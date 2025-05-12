@@ -570,7 +570,7 @@ jobs:
     if: always()
     steps:
       - name: Send notification
-        uses: slackapi/slack-github-action@v1.23.0
+        uses: slackapi/slack-github-action@v2.1.0
         with:
           payload: |
             {
