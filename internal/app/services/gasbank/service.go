@@ -83,7 +83,10 @@ func (s *Service) EnsureAccount(ctx context.Context, accountID string, walletAdd
 	if err != nil {
 		return gasbank.Account{}, err
 	}
-	s.log.Infof("gas account %s created for account %s", created.ID, accountID)
+	s.log.WithField("gas_account_id", created.ID).
+		WithField("account_id", accountID).
+		WithField("wallet", created.WalletAddress).
+		Info("gas account ensured")
 	return created, nil
 }
 
@@ -97,6 +100,7 @@ func (s *Service) Deposit(ctx context.Context, gasAccountID string, amount float
 	if err != nil {
 		return gasbank.Account{}, gasbank.Transaction{}, err
 	}
+	original := acct
 
 	if acct.AccountID != "" && s.accounts != nil {
 		if _, err := s.accounts.GetAccount(ctx, acct.AccountID); err != nil {
@@ -104,17 +108,17 @@ func (s *Service) Deposit(ctx context.Context, gasAccountID string, amount float
 		}
 	}
 
-	acct.Balance += amount
-	acct.Available += amount
-	acct.UpdatedAt = time.Now().UTC()
-	acct, err = s.store.UpdateGasAccount(ctx, acct)
-	if err != nil {
+	updated := acct
+	updated.Balance += amount
+	updated.Available += amount
+	updated.UpdatedAt = time.Now().UTC()
+	if updated, err = s.store.UpdateGasAccount(ctx, updated); err != nil {
 		return gasbank.Account{}, gasbank.Transaction{}, err
 	}
 
 	tx := gasbank.Transaction{
-		AccountID:      acct.ID,
-		UserAccountID:  acct.AccountID,
+		AccountID:      updated.ID,
+		UserAccountID:  updated.AccountID,
 		Type:           gasbank.TransactionDeposit,
 		Amount:         amount,
 		NetAmount:      amount,
@@ -125,10 +129,19 @@ func (s *Service) Deposit(ctx context.Context, gasAccountID string, amount float
 	}
 	tx, err = s.store.CreateGasTransaction(ctx, tx)
 	if err != nil {
-		return gasbank.Account{}, gasbank.Transaction{}, err
+		if _, rollbackErr := s.store.UpdateGasAccount(ctx, original); rollbackErr != nil {
+			s.log.WithError(rollbackErr).
+				WithField("gas_account_id", original.ID).
+				Error("failed to rollback gas account after deposit failure")
+		}
+		return gasbank.Account{}, gasbank.Transaction{}, fmt.Errorf("create gas transaction: %w", err)
 	}
-	s.log.Infof("gas deposit %.4f into %s", amount, acct.ID)
-	return acct, tx, nil
+	s.log.WithField("gas_account_id", updated.ID).
+		WithField("account_id", updated.AccountID).
+		WithField("amount", amount).
+		WithField("tx_id", txID).
+		Info("gas deposit recorded")
+	return updated, tx, nil
 }
 
 // Withdraw debits the specified amount if funds are available.
@@ -141,18 +154,20 @@ func (s *Service) Withdraw(ctx context.Context, gasAccountID string, amount floa
 	if err != nil {
 		return gasbank.Account{}, gasbank.Transaction{}, err
 	}
+	original := acct
 
 	if acct.Available < amount-Epsilon {
 		return gasbank.Account{}, gasbank.Transaction{}, errInsufficientFunds
 	}
 
-	acct.Available -= amount
-	acct.Pending += amount
-	acct.UpdatedAt = time.Now().UTC()
+	updated := acct
+	updated.Available -= amount
+	updated.Pending += amount
+	updated.UpdatedAt = time.Now().UTC()
 
 	tx := gasbank.Transaction{
-		AccountID:     acct.ID,
-		UserAccountID: acct.AccountID,
+		AccountID:     updated.ID,
+		UserAccountID: updated.AccountID,
 		Type:          gasbank.TransactionWithdrawal,
 		Amount:        amount,
 		NetAmount:     amount,
@@ -160,17 +175,25 @@ func (s *Service) Withdraw(ctx context.Context, gasAccountID string, amount floa
 		ToAddress:     to,
 	}
 
-	acct, err = s.store.UpdateGasAccount(ctx, acct)
-	if err != nil {
+	if updated, err = s.store.UpdateGasAccount(ctx, updated); err != nil {
 		return gasbank.Account{}, gasbank.Transaction{}, err
 	}
 
 	tx, err = s.store.CreateGasTransaction(ctx, tx)
 	if err != nil {
-		return gasbank.Account{}, gasbank.Transaction{}, err
+		if _, rollbackErr := s.store.UpdateGasAccount(ctx, original); rollbackErr != nil {
+			s.log.WithError(rollbackErr).
+				WithField("gas_account_id", original.ID).
+				Error("failed to rollback gas account after withdrawal failure")
+		}
+		return gasbank.Account{}, gasbank.Transaction{}, fmt.Errorf("create gas transaction: %w", err)
 	}
-	s.log.Infof("gas withdrawal %.4f from %s", amount, acct.ID)
-	return acct, tx, nil
+	s.log.WithField("gas_account_id", updated.ID).
+		WithField("account_id", updated.AccountID).
+		WithField("amount", amount).
+		WithField("destination", to).
+		Info("gas withdrawal requested")
+	return updated, tx, nil
 }
 
 // GetAccount returns the requested gas account.
@@ -245,6 +268,10 @@ func (s *Service) CompleteWithdrawal(ctx context.Context, txID string, success b
 		return gasbank.Account{}, gasbank.Transaction{}, err
 	}
 
-	s.log.Infof("withdrawal %s settled (success=%t)", tx.ID, success)
+	s.log.WithField("gas_account_id", acct.ID).
+		WithField("transaction_id", tx.ID).
+		WithField("account_id", acct.AccountID).
+		WithField("success", success).
+		Info("gas withdrawal settled")
 	return acct, tx, nil
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,7 +17,9 @@ import (
 	"github.com/R3E-Network/service_layer/internal/app/domain/gasbank"
 	"github.com/R3E-Network/service_layer/internal/app/domain/oracle"
 	"github.com/R3E-Network/service_layer/internal/app/domain/trigger"
+	"github.com/R3E-Network/service_layer/internal/app/metrics"
 	gasbanksvc "github.com/R3E-Network/service_layer/internal/app/services/gasbank"
+	randomsvc "github.com/R3E-Network/service_layer/internal/app/services/random"
 )
 
 // handler bundles HTTP endpoints for the application services.
@@ -28,6 +31,8 @@ type handler struct {
 func NewHandler(application *app.Application) http.Handler {
 	h := &handler{app: application}
 	mux := http.NewServeMux()
+	mux.Handle("/metrics", metrics.Handler())
+	mux.HandleFunc("/healthz", h.health)
 	mux.HandleFunc("/accounts", h.accounts)
 	mux.HandleFunc("/accounts/", h.accountResources)
 	return mux
@@ -113,6 +118,10 @@ func (h *handler) accountResources(w http.ResponseWriter, r *http.Request) {
 		h.accountPriceFeeds(w, r, accountID, parts[2:])
 	case "oracle":
 		h.accountOracle(w, r, accountID, parts[2:])
+	case "secrets":
+		h.accountSecrets(w, r, accountID, parts[2:])
+	case "random":
+		h.accountRandom(w, r, accountID)
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
@@ -161,27 +170,115 @@ func (h *handler) accountFunctions(w http.ResponseWriter, r *http.Request, accou
 		return
 	}
 
-	functionID := rest[0]
-	if len(rest) > 1 && rest[1] == "execute" {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+	switch rest[0] {
+	case "executions":
+		h.accountFunctionExecutionLookup(w, r, accountID, rest[1:])
+		return
+	default:
+		functionID := rest[0]
+		if len(rest) < 2 {
+			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		var payload map[string]any
-		if err := decodeJSON(r.Body, &payload); err != nil {
-			writeError(w, http.StatusBadRequest, err)
+		switch rest[1] {
+		case "execute":
+			if r.Method != http.MethodPost {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			var payload map[string]any
+			if err := decodeJSON(r.Body, &payload); err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			result, err := h.app.Functions.Execute(r.Context(), functionID, payload)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, result)
+			return
+		case "executions":
+			h.accountFunctionExecutions(w, r, accountID, functionID, rest[2:])
+			return
+		default:
+			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		result, err := h.app.Functions.Execute(r.Context(), functionID, payload)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, result)
+	}
+}
+
+func (h *handler) accountFunctionExecutions(w http.ResponseWriter, r *http.Request, accountID, functionID string, rest []string) {
+	def, err := h.app.Functions.Get(r.Context(), functionID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	if def.AccountID != accountID {
+		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
-	w.WriteHeader(http.StatusNotFound)
+	switch len(rest) {
+	case 0:
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		limit := 0
+		if raw := r.URL.Query().Get("limit"); raw != "" {
+			parsed, err := strconv.Atoi(raw)
+			if err != nil || parsed < 0 {
+				writeError(w, http.StatusBadRequest, fmt.Errorf("invalid limit"))
+				return
+			}
+			limit = parsed
+		}
+		execs, err := h.app.Functions.ListExecutions(r.Context(), functionID, limit)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, execs)
+	case 1:
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		exec, err := h.app.Functions.GetExecution(r.Context(), rest[0])
+		if err != nil {
+			writeError(w, http.StatusNotFound, err)
+			return
+		}
+		if exec.AccountID != accountID || exec.FunctionID != functionID {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		writeJSON(w, http.StatusOK, exec)
+	default:
+		w.WriteHeader(http.StatusNotFound)
+	}
+}
+
+func (h *handler) accountFunctionExecutionLookup(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {
+	if len(rest) != 1 {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	exec, err := h.app.Functions.GetExecution(r.Context(), rest[0])
+	if err != nil {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	if exec.AccountID != accountID {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+	writeJSON(w, http.StatusOK, exec)
 }
 
 func (h *handler) accountTriggers(w http.ResponseWriter, r *http.Request, accountID string) {
@@ -376,6 +473,119 @@ func (h *handler) accountGasBank(w http.ResponseWriter, r *http.Request, account
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}
+}
+
+func (h *handler) accountSecrets(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {
+	if h.app.Secrets == nil {
+		writeError(w, http.StatusNotImplemented, fmt.Errorf("secrets service not configured"))
+		return
+	}
+
+	if len(rest) == 0 {
+		switch r.Method {
+		case http.MethodGet:
+			items, err := h.app.Secrets.List(r.Context(), accountID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, items)
+		case http.MethodPost:
+			var payload struct {
+				Name  string `json:"name"`
+				Value string `json:"value"`
+			}
+			if err := decodeJSON(r.Body, &payload); err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			meta, err := h.app.Secrets.Create(r.Context(), accountID, payload.Name, payload.Value)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			writeJSON(w, http.StatusCreated, meta)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+		return
+	}
+
+	name := rest[0]
+	switch r.Method {
+	case http.MethodGet:
+		sec, err := h.app.Secrets.Get(r.Context(), accountID, name)
+		if err != nil {
+			writeError(w, http.StatusNotFound, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id":         sec.ID,
+			"account_id": sec.AccountID,
+			"name":       sec.Name,
+			"version":    sec.Version,
+			"created_at": sec.CreatedAt,
+			"updated_at": sec.UpdatedAt,
+			"value":      sec.Value,
+		})
+	case http.MethodPut:
+		var payload struct {
+			Value string `json:"value"`
+		}
+		if err := decodeJSON(r.Body, &payload); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		meta, err := h.app.Secrets.Update(r.Context(), accountID, name, payload.Value)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, meta)
+	case http.MethodDelete:
+		if err := h.app.Secrets.Delete(r.Context(), accountID, name); err != nil {
+			writeError(w, http.StatusNotFound, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *handler) accountRandom(w http.ResponseWriter, r *http.Request, accountID string) {
+	if h.app.Random == nil {
+		writeError(w, http.StatusNotImplemented, fmt.Errorf("random service not configured"))
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	var payload struct {
+		Length int `json:"length"`
+	}
+	if err := decodeJSON(r.Body, &payload); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if payload.Length == 0 {
+		payload.Length = 32
+	}
+
+	res, err := h.app.Random.Generate(r.Context(), payload.Length)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"account_id": accountID,
+		"length":     payload.Length,
+		"value":      randomsvc.EncodeResult(res),
+		"created_at": res.CreatedAt,
+	})
 }
 
 func (h *handler) accountAutomation(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {
@@ -864,4 +1074,12 @@ func writeError(w http.ResponseWriter, status int, err error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+}
+
+func (h *handler) health(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

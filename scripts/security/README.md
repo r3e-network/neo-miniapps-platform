@@ -49,7 +49,7 @@ Runs OWASP ZAP to scan API endpoints for security vulnerabilities.
 # or with custom target
 ./run_zap_scan.sh -t https://api.example.com
 # or with Swagger specification
-./run_zap_scan.sh -s ./internal/api/swagger.json
+./run_zap_scan.sh -s ./path/to/openapi.yaml
 ```
 
 ## Prerequisites

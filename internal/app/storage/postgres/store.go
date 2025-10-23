@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/R3E-Network/service_layer/internal/app/domain/gasbank"
 	"github.com/R3E-Network/service_layer/internal/app/domain/oracle"
 	"github.com/R3E-Network/service_layer/internal/app/domain/pricefeed"
+	"github.com/R3E-Network/service_layer/internal/app/domain/secret"
 	"github.com/R3E-Network/service_layer/internal/app/domain/trigger"
 	"github.com/R3E-Network/service_layer/internal/app/storage"
 	"github.com/google/uuid"
@@ -31,6 +33,7 @@ var _ storage.GasBankStore = (*Store)(nil)
 var _ storage.AutomationStore = (*Store)(nil)
 var _ storage.PriceFeedStore = (*Store)(nil)
 var _ storage.OracleStore = (*Store)(nil)
+var _ storage.SecretStore = (*Store)(nil)
 
 // New creates a Store using the provided database handle.
 func New(db *sql.DB) *Store {
@@ -258,6 +261,80 @@ func (s *Store) ListFunctions(ctx context.Context, accountID string) ([]function
 			_ = json.Unmarshal(secretsRaw, &def.Secrets)
 		}
 		result = append(result, def)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) CreateExecution(ctx context.Context, exec function.Execution) (function.Execution, error) {
+	if exec.ID == "" {
+		exec.ID = uuid.NewString()
+	}
+	exec.StartedAt = exec.StartedAt.UTC()
+	exec.CompletedAt = exec.CompletedAt.UTC()
+
+	inputJSON, err := json.Marshal(exec.Input)
+	if err != nil {
+		return function.Execution{}, err
+	}
+	outputJSON, err := json.Marshal(exec.Output)
+	if err != nil {
+		return function.Execution{}, err
+	}
+	logsJSON, err := json.Marshal(exec.Logs)
+	if err != nil {
+		return function.Execution{}, err
+	}
+	actionsJSON, err := json.Marshal(exec.Actions)
+	if err != nil {
+		return function.Execution{}, err
+	}
+
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO app_function_executions
+			(id, account_id, function_id, input, output, logs, actions, error, status, started_at, completed_at, duration_ns)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	`, exec.ID, exec.AccountID, exec.FunctionID, inputJSON, outputJSON, logsJSON, actionsJSON, toNullString(exec.Error), exec.Status, exec.StartedAt, toNullTime(exec.CompletedAt), exec.Duration.Nanoseconds())
+	if err != nil {
+		return function.Execution{}, err
+	}
+	return exec, nil
+}
+
+func (s *Store) GetExecution(ctx context.Context, id string) (function.Execution, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, account_id, function_id, input, output, logs, actions, error, status, started_at, completed_at, duration_ns
+		FROM app_function_executions
+		WHERE id = $1
+	`, id)
+
+	return scanFunctionExecution(row)
+}
+
+func (s *Store) ListFunctionExecutions(ctx context.Context, functionID string, limit int) ([]function.Execution, error) {
+	query := `
+		SELECT id, account_id, function_id, input, output, logs, actions, error, status, started_at, completed_at, duration_ns
+		FROM app_function_executions
+		WHERE function_id = $1
+		ORDER BY started_at DESC
+	`
+	args := []any{functionID}
+	if limit > 0 {
+		query += " LIMIT $2"
+		args = append(args, limit)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []function.Execution
+	for rows.Next() {
+		exec, err := scanFunctionExecution(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, exec)
 	}
 	return result, rows.Err()
 }
@@ -831,6 +908,105 @@ func (s *Store) ListPendingRequests(ctx context.Context) ([]oracle.Request, erro
 	return result, rows.Err()
 }
 
+// --- SecretStore -----------------------------------------------------------
+
+func (s *Store) CreateSecret(ctx context.Context, sec secret.Secret) (secret.Secret, error) {
+	if sec.ID == "" {
+		sec.ID = uuid.NewString()
+	}
+	now := time.Now().UTC()
+	sec.CreatedAt = now
+	sec.UpdatedAt = now
+	sec.Version = 1
+
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO app_secrets (id, account_id, name, value, version, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, sec.ID, sec.AccountID, sec.Name, sec.Value, sec.Version, sec.CreatedAt, sec.UpdatedAt)
+	if err != nil {
+		return secret.Secret{}, err
+	}
+	return sec, nil
+}
+
+func (s *Store) UpdateSecret(ctx context.Context, sec secret.Secret) (secret.Secret, error) {
+	existing, err := s.GetSecret(ctx, sec.AccountID, sec.Name)
+	if err != nil {
+		return secret.Secret{}, err
+	}
+
+	sec.ID = existing.ID
+	sec.AccountID = existing.AccountID
+	sec.Name = existing.Name
+	sec.CreatedAt = existing.CreatedAt
+	sec.Version = existing.Version + 1
+	sec.UpdatedAt = time.Now().UTC()
+
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE app_secrets
+		SET value = $1, version = $2, updated_at = $3
+		WHERE id = $4
+	`, sec.Value, sec.Version, sec.UpdatedAt, sec.ID)
+	if err != nil {
+		return secret.Secret{}, err
+	}
+	return sec, nil
+}
+
+func (s *Store) GetSecret(ctx context.Context, accountID, name string) (secret.Secret, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, account_id, name, value, version, created_at, updated_at
+		FROM app_secrets
+		WHERE account_id = $1 AND lower(name) = lower($2)
+	`, accountID, name)
+
+	sec, err := scanSecret(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return secret.Secret{}, fmt.Errorf("secret %s not found for account %s", name, accountID)
+		}
+		return secret.Secret{}, err
+	}
+	return sec, nil
+}
+
+func (s *Store) ListSecrets(ctx context.Context, accountID string) ([]secret.Secret, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, account_id, name, value, version, created_at, updated_at
+		FROM app_secrets
+		WHERE account_id = $1
+		ORDER BY created_at
+	`, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []secret.Secret
+	for rows.Next() {
+		sec, err := scanSecret(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, sec)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) DeleteSecret(ctx context.Context, accountID, name string) error {
+	result, err := s.db.ExecContext(ctx, `
+		DELETE FROM app_secrets
+		WHERE account_id = $1 AND lower(name) = lower($2)
+	`, accountID, name)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("secret %s not found for account %s", name, accountID)
+	}
+	return nil
+}
+
 // --- OracleStore ------------------------------------------------------------
 
 func (s *Store) CreateDataSource(ctx context.Context, src oracle.DataSource) (oracle.DataSource, error) {
@@ -1030,6 +1206,46 @@ type rowScanner interface {
 	Scan(dest ...any) error
 }
 
+func scanFunctionExecution(scanner rowScanner) (function.Execution, error) {
+	var (
+		exec        function.Execution
+		inputJSON   []byte
+		outputJSON  []byte
+		logsJSON    []byte
+		actionsJSON []byte
+		errorText   sql.NullString
+		startedAt   time.Time
+		completedAt sql.NullTime
+		durationNS  sql.NullInt64
+	)
+	if err := scanner.Scan(&exec.ID, &exec.AccountID, &exec.FunctionID, &inputJSON, &outputJSON, &logsJSON, &actionsJSON, &errorText, &exec.Status, &startedAt, &completedAt, &durationNS); err != nil {
+		return function.Execution{}, err
+	}
+	if len(inputJSON) > 0 {
+		_ = json.Unmarshal(inputJSON, &exec.Input)
+	}
+	if len(outputJSON) > 0 {
+		_ = json.Unmarshal(outputJSON, &exec.Output)
+	}
+	if len(logsJSON) > 0 {
+		_ = json.Unmarshal(logsJSON, &exec.Logs)
+	}
+	if len(actionsJSON) > 0 {
+		_ = json.Unmarshal(actionsJSON, &exec.Actions)
+	}
+	if errorText.Valid {
+		exec.Error = errorText.String
+	}
+	exec.StartedAt = startedAt.UTC()
+	if completedAt.Valid {
+		exec.CompletedAt = completedAt.Time.UTC()
+	}
+	if durationNS.Valid {
+		exec.Duration = time.Duration(durationNS.Int64)
+	}
+	return exec, nil
+}
+
 func scanGasAccount(scanner rowScanner) (gasbank.Account, error) {
 	var (
 		acct         gasbank.Account
@@ -1092,6 +1308,20 @@ func scanGasTransaction(scanner rowScanner) (gasbank.Transaction, error) {
 	tx.CreatedAt = createdAt.UTC()
 	tx.UpdatedAt = updatedAt.UTC()
 	return tx, nil
+}
+
+func scanSecret(scanner rowScanner) (secret.Secret, error) {
+	var (
+		sec       secret.Secret
+		createdAt time.Time
+		updatedAt time.Time
+	)
+	if err := scanner.Scan(&sec.ID, &sec.AccountID, &sec.Name, &sec.Value, &sec.Version, &createdAt, &updatedAt); err != nil {
+		return secret.Secret{}, err
+	}
+	sec.CreatedAt = createdAt.UTC()
+	sec.UpdatedAt = updatedAt.UTC()
+	return sec, nil
 }
 
 func toNullString(value string) sql.NullString {

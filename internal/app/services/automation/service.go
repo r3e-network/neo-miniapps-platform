@@ -85,7 +85,10 @@ func (s *Service) CreateJob(ctx context.Context, accountID, functionID, name, sc
 	if err != nil {
 		return automation.Job{}, err
 	}
-	s.log.Infof("automation job %s created for account %s", job.ID, accountID)
+	s.log.WithField("job_id", job.ID).
+		WithField("account_id", accountID).
+		WithField("function_id", job.FunctionID).
+		Info("automation job created")
 	return job, nil
 }
 
@@ -130,7 +133,9 @@ func (s *Service) UpdateJob(ctx context.Context, jobID string, name, schedule, d
 	if err != nil {
 		return automation.Job{}, err
 	}
-	s.log.Infof("automation job %s updated", job.ID)
+	s.log.WithField("job_id", job.ID).
+		WithField("account_id", job.AccountID).
+		Info("automation job updated")
 	return job, nil
 }
 
@@ -148,11 +153,10 @@ func (s *Service) SetEnabled(ctx context.Context, jobID string, enabled bool) (a
 	if err != nil {
 		return automation.Job{}, err
 	}
-	state := "disabled"
-	if enabled {
-		state = "enabled"
-	}
-	s.log.Infof("automation job %s %s", job.ID, state)
+	s.log.WithField("job_id", job.ID).
+		WithField("account_id", job.AccountID).
+		WithField("enabled", enabled).
+		Info("automation job state changed")
 	return job, nil
 }
 

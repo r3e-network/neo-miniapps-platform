@@ -3,6 +3,10 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"os"
+	"strings"
+	"time"
 
 	"github.com/R3E-Network/service_layer/internal/app/services/accounts"
 	automationsvc "github.com/R3E-Network/service_layer/internal/app/services/automation"
@@ -10,6 +14,8 @@ import (
 	gasbanksvc "github.com/R3E-Network/service_layer/internal/app/services/gasbank"
 	oraclesvc "github.com/R3E-Network/service_layer/internal/app/services/oracle"
 	pricefeedsvc "github.com/R3E-Network/service_layer/internal/app/services/pricefeed"
+	randomsvc "github.com/R3E-Network/service_layer/internal/app/services/random"
+	"github.com/R3E-Network/service_layer/internal/app/services/secrets"
 	"github.com/R3E-Network/service_layer/internal/app/services/triggers"
 	"github.com/R3E-Network/service_layer/internal/app/storage"
 	"github.com/R3E-Network/service_layer/internal/app/storage/memory"
@@ -27,6 +33,7 @@ type Stores struct {
 	Automation storage.AutomationStore
 	PriceFeeds storage.PriceFeedStore
 	Oracle     storage.OracleStore
+	Secrets    storage.SecretStore
 }
 
 // Application ties domain services together and manages their lifecycle.
@@ -41,6 +48,8 @@ type Application struct {
 	Automation *automationsvc.Service
 	PriceFeeds *pricefeedsvc.Service
 	Oracle     *oraclesvc.Service
+	Secrets    *secrets.Service
+	Random     *randomsvc.Service
 }
 
 // New builds a fully initialised application with the provided stores.
@@ -71,18 +80,34 @@ func New(stores Stores, log *logger.Logger) (*Application, error) {
 	if stores.Oracle == nil {
 		stores.Oracle = mem
 	}
+	if stores.Secrets == nil {
+		stores.Secrets = mem
+	}
 
 	manager := system.NewManager()
 
 	acctService := accounts.New(stores.Accounts, log)
 	funcService := functions.New(stores.Accounts, stores.Functions, log)
-	funcService.AttachExecutor(functions.NewSimpleExecutor())
+	secretsService := secrets.New(stores.Secrets, log)
+	teeMode := strings.ToLower(strings.TrimSpace(os.Getenv("TEE_MODE")))
+	var executor functions.FunctionExecutor
+	switch teeMode {
+	case "mock", "disabled", "off":
+		log.Warn("TEE_MODE set to mock; using mock TEE executor")
+		executor = functions.NewMockTEEExecutor()
+	default:
+		executor = functions.NewTEEExecutor(secretsService)
+	}
+	funcService.AttachExecutor(executor)
+	funcService.AttachSecretResolver(secretsService)
 	trigService := triggers.New(stores.Accounts, stores.Functions, stores.Triggers, log)
 	gasService := gasbanksvc.New(stores.Accounts, stores.GasBank, log)
-	settlement := gasbanksvc.NewSettlementPoller(stores.GasBank, gasService, nil, log)
 	automationService := automationsvc.New(stores.Accounts, stores.Functions, stores.Automation, log)
 	priceFeedService := pricefeedsvc.New(stores.Accounts, stores.PriceFeeds, log)
 	oracleService := oraclesvc.New(stores.Accounts, stores.Oracle, log)
+	randomService := randomsvc.New(log)
+
+	httpClient := &http.Client{Timeout: 10 * time.Second}
 
 	funcService.AttachDependencies(trigService, automationService, priceFeedService, oracleService, gasService)
 
@@ -98,10 +123,47 @@ func New(stores Stores, log *logger.Logger) (*Application, error) {
 		return err
 	}), automationService, log))
 	priceRunner := pricefeedsvc.NewRefresher(priceFeedService, log)
-	priceRunner.WithFetcher(pricefeedsvc.NewRandomFetcher(log))
-	oracleRunner := oraclesvc.NewDispatcher(oracleService, log)
+	if endpoint := strings.TrimSpace(os.Getenv("PRICEFEED_FETCH_URL")); endpoint != "" {
+		fetcher, err := pricefeedsvc.NewHTTPFetcher(httpClient, endpoint, os.Getenv("PRICEFEED_FETCH_KEY"), log)
+		if err != nil {
+			log.WithError(err).Warn("configure price feed fetcher")
+		} else {
+			priceRunner.WithFetcher(fetcher)
+		}
+	} else {
+		log.Warn("PRICEFEED_FETCH_URL not set; price feed refresher disabled")
+	}
 
-	for _, svc := range []system.Service{settlement, autoRunner, priceRunner, oracleRunner} {
+	oracleRunner := oraclesvc.NewDispatcher(oracleService, log)
+	if endpoint := strings.TrimSpace(os.Getenv("ORACLE_RESOLVER_URL")); endpoint != "" {
+		resolver, err := oraclesvc.NewHTTPResolver(httpClient, endpoint, os.Getenv("ORACLE_RESOLVER_KEY"), log)
+		if err != nil {
+			log.WithError(err).Warn("configure oracle resolver")
+		} else {
+			oracleRunner.WithResolver(resolver)
+		}
+	} else {
+		log.Warn("ORACLE_RESOLVER_URL not set; oracle dispatcher disabled")
+	}
+
+	var settlement system.Service
+	if endpoint := strings.TrimSpace(os.Getenv("GASBANK_RESOLVER_URL")); endpoint != "" {
+		resolver, err := gasbanksvc.NewHTTPWithdrawalResolver(httpClient, endpoint, os.Getenv("GASBANK_RESOLVER_KEY"), log)
+		if err != nil {
+			log.WithError(err).Warn("configure gas bank resolver")
+		} else {
+			settlement = gasbanksvc.NewSettlementPoller(stores.GasBank, gasService, resolver, log)
+		}
+	} else {
+		log.Warn("GASBANK_RESOLVER_URL not set; gas bank settlement disabled")
+	}
+
+	services := []system.Service{autoRunner, priceRunner, oracleRunner}
+	if settlement != nil {
+		services = append(services, settlement)
+	}
+
+	for _, svc := range services {
 		if err := manager.Register(svc); err != nil {
 			return nil, fmt.Errorf("register %s: %w", svc.Name(), err)
 		}
@@ -117,6 +179,8 @@ func New(stores Stores, log *logger.Logger) (*Application, error) {
 		Automation: automationService,
 		PriceFeeds: priceFeedService,
 		Oracle:     oracleService,
+		Secrets:    secretsService,
+		Random:     randomService,
 	}, nil
 }
 

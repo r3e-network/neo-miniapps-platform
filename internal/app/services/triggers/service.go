@@ -53,7 +53,10 @@ func (s *Service) Register(ctx context.Context, trg trigger.Trigger) (trigger.Tr
 	if err != nil {
 		return trigger.Trigger{}, err
 	}
-	s.log.Infof("trigger %s registered", created.ID)
+	s.log.WithField("trigger_id", created.ID).
+		WithField("account_id", created.AccountID).
+		WithField("function_id", created.FunctionID).
+		Info("trigger registered")
 	return created, nil
 }
 
@@ -69,11 +72,10 @@ func (s *Service) SetEnabled(ctx context.Context, id string, enabled bool) (trig
 	if err != nil {
 		return trigger.Trigger{}, err
 	}
-	state := "disabled"
-	if enabled {
-		state = "enabled"
-	}
-	s.log.Infof("trigger %s %s", id, state)
+	s.log.WithField("trigger_id", id).
+		WithField("account_id", trg.AccountID).
+		WithField("enabled", enabled).
+		Info("trigger state changed")
 	return updated, nil
 }
 

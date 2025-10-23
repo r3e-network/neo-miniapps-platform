@@ -1,5 +1,9 @@
 # Contract Automation Integration Guide
 
+> **Legacy notice:** The automation flows described here refer to the original
+> Service Layer implementation focused on the refactored runtime.
+> API surface under `internal/app/httpapi`.
+
 This guide explains how to use the Contract Automation service to integrate with Neo N3 smart contracts.
 
 ## Overview
@@ -324,7 +328,7 @@ curl -X GET https://api.servicelayer.neo.org/v1/triggers/123/history \
 Get the logs for a specific function execution:
 
 ```bash
-curl -X GET https://api.servicelayer.neo.org/v1/functions/executions/456 \
+curl -X GET https://api.servicelayer.neo.org/v1/accounts/123/functions/executions/456 \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 

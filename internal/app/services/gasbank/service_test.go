@@ -3,12 +3,15 @@ package gasbank
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"math"
 	"testing"
 
 	"github.com/R3E-Network/service_layer/internal/app/domain/account"
 	domain "github.com/R3E-Network/service_layer/internal/app/domain/gasbank"
 	"github.com/R3E-Network/service_layer/internal/app/storage/memory"
+	"github.com/R3E-Network/service_layer/pkg/logger"
 )
 
 func TestService_DepositWithdraw(t *testing.T) {
@@ -110,4 +113,93 @@ func TestService_PreventDuplicateWallets(t *testing.T) {
 	if _, err := svc.EnsureAccount(context.Background(), acct2.ID, "walletx"); err == nil || !errors.Is(err, ErrWalletInUse) {
 		t.Fatalf("expected duplicate wallet error, got %v", err)
 	}
+}
+
+func TestService_DepositRollsBackOnTransactionFailure(t *testing.T) {
+	store := &failingGasBankStore{Store: memory.New(), failCreateTx: true}
+	acct, err := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	gasAcct, err := store.CreateGasAccount(context.Background(), domain.Account{AccountID: acct.ID})
+	if err != nil {
+		t.Fatalf("create gas account: %v", err)
+	}
+
+	svc := New(store, store, nil)
+	if _, _, err := svc.Deposit(context.Background(), gasAcct.ID, 15, "tx", "", ""); err == nil {
+		t.Fatalf("expected deposit to fail")
+	}
+
+	stored, err := store.GetGasAccount(context.Background(), gasAcct.ID)
+	if err != nil {
+		t.Fatalf("get gas account: %v", err)
+	}
+	if stored.Balance != 0 || stored.Available != 0 || stored.Pending != 0 {
+		t.Fatalf("expected balances to rollback, got %+v", stored)
+	}
+}
+
+func TestService_WithdrawRollsBackOnTransactionFailure(t *testing.T) {
+	store := &failingGasBankStore{Store: memory.New()}
+	acct, err := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	gasAcct, err := store.CreateGasAccount(context.Background(), domain.Account{AccountID: acct.ID})
+	if err != nil {
+		t.Fatalf("create gas account: %v", err)
+	}
+
+	svc := New(store, store, nil)
+	if _, _, err := svc.Deposit(context.Background(), gasAcct.ID, 20, "tx", "", ""); err != nil {
+		t.Fatalf("deposit: %v", err)
+	}
+
+	store.failCreateTx = true
+	if _, _, err := svc.Withdraw(context.Background(), gasAcct.ID, 7, "dest"); err == nil {
+		t.Fatalf("expected withdraw to fail")
+	}
+
+	stored, err := store.GetGasAccount(context.Background(), gasAcct.ID)
+	if err != nil {
+		t.Fatalf("get gas account: %v", err)
+	}
+	if math.Abs(stored.Available-20) > 1e-9 {
+		t.Fatalf("available balance should rollback to 20, got %v", stored.Available)
+	}
+	if stored.Pending != 0 {
+		t.Fatalf("pending should be zero after rollback, got %v", stored.Pending)
+	}
+}
+
+type failingGasBankStore struct {
+	*memory.Store
+	failCreateTx bool
+}
+
+func (s *failingGasBankStore) CreateGasTransaction(ctx context.Context, tx domain.Transaction) (domain.Transaction, error) {
+	if s.failCreateTx {
+		return domain.Transaction{}, fmt.Errorf("stub create gas transaction failure")
+	}
+	created, err := s.Store.CreateGasTransaction(ctx, tx)
+	if err == nil {
+		// Reset failure flag so subsequent operations can toggle explicitly.
+		s.failCreateTx = false
+	}
+	return created, err
+}
+
+func ExampleService_Deposit() {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	gasAcct, _ := store.CreateGasAccount(context.Background(), domain.Account{AccountID: acct.ID})
+
+	log := logger.NewDefault("example-gasbank")
+	log.SetOutput(io.Discard)
+	svc := New(store, store, log)
+	accountWithFunds, tx, _ := svc.Deposit(context.Background(), gasAcct.ID, 10, "tx123", "walletA", "walletB")
+	fmt.Printf("balance:%.0f status:%s\n", accountWithFunds.Available, tx.Status)
+	// Output:
+	// balance:10 status:completed
 }

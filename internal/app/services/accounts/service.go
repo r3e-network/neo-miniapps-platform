@@ -36,7 +36,9 @@ func (s *Service) Create(ctx context.Context, owner string, metadata map[string]
 		return account.Account{}, err
 	}
 
-	s.log.Infof("account %s created for %s", created.ID, owner)
+	s.log.WithField("account_id", created.ID).
+		WithField("owner", owner).
+		Info("account created")
 	return created, nil
 }
 
@@ -51,7 +53,7 @@ func (s *Service) UpdateMetadata(ctx context.Context, id string, metadata map[st
 	if err != nil {
 		return account.Account{}, err
 	}
-	s.log.Infof("account %s metadata updated", id)
+	s.log.WithField("account_id", id).Info("account metadata updated")
 	return updated, nil
 }
 
@@ -74,6 +76,6 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	if err := s.store.DeleteAccount(ctx, id); err != nil {
 		return err
 	}
-	s.log.Infof("account %s deleted", id)
+	s.log.WithField("account_id", id).Info("account deleted")
 	return nil
 }

@@ -130,13 +130,20 @@ func (r *Refresher) tick(ctx context.Context) {
 	}
 
 	for _, feed := range feeds {
+		if !feed.Active {
+			continue
+		}
 		price, source, err := fetcher.Fetch(ctx, feed)
 		if err != nil {
-			r.log.WithError(err).Warnf("fetch price for %s failed", feed.ID)
+			r.log.WithError(err).
+				WithField("feed_id", feed.ID).
+				Warn("price fetch failed")
 			continue
 		}
 		if _, err := r.service.RecordSnapshot(ctx, feed.ID, price, source, time.Now()); err != nil {
-			r.log.WithError(err).Warnf("record snapshot for %s failed", feed.ID)
+			r.log.WithError(err).
+				WithField("feed_id", feed.ID).
+				Warn("record price snapshot failed")
 		}
 	}
 }

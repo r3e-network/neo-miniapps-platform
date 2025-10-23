@@ -1,0 +1,30 @@
+{
+  "name": "@service-layer/devpack",
+  "version": "0.1.0",
+  "description": "TypeScript helpers for authoring Service Layer functions with Devpack.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/r3e-network/service_layer"
+  },
+  "bugs": {
+    "url": "https://github.com/r3e-network/service_layer/issues"
+  },
+  "keywords": [
+    "neo",
+    "oracle",
+    "functions",
+    "devpack",
+    "sdk"
+  ],
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}

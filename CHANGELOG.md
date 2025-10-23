@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Detailed security checklist and implementation status
 - Complete DevOps infrastructure with Terraform and Helm charts
 - Monitoring dashboards for key metrics
+- Devpack runtime with declarative action queueing for functions
+- Execution history persistence for action outcomes across storage backends
+- JavaScript/TypeScript Devpack SDK (`@service-layer/devpack`) for local development
 
 ### Fixed
 - JavaScript runtime execution environment for TEE

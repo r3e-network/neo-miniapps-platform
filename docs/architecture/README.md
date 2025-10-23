@@ -36,13 +36,11 @@ internal/
     metrics/       # Prometheus registry + instrumentation
 
 cmd/
-  appserver/       # New entrypoint that wires everything together
-  legacy/…         # Existing binaries kept until migrated
+  appserver/       # Entry point that wires everything together
 ```
 
-Each new module should slot into this structure. Existing legacy packages can
-be migrated gradually; until then, keep them isolated under `cmd/legacy` or
-`internal/legacy`.
+Each new module should slot into this structure. Keep experimental features in
+clearly scoped subpackages until they mature.
 
 Service Lifecycle
 -----------------
@@ -111,11 +109,10 @@ Migration Strategy
 
 1. **Baseline** – merge the new `internal/app` scaffolding and ensure tests pass.
 2. **Persistence** – create `storage/postgres` adapters and align migrations.
-3. **Service Ports** – migrate each legacy service (gas bank, price feed,
-   oracle, TEE) into `internal/app/services/<module>` using the new contracts.
-4. **Transport** – replace legacy HTTP handlers with the new `httpapi`
-   endpoints as modules are ported.
-5. **Cleanup** – delete legacy packages once parity is achieved.
+3. **Service Ports** – keep services isolated under `internal/app/services/<module>`
+   using shared contracts.
+4. **Transport** – extend the `httpapi` endpoints as new capabilities land.
+5. **Cleanup** – remove superseded code paths quickly so the runtime stays lean.
 
 Document any deviations here before implementing them.
 

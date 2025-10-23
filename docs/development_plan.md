@@ -44,7 +44,7 @@ Iterate per module (gas bank, price feed, oracle, TEE, automation):
 5. Expose HTTP endpoints.
 6. Register service with the manager.
 
-Only after a module is complete should the legacy equivalent be deprecated.
+Only after a module is complete should the old behaviour be removed.
 
 Step 4 – Runtime Orchestration
 ------------------------------
@@ -65,7 +65,7 @@ Step 5 – Observability & Ops
 Step 6 – Cleanup & Legacy Removal
 ---------------------------------
 
-- Remove unused legacy packages once the new modules achieve feature parity.
+- Remove unused packages once the new modules achieve feature parity.
 - Update README and user documentation to point to the new entrypoints.
 - Archive or delete old CI jobs and scripts.
 

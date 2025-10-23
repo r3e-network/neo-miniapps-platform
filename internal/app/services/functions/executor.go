@@ -25,6 +25,7 @@ func (e *SimpleExecutor) Execute(ctx context.Context, def function.Definition, p
 	return function.ExecutionResult{
 		FunctionID:  def.ID,
 		Output:      out,
+		Status:      function.ExecutionStatusSucceeded,
 		StartedAt:   started,
 		CompletedAt: completed,
 		Duration:    completed.Sub(started),

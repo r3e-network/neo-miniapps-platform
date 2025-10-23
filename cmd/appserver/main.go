@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
@@ -15,6 +17,7 @@ import (
 
 	app "github.com/R3E-Network/service_layer/internal/app"
 	"github.com/R3E-Network/service_layer/internal/app/httpapi"
+	"github.com/R3E-Network/service_layer/internal/app/services/secrets"
 	"github.com/R3E-Network/service_layer/internal/app/storage/postgres"
 	"github.com/R3E-Network/service_layer/internal/config"
 	"github.com/R3E-Network/service_layer/internal/platform/database"
@@ -26,6 +29,7 @@ func main() {
 	dsn := flag.String("dsn", "", "PostgreSQL DSN (overrides config/env; in-memory storage when empty)")
 	configPath := flag.String("config", "", "Path to configuration file (JSON or YAML)")
 	runMigrations := flag.Bool("migrate", true, "run embedded database migrations on startup (ignored for in-memory)")
+	apiTokensFlag := flag.String("api-tokens", "", "comma-separated API tokens for HTTP authentication")
 	flag.Parse()
 
 	var cfg *config.Config
@@ -69,6 +73,7 @@ func main() {
 			Automation: store,
 			PriceFeeds: store,
 			Oracle:     store,
+			Secrets:    store,
 		}
 	}
 
@@ -80,10 +85,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("initialise application: %v", err)
 	}
+	configureSecretsCipher(application.Secrets, dsnVal)
 
 	listenAddr := determineAddr(*addr, cfg)
+	tokens := resolveAPITokens(*apiTokensFlag)
 
-	httpService := httpapi.NewService(application, listenAddr, nil)
+	httpService := httpapi.NewService(application, listenAddr, tokens, nil)
 	if err := application.Attach(httpService); err != nil {
 		log.Fatalf("attach http service: %v", err)
 	}
@@ -170,4 +177,78 @@ func resolveDSN(flagDSN string, cfg *config.Config) string {
 		return cfg.Database.ConnectionString()
 	}
 	return ""
+}
+
+func resolveAPITokens(flagTokens string) []string {
+	var tokens []string
+	tokens = append(tokens, splitTokens(flagTokens)...)
+	tokens = append(tokens, splitTokens(os.Getenv("API_TOKENS"))...)
+	if token := strings.TrimSpace(os.Getenv("API_TOKEN")); token != "" {
+		tokens = append(tokens, token)
+	}
+	return tokens
+}
+
+func splitTokens(value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	trimmed := make([]string, 0, len(parts))
+	for _, part := range parts {
+		p := strings.TrimSpace(part)
+		if p != "" {
+			trimmed = append(trimmed, p)
+		}
+	}
+	return trimmed
+}
+
+func configureSecretsCipher(svc *secrets.Service, dsn string) {
+	if svc == nil {
+		return
+	}
+	key := strings.TrimSpace(os.Getenv("SECRET_ENCRYPTION_KEY"))
+	if key == "" {
+		if strings.TrimSpace(dsn) != "" {
+			log.Fatal("SECRET_ENCRYPTION_KEY must be set when using persistent storage")
+		}
+		log.Println("WARNING: SECRET_ENCRYPTION_KEY not set; storing secrets without encryption")
+		return
+	}
+
+	rawKey, err := decodeSecretKey(key)
+	if err != nil {
+		log.Fatalf("invalid SECRET_ENCRYPTION_KEY: %v", err)
+	}
+
+	cipher, err := secrets.NewAESCipher(rawKey)
+	if err != nil {
+		log.Fatalf("initialise secret cipher: %v", err)
+	}
+	svc.SetCipher(cipher)
+}
+
+func decodeSecretKey(value string) ([]byte, error) {
+	if decoded, err := base64.StdEncoding.DecodeString(value); err == nil && validKeyLength(decoded) {
+		return decoded, nil
+	}
+	if decoded, err := hex.DecodeString(value); err == nil && validKeyLength(decoded) {
+		return decoded, nil
+	}
+	raw := []byte(value)
+	if validKeyLength(raw) {
+		return raw, nil
+	}
+	return nil, fmt.Errorf("expected 16, 24, or 32 byte key")
+}
+
+func validKeyLength(key []byte) bool {
+	switch len(key) {
+	case 16, 24, 32:
+		return true
+	default:
+		return false
+	}
 }

@@ -42,7 +42,7 @@ if [[ "$TARGET_URL" == "http://localhost"* ]]; then
     # Check if the server is already running
     if ! curl -s "$TARGET_URL/health" > /dev/null; then
         echo "Local API server not detected. Please start the API server before running this script."
-        echo "You can use: make run-api"
+        echo "You can use: make run"
         echo "Alternatively, specify a different target URL with -t or --target"
         exit 1
     fi
@@ -53,21 +53,9 @@ fi
 # Determine if we have a Swagger/OpenAPI specification
 if [ -n "$SWAGGER_URL" ]; then
     echo "Running API scan with OpenAPI specification at $SWAGGER_URL..."
-    
-    # Run ZAP API scan with Swagger spec
     docker run --rm -v "$(pwd)/$OUTPUT_DIR:/zap/wrk" $ZAP_IMAGE zap-api-scan.py -t "$SWAGGER_URL" -f openapi -r zap-api-report.html
-elif [ -f "./internal/api/swagger.json" ]; then
-    # Copy Swagger file to output directory
-    cp "./internal/api/swagger.json" "$OUTPUT_DIR/"
-    
-    echo "Running API scan with local OpenAPI specification..."
-    
-    # Run ZAP API scan with local Swagger spec
-    docker run --rm -v "$(pwd)/$OUTPUT_DIR:/zap/wrk" $ZAP_IMAGE zap-api-scan.py -t "/zap/wrk/swagger.json" -f openapi -r zap-api-report.html
 else
     echo "No OpenAPI specification found. Running baseline scan against $TARGET_URL..."
-    
-    # Run ZAP baseline scan without Swagger spec
     docker run --rm -v "$(pwd)/$OUTPUT_DIR:/zap/wrk" $ZAP_IMAGE zap-baseline.py -t "$TARGET_URL" -r zap-baseline-report.html
 fi
 

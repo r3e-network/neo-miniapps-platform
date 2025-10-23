@@ -2,11 +2,14 @@ package oracle
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"testing"
 
 	"github.com/R3E-Network/service_layer/internal/app/domain/account"
 	domain "github.com/R3E-Network/service_layer/internal/app/domain/oracle"
 	"github.com/R3E-Network/service_layer/internal/app/storage/memory"
+	"github.com/R3E-Network/service_layer/pkg/logger"
 )
 
 func TestService_SourceAndRequestLifecycle(t *testing.T) {
@@ -59,4 +62,17 @@ func TestService_SourceAndRequestLifecycle(t *testing.T) {
 	if requests[0].Status != domain.StatusFailed {
 		t.Fatalf("expected failed status, got %s", requests[0].Status)
 	}
+}
+
+func ExampleService_CreateRequest() {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "oracle-user"})
+	log := logger.NewDefault("example-oracle")
+	log.SetOutput(io.Discard)
+	svc := New(store, store, log)
+	src, _ := svc.CreateSource(context.Background(), acct.ID, "prices", "https://api.example.com", "GET", "", nil, "")
+	req, _ := svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
+	fmt.Println(req.Status)
+	// Output:
+	// pending
 }

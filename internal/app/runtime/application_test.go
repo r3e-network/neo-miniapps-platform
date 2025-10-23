@@ -1,37 +1,55 @@
 package runtime
 
-import "testing"
+import (
+	"os"
+	"testing"
 
-func TestParseEncryptionKey(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   string
-		wantLen int
-		ok      bool
-	}{
-		{"raw-16", "1234567890abcdef", 16, true},
-		{"raw-32", "0123456789abcdef0123456789abcdef", 32, true},
-		{"base64", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=", 32, true},
-		{"hex", "3031323334353637383961626364656630313233343536373839616263646566", 32, true},
-		{"invalid-length", "short", 0, false},
-		{"invalid-format", "zzzz", 0, false},
+	"github.com/R3E-Network/service_layer/internal/config"
+)
+
+func TestDetermineListenAddrUsesDefaults(t *testing.T) {
+	cfg := config.New()
+	cfg.Server.Host = ""
+	cfg.Server.Port = 0
+
+	addr := determineListenAddr(cfg)
+	if addr != "0.0.0.0:8080" {
+		t.Fatalf("expected default addr, got %s", addr)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			key, err := parseEncryptionKey(tt.input)
-			if tt.ok {
-				if err != nil {
-					t.Fatalf("expected success, got error: %v", err)
-				}
-				if len(key) != tt.wantLen {
-					t.Fatalf("unexpected length: got %d want %d", len(key), tt.wantLen)
-				}
-			} else {
-				if err == nil {
-					t.Fatalf("expected error, got none")
-				}
-			}
-		})
+	cfg.Server.Host = "127.0.0.1 "
+	cfg.Server.Port = 9090
+	if got := determineListenAddr(cfg); got != "127.0.0.1:9090" {
+		t.Fatalf("unexpected addr %s", got)
 	}
+}
+
+func TestSplitAndTrim(t *testing.T) {
+	cases := map[string][]string{
+		"":                 nil,
+		"   ":              nil,
+		"token1":           {"token1"},
+		"token1, token2  ": {"token1", "token2"},
+	}
+
+	for input, expected := range cases {
+		if got := splitAndTrim(input); len(got) != len(expected) {
+			t.Fatalf("splitAndTrim(%q) length mismatch: %v vs %v", input, got, expected)
+		}
+	}
+}
+
+func TestLoadAPITokensReadsEnv(t *testing.T) {
+	t.Setenv("API_TOKENS", "alpha, beta")
+	t.Setenv("API_TOKEN", "gamma")
+	cfg := config.New()
+	tokens := loadAPITokens(cfg)
+	if len(tokens) != 3 {
+		t.Fatalf("expected 3 tokens, got %d", len(tokens))
+	}
+	if tokens[0] != "alpha" || tokens[2] != "gamma" {
+		t.Fatalf("unexpected tokens %v", tokens)
+	}
+	os.Unsetenv("API_TOKENS")
+	os.Unsetenv("API_TOKEN")
 }

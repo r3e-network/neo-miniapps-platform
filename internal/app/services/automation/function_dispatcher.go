@@ -5,6 +5,7 @@ import (
 	"time"
 
 	domain "github.com/R3E-Network/service_layer/internal/app/domain/automation"
+	"github.com/R3E-Network/service_layer/internal/app/metrics"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 )
 
@@ -53,16 +54,24 @@ func (d *FunctionDispatcher) DispatchJob(ctx context.Context, job domain.Job) er
 		return nil
 	}
 	payload := map[string]any{"automation_job": job.ID}
+	start := time.Now()
 	if err := d.runner.Execute(ctx, job.FunctionID, payload); err != nil {
-		d.log.WithError(err).Warnf("function execution failed for job %s", job.ID)
+		d.log.WithError(err).
+			WithField("job_id", job.ID).
+			WithField("function_id", job.FunctionID).
+			Warn("automation job execution failed")
+		metrics.RecordAutomationExecution(job.ID, time.Since(start), false)
 		return err
 	}
+	metrics.RecordAutomationExecution(job.ID, time.Since(start), true)
 
 	if d.service != nil {
 		runAt := time.Now()
 		next := d.nextFn(job)
 		if _, err := d.service.RecordExecution(ctx, job.ID, runAt, next); err != nil {
-			d.log.WithError(err).Warnf("record execution for job %s failed", job.ID)
+			d.log.WithError(err).
+				WithField("job_id", job.ID).
+				Warn("record automation job execution failed")
 		}
 	}
 	return nil

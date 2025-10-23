@@ -1,28 +1,18 @@
 #!/bin/bash
 
-# Run unit tests only, skipping integration tests and packages with known issues
-echo "Running selected unit tests..."
+set -euo pipefail
 
-# List of packages that should work properly
 PACKAGES=(
+  "./cmd/appserver"
+  "./internal/app/..."
   "./internal/config/..."
-  "./internal/api/common/..."
-  "./pkg/logger/..."
-  "./pkg/cache/..."
-  "./internal/blockchain/compat/..."
-  "./internal/blockchain/..."
+  "./internal/platform/..."
 )
 
-# Run tests on selected packages
-go test -v ${PACKAGES[@]} -short
+echo "Running unit tests for refactored runtime..."
+go test -v "${PACKAGES[@]}" -short
 
-# Show summary of what was tested
-echo "Tested the following packages:"
-for pkg in "${PACKAGES[@]}"; do
-  echo "  - $pkg"
-done
-
-echo "Skipped packages with known issues."
-echo "Once dependencies are fixed, run 'make test' to test all packages."
-
-exit $? 
+cat <<SUMMARY
+Tested the following packages:
+$(printf '  - %s\n' "${PACKAGES[@]}")
+SUMMARY

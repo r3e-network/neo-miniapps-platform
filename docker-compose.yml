@@ -1,30 +1,16 @@
-version: '3.8'
+version: '3.9'
 
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/service_layer?sslmode=disable
     ports:
       - "8080:8080"
     depends_on:
       - postgres
-      - redis
-    environment:
-      - SERVER_PORT=8080
-      - SERVER_HOST=0.0.0.0
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
-      - DB_NAME=service_layer
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - NEO_RPC_URL=http://neo-node:10332
-    volumes:
-      - ./configs:/app/configs
-      - ./logs:/app/logs
-    restart: unless-stopped
 
   postgres:
     image: postgres:14-alpine
@@ -36,75 +22,6 @@ services:
       - POSTGRES_DB=service_layer
     volumes:
       - postgres-data:/var/lib/postgresql/data
-    restart: unless-stopped
-
-  redis:
-    image: redis:6-alpine
-    ports:
-      - "6379:6379"
-    command: redis-server --appendonly yes
-    volumes:
-      - redis-data:/data
-    restart: unless-stopped
-
-  neo-node:
-    image: nspccdev/neo-go-node:latest
-    ports:
-      - "10332:10332"
-      - "10333:10333"
-    volumes:
-      - neo-data:/data
-    command: node --privnet --rpc-bind=0.0.0.0:10332
-    restart: unless-stopped
-
-  prometheus:
-    image: prom/prometheus:latest
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus-data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-    restart: unless-stopped
-
-  grafana:
-    image: grafana/grafana:latest
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-    volumes:
-      - grafana-data:/var/lib/grafana
-    depends_on:
-      - prometheus
-    restart: unless-stopped
-
-  neo-oracle:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./config:/app/config
-    environment:
-      - TZ=UTC
-    restart: unless-stopped
-    networks:
-      - neo-network
 
 volumes:
   postgres-data:
-  redis-data:
-  neo-data:
-  prometheus-data:
-  grafana-data:
-
-networks:
-  neo-network:
-    driver: bridge

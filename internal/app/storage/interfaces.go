@@ -9,6 +9,7 @@ import (
 	"github.com/R3E-Network/service_layer/internal/app/domain/gasbank"
 	"github.com/R3E-Network/service_layer/internal/app/domain/oracle"
 	"github.com/R3E-Network/service_layer/internal/app/domain/pricefeed"
+	"github.com/R3E-Network/service_layer/internal/app/domain/secret"
 	"github.com/R3E-Network/service_layer/internal/app/domain/trigger"
 )
 
@@ -27,6 +28,9 @@ type FunctionStore interface {
 	UpdateFunction(ctx context.Context, def function.Definition) (function.Definition, error)
 	GetFunction(ctx context.Context, id string) (function.Definition, error)
 	ListFunctions(ctx context.Context, accountID string) ([]function.Definition, error)
+	CreateExecution(ctx context.Context, exec function.Execution) (function.Execution, error)
+	GetExecution(ctx context.Context, id string) (function.Execution, error)
+	ListFunctionExecutions(ctx context.Context, functionID string, limit int) ([]function.Execution, error)
 }
 
 // TriggerStore persists trigger records.
@@ -83,4 +87,13 @@ type OracleStore interface {
 	GetRequest(ctx context.Context, id string) (oracle.Request, error)
 	ListRequests(ctx context.Context, accountID string) ([]oracle.Request, error)
 	ListPendingRequests(ctx context.Context) ([]oracle.Request, error)
+}
+
+// SecretStore persists account secrets.
+type SecretStore interface {
+	CreateSecret(ctx context.Context, sec secret.Secret) (secret.Secret, error)
+	UpdateSecret(ctx context.Context, sec secret.Secret) (secret.Secret, error)
+	GetSecret(ctx context.Context, accountID, name string) (secret.Secret, error)
+	ListSecrets(ctx context.Context, accountID string) ([]secret.Secret, error)
+	DeleteSecret(ctx context.Context, accountID, name string) error
 }

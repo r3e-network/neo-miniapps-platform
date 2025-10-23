@@ -81,7 +81,10 @@ func (s *Service) CreateSource(ctx context.Context, accountID, name, url, method
 	if err != nil {
 		return oracle.DataSource{}, err
 	}
-	s.log.Infof("oracle source %s created for account %s", src.ID, accountID)
+	s.log.WithField("source_id", src.ID).
+		WithField("account_id", accountID).
+		WithField("name", name).
+		Info("oracle source created")
 	return src, nil
 }
 
@@ -136,7 +139,9 @@ func (s *Service) UpdateSource(ctx context.Context, sourceID string, name, url, 
 	if err != nil {
 		return oracle.DataSource{}, err
 	}
-	s.log.Infof("oracle source %s updated", src.ID)
+	s.log.WithField("source_id", src.ID).
+		WithField("account_id", src.AccountID).
+		Info("oracle source updated")
 	return src, nil
 }
 
@@ -193,7 +198,10 @@ func (s *Service) CreateRequest(ctx context.Context, accountID, sourceID, payloa
 	if err != nil {
 		return oracle.Request{}, err
 	}
-	s.log.Infof("oracle request %s created for source %s", req.ID, sourceID)
+	s.log.WithField("request_id", req.ID).
+		WithField("account_id", accountID).
+		WithField("source_id", sourceID).
+		Info("oracle request created")
 	return req, nil
 }
 

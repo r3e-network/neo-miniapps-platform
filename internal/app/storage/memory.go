@@ -3,11 +3,14 @@ package storage
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/app/domain/account"
 	"github.com/R3E-Network/service_layer/internal/app/domain/function"
+	"github.com/R3E-Network/service_layer/internal/app/domain/secret"
 	"github.com/R3E-Network/service_layer/internal/app/domain/trigger"
 )
 
@@ -15,20 +18,24 @@ import (
 // interfaces defined in this package. It is intended for tests and prototyping
 // and deliberately keeps the implementation simple.
 type Memory struct {
-	mu        sync.RWMutex
-	nextID    int64
-	accounts  map[string]account.Account
-	functions map[string]function.Definition
-	triggers  map[string]trigger.Trigger
+	mu         sync.RWMutex
+	nextID     int64
+	accounts   map[string]account.Account
+	functions  map[string]function.Definition
+	executions map[string]function.Execution
+	triggers   map[string]trigger.Trigger
+	secrets    map[string]secret.Secret
 }
 
 // NewMemory creates an empty in-memory store.
 func NewMemory() *Memory {
 	return &Memory{
-		nextID:    1,
-		accounts:  make(map[string]account.Account),
-		functions: make(map[string]function.Definition),
-		triggers:  make(map[string]trigger.Trigger),
+		nextID:     1,
+		accounts:   make(map[string]account.Account),
+		functions:  make(map[string]function.Definition),
+		executions: make(map[string]function.Execution),
+		triggers:   make(map[string]trigger.Trigger),
+		secrets:    make(map[string]secret.Secret),
 	}
 }
 
@@ -40,6 +47,10 @@ func (m *Memory) nextIDLocked() string {
 
 func fmtID(id int64) string {
 	return fmt.Sprintf("%d", id)
+}
+
+func secretKey(accountID, name string) string {
+	return accountID + "|" + strings.ToLower(name)
 }
 
 // AccountStore implementation -------------------------------------------------
@@ -177,6 +188,138 @@ func (m *Memory) ListFunctions(_ context.Context, accountID string) ([]function.
 	return result, nil
 }
 
+func (m *Memory) CreateExecution(_ context.Context, exec function.Execution) (function.Execution, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if exec.ID == "" {
+		exec.ID = m.nextIDLocked()
+	} else if _, exists := m.executions[exec.ID]; exists {
+		return function.Execution{}, fmt.Errorf("function execution %s already exists", exec.ID)
+	}
+
+	exec.StartedAt = exec.StartedAt.UTC()
+	exec.CompletedAt = exec.CompletedAt.UTC()
+	if exec.Input == nil {
+		exec.Input = map[string]any{}
+	}
+	if exec.Output == nil {
+		exec.Output = map[string]any{}
+	}
+	exec.Logs = cloneStrings(exec.Logs)
+
+	m.executions[exec.ID] = cloneExecution(exec)
+	return cloneExecution(exec), nil
+}
+
+func (m *Memory) GetExecution(_ context.Context, id string) (function.Execution, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	exec, ok := m.executions[id]
+	if !ok {
+		return function.Execution{}, fmt.Errorf("function execution %s not found", id)
+	}
+	return cloneExecution(exec), nil
+}
+
+func (m *Memory) ListFunctionExecutions(_ context.Context, functionID string, limit int) ([]function.Execution, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make([]function.Execution, 0)
+	for _, exec := range m.executions {
+		if exec.FunctionID == functionID {
+			result = append(result, cloneExecution(exec))
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].StartedAt.After(result[j].StartedAt)
+	})
+	if limit > 0 && len(result) > limit {
+		result = result[:limit]
+	}
+	return result, nil
+}
+
+// SecretStore implementation -------------------------------------------------
+
+func (m *Memory) CreateSecret(_ context.Context, sec secret.Secret) (secret.Secret, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key := secretKey(sec.AccountID, sec.Name)
+	if _, exists := m.secrets[key]; exists {
+		return secret.Secret{}, fmt.Errorf("secret %s already exists", sec.Name)
+	}
+
+	if sec.ID == "" {
+		sec.ID = m.nextIDLocked()
+	}
+	now := time.Now().UTC()
+	sec.CreatedAt = now
+	sec.UpdatedAt = now
+	sec.Version = 1
+
+	m.secrets[key] = sec
+	return sec, nil
+}
+
+func (m *Memory) UpdateSecret(_ context.Context, sec secret.Secret) (secret.Secret, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key := secretKey(sec.AccountID, sec.Name)
+	existing, ok := m.secrets[key]
+	if !ok {
+		return secret.Secret{}, fmt.Errorf("secret %s not found", sec.Name)
+	}
+
+	sec.ID = existing.ID
+	sec.CreatedAt = existing.CreatedAt
+	sec.Version = existing.Version + 1
+	sec.UpdatedAt = time.Now().UTC()
+
+	m.secrets[key] = sec
+	return sec, nil
+}
+
+func (m *Memory) GetSecret(_ context.Context, accountID, name string) (secret.Secret, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	sec, ok := m.secrets[secretKey(accountID, name)]
+	if !ok {
+		return secret.Secret{}, fmt.Errorf("secret %s not found", name)
+	}
+	return sec, nil
+}
+
+func (m *Memory) ListSecrets(_ context.Context, accountID string) ([]secret.Secret, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make([]secret.Secret, 0)
+	for _, sec := range m.secrets {
+		if sec.AccountID == accountID {
+			result = append(result, sec)
+		}
+	}
+	return result, nil
+}
+
+func (m *Memory) DeleteSecret(_ context.Context, accountID, name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key := secretKey(accountID, name)
+	if _, ok := m.secrets[key]; !ok {
+		return fmt.Errorf("secret %s not found", name)
+	}
+	delete(m.secrets, key)
+	return nil
+}
+
 // TriggerStore implementation -------------------------------------------------
 
 func (m *Memory) CreateTrigger(_ context.Context, trg trigger.Trigger) (trigger.Trigger, error) {
@@ -250,6 +393,26 @@ func copyMap(src map[string]string) map[string]string {
 	return dst
 }
 
+func copyAnyMap(src map[string]any) map[string]any {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]any, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
+}
+
+func cloneStrings(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	dup := make([]string, len(items))
+	copy(dup, items)
+	return dup
+}
+
 func cloneAccount(acct account.Account) account.Account {
 	acct.Metadata = copyMap(acct.Metadata)
 	return acct
@@ -258,6 +421,13 @@ func cloneAccount(acct account.Account) account.Account {
 func cloneFunction(def function.Definition) function.Definition {
 	def.Secrets = append([]string(nil), def.Secrets...)
 	return def
+}
+
+func cloneExecution(exec function.Execution) function.Execution {
+	exec.Input = copyAnyMap(exec.Input)
+	exec.Output = copyAnyMap(exec.Output)
+	exec.Logs = cloneStrings(exec.Logs)
+	return exec
 }
 
 func cloneTrigger(trg trigger.Trigger) trigger.Trigger {

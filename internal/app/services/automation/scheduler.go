@@ -148,16 +148,23 @@ func (s *Scheduler) tick(ctx context.Context) {
 		return
 	}
 
+	now := time.Now()
 	var wg sync.WaitGroup
 	for _, job := range jobs {
 		if !job.Enabled {
+			continue
+		}
+		if !job.NextRun.IsZero() && job.NextRun.After(now) {
 			continue
 		}
 		wg.Add(1)
 		go func(job domain.Job) {
 			defer wg.Done()
 			if err := dispatcher.DispatchJob(ctx, job); err != nil {
-				s.log.WithError(err).Warnf("dispatch job %s failed", job.ID)
+				s.log.WithError(err).
+					WithField("job_id", job.ID).
+					WithField("function_id", job.FunctionID).
+					Warn("dispatch automation job failed")
 			}
 		}(job)
 	}

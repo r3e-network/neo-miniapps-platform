@@ -1,349 +1,164 @@
-# Neo N3 Service Layer Developer Guide
+# Service Layer Developer Guide
 
-This guide provides instructions for developers who want to use the Neo N3 Service Layer API to enhance their smart contracts with external data and automation.
+This guide walks through the refactored Service Layer runtime that ships under
+`cmd/appserver`. The new architecture exposes a small HTTP surface rooted at
+`/accounts/{accountID}/...`, backs services with in-memory storage by default,
+and optionally wires PostgreSQL when a DSN is supplied.
 
-## Getting Started
-
-### 1. Create an Account
-
-To start using the Neo N3 Service Layer, you need to create an account:
+## 1. Getting Started
 
 ```bash
-curl -X POST https://api.servicelayer.neo.org/v1/auth/register \
-  -H "Content-Type: application/json" \
+git clone https://github.com/R3E-Network/service_layer.git
+cd service_layer
+
+# In-memory mode
+go run ./cmd/appserver
+
+# With PostgreSQL (+ migrations)
+DATABASE_URL=postgres://user:pass@localhost:5432/service_layer?sslmode=disable \
+  go run ./cmd/appserver -migrate
+```
+
+Copy `.env.example` to `.env` if you prefer to manage environment variables
+within the repository. Docker Compose automatically consumes the file.
+
+## 2. Core Concepts
+
+| Concept          | Description                                                                 |
+|------------------|-----------------------------------------------------------------------------|
+| Account          | Tenant boundary for secrets, functions, automation, oracle requests, etc.  |
+| Function         | JavaScript snippet executed via the embedded Goja runtime.                  |
+| Automation       | Cron-style jobs that invoke functions on a schedule.                        |
+| Gas Bank         | Simple ledger tracking deposits/withdrawals for contract execution funds.   |
+| Oracle           | Account-scoped data sources and one-off requests with dispatcher support.   |
+| Price Feed       | Reference price definitions with snapshot storage.                          |
+
+## 3. API Walkthrough
+
+All requests are plain JSON. Authentication is not enforced yet; the focus is on
+functionality parity with the migration plan.
+
+### 3.1 Accounts
+
+```bash
+# Create
+curl -sS -X POST http://localhost:8080/accounts \
+  -d '{"owner":"alice"}' | jq
+
+# List
+curl -sS http://localhost:8080/accounts | jq
+
+# Delete
+curl -sS -X DELETE http://localhost:8080/accounts/{accountID}
+```
+
+### 3.2 Secrets
+
+```bash
+# Store a secret
+curl -sS -X POST \
+  http://localhost:8080/accounts/{accountID}/secrets \
+  -d '{"name":"apiKey","value":"top-secret"}' | jq
+
+# List metadata
+curl -sS http://localhost:8080/accounts/{accountID}/secrets | jq
+```
+
+### 3.3 Functions & Execution
+
+```bash
+# Create a function referencing the secret
+curl -sS -X POST \
+  http://localhost:8080/accounts/{accountID}/functions \
   -d '{
-    "username": "your_username",
-    "email": "your_email@example.com",
-    "password": "your_password"
-  }'
+        "name":"hello",
+        "source":"(params, secrets) => ({secret: secrets.apiKey})",
+        "secrets":["apiKey"]
+      }' | jq
+
+# Execute immediately
+curl -sS -X POST \
+  http://localhost:8080/accounts/{accountID}/functions/{functionID}/execute \
+  -d '{"input":"hi"}' | jq
+
+# Inspect execution history
+curl -sS \
+  http://localhost:8080/accounts/{accountID}/functions/{functionID}/executions | jq
 ```
 
-### 2. Get Authentication Token
-
-Once you have an account, you need to obtain an authentication token:
+### 3.4 Gas Bank
 
 ```bash
-curl -X POST https://api.servicelayer.neo.org/v1/auth/login \
-  -H "Content-Type: application/json" \
+# Ensure / create a gas account (optionally with wallet binding)
+curl -sS -X POST \
+  http://localhost:8080/accounts/{accountID}/gasbank \
+  -d '{"wallet_address":"WALLET-1"}' | jq
+
+# Deposit gas
+curl -sS -X POST \
+  http://localhost:8080/accounts/{accountID}/gasbank/deposit \
+  -d '{"gas_account_id":"{gasAccountID}","amount":5.0,"tx_id":"tx1"}' | jq
+
+# Request withdrawal
+curl -sS -X POST \
+  http://localhost:8080/accounts/{accountID}/gasbank/withdraw \
+  -d '{"gas_account_id":"{gasAccountID}","amount":1.5,"to_address":"ADDR"}' | jq
+```
+
+### 3.5 Automation
+
+```bash
+# Create a cron job that triggers a function every minute
+curl -sS -X POST \
+  http://localhost:8080/accounts/{accountID}/automation/jobs \
   -d '{
-    "username_or_email": "your_username",
-    "password": "your_password"
-  }'
+        "function_id":"{functionID}",
+        "name":"every-minute",
+        "schedule":"@every 1m"
+      }' | jq
+
+# Disable the job
+curl -sS -X PATCH \
+  http://localhost:8080/accounts/{accountID}/automation/jobs/{jobID} \
+  -d '{"enabled":false}' | jq
 ```
 
-The response will include:
-
-```json
-{
-  "success": true,
-  "data": {
-    "access_token": "eyJhbGciOi...",
-    "refresh_token": "eyJhbGciOi...",
-    "expires_in": 86400
-  }
-}
-```
-
-Use the `access_token` in all subsequent API requests.
-
-## Using JavaScript Functions
-
-### Creating a Function
-
-Create a JavaScript function that will be executed in the TEE:
+### 3.6 Oracle
 
 ```bash
-curl -X POST https://api.servicelayer.neo.org/v1/functions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -d '{
-    "name": "calculateAverage",
-    "description": "Calculate average of token prices",
-    "source_code": "function calculate(sources) { \n  let sum = 0; \n  for (const source of sources) { \n    sum += source.price; \n  } \n  return { average: sum / sources.length }; \n}",
-    "timeout": 5,
-    "memory": 128,
-    "secrets": ["api_key1", "api_key2"]
-  }'
+# Register a data source
+curl -sS -X POST \
+  http://localhost:8080/accounts/{accountID}/oracle/sources \
+  -d '{"name":"prices","url":"https://api.example.com"}' | jq
+
+# Issue a request
+curl -sS -X POST \
+  http://localhost:8080/accounts/{accountID}/oracle/requests \
+  -d '{"data_source_id":"{sourceID}","payload":"{}"}' | jq
 ```
 
-### Executing a Function
+## 4. Observability
 
-Execute a function:
+- `/metrics` exposes Prometheus counters/histograms for HTTP traffic and function
+  runtimes.
+- Structured service logs include identifiers such as `account_id`,
+  `function_id`, `job_id`, and `gas_account_id`, simplifying trace correlation.
 
-```bash
-curl -X POST https://api.servicelayer.neo.org/v1/functions/123/execute \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -d '{
-    "params": {
-      "sources": [
-        {"name": "source1", "price": 42},
-        {"name": "source2", "price": 43}
-      ]
-    },
-    "async": false
-  }'
-```
+## 5. Configuration Checklist
 
-## Managing Secrets
+| Control                | Source                    | Notes                                         |
+|------------------------|---------------------------|-----------------------------------------------|
+| `DATABASE_URL`         | env / `-dsn` flag         | Empty string keeps storage in-memory.         |
+| `SECRET_ENCRYPTION_KEY`| env                       | Enables AES-GCM for secrets.                  |
+| Logging options        | env (`LOG_LEVEL`) or YAML | Defaults to text output at info level.        |
+| Metrics toggle         | `metrics.enabled`         | `/metrics` served from the main HTTP mux.     |
 
-### Storing a Secret
+Sample configuration lives in `configs/config.yaml`. Adjust as needed and supply
+via `-config` (JSON or YAML).
 
-Store a secret that can be used by your functions:
+## 6. Next Steps
 
-```bash
-curl -X POST https://api.servicelayer.neo.org/v1/secrets \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -d '{
-    "name": "api_key1",
-    "value": "your_secret_api_key"
-  }'
-```
+Refer to [`integration_endpoints.md`](integration_endpoints.md) for the expected HTTP payloads used by the price feed, oracle, and gas bank integrations.
 
-### Getting Secret Metadata
-
-Get metadata about your secret (the actual value is never returned):
-
-```bash
-curl -X GET https://api.servicelayer.neo.org/v1/secrets/api_key1 \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-## Setting Up Contract Automation
-
-### Creating a Trigger
-
-Create a trigger to automate contract functions:
-
-```bash
-curl -X POST https://api.servicelayer.neo.org/v1/triggers \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -d '{
-    "name": "Daily Price Update",
-    "description": "Updates token prices every day at midnight",
-    "trigger_type": "cron",
-    "trigger_config": {
-      "schedule": "0 0 * * *",
-      "timezone": "UTC"
-    },
-    "function_id": 123
-  }'
-```
-
-The Service Layer supports several types of triggers:
-
-1. **Cron triggers** - Time-based using cron syntax
-   ```json
-   {
-     "trigger_type": "cron",
-     "trigger_config": {
-       "schedule": "0 0 * * *",
-       "timezone": "UTC"
-     }
-   }
-   ```
-
-2. **Price triggers** - Based on token price changes
-   ```json
-   {
-     "trigger_type": "price",
-     "trigger_config": {
-       "asset_pair": "NEO/USD",
-       "condition": "above",
-       "threshold": 50.0,
-       "duration": 300
-     }
-   }
-   ```
-
-3. **Blockchain triggers** - Based on blockchain events
-   ```json
-   {
-     "trigger_type": "blockchain",
-     "trigger_config": {
-       "contract_hash": "0x1234567890abcdef",
-       "event_name": "Transfer"
-     }
-   }
-   ```
-
-## Using the Price Feed
-
-### Creating a Price Feed
-
-Set up a price feed for a token pair:
-
-```bash
-curl -X POST https://api.servicelayer.neo.org/v1/pricefeeds \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -d '{
-    "asset_pair": "NEO/USD",
-    "frequency": 300,
-    "sources": [
-      "binance",
-      "huobi",
-      "gate"
-    ],
-    "aggregation": "median",
-    "deviation": 0.5
-  }'
-```
-
-### Getting Latest Price
-
-Get the latest price for a token:
-
-```bash
-curl -X GET https://api.servicelayer.neo.org/v1/pricefeeds/123 \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-## Random Number Generation
-
-### Generating a Random Number
-
-Generate a verifiably random number:
-
-```bash
-curl -X POST https://api.servicelayer.neo.org/v1/random \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -d '{
-    "min": 1,
-    "max": 100
-  }'
-```
-
-### Verifying a Random Number
-
-Verify a previously generated random number:
-
-```bash
-curl -X GET https://api.servicelayer.neo.org/v1/random/123/verify \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-## Gas Bank
-
-### Depositing Gas
-
-Deposit gas to be used by the service:
-
-```bash
-curl -X POST https://api.servicelayer.neo.org/v1/gasbank/deposit \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -d '{
-    "amount": 10.0,
-    "tx_hash": "0x1234567890abcdef1234567890abcdef12345678"
-  }'
-```
-
-### Checking Gas Balance
-
-Check your gas balance:
-
-```bash
-curl -X GET https://api.servicelayer.neo.org/v1/gasbank/balance \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-## Smart Contract Integration
-
-### 1. Deploy the Smart Contract
-
-Deploy the smart contract to the Neo N3 blockchain using Neo Blockchain Toolkit.
-
-### 2. Register the Contract with Service Layer
-
-Register your contract's hash with the Service Layer to enable automation:
-
-```bash
-curl -X POST https://api.servicelayer.neo.org/v1/contracts \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -d '{
-    "name": "OracleConsumer",
-    "contract_hash": "0x1234567890abcdef1234567890abcdef12345678",
-    "description": "Oracle consumer contract"
-  }'
-```
-
-### 3. Set Up Automation Triggers
-
-Create triggers to automate your contract functions:
-
-```bash
-curl -X POST https://api.servicelayer.neo.org/v1/triggers \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -d '{
-    "name": "Daily Price Update",
-    "description": "Updates token prices every day at midnight",
-    "trigger_type": "cron",
-    "trigger_config": {
-      "schedule": "0 0 * * *",
-      "timezone": "UTC"
-    },
-    "contract_id": 123,
-    "method": "executeAutomation",
-    "parameters": [
-      {
-        "type": "String",
-        "value": "updatePrices"
-      }
-    ]
-  }'
-```
-
-## Best Practices
-
-### Security
-
-1. Never hardcode sensitive data like API keys in your functions.
-2. Use the Secrets management feature to securely store sensitive information.
-3. Implement proper authentication in your smart contracts.
-4. Use rate limiting to prevent excessive API calls.
-
-### Performance
-
-1. Keep JavaScript functions small and focused on a single task.
-2. Limit the number of external API calls in your functions.
-3. Set reasonable timeouts for your functions.
-4. Use caching where appropriate to reduce redundant calls.
-
-### Reliability
-
-1. Implement error handling in your functions and smart contracts.
-2. Test your functions thoroughly before deploying to production.
-3. Monitor function execution logs for errors.
-4. Set up alerts for failed automations.
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Authentication Errors**
-   - Make sure your access token is valid and not expired
-   - If expired, use the refresh token to get a new access token
-
-2. **Function Execution Errors**
-   - Check the function logs for detailed error messages
-   - Verify that all required secrets are available
-   - Ensure your function code is syntactically correct
-
-3. **Trigger Execution Failures**
-   - Check that the contract hash is correct
-   - Verify that the method exists in your contract
-   - Ensure parameters are correctly formatted
-
-### Getting Help
-
-For additional support:
-
-- Check the [API documentation](https://api.servicelayer.neo.org/docs)
-- Join the Neo N3 Service Layer community forum
-- Contact support at support@servicelayer.neo.org
+- Explore `docs/runtime_quickstart.md` for the full endpoint matrix.
+- Review `docs/automation_integration.md` for end-to-end automation workflows.

@@ -2,12 +2,15 @@ package triggers
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"testing"
 
 	"github.com/R3E-Network/service_layer/internal/app/domain/account"
 	"github.com/R3E-Network/service_layer/internal/app/domain/function"
 	"github.com/R3E-Network/service_layer/internal/app/domain/trigger"
 	"github.com/R3E-Network/service_layer/internal/app/storage/memory"
+	"github.com/R3E-Network/service_layer/pkg/logger"
 )
 
 func TestService(t *testing.T) {
@@ -65,4 +68,23 @@ func TestService_RegisterEventAndWebhook(t *testing.T) {
 	if _, err := svc.Register(context.Background(), wh); err != nil {
 		t.Fatalf("register webhook trigger: %v", err)
 	}
+}
+
+func ExampleService_Register() {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	fn, _ := store.CreateFunction(context.Background(), function.Definition{AccountID: acct.ID, Name: "fn", Source: "() => 1"})
+	log := logger.NewDefault("example-triggers")
+	log.SetOutput(io.Discard)
+	svc := New(store, store, store, log)
+
+	trg, _ := svc.Register(context.Background(), trigger.Trigger{
+		AccountID:  acct.ID,
+		FunctionID: fn.ID,
+		Type:       trigger.TypeEvent,
+		Rule:       "user.created",
+	})
+	fmt.Println(trg.Type, trg.Enabled)
+	// Output:
+	// event true
 }

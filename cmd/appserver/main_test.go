@@ -21,7 +21,7 @@ func TestResolveDSNPrecedence(t *testing.T) {
 			flag: "postgres://flag",
 			env:  "postgres://env",
 			cfg: func() *config.Config {
-				cfg := config.DefaultConfig()
+				cfg := config.New()
 				cfg.Database.DSN = "postgres://cfg"
 				return cfg
 			},
@@ -32,7 +32,7 @@ func TestResolveDSNPrecedence(t *testing.T) {
 			flag: "",
 			env:  "postgres://env",
 			cfg: func() *config.Config {
-				cfg := config.DefaultConfig()
+				cfg := config.New()
 				cfg.Database.DSN = "postgres://cfg"
 				return cfg
 			},
@@ -43,7 +43,7 @@ func TestResolveDSNPrecedence(t *testing.T) {
 			flag: "",
 			env:  "",
 			cfg: func() *config.Config {
-				cfg := config.DefaultConfig()
+				cfg := config.New()
 				cfg.Database.DSN = "postgres://cfg"
 				return cfg
 			},
@@ -54,7 +54,7 @@ func TestResolveDSNPrecedence(t *testing.T) {
 			flag: "",
 			env:  "",
 			cfg: func() *config.Config {
-				cfg := config.DefaultConfig()
+				cfg := config.New()
 				cfg.Database.DSN = ""
 				cfg.Database.Host = "localhost"
 				cfg.Database.Port = 5432
@@ -71,7 +71,7 @@ func TestResolveDSNPrecedence(t *testing.T) {
 			flag: "",
 			env:  "",
 			cfg: func() *config.Config {
-				return config.DefaultConfig()
+				return config.New()
 			},
 			want: "",
 		},
@@ -80,7 +80,7 @@ func TestResolveDSNPrecedence(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			// ensure base config doesn't leak between cases
-			cfg := config.DefaultConfig()
+			cfg := config.New()
 			if tc.cfg != nil {
 				cfg = tc.cfg()
 			}

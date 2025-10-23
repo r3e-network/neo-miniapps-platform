@@ -86,7 +86,10 @@ func (s *Service) CreateFeed(ctx context.Context, accountID, baseAsset, quoteAss
 	if err != nil {
 		return pricefeed.Feed{}, err
 	}
-	s.log.Infof("price feed %s created for account %s", feed.ID, accountID)
+	s.log.WithField("feed_id", feed.ID).
+		WithField("account_id", accountID).
+		WithField("pair", feed.Pair).
+		Info("price feed created")
 	return feed, nil
 }
 
@@ -122,7 +125,9 @@ func (s *Service) UpdateFeed(ctx context.Context, feedID string, interval, heart
 	if err != nil {
 		return pricefeed.Feed{}, err
 	}
-	s.log.Infof("price feed %s updated", feed.ID)
+	s.log.WithField("feed_id", feed.ID).
+		WithField("account_id", feed.AccountID).
+		Info("price feed updated")
 	return feed, nil
 }
 
@@ -142,11 +147,10 @@ func (s *Service) SetActive(ctx context.Context, feedID string, active bool) (pr
 		return pricefeed.Feed{}, err
 	}
 
-	state := "disabled"
-	if active {
-		state = "enabled"
-	}
-	s.log.Infof("price feed %s %s", feed.ID, state)
+	s.log.WithField("feed_id", feed.ID).
+		WithField("account_id", feed.AccountID).
+		WithField("active", active).
+		Info("price feed state changed")
 	return feed, nil
 }
 

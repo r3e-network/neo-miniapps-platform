@@ -2,12 +2,15 @@ package automation
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"testing"
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/app/domain/account"
 	"github.com/R3E-Network/service_layer/internal/app/domain/function"
 	"github.com/R3E-Network/service_layer/internal/app/storage/memory"
+	"github.com/R3E-Network/service_layer/pkg/logger"
 )
 
 func TestService_CreateAndUpdateJob(t *testing.T) {
@@ -74,4 +77,18 @@ func TestService_CreateAndUpdateJob(t *testing.T) {
 	if len(list) != 1 {
 		t.Fatalf("expected one job, got %d", len(list))
 	}
+}
+
+func ExampleService_CreateJob() {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	fn, _ := store.CreateFunction(context.Background(), function.Definition{AccountID: acct.ID, Name: "fn", Source: "() => 1"})
+	log := logger.NewDefault("example-automation")
+	log.SetOutput(io.Discard)
+	svc := New(store, store, store, log)
+
+	job, _ := svc.CreateJob(context.Background(), acct.ID, fn.ID, "daily-report", "@daily", "send summary email")
+	fmt.Println(job.Name, job.Enabled)
+	// Output:
+	// daily-report true
 }

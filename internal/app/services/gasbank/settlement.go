@@ -61,9 +61,6 @@ func NewSettlementPoller(store storage.GasBankStore, service *Service, resolver 
 	if log == nil {
 		log = logger.NewDefault("gasbank-settlement")
 	}
-	if resolver == nil {
-		resolver = NewTimeoutResolver(2 * time.Minute)
-	}
 	return &SettlementPoller{
 		store:       store,
 		service:     service,
@@ -77,6 +74,10 @@ func NewSettlementPoller(store storage.GasBankStore, service *Service, resolver 
 func (p *SettlementPoller) Name() string { return "gasbank-settlement" }
 
 func (p *SettlementPoller) Start(ctx context.Context) error {
+	if p.resolver == nil {
+		p.log.Warn("withdrawal resolver not configured; settlement poller disabled")
+		return nil
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.running {
@@ -136,6 +137,9 @@ func (p *SettlementPoller) Stop(ctx context.Context) error {
 }
 
 func (p *SettlementPoller) tick(ctx context.Context) {
+	if p.resolver == nil {
+		return
+	}
 	txs, err := p.store.ListPendingWithdrawals(ctx)
 	if err != nil {
 		p.log.WithError(err).Warn("list pending withdrawals failed")
@@ -150,7 +154,9 @@ func (p *SettlementPoller) tick(ctx context.Context) {
 
 		done, success, message, retryAfter, err := p.resolver.Resolve(ctx, tx)
 		if err != nil {
-			p.log.WithError(err).Warnf("resolver error for withdrawal %s", tx.ID)
+			p.log.WithError(err).
+				WithField("transaction_id", tx.ID).
+				Warn("withdrawal resolver error")
 			p.scheduleNext(tx.ID, retryAfter)
 			continue
 		}
@@ -161,16 +167,22 @@ func (p *SettlementPoller) tick(ctx context.Context) {
 		}
 
 		if p.service == nil {
-			p.log.Warnf("no gas bank service attached; cannot settle %s", tx.ID)
+			p.log.WithField("transaction_id", tx.ID).
+				Warn("no gas bank service attached; cannot settle withdrawal")
 			continue
 		}
 
 		if _, _, err := p.service.CompleteWithdrawal(ctx, tx.ID, success, message); err != nil {
-			p.log.WithError(err).Warnf("complete withdrawal %s failed", tx.ID)
+			p.log.WithError(err).
+				WithField("transaction_id", tx.ID).
+				Warn("complete withdrawal failed")
 			p.scheduleNext(tx.ID, retryAfter)
 			continue
 		}
-		p.log.Infof("withdrawal %s settled (success=%t)", tx.ID, success)
+		p.log.WithField("transaction_id", tx.ID).
+			WithField("account_id", tx.AccountID).
+			WithField("success", success).
+			Info("settlement poller completed withdrawal")
 		p.clearSchedule(tx.ID)
 	}
 }

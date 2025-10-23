@@ -35,7 +35,6 @@ func NewDispatcher(service *Service, log *logger.Logger) *Dispatcher {
 		service:     service,
 		log:         log,
 		interval:    10 * time.Second,
-		resolver:    NewTimeoutResolver(2 * time.Minute),
 		nextAttempt: make(map[string]time.Time),
 	}
 }
@@ -51,6 +50,11 @@ func (d *Dispatcher) Name() string { return "oracle-dispatcher" }
 
 func (d *Dispatcher) Start(ctx context.Context) error {
 	d.mu.Lock()
+	if d.resolver == nil {
+		d.mu.Unlock()
+		d.log.Warn("oracle request resolver not configured; dispatcher disabled")
+		return nil
+	}
 	if d.running {
 		d.mu.Unlock()
 		return nil
@@ -139,7 +143,9 @@ func (d *Dispatcher) tick(ctx context.Context) {
 
 		done, success, result, errMsg, retryAfter, err := resolver.Resolve(ctx, req)
 		if err != nil {
-			d.log.WithError(err).Warnf("resolver error for request %s", req.ID)
+			d.log.WithError(err).
+				WithField("request_id", req.ID).
+				Warn("oracle resolver error")
 			d.scheduleNext(req.ID, retryAfter)
 			continue
 		}
@@ -151,13 +157,17 @@ func (d *Dispatcher) tick(ctx context.Context) {
 
 		if success {
 			if _, err := d.service.CompleteRequest(ctx, req.ID, result); err != nil {
-				d.log.WithError(err).Warnf("complete request %s failed", req.ID)
+				d.log.WithError(err).
+					WithField("request_id", req.ID).
+					Warn("complete oracle request failed")
 				d.scheduleNext(req.ID, retryAfter)
 				continue
 			}
 		} else {
 			if _, err := d.service.FailRequest(ctx, req.ID, errMsg); err != nil {
-				d.log.WithError(err).Warnf("fail request %s failed", req.ID)
+				d.log.WithError(err).
+					WithField("request_id", req.ID).
+					Warn("mark oracle request failed")
 				d.scheduleNext(req.ID, retryAfter)
 				continue
 			}

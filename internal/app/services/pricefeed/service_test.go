@@ -2,12 +2,15 @@ package pricefeed
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"testing"
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/app/domain/account"
 	pricefeedDomain "github.com/R3E-Network/service_layer/internal/app/domain/pricefeed"
 	"github.com/R3E-Network/service_layer/internal/app/storage/memory"
+	"github.com/R3E-Network/service_layer/pkg/logger"
 )
 
 func TestService_FeedLifecycle(t *testing.T) {
@@ -93,4 +96,16 @@ func TestService_Refresher(t *testing.T) {
 	if len(snaps) == 0 {
 		t.Fatalf("expected snapshot recorded")
 	}
+}
+
+func ExampleService_CreateFeed() {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "desk"})
+	log := logger.NewDefault("example-pricefeed")
+	log.SetOutput(io.Discard)
+	svc := New(store, store, log)
+	feed, _ := svc.CreateFeed(context.Background(), acct.ID, "btc", "usd", "@every 1m", "@every 5m", 0.5)
+	fmt.Println(feed.Pair, feed.Active)
+	// Output:
+	// BTC/USD true
 }

@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/R3E-Network/service_layer/internal/app/domain/gasbank"
 	"github.com/R3E-Network/service_layer/internal/app/domain/oracle"
 	"github.com/R3E-Network/service_layer/internal/app/domain/pricefeed"
+	"github.com/R3E-Network/service_layer/internal/app/domain/secret"
 	"github.com/R3E-Network/service_layer/internal/app/domain/trigger"
 	"github.com/R3E-Network/service_layer/internal/app/storage"
 )
@@ -24,6 +26,7 @@ type Store struct {
 	nextID              int64
 	accounts            map[string]account.Account
 	functions           map[string]function.Definition
+	functionExecutions  map[string]function.Execution
 	triggers            map[string]trigger.Trigger
 	gasAccounts         map[string]gasbank.Account
 	gasAccountsByWallet map[string]string
@@ -34,6 +37,7 @@ type Store struct {
 	priceSnapshots      map[string][]pricefeed.Snapshot
 	oracleSources       map[string]oracle.DataSource
 	oracleRequests      map[string]oracle.Request
+	secrets             map[string]secret.Secret
 }
 
 var _ storage.AccountStore = (*Store)(nil)
@@ -50,6 +54,7 @@ func New() *Store {
 		nextID:              1,
 		accounts:            make(map[string]account.Account),
 		functions:           make(map[string]function.Definition),
+		functionExecutions:  make(map[string]function.Execution),
 		triggers:            make(map[string]trigger.Trigger),
 		gasAccounts:         make(map[string]gasbank.Account),
 		gasAccountsByWallet: make(map[string]string),
@@ -60,6 +65,7 @@ func New() *Store {
 		priceSnapshots:      make(map[string][]pricefeed.Snapshot),
 		oracleSources:       make(map[string]oracle.DataSource),
 		oracleRequests:      make(map[string]oracle.Request),
+		secrets:             make(map[string]secret.Secret),
 	}
 }
 
@@ -202,6 +208,65 @@ func (s *Store) ListFunctions(_ context.Context, accountID string) ([]function.D
 	return result, nil
 }
 
+func (s *Store) CreateExecution(_ context.Context, exec function.Execution) (function.Execution, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if exec.ID == "" {
+		exec.ID = s.nextIDLocked()
+	} else if _, exists := s.functionExecutions[exec.ID]; exists {
+		return function.Execution{}, fmt.Errorf("function execution %s already exists", exec.ID)
+	}
+
+	exec.StartedAt = exec.StartedAt.UTC()
+	exec.CompletedAt = exec.CompletedAt.UTC()
+	if exec.Input == nil {
+		exec.Input = map[string]any{}
+	}
+	if exec.Output == nil {
+		exec.Output = map[string]any{}
+	}
+	exec.Logs = append([]string(nil), exec.Logs...)
+	if exec.Actions == nil {
+		exec.Actions = []function.ActionResult{}
+	} else {
+		exec.Actions = cloneActionResults(exec.Actions)
+	}
+
+	s.functionExecutions[exec.ID] = cloneExecution(exec)
+	return cloneExecution(exec), nil
+}
+
+func (s *Store) GetExecution(_ context.Context, id string) (function.Execution, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	exec, ok := s.functionExecutions[id]
+	if !ok {
+		return function.Execution{}, fmt.Errorf("function execution %s not found", id)
+	}
+	return cloneExecution(exec), nil
+}
+
+func (s *Store) ListFunctionExecutions(_ context.Context, functionID string, limit int) ([]function.Execution, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make([]function.Execution, 0)
+	for _, exec := range s.functionExecutions {
+		if exec.FunctionID == functionID {
+			result = append(result, cloneExecution(exec))
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].StartedAt.After(result[j].StartedAt)
+	})
+	if limit > 0 && len(result) > limit {
+		result = result[:limit]
+	}
+	return result, nil
+}
+
 // TriggerStore implementation -------------------------------------------------
 
 func (s *Store) CreateTrigger(_ context.Context, trg trigger.Trigger) (trigger.Trigger, error) {
@@ -285,6 +350,47 @@ func cloneAccount(acct account.Account) account.Account {
 func cloneFunction(def function.Definition) function.Definition {
 	def.Secrets = append([]string(nil), def.Secrets...)
 	return def
+}
+
+func cloneExecution(exec function.Execution) function.Execution {
+	exec.Input = cloneAnyMap(exec.Input)
+	exec.Output = cloneAnyMap(exec.Output)
+	if exec.Logs != nil {
+		exec.Logs = append([]string(nil), exec.Logs...)
+	}
+	if exec.Actions != nil {
+		exec.Actions = cloneActionResults(exec.Actions)
+	}
+	return exec
+}
+
+func cloneAnyMap(src map[string]any) map[string]any {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]any, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
+}
+
+func cloneActionResults(actions []function.ActionResult) []function.ActionResult {
+	if len(actions) == 0 {
+		return nil
+	}
+	copied := make([]function.ActionResult, len(actions))
+	for i, act := range actions {
+		copied[i] = cloneActionResult(act)
+	}
+	return copied
+}
+
+func cloneActionResult(action function.ActionResult) function.ActionResult {
+	action.Params = cloneAnyMap(action.Params)
+	action.Result = cloneAnyMap(action.Result)
+	action.Meta = cloneAnyMap(action.Meta)
+	return action
 }
 
 func cloneTrigger(trg trigger.Trigger) trigger.Trigger {
@@ -757,4 +863,86 @@ func (s *Store) ListPendingRequests(_ context.Context) ([]oracle.Request, error)
 		}
 	}
 	return result, nil
+}
+
+// SecretStore implementation -------------------------------------------------
+
+func (s *Store) CreateSecret(_ context.Context, sec secret.Secret) (secret.Secret, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := secretKey(sec.AccountID, sec.Name)
+	if _, exists := s.secrets[key]; exists {
+		return secret.Secret{}, fmt.Errorf("secret %s already exists for account %s", sec.Name, sec.AccountID)
+	}
+
+	if sec.ID == "" {
+		sec.ID = s.nextIDLocked()
+	}
+	now := time.Now().UTC()
+	sec.CreatedAt = now
+	sec.UpdatedAt = now
+	sec.Version = 1
+
+	s.secrets[key] = sec
+	return sec, nil
+}
+
+func (s *Store) UpdateSecret(_ context.Context, sec secret.Secret) (secret.Secret, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := secretKey(sec.AccountID, sec.Name)
+	existing, ok := s.secrets[key]
+	if !ok {
+		return secret.Secret{}, fmt.Errorf("secret %s not found for account %s", sec.Name, sec.AccountID)
+	}
+
+	sec.ID = existing.ID
+	sec.CreatedAt = existing.CreatedAt
+	sec.Version = existing.Version + 1
+	sec.UpdatedAt = time.Now().UTC()
+
+	s.secrets[key] = sec
+	return sec, nil
+}
+
+func (s *Store) GetSecret(_ context.Context, accountID, name string) (secret.Secret, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	sec, ok := s.secrets[secretKey(accountID, name)]
+	if !ok {
+		return secret.Secret{}, fmt.Errorf("secret %s not found for account %s", name, accountID)
+	}
+	return sec, nil
+}
+
+func (s *Store) ListSecrets(_ context.Context, accountID string) ([]secret.Secret, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make([]secret.Secret, 0)
+	for _, sec := range s.secrets {
+		if sec.AccountID == accountID {
+			result = append(result, sec)
+		}
+	}
+	return result, nil
+}
+
+func (s *Store) DeleteSecret(_ context.Context, accountID, name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := secretKey(accountID, name)
+	if _, ok := s.secrets[key]; !ok {
+		return fmt.Errorf("secret %s not found for account %s", name, accountID)
+	}
+	delete(s.secrets, key)
+	return nil
+}
+
+func secretKey(accountID, name string) string {
+	return accountID + "|" + strings.ToLower(name)
 }

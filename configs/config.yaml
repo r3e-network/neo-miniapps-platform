@@ -1,112 +1,20 @@
-# Neo N3 Service Layer Configuration
+# Sample configuration for the refactored Service Layer runtime.
+# All sections are optional – omit what you do not need.
 
-# Server configuration
 server:
+  host: "0.0.0.0"
   port: 8080
-  host: "127.0.0.1"
-  mode: "development" # development, production
-  timeout: 30 # Request timeout in seconds
-  cors:
-    allowed_origins: ["*"]
-    allowed_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-    allowed_headers: ["Content-Type", "Authorization"]
-    max_age: 86400 # 24 hours
 
-# Database configuration
 database:
-  # Optional DSN overrides host/port fields when set.
-  dsn: ""
-  host: "localhost"
-  port: 5432
-  user: "postgres"
-  password: "postgres"
-  name: "service_layer"
-  ssl_mode: "disable"
-  max_open_conns: 25
+  # When dsn is empty the runtime falls back to in-memory storage.
+  driver: "postgres"
+  dsn: "postgres://service_layer:service_layer@localhost:5432/service_layer?sslmode=disable"
+  max_open_conns: 10
   max_idle_conns: 5
-  conn_max_lifetime: 300 # seconds
+  conn_max_lifetime: 300
 
-# Redis configuration
-redis:
-  host: "localhost"
-  port: 6379
-  password: ""
-  db: 0
-  pool_size: 10
-
-# Neo N3 blockchain configuration
-neo:
-  rpc_url: "http://localhost:10332"
-  network: "private" # private, testnet, mainnet
-  gas_limit: 100000000
-  gas_price: 1000
-
-# TEE configuration
-tee:
-  provider: "azure" # azure, aws, etc.
-  azure:
-    region: "eastus"
-    vm_size: "Standard_DC4s_v3"
-    attestation_url: "https://shareduks.uks.attest.azure.net"
-  runtime:
-    js_memory_limit: 128 # MB
-    execution_timeout: 30 # seconds
-    max_cpu_time: 10 # seconds
-
-# Auth configuration
-auth:
-  jwt_secret: "change-me-in-production"
-  token_expiry: 86400 # 24 hours
-  refresh_token_expiry: 604800 # 7 days
-  password_hash_cost: 10
-
-# Services configuration
-services:
-  functions:
-    max_functions_per_user: 100
-    max_execution_history: 1000
-    max_source_code_size: 100000 # bytes
-  
-  secrets:
-    max_secrets_per_user: 50
-    max_secret_size: 5000 # bytes
-  
-  automation:
-    max_triggers_per_user: 100
-    min_cron_interval: 60 # seconds
-  
-  price_feed:
-    default_update_frequency: 300 # seconds
-    max_sources: 10
-    min_sources: 3
-    default_deviation_threshold: 0.5 # percent
-  
-  gas_bank:
-    min_deposit: 1.0
-    max_withdrawal: 100.0
-    gas_reserve: 10.0 # percent
-
-# Monitoring configuration
-monitoring:
-  prometheus:
-    enabled: true
-    port: 9090
-  logging:
-    level: "info" # debug, info, warn, error
-    format: "json" # json, text
-    output: "stdout" # stdout, file
-    file_path: "logs/service_layer.log"
-  tracing:
-    enabled: false
-    jaeger_endpoint: "http://localhost:14268/api/traces"
-    service_name: "service_layer"
-
-# Feature flags
-features:
-  random_generator: true
-  price_feed: true
-  functions: true
-  automation: true
-  gas_bank: true
-  oracle: true
-  secrets: true
+logging:
+  level: "info"   # debug, info, warn, error
+  format: "text"  # text, json
+  output: "stdout"
+  file_prefix: "service-layer"

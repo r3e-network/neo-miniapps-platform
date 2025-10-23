@@ -2,9 +2,12 @@ package accounts
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"testing"
 
 	"github.com/R3E-Network/service_layer/internal/app/storage/memory"
+	"github.com/R3E-Network/service_layer/pkg/logger"
 )
 
 func TestService(t *testing.T) {
@@ -34,4 +37,15 @@ func TestService(t *testing.T) {
 	if len(list) != 1 {
 		t.Fatalf("expected 1 account, got %d", len(list))
 	}
+}
+
+func ExampleService_Create() {
+	store := memory.New()
+	log := logger.NewDefault("example-accounts")
+	log.SetOutput(io.Discard)
+	svc := New(store, log)
+	acct, _ := svc.Create(context.Background(), "alice", map[string]string{"tier": "pro"})
+	fmt.Println(acct.Owner, acct.Metadata["tier"])
+	// Output:
+	// alice pro
 }
