@@ -145,7 +145,9 @@ for navigation and context, then update the [`Neo Service Layer Specification`](
 whenever behaviour, APIs, or operations change. The retired LaTeX/PDF spec has been
 fully removed—keep the Markdown specification as the single source of truth. Run
 the [Service Layer Review Checklist](docs/review-checklist.md) before merging to
-confirm the documentation, CLI, and dashboard remain in lockstep.
+confirm the documentation, CLI, and dashboard remain in lockstep. Service
+descriptors all advertise the same `platform` layer so every capability is
+treated with equal priority.
 
 ## Development
 

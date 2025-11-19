@@ -137,7 +137,7 @@ func (s *Service) Descriptor() core.Descriptor {
 	return core.Descriptor{
 		Name:         "random",
 		Domain:       "random",
-		Layer:        core.LayerEngine,
+		Layer:        core.LayerPlatform,
 		Capabilities: []string{"randomness"},
 	}
 }

@@ -1,16 +1,12 @@
 package service
 
-// Layer describes the architectural slice a service belongs to. These map
-// loosely to the centralized Chainlink-inspired blueprint (ingress → chain
-// adapters → engines → data/external connectors → security/ops).
+// Layer describes the service placement. The platform now treats every
+// capability uniformly, so all descriptors advertise the same consolidated
+// layer for clarity.
 type Layer string
 
 const (
-	LayerIngress  Layer = "ingress"
-	LayerAdapter  Layer = "adapter"
-	LayerEngine   Layer = "engine"
-	LayerData     Layer = "data"
-	LayerSecurity Layer = "security"
+	LayerPlatform Layer = "platform"
 )
 
 // Descriptor advertises a service's placement and capabilities. It is optional

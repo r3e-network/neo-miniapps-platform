@@ -116,7 +116,7 @@ func (s *Service) Descriptor() core.Descriptor {
 	return core.Descriptor{
 		Name:         "cre",
 		Domain:       "cre",
-		Layer:        core.LayerEngine,
+		Layer:        core.LayerPlatform,
 		Capabilities: []string{"playbooks", "runs", "executors"},
 	}
 }

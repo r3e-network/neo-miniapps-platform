@@ -68,7 +68,7 @@ func (d *Dispatcher) Descriptor() core.Descriptor {
 	return core.Descriptor{
 		Name:         "oracle-dispatcher",
 		Domain:       "oracle",
-		Layer:        core.LayerEngine,
+		Layer:        core.LayerPlatform,
 		Capabilities: []string{"dispatch", "resolve"},
 	}
 }

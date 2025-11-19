@@ -233,7 +233,7 @@ func (s *Service) Descriptor() core.Descriptor {
 	return core.Descriptor{
 		Name:         "gasbank",
 		Domain:       "gasbank",
-		Layer:        core.LayerEngine,
+		Layer:        core.LayerPlatform,
 		Capabilities: []string{"accounts", "deposits", "withdrawals"},
 	}
 }

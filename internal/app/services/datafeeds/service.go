@@ -177,7 +177,7 @@ func (s *Service) Descriptor() core.Descriptor {
 	return core.Descriptor{
 		Name:         "datafeeds",
 		Domain:       "datafeeds",
-		Layer:        core.LayerEngine,
+		Layer:        core.LayerPlatform,
 		Capabilities: []string{"registry", "ingest", "dispatch"},
 	}
 }

@@ -376,7 +376,7 @@ func (s *Service) Descriptor() core.Descriptor {
 	return core.Descriptor{
 		Name:         "pricefeed",
 		Domain:       "pricefeed",
-		Layer:        core.LayerEngine,
+		Layer:        core.LayerPlatform,
 		Capabilities: []string{"feeds", "rounds", "observations"},
 	}
 }

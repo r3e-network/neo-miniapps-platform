@@ -195,7 +195,7 @@ func (s *Service) Descriptor() core.Descriptor {
 	return core.Descriptor{
 		Name:         "datalink",
 		Domain:       "datalink",
-		Layer:        core.LayerEngine,
+		Layer:        core.LayerPlatform,
 		Capabilities: []string{"channels", "deliveries", "dispatch"},
 	}
 }

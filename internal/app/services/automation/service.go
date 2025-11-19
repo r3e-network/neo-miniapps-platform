@@ -213,7 +213,7 @@ func (s *Service) Descriptor() core.Descriptor {
 	return core.Descriptor{
 		Name:         "automation",
 		Domain:       "automation",
-		Layer:        core.LayerEngine,
+		Layer:        core.LayerPlatform,
 		Capabilities: []string{"registry", "jobs", "schedule"},
 	}
 }

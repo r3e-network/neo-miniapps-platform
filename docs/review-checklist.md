@@ -16,6 +16,7 @@ order, and reset the checkboxes the next time you audit the repo.
 - [ ] Verify `npm run build` inside `apps/dashboard` compiles the dashboard with
       all service panels present.
 - [ ] Confirm CLI documentation matches the subcommands currently shipped in `cmd/slctl`.
+- [ ] Confirm every service descriptor reports the `platform` layer so all capabilities share the same priority.
 
 ## Service Coverage (HTTP API + Dashboard)
 Each item requires an HTTP surface documented in

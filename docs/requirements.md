@@ -10,6 +10,7 @@
 - Use [`docs/README.md`](README.md) as the entry point for related references (Devpack examples, dashboard notes, infrastructure docs).
 - Every feature/change proposal must link to the relevant sections below when discussed in issues/PRs so reviewers can trace intent to implementation.
 - Deprecations and removals should be staged through this document first, with migration notes captured alongside the affected services.
+- Service descriptors expose a single `platform` layer so every capability carries the same priority; update descriptors and docs together whenever the catalogue changes.
 - During reviews, step through the [Service Layer Review Checklist](review-checklist.md) to keep documentation, CLI, and dashboard coverage aligned.
 
 ## System Overview

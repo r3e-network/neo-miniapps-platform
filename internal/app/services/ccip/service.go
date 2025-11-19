@@ -205,7 +205,7 @@ func (s *Service) Descriptor() core.Descriptor {
 	return core.Descriptor{
 		Name:         "ccip",
 		Domain:       "ccip",
-		Layer:        core.LayerEngine,
+		Layer:        core.LayerPlatform,
 		Capabilities: []string{"lanes", "dispatch", "messages"},
 	}
 }

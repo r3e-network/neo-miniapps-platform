@@ -93,7 +93,7 @@ func (s *Service) Descriptor() core.Descriptor {
 	return core.Descriptor{
 		Name:         "triggers",
 		Domain:       "triggers",
-		Layer:        core.LayerEngine,
+		Layer:        core.LayerPlatform,
 		Capabilities: []string{"triggers", "schedules"},
 	}
 }

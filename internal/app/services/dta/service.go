@@ -171,7 +171,7 @@ func (s *Service) Descriptor() core.Descriptor {
 	return core.Descriptor{
 		Name:         "dta",
 		Domain:       "dta",
-		Layer:        core.LayerEngine,
+		Layer:        core.LayerPlatform,
 		Capabilities: []string{"orders", "subscriptions", "dispatch"},
 	}
 }

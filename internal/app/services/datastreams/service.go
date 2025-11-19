@@ -151,7 +151,7 @@ func (s *Service) Descriptor() core.Descriptor {
 	return core.Descriptor{
 		Name:         "datastreams",
 		Domain:       "datastreams",
-		Layer:        core.LayerEngine,
+		Layer:        core.LayerPlatform,
 		Capabilities: []string{"streams", "frames", "ingest"},
 	}
 }

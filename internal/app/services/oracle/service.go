@@ -291,7 +291,7 @@ func (s *Service) Descriptor() core.Descriptor {
 	return core.Descriptor{
 		Name:         "oracle",
 		Domain:       "oracle",
-		Layer:        core.LayerEngine,
+		Layer:        core.LayerPlatform,
 		Capabilities: []string{"requests", "resolve", "dispatch"},
 	}
 }

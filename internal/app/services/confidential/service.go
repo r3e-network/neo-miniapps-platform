@@ -205,7 +205,7 @@ func (s *Service) Descriptor() core.Descriptor {
 	return core.Descriptor{
 		Name:         "confidential",
 		Domain:       "confidential",
-		Layer:        core.LayerEngine,
+		Layer:        core.LayerPlatform,
 		Capabilities: []string{"enclaves", "sealed_keys", "attestations"},
 	}
 }

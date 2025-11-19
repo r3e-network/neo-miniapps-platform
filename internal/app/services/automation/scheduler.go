@@ -91,7 +91,7 @@ func (s *Scheduler) Descriptor() core.Descriptor {
 	return core.Descriptor{
 		Name:         "automation-scheduler",
 		Domain:       "automation",
-		Layer:        core.LayerEngine,
+		Layer:        core.LayerPlatform,
 		Capabilities: []string{"schedule", "dispatch"},
 	}
 }

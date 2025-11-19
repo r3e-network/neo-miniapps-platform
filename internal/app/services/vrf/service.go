@@ -213,7 +213,7 @@ func (s *Service) Descriptor() core.Descriptor {
 	return core.Descriptor{
 		Name:         "vrf",
 		Domain:       "vrf",
-		Layer:        core.LayerEngine,
+		Layer:        core.LayerPlatform,
 		Capabilities: []string{"keys", "requests", "dispatch"},
 	}
 }

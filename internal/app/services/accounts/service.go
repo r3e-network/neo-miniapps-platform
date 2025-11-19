@@ -93,7 +93,7 @@ func (s *Service) Descriptor() core.Descriptor {
 	return core.Descriptor{
 		Name:         "accounts",
 		Domain:       "accounts",
-		Layer:        core.LayerIngress,
+		Layer:        core.LayerPlatform,
 		Capabilities: []string{"accounts", "metadata"},
 	}
 }
