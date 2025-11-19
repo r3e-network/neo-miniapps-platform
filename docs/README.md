@@ -6,6 +6,8 @@ have been consolidated into that specification.
 
 ## Primary Reference
 - [Neo Service Layer Specification](requirements.md)
+- [Service Layer Review Checklist](review-checklist.md)
+- [CLI Quick Reference](../README.md#cli-quick-reference)
 
 All other documents have been retired to avoid drift. Update the specification
 directly when behaviour changes so the documentation remains clean, clear, and

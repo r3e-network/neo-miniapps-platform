@@ -10,6 +10,7 @@
 - Use [`docs/README.md`](README.md) as the entry point for related references (Devpack examples, dashboard notes, infrastructure docs).
 - Every feature/change proposal must link to the relevant sections below when discussed in issues/PRs so reviewers can trace intent to implementation.
 - Deprecations and removals should be staged through this document first, with migration notes captured alongside the affected services.
+- During reviews, step through the [Service Layer Review Checklist](review-checklist.md) to keep documentation, CLI, and dashboard coverage aligned.
 
 ## System Overview
 - `cmd/appserver` is the single Go binary that wires all services (`internal/app/services/*`), HTTP handlers (`internal/app/httpapi`), and storage adapters (`internal/app/storage/{memory,postgres}`).
@@ -20,14 +21,14 @@
 - Optional TEE execution paths use the Goja JavaScript runtime today and can be swapped with Azure Confidential Computing-backed executors when runners are provisioned (see Confidential Compute sections for expectations).
 
 ## Functional Requirements
-### Core Runtime Services
+### Service Catalogue
 #### Accounts & Authentication
 - Manage account/workspace records, metadata, and lifecycle through `/accounts` endpoints and enforce per-account ownership across dependent services.
 - Enforce HTTP authentication via static bearer tokens configured through `API_TOKENS` or the `-api-tokens` flag. All endpoints except `/healthz` require a valid `Authorization: Bearer <token>` header.
 - Provide workspace-level capability descriptors via `/system/descriptors` for dashboards/CLI discovery.
 
 #### Workspace Wallets
-- Register signer wallets, threshold policies, and association to accounts. Wallet metadata is exposed under `/accounts/{id}/workspace-wallets` and used by advanced services (CCIP, VRF, Data Feeds, DTA) to gate actions.
+- Register signer wallets, threshold policies, and association to accounts. Wallet metadata is exposed under `/accounts/{id}/workspace-wallets` and used by downstream services (CCIP, VRF, Data Feeds, DTA) to gate actions.
 
 #### Secrets Vault
 - Store, rotate, and resolve AES-GCM encrypted secrets per account. Plaintext material must never be persisted; secret resolution only happens in-memory during function execution.
@@ -60,21 +61,44 @@
 #### Randomness Service
 - Generate cryptographically secure random bytes per account and optionally sign responses when deterministic replay is required.
 - Enforce bounds on the requested length (default 32 bytes, max 1024) and provide multiple encodings in responses.
+- Expose `/accounts/{id}/random` for generation requests and `/accounts/{id}/random/requests` for retrieving recent history.
 
 #### Observability & System Services
 - Expose `/metrics` for Prometheus scraping and `/healthz` for readiness probes. `/metrics` requires authentication; `/healthz` remains unauthenticated for orchestrators.
 - Emit structured logs annotated with account/service identifiers. Provide hooks for tracing/metrics per service (see `internal/app/metrics`).
 - Enforce pagination limits via `limit` parameters to protect the API, returning cursors/tokens where applicable.
 
-### Advanced Extensions (Chainlink Parity Surfaces)
-- **CRE Orchestrator** – manage playbooks, runs, and executors for cross-runtime automation. Provide CRUD endpoints, execution tracking, and executor registration/heartbeat flows.
-- **CCIP** – register cross-chain lanes, manage messages, attach workspace wallets for signing, and track dispatch/retry status.
-- **Data Feeds** – manage feed registry, signer sets, and update submissions with wallet-gated permissions.
-- **Data Streams** – configure high-frequency ingestion, frame publication, and retention enforcement.
-- **DataLink** – define provider channels, delivery attempts, payload schemas, and retry policies for off-chain data movement.
-- **DTA** – orchestrate subscription/redemption workflows with approval requirements and wallet checks.
-- **VRF** – register randomness keys bound to workspace wallets and submit/retrieve randomness requests with attested proofs.
-- **Confidential Compute** – track enclaves, sealed keys, attestation material, and coordinate runner assignments for trusted execution. Enforce compliance on key upload/rotation.
+#### CRE Orchestrator
+- Manage playbooks, runs, and executors for cross-runtime automation.
+- Provide CRUD endpoints, execution tracking, and executor registration/heartbeat flows with per-account scoping.
+
+#### CCIP
+- Register cross-chain lanes, attach workspace wallets for signing, and manage message dispatch.
+- Track status transitions (queued, sending, dispatched, failed) and surface retry metadata to operators.
+
+#### Data Feeds
+- Manage the feed registry, signer sets, decimals, and update submission metadata.
+- Enforce wallet-gated permissions for submissions and store historic rounds + signatures for auditing.
+
+#### Data Streams
+- Configure high-frequency ingestion, frame publication, SLAs, and retention enforcement parameters.
+- Expose frame listings and latency metrics per stream for troubleshooting.
+
+#### DataLink
+- Define provider channels, delivery attempts, payload schemas, and retry policies for off-chain data movement.
+- Surface per-delivery logs/status plus signer information required for attestations.
+
+#### DTA
+- Orchestrate subscription/redemption workflows with approval requirements and wallet checks.
+- Track product catalogues, orders, and settlement instructions with immutable audit history.
+
+#### VRF
+- Register randomness keys bound to workspace wallets and submit/retrieve randomness requests with attested proofs.
+- Store attestation material, consumer metadata, and fulfillment status for each request.
+
+#### Confidential Compute
+- Track enclaves, sealed keys, attestation material, and coordinate runner assignments for trusted execution.
+- Enforce compliance controls for key upload/rotation and expose enclave health for operators.
 
 ### Tooling & Developer Experience
 - Maintain parity between CLI commands, HTTP endpoints, and SDK helpers so every capability is scriptable.
@@ -89,8 +113,16 @@
 - Long-running operations (automation runs, CRE executions) expose status resources that clients can poll. Webhook callbacks validate shared secrets when configured.
 
 ### CLI (`cmd/slctl`)
-- Mirrors the HTTP API (accounts, functions, secrets, automation, gas bank, oracle, price feed, randomness, advanced services) with subcommands and flag validation.
-- Reads configuration from flags/environment variables and prints machine-readable tables/JSON for scripting.
+- Covers every documented service. Current surface:
+  - `slctl accounts list|get|create|delete`.
+  - `slctl functions list|get|create|delete` plus execution helpers.
+  - `slctl automation jobs ...` and `slctl secrets ...` for operator workflows.
+  - `slctl gasbank ...` for balances/transactions.
+  - `slctl oracle sources|requests ...` to manage adapters.
+  - `slctl pricefeeds list|create|get|snapshots`.
+  - `slctl random generate` (trigger a draw) and `slctl random list` (recent `/random/requests` history).
+  - `slctl services list` for descriptor discovery.
+- Reads configuration from flags/environment variables and prints machine-readable tables/JSON for scripting. Extend CLI coverage alongside new HTTP endpoints so every catalogued service eventually ships with parity commands.
 
 ### TypeScript Devpack & SDK
 - Provide helpers for declaring functions, managing secrets, enqueuing Devpack actions (automation jobs, oracle requests, price feed updates, gas bank operations), and validating inputs locally.
@@ -101,7 +133,7 @@
 - External integrations: Stripe/Resend for billing/support communications, Logtail/Axiom for log shipping, Neo N3 RPC nodes and other data providers for service execution.
 
 ## Data Management & Persistence
-- PostgreSQL 14+ is the canonical store. Tables cover accounts, workspace wallets, secrets (encrypted values + metadata), functions (definitions, executions, action history), automation jobs/runs, triggers, oracle sources/requests, price feeds/snapshots, gas accounts/transactions, randomness history, and every advanced-service entity (CRE, CCIP, VRF, Data Feeds, Data Streams, DataLink, DTA, Confidential Compute).
+- PostgreSQL 14+ is the canonical store. Tables cover accounts, workspace wallets, secrets (encrypted values + metadata), functions (definitions, executions, action history), automation jobs/runs, triggers, oracle sources/requests, price feeds/snapshots, gas accounts/transactions, randomness history, and each service entity described in this catalogue (CRE, CCIP, VRF, Data Feeds, Data Streams, DataLink, DTA, Confidential Compute).
 - All database mutations go through versioned migrations under `internal/platform/migrations`; the server auto-applies them when `-migrate` is enabled (default true) in Postgres mode.
 - In-memory adapters (under `internal/app/storage/memory`) provide a dependency-free option for tests and local experimentation.
 - Secrets are encrypted before persistence; other sensitive blobs (sealed keys, attestations) follow the same cipher utilities.
@@ -125,7 +157,7 @@
 
 ### Scalability
 - Support horizontal scaling by running multiple `appserver` instances behind a load balancer; all shared state resides in Postgres.
-- Enforce pagination and request limits to protect cluster resources. Each advanced service should guard per-account quotas (feeds, streams, wallets, keys, etc.).
+- Enforce pagination and request limits to protect cluster resources. Each service should guard per-account quotas (feeds, streams, wallets, keys, etc.).
 
 ### Maintainability & Developer Experience
 - Keep services isolated (`internal/app/services/<name>`), with interfaces documented in `internal/app/storage/interfaces.go` and examples in `*_test.go`.

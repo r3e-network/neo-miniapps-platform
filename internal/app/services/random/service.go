@@ -27,7 +27,12 @@ type Service struct {
 	pub     ed25519.PublicKey
 	mu      sync.Mutex
 	counter uint64
+	history map[string][]domain.Result
+	histMu  sync.Mutex
+	limit   int
 }
+
+const defaultHistoryLimit = 100
 
 // Option configures the randomness service.
 type Option func(*Service) error
@@ -42,10 +47,12 @@ func New(accounts storage.AccountStore, log *logger.Logger, opts ...Option) *Ser
 		panic(fmt.Sprintf("generate ed25519 key: %v", err))
 	}
 	svc := &Service{
-		base: core.NewBase(accounts),
-		log:  log,
-		priv: priv,
-		pub:  pub,
+		base:    core.NewBase(accounts),
+		log:     log,
+		priv:    priv,
+		pub:     pub,
+		history: make(map[string][]domain.Result),
+		limit:   defaultHistoryLimit,
 	}
 	for _, opt := range opts {
 		if opt == nil {
@@ -79,7 +86,7 @@ func (s *Service) Generate(ctx context.Context, accountID string, length int, re
 	}
 
 	s.log.Debugf("generated %d random bytes", length)
-	return domain.Result{
+	res := domain.Result{
 		Value:     value,
 		CreatedAt: now,
 		Signature: sig,
@@ -87,7 +94,9 @@ func (s *Service) Generate(ctx context.Context, accountID string, length int, re
 		RequestID: reqID,
 		Counter:   nonce,
 		Length:    length,
-	}, nil
+	}
+	s.record(accountID, res)
+	return res, nil
 }
 
 // EncodeResult encodes the random bytes using base64 for transport.
@@ -144,6 +153,53 @@ func WithSigningKey(privateKey []byte) Option {
 		s.pub = s.priv.Public().(ed25519.PublicKey)
 		return nil
 	}
+}
+
+// WithHistoryLimit overrides the maximum number of results stored per account.
+func WithHistoryLimit(limit int) Option {
+	return func(s *Service) error {
+		if limit <= 0 {
+			return fmt.Errorf("history limit must be positive")
+		}
+		s.limit = limit
+		return nil
+	}
+}
+
+// List returns recently generated random results for the account (newest first).
+func (s *Service) List(ctx context.Context, accountID string, limit int) ([]domain.Result, error) {
+	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
+		return nil, err
+	}
+	s.histMu.Lock()
+	defer s.histMu.Unlock()
+	results := s.history[accountID]
+	if len(results) == 0 {
+		return nil, nil
+	}
+	max := len(results)
+	if limit > 0 && limit < max {
+		max = limit
+	}
+	out := make([]domain.Result, max)
+	for i := 0; i < max; i++ {
+		out[i] = results[len(results)-1-i]
+	}
+	return out, nil
+}
+
+func (s *Service) record(accountID string, res domain.Result) {
+	s.histMu.Lock()
+	defer s.histMu.Unlock()
+	history := append(s.history[accountID], res)
+	max := s.limit
+	if max <= 0 {
+		max = defaultHistoryLimit
+	}
+	if len(history) > max {
+		history = history[len(history)-max:]
+	}
+	s.history[accountID] = history
 }
 
 func (s *Service) nextCounter() uint64 {

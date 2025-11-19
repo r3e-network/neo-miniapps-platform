@@ -78,6 +78,34 @@ func TestService_WithSigningKey(t *testing.T) {
 	}
 }
 
+func TestServiceListHistory(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "hist"})
+	svc := New(store, nil, WithHistoryLimit(2))
+	for i := 0; i < 3; i++ {
+		if _, err := svc.Generate(context.Background(), acct.ID, 8, fmt.Sprintf("req-%d", i)); err != nil {
+			t.Fatalf("generate %d: %v", i, err)
+		}
+	}
+	results, err := svc.List(context.Background(), acct.ID, 0)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	if results[0].RequestID != "req-2" || results[1].RequestID != "req-1" {
+		t.Fatalf("expected newest-first order, got %+v", results)
+	}
+	limited, err := svc.List(context.Background(), acct.ID, 1)
+	if err != nil {
+		t.Fatalf("list limited: %v", err)
+	}
+	if len(limited) != 1 || limited[0].RequestID != "req-2" {
+		t.Fatalf("expected latest item only, got %+v", limited)
+	}
+}
+
 func ExampleService_Generate() {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "demo"})

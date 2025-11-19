@@ -151,8 +151,24 @@ func TestHandlerLifecycle(t *testing.T) {
 	if err := json.Unmarshal(resp.Body.Bytes(), &randomResp); err != nil {
 		t.Fatalf("unmarshal random: %v", err)
 	}
-	if randomResp["request_id"] != "req-http" {
-		t.Fatalf("expected request id echoed, got %v", randomResp["request_id"])
+	if randomResp["RequestID"] != "req-http" {
+		t.Fatalf("expected request id echoed, got %v", randomResp["RequestID"])
+	}
+
+	listResp := httptest.NewRecorder()
+	handler.ServeHTTP(listResp, authedRequest(http.MethodGet, "/accounts/"+id+"/random/requests?limit=5", nil))
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("expected 200 random list, got %d", listResp.Code)
+	}
+	var listPayload []map[string]any
+	if err := json.Unmarshal(listResp.Body.Bytes(), &listPayload); err != nil {
+		t.Fatalf("unmarshal random list: %v", err)
+	}
+	if len(listPayload) != 1 {
+		t.Fatalf("expected single random record, got %d", len(listPayload))
+	}
+	if listPayload[0]["RequestID"] != "req-http" {
+		t.Fatalf("expected list to include request, got %v", listPayload[0]["RequestID"])
 	}
 
 	trigBody := marshal(map[string]any{"function_id": fnID, "rule": "cron:@hourly"})

@@ -117,7 +117,7 @@ func (h *handler) accountResources(w http.ResponseWriter, r *http.Request) {
 	case "secrets":
 		h.accountSecrets(w, r, accountID, parts[2:])
 	case "random":
-		h.accountRandom(w, r, accountID)
+		h.accountRandom(w, r, accountID, parts[2:])
 	case "cre":
 		h.accountCRE(w, r, accountID, parts[2:])
 	case "ccip":

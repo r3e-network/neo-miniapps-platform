@@ -127,6 +127,29 @@ export type DatastreamFrame = {
   Status?: string;
 };
 
+export type PriceFeed = {
+  ID: string;
+  AccountID: string;
+  BaseAsset: string;
+  QuoteAsset: string;
+  Pair: string;
+  UpdateInterval: string;
+  Heartbeat: string;
+  DeviationPercent: number;
+  Active: boolean;
+  CreatedAt?: string;
+  UpdatedAt?: string;
+};
+
+export type PriceSnapshot = {
+  ID: string;
+  FeedID: string;
+  Price: number;
+  Source?: string;
+  CollectedAt?: string;
+  CreatedAt?: string;
+};
+
 export type DTAProduct = {
   ID: string;
   AccountID: string;
@@ -258,12 +281,14 @@ export type OracleRequest = {
 };
 
 export type RandomRequest = {
-  ID: string;
   AccountID: string;
-  Status: string;
   Length: number;
+  Value: string;
   CreatedAt?: string;
-  CompletedAt?: string;
+  RequestID?: string;
+  Counter: number;
+  Signature: string;
+  PublicKey?: string;
 };
 
 export type Trigger = {
@@ -365,6 +390,17 @@ export async function fetchDatastreams(config: ClientConfig, accountID: string, 
 export async function fetchDatastreamFrames(config: ClientConfig, accountID: string, streamID: string, limit = 20): Promise<DatastreamFrame[]> {
   const url = `${config.baseUrl}/accounts/${accountID}/datastreams/${streamID}/frames?limit=${limit}`;
   return fetchJSON<DatastreamFrame[]>(url, config);
+}
+
+export async function fetchPriceFeeds(config: ClientConfig, accountID: string): Promise<PriceFeed[]> {
+  const url = `${config.baseUrl}/accounts/${accountID}/pricefeeds`;
+  return fetchJSON<PriceFeed[]>(url, config);
+}
+
+export async function fetchPriceSnapshots(config: ClientConfig, accountID: string, feedID: string, limit = 5): Promise<PriceSnapshot[]> {
+  const url = `${config.baseUrl}/accounts/${accountID}/pricefeeds/${feedID}/snapshots`;
+  const snapshots = await fetchJSON<PriceSnapshot[]>(url, config);
+  return snapshots.slice(0, limit);
 }
 
 export async function fetchDTAProducts(config: ClientConfig, accountID: string, limit = 50): Promise<DTAProduct[]> {

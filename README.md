@@ -63,10 +63,21 @@ ensure gas accounts and submit oracle requests.
 
 - **CLI (`cmd/slctl`)** — wraps the HTTP API for scripting. Honours `SERVICE_LAYER_ADDR`
   and `SERVICE_LAYER_TOKEN` like the server. Use it to create accounts, register functions,
-  and inspect automation/oracle history from a terminal.
+  request randomness (`slctl random generate --account <id> --length 64`) or inspect recent draws (`slctl random list --account <id>`), and inspect automation/oracle history from a terminal.
 - **Dashboard (`apps/dashboard`)** — React + Vite SPA for day-to-day operations. See
   `apps/dashboard/README.md` for Docker/local instructions. Configure API and Prometheus
   endpoints in the UI once the server is running.
+
+### CLI Quick Reference
+- `slctl accounts list|get|create|delete` — manage account records.
+- `slctl functions list|get|create|delete` (+ execution helpers) — deploy and inspect functions.
+- `slctl automation jobs ...` / `slctl secrets ...` — administer schedulers and secret vault entries.
+- `slctl gasbank ...` — view balances and transfer history.
+- `slctl oracle sources|requests ...` — configure HTTP adapters and inspect inflight work.
+- `slctl pricefeeds list|create|get|snapshots` — define asset pairs and monitor submissions.
+- `slctl random generate --account <id> --length <n>` — request deterministic bytes.
+- `slctl random list --account <id> [--limit n]` — fetch recent `/random/requests` history.
+- `slctl services list` — dump `/system/descriptors` for feature discovery.
 
 ### Docker
 
@@ -124,7 +135,9 @@ scripts/               - automation helpers (see scripts/README.md)
 All project documentation lives under `docs/`. Start with [`docs/README.md`](docs/README.md)
 for navigation and context, then update the [`Neo Service Layer Specification`](docs/requirements.md)
 whenever behaviour, APIs, or operations change. The retired LaTeX/PDF spec has been
-fully removed—keep the Markdown specification as the single source of truth.
+fully removed—keep the Markdown specification as the single source of truth. Run
+the [Service Layer Review Checklist](docs/review-checklist.md) before merging to
+confirm the documentation, CLI, and dashboard remain in lockstep.
 
 ## Development
 

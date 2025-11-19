@@ -20,6 +20,8 @@ import {
   FunctionSummary,
   GasAccount,
   GasTransaction,
+  PriceFeed,
+  PriceSnapshot,
   Lane,
   OracleRequest,
   OracleSource,
@@ -48,6 +50,8 @@ import {
   fetchFunctions,
   fetchGasAccounts,
   fetchGasTransactions,
+  fetchPriceFeeds,
+  fetchPriceSnapshots,
   fetchHealth,
   fetchLanes,
   fetchMessages,
@@ -102,6 +106,12 @@ type DatafeedsState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "ready"; feeds: Datafeed[]; updates: Record<string, DatafeedUpdate[]> }
+  | { status: "error"; message: string };
+
+type PricefeedsState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; feeds: PriceFeed[]; snapshots: Record<string, PriceSnapshot[]> }
   | { status: "error"; message: string };
 
 type DatalinkState =
@@ -170,6 +180,13 @@ type RandomState =
   | { status: "ready"; requests: RandomRequest[] }
   | { status: "error"; message: string };
 
+function formatSnippet(value: string, limit = 32) {
+  if (!value) {
+    return "";
+  }
+  return value.length > limit ? `${value.slice(0, limit)}…` : value;
+}
+
 export function App() {
   const [baseUrl, setBaseUrl] = useLocalStorage("sl-ui.baseUrl", "http://localhost:8080");
   const [token, setToken] = useLocalStorage("sl-ui.token", "");
@@ -195,6 +212,7 @@ export function App() {
   const [vrf, setVRF] = useState<Record<string, VRFState>>({});
   const [ccip, setCCIP] = useState<Record<string, CCIPState>>({});
   const [datafeeds, setDatafeeds] = useState<Record<string, DatafeedsState>>({});
+  const [pricefeeds, setPricefeeds] = useState<Record<string, PricefeedsState>>({});
   const [datalink, setDatalink] = useState<Record<string, DatalinkState>>({});
   const [datastreams, setDatastreams] = useState<Record<string, DatastreamsState>>({});
   const [dta, setDTA] = useState<Record<string, DTAState>>({});
@@ -234,6 +252,7 @@ export function App() {
       setVRF({});
       setCCIP({});
       setDatafeeds({});
+      setPricefeeds({});
       setDatalink({});
       setDatastreams({});
       setDTA({});
@@ -307,6 +326,21 @@ export function App() {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setDatafeeds((prev) => ({ ...prev, [accountID]: { status: "error", message } }));
+    }
+  }
+
+  async function loadPricefeeds(accountID: string) {
+    setPricefeeds((prev) => ({ ...prev, [accountID]: { status: "loading" } }));
+    try {
+      const feeds = await fetchPriceFeeds(config, accountID);
+      const snapshots: Record<string, PriceSnapshot[]> = {};
+      for (const feed of feeds) {
+        snapshots[feed.ID] = await fetchPriceSnapshots(config, accountID, feed.ID, 5);
+      }
+      setPricefeeds((prev) => ({ ...prev, [accountID]: { status: "ready", feeds, snapshots } }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setPricefeeds((prev) => ({ ...prev, [accountID]: { status: "error", message } }));
     }
   }
 
@@ -555,6 +589,7 @@ export function App() {
                   const walletState = wallets[acct.ID] ?? { status: "idle" };
                   const vrfState = vrf[acct.ID] ?? { status: "idle" };
                   const ccipState = ccip[acct.ID] ?? { status: "idle" };
+                  const pricefeedState = pricefeeds[acct.ID] ?? { status: "idle" };
                   return (
                     <li key={acct.ID} className="account">
                       <div className="row">
@@ -575,6 +610,9 @@ export function App() {
                           </button>
                           <button type="button" onClick={() => loadDatafeeds(acct.ID)} disabled={datafeeds[acct.ID]?.status === "loading"}>
                             {datafeeds[acct.ID]?.status === "loading" ? "Loading feeds..." : "Datafeeds"}
+                          </button>
+                          <button type="button" onClick={() => loadPricefeeds(acct.ID)} disabled={pricefeedState.status === "loading"}>
+                            {pricefeedState.status === "loading" ? "Loading price feeds..." : "Price feeds"}
                           </button>
                           <button type="button" onClick={() => loadDatalink(acct.ID)} disabled={datalink[acct.ID]?.status === "loading"}>
                             {datalink[acct.ID]?.status === "loading" ? "Loading link..." : "Datalink"}
@@ -726,6 +764,46 @@ export function App() {
                                 )}
                               </li>
                             ))}
+                          </ul>
+                        </div>
+                      )}
+                      {pricefeedState.status === "error" && <p className="error">Price feeds: {pricefeedState.message}</p>}
+                      {pricefeedState.status === "ready" && (
+                        <div className="vrf">
+                          <div className="row">
+                            <h4 className="tight">Price feeds</h4>
+                            <span className="tag subdued">{pricefeedState.feeds.length}</span>
+                          </div>
+                          <ul className="wallets">
+                            {pricefeedState.feeds.map((feed) => {
+                              const snapshotsForFeed = pricefeedState.snapshots[feed.ID] ?? [];
+                              const latest = snapshotsForFeed[0];
+                              const latestTimestamp = latest?.CollectedAt || latest?.CreatedAt;
+                              const formattedTs = latestTimestamp ? new Date(latestTimestamp).toLocaleString() : undefined;
+                              const deviation = Number.isFinite(feed.DeviationPercent) ? feed.DeviationPercent.toFixed(2) : "n/a";
+                              const pairLabel = feed.Pair || `${feed.BaseAsset}/${feed.QuoteAsset}`;
+                              return (
+                                <li key={feed.ID}>
+                                  <div className="row">
+                                    <div>
+                                      <strong>{pairLabel}</strong>
+                                      <div className="muted mono">
+                                        Update {feed.UpdateInterval || "n/a"} • Heartbeat {feed.Heartbeat || "n/a"} • Δ {deviation}%
+                                      </div>
+                                    </div>
+                                    <span className={`tag ${feed.Active ? "" : "subdued"}`}>{feed.Active ? "active" : "paused"}</span>
+                                  </div>
+                                  {latest ? (
+                                    <div className="muted mono">
+                                      Latest {latest.Price} via {latest.Source || "unknown"}
+                                      {formattedTs ? ` @ ${formattedTs}` : ""}
+                                    </div>
+                                  ) : (
+                                    <div className="muted mono">No snapshots recorded</div>
+                                  )}
+                                </li>
+                              );
+                            })}
                           </ul>
                         </div>
                       )}
@@ -1092,15 +1170,23 @@ export function App() {
                             <span className="tag subdued">{randomState.requests.length}</span>
                           </div>
                           <ul className="wallets">
-                            {randomState.requests.map((req) => (
-                              <li key={req.ID}>
-                                <div className="row">
-                                  <div className="mono">{req.ID}</div>
-                                  <span className="tag subdued">{req.Status}</span>
-                                </div>
-                                <div className="muted mono">Length: {req.Length} bytes</div>
-                              </li>
-                            ))}
+                            {randomState.requests.map((req) => {
+                              const label = req.RequestID && req.RequestID.trim().length > 0 ? req.RequestID : `Counter ${req.Counter}`;
+                              const timestamp = req.CreatedAt ? new Date(req.CreatedAt).toLocaleString() : undefined;
+                              return (
+                                <li key={`${label}-${req.Counter}`}>
+                                  <div className="row">
+                                    <div>
+                                      <div className="mono">{label}</div>
+                                      {timestamp && <div className="muted mono">{timestamp}</div>}
+                                    </div>
+                                    <span className="tag subdued">{req.Length} bytes</span>
+                                  </div>
+                                  <div className="muted mono">Value: {formatSnippet(req.Value, 28)}</div>
+                                  <div className="muted mono">Signature: {formatSnippet(req.Signature, 28)}</div>
+                                </li>
+                              );
+                            })}
                           </ul>
                         </div>
                       )}

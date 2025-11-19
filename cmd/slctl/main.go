@@ -62,6 +62,8 @@ func run(ctx context.Context, args []string) error {
 		return handleOracle(ctx, client, remaining[1:])
 	case "pricefeeds":
 		return handlePriceFeeds(ctx, client, remaining[1:])
+	case "random":
+		return handleRandom(ctx, client, remaining[1:])
 	case "services":
 		return handleServices(ctx, client, remaining[1:])
 	case "version":
@@ -99,6 +101,7 @@ Commands:
   gasbank      Manage gas bank accounts and transfers
   oracle       Manage oracle sources and requests
   pricefeeds   Manage price feed definitions and snapshots
+  random       Request deterministic randomness
   services     Introspect service descriptors
   version      Show CLI version information`)
 }
@@ -858,6 +861,77 @@ func handlePriceFeeds(ctx context.Context, client *apiClient, args []string) err
 		prettyPrint(data)
 	default:
 		return fmt.Errorf("unknown pricefeeds subcommand %q", sub)
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------
+// Randomness
+
+func handleRandom(ctx context.Context, client *apiClient, args []string) error {
+	if len(args) == 0 {
+		fmt.Println(`Usage:
+  slctl random list --account <id> [--limit 10]
+  slctl random generate --account <id> [--length 32] [--request-id <id>]`)
+		return nil
+	}
+	sub := args[0]
+	switch sub {
+	case "generate":
+		fs := flag.NewFlagSet("random generate", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var accountID, requestID string
+		var length int
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		fs.IntVar(&length, "length", 32, "Number of random bytes (1-1024)")
+		fs.StringVar(&requestID, "request-id", "", "Optional request identifier")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" {
+			return errors.New("account is required")
+		}
+		if length <= 0 {
+			length = 32
+		}
+		payload := map[string]any{
+			"length": length,
+		}
+		if strings.TrimSpace(requestID) != "" {
+			payload["request_id"] = requestID
+		}
+		data, err := client.request(ctx, http.MethodPost, "/accounts/"+accountID+"/random", payload)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
+	case "list":
+		fs := flag.NewFlagSet("random list", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var accountID string
+		var limit int
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		fs.IntVar(&limit, "limit", 10, "Number of results to show")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" {
+			return errors.New("account is required")
+		}
+		if limit <= 0 {
+			limit = 10
+		}
+		path := fmt.Sprintf("/accounts/%s/random/requests?limit=%d", accountID, limit)
+		data, err := client.request(ctx, http.MethodGet, path, nil)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
+	default:
+		fmt.Println(`Usage:
+  slctl random list --account <id> [--limit 10]
+  slctl random generate --account <id> [--length 32] [--request-id <id>]`)
+		return fmt.Errorf("unknown random subcommand %q", sub)
 	}
 	return nil
 }
