@@ -64,6 +64,22 @@ func run(ctx context.Context, args []string) error {
 		return handlePriceFeeds(ctx, client, remaining[1:])
 	case "random":
 		return handleRandom(ctx, client, remaining[1:])
+	case "cre":
+		return handleCRE(ctx, client, remaining[1:])
+	case "ccip":
+		return handleCCIP(ctx, client, remaining[1:])
+	case "vrf":
+		return handleVRF(ctx, client, remaining[1:])
+	case "datalink":
+		return handleDataLink(ctx, client, remaining[1:])
+	case "dta":
+		return handleDTA(ctx, client, remaining[1:])
+	case "datastreams":
+		return handleDataStreams(ctx, client, remaining[1:])
+	case "confcompute":
+		return handleConfCompute(ctx, client, remaining[1:])
+	case "workspace-wallets":
+		return handleWorkspaceWallets(ctx, client, remaining[1:])
 	case "services":
 		return handleServices(ctx, client, remaining[1:])
 	case "version":
@@ -102,6 +118,14 @@ Commands:
   oracle       Manage oracle sources and requests
   pricefeeds   Manage price feed definitions and snapshots
   random       Request deterministic randomness
+  cre          Inspect Chainlink Reliability Engine assets
+  ccip         Inspect cross-chain lanes and messages
+  vrf          Inspect VRF keys and requests
+  datalink     Inspect channel configurations and deliveries
+  dta          Inspect digital transfer agency products and orders
+  datastreams  Inspect stream configurations and frames
+  confcompute  Inspect confidential-compute enclaves
+  workspace-wallets Inspect linked signing wallets
   services     Introspect service descriptors
   version      Show CLI version information`)
 }
@@ -933,6 +957,457 @@ func handleRandom(ctx context.Context, client *apiClient, args []string) error {
   slctl random generate --account <id> [--length 32] [--request-id <id>]`)
 		return fmt.Errorf("unknown random subcommand %q", sub)
 	}
+	return nil
+}
+
+// ---------------------------------------------------------------------
+// CRE
+
+func handleCRE(ctx context.Context, client *apiClient, args []string) error {
+	if len(args) == 0 {
+		fmt.Println(`Usage:
+  slctl cre playbooks --account <id>
+  slctl cre executors --account <id>
+  slctl cre runs --account <id> [--limit 25]`)
+		return nil
+	}
+	resource := args[0]
+	switch resource {
+	case "playbooks":
+		fs := flag.NewFlagSet("cre playbooks", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var accountID string
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" {
+			return errors.New("account is required")
+		}
+		url := fmt.Sprintf("/accounts/%s/cre/playbooks", accountID)
+		data, err := client.request(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
+	case "executors":
+		fs := flag.NewFlagSet("cre executors", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var accountID string
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" {
+			return errors.New("account is required")
+		}
+		url := fmt.Sprintf("/accounts/%s/cre/executors", accountID)
+		data, err := client.request(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
+	case "runs":
+		fs := flag.NewFlagSet("cre runs", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var accountID string
+		var limit int
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		fs.IntVar(&limit, "limit", 25, "Number of runs to fetch")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" {
+			return errors.New("account is required")
+		}
+		if limit <= 0 {
+			limit = 25
+		}
+		url := fmt.Sprintf("/accounts/%s/cre/runs?limit=%d", accountID, limit)
+		data, err := client.request(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
+	default:
+		fmt.Println(`Usage:
+  slctl cre playbooks --account <id>
+  slctl cre executors --account <id>
+  slctl cre runs --account <id> [--limit 25]`)
+		return fmt.Errorf("unknown cre subcommand %q", resource)
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------
+// CCIP
+
+func handleCCIP(ctx context.Context, client *apiClient, args []string) error {
+	if len(args) == 0 {
+		fmt.Println(`Usage:
+  slctl ccip lanes --account <id>
+  slctl ccip messages --account <id> [--limit 50]`)
+		return nil
+	}
+	switch args[0] {
+	case "lanes":
+		fs := flag.NewFlagSet("ccip lanes", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var accountID string
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" {
+			return errors.New("account is required")
+		}
+		url := fmt.Sprintf("/accounts/%s/ccip/lanes", accountID)
+		data, err := client.request(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
+	case "messages":
+		fs := flag.NewFlagSet("ccip messages", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var accountID string
+		var limit int
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		fs.IntVar(&limit, "limit", 50, "Number of messages to fetch")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" {
+			return errors.New("account is required")
+		}
+		if limit <= 0 {
+			limit = 50
+		}
+		url := fmt.Sprintf("/accounts/%s/ccip/messages?limit=%d", accountID, limit)
+		data, err := client.request(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
+	default:
+		fmt.Println(`Usage:
+  slctl ccip lanes --account <id>
+  slctl ccip messages --account <id> [--limit 50]`)
+		return fmt.Errorf("unknown ccip subcommand %q", args[0])
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------
+// VRF
+
+func handleVRF(ctx context.Context, client *apiClient, args []string) error {
+	if len(args) == 0 {
+		fmt.Println(`Usage:
+  slctl vrf keys --account <id>
+  slctl vrf requests --account <id> [--limit 50]`)
+		return nil
+	}
+	switch args[0] {
+	case "keys":
+		fs := flag.NewFlagSet("vrf keys", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var accountID string
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" {
+			return errors.New("account is required")
+		}
+		url := fmt.Sprintf("/accounts/%s/vrf/keys", accountID)
+		data, err := client.request(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
+	case "requests":
+		fs := flag.NewFlagSet("vrf requests", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var accountID string
+		var limit int
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		fs.IntVar(&limit, "limit", 50, "Number of requests to fetch")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" {
+			return errors.New("account is required")
+		}
+		if limit <= 0 {
+			limit = 50
+		}
+		url := fmt.Sprintf("/accounts/%s/vrf/requests?limit=%d", accountID, limit)
+		data, err := client.request(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
+	default:
+		fmt.Println(`Usage:
+  slctl vrf keys --account <id>
+  slctl vrf requests --account <id> [--limit 50]`)
+		return fmt.Errorf("unknown vrf subcommand %q", args[0])
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------
+// DataLink
+
+func handleDataLink(ctx context.Context, client *apiClient, args []string) error {
+	if len(args) == 0 {
+		fmt.Println(`Usage:
+  slctl datalink channels --account <id>
+  slctl datalink deliveries --account <id> [--limit 50]`)
+		return nil
+	}
+	switch args[0] {
+	case "channels":
+		fs := flag.NewFlagSet("datalink channels", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var accountID string
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" {
+			return errors.New("account is required")
+		}
+		url := fmt.Sprintf("/accounts/%s/datalink/channels", accountID)
+		data, err := client.request(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
+	case "deliveries":
+		fs := flag.NewFlagSet("datalink deliveries", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var accountID string
+		var limit int
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		fs.IntVar(&limit, "limit", 50, "Number of deliveries to fetch")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" {
+			return errors.New("account is required")
+		}
+		if limit <= 0 {
+			limit = 50
+		}
+		url := fmt.Sprintf("/accounts/%s/datalink/deliveries?limit=%d", accountID, limit)
+		data, err := client.request(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
+	default:
+		fmt.Println(`Usage:
+  slctl datalink channels --account <id>
+  slctl datalink deliveries --account <id> [--limit 50]`)
+		return fmt.Errorf("unknown datalink subcommand %q", args[0])
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------
+// DTA
+
+func handleDTA(ctx context.Context, client *apiClient, args []string) error {
+	if len(args) == 0 {
+		fmt.Println(`Usage:
+  slctl dta products --account <id>
+  slctl dta orders --account <id> [--limit 50]`)
+		return nil
+	}
+	switch args[0] {
+	case "products":
+		fs := flag.NewFlagSet("dta products", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var accountID string
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" {
+			return errors.New("account is required")
+		}
+		url := fmt.Sprintf("/accounts/%s/dta/products", accountID)
+		data, err := client.request(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
+	case "orders":
+		fs := flag.NewFlagSet("dta orders", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var accountID string
+		var limit int
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		fs.IntVar(&limit, "limit", 50, "Number of orders to fetch")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" {
+			return errors.New("account is required")
+		}
+		if limit <= 0 {
+			limit = 50
+		}
+		url := fmt.Sprintf("/accounts/%s/dta/orders?limit=%d", accountID, limit)
+		data, err := client.request(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
+	default:
+		fmt.Println(`Usage:
+  slctl dta products --account <id>
+  slctl dta orders --account <id> [--limit 50]`)
+		return fmt.Errorf("unknown dta subcommand %q", args[0])
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------
+// DataStreams
+
+func handleDataStreams(ctx context.Context, client *apiClient, args []string) error {
+	if len(args) == 0 {
+		fmt.Println(`Usage:
+  slctl datastreams streams --account <id>
+  slctl datastreams frames --account <id> --stream <id> [--limit 20]`)
+		return nil
+	}
+	switch args[0] {
+	case "streams":
+		fs := flag.NewFlagSet("datastreams streams", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var accountID string
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" {
+			return errors.New("account is required")
+		}
+		url := fmt.Sprintf("/accounts/%s/datastreams", accountID)
+		data, err := client.request(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
+	case "frames":
+		fs := flag.NewFlagSet("datastreams frames", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var accountID, streamID string
+		var limit int
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		fs.StringVar(&streamID, "stream", "", "Stream ID (required)")
+		fs.IntVar(&limit, "limit", 20, "Number of frames to fetch")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" || streamID == "" {
+			return errors.New("account and stream are required")
+		}
+		if limit <= 0 {
+			limit = 20
+		}
+		url := fmt.Sprintf("/accounts/%s/datastreams/%s/frames?limit=%d", accountID, streamID, limit)
+		data, err := client.request(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
+	default:
+		fmt.Println(`Usage:
+  slctl datastreams streams --account <id>
+  slctl datastreams frames --account <id> --stream <id> [--limit 20]`)
+		return fmt.Errorf("unknown datastreams subcommand %q", args[0])
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------
+// Confidential Compute
+
+func handleConfCompute(ctx context.Context, client *apiClient, args []string) error {
+	if len(args) == 0 {
+		fmt.Println(`Usage:
+  slctl confcompute enclaves --account <id> [--limit 50]`)
+		return nil
+	}
+	if args[0] != "enclaves" {
+		fmt.Println(`Usage:
+  slctl confcompute enclaves --account <id> [--limit 50]`)
+		return fmt.Errorf("unknown confcompute subcommand %q", args[0])
+	}
+	fs := flag.NewFlagSet("confcompute enclaves", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	var accountID string
+	var limit int
+	fs.StringVar(&accountID, "account", "", "Account ID (required)")
+	fs.IntVar(&limit, "limit", 50, "Number of enclaves to fetch")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if accountID == "" {
+		return errors.New("account is required")
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	url := fmt.Sprintf("/accounts/%s/confcompute/enclaves?limit=%d", accountID, limit)
+	data, err := client.request(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	prettyPrint(data)
+	return nil
+}
+
+// ---------------------------------------------------------------------
+// Workspace Wallets
+
+func handleWorkspaceWallets(ctx context.Context, client *apiClient, args []string) error {
+	if len(args) == 0 {
+		fmt.Println(`Usage:
+  slctl workspace-wallets list --account <id> [--limit 50]`)
+		return nil
+	}
+	if args[0] != "list" {
+		fmt.Println(`Usage:
+  slctl workspace-wallets list --account <id> [--limit 50]`)
+		return fmt.Errorf("unknown workspace-wallets subcommand %q", args[0])
+	}
+	fs := flag.NewFlagSet("workspace-wallets list", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	var accountID string
+	var limit int
+	fs.StringVar(&accountID, "account", "", "Account ID (required)")
+	fs.IntVar(&limit, "limit", 50, "Number of wallets to fetch")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if accountID == "" {
+		return errors.New("account is required")
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	url := fmt.Sprintf("/accounts/%s/workspace-wallets?limit=%d", accountID, limit)
+	data, err := client.request(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	prettyPrint(data)
 	return nil
 }
 

@@ -77,6 +77,14 @@ ensure gas accounts and submit oracle requests.
 - `slctl pricefeeds list|create|get|snapshots` — define asset pairs and monitor submissions.
 - `slctl random generate --account <id> --length <n>` — request deterministic bytes.
 - `slctl random list --account <id> [--limit n]` — fetch recent `/random/requests` history.
+- `slctl cre playbooks|executors|runs --account <id>` — inspect Chainlink Reliability Engine assets and activity.
+- `slctl ccip lanes|messages --account <id>` — list cross-chain lanes and recent CCIP messages.
+- `slctl vrf keys|requests --account <id>` — inspect VRF key inventory and recent randomness requests.
+- `slctl datalink channels|deliveries --account <id>` — inspect data movement channels and recent delivery attempts.
+- `slctl dta products|orders --account <id>` — inspect DTA product catalogues and order history.
+- `slctl datastreams streams|frames --account <id>` — inspect high-frequency streams and recent frames.
+- `slctl confcompute enclaves --account <id>` — inspect confidential-compute enclave inventory.
+- `slctl workspace-wallets list --account <id>` — inspect registered signing wallets.
 - `slctl services list` — dump `/system/descriptors` for feature discovery.
 
 ### Docker

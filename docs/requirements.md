@@ -120,6 +120,14 @@
   - `slctl gasbank ...` for balances/transactions.
   - `slctl oracle sources|requests ...` to manage adapters.
   - `slctl pricefeeds list|create|get|snapshots`.
+  - `slctl cre playbooks|executors|runs --account <id> [--limit n]` for Chainlink Reliability Engine inventory and activity.
+  - `slctl ccip lanes|messages --account <id> [--limit n]` for cross-chain lane/message introspection.
+  - `slctl vrf keys|requests --account <id> [--limit n]` for randomness key inventory and request history.
+  - `slctl datalink channels|deliveries --account <id> [--limit n]` for data movement channel/delivery auditing.
+  - `slctl dta products|orders --account <id> [--limit n]` for subscription/redemption inventory review.
+  - `slctl datastreams streams|frames --account <id> [--limit n]` for stream configuration/frame inspection.
+  - `slctl confcompute enclaves --account <id> [--limit n]` for confidential-compute inventory.
+  - `slctl workspace-wallets list --account <id> [--limit n]` for signer/inventory auditing.
   - `slctl random generate` (trigger a draw) and `slctl random list` (recent `/random/requests` history).
   - `slctl services list` for descriptor discovery.
 - Reads configuration from flags/environment variables and prints machine-readable tables/JSON for scripting. Extend CLI coverage alongside new HTTP endpoints so every catalogued service eventually ships with parity commands.
