@@ -209,6 +209,63 @@ export type AutomationJob = {
   Enabled: boolean;
 };
 
+export type Secret = {
+  ID: string;
+  AccountID: string;
+  Name: string;
+  CreatedAt: string;
+  UpdatedAt: string;
+  Metadata?: Record<string, string>;
+};
+
+export type FunctionSummary = {
+  ID: string;
+  AccountID: string;
+  Name: string;
+  Runtime: string;
+  Status?: string;
+  CreatedAt?: string;
+  UpdatedAt?: string;
+};
+
+export type FunctionExecution = {
+  ID: string;
+  FunctionID: string;
+  AccountID: string;
+  Status: string;
+  StartedAt?: string;
+  CompletedAt?: string;
+  Error?: string;
+};
+
+export type OracleSource = {
+  ID: string;
+  AccountID: string;
+  Name: string;
+  URL: string;
+  AuthType?: string;
+  Status?: string;
+};
+
+export type OracleRequest = {
+  ID: string;
+  AccountID: string;
+  SourceID: string;
+  Status: string;
+  CreatedAt?: string;
+  UpdatedAt?: string;
+  Error?: string;
+};
+
+export type RandomRequest = {
+  ID: string;
+  AccountID: string;
+  Status: string;
+  Length: number;
+  CreatedAt?: string;
+  CompletedAt?: string;
+};
+
 export type Trigger = {
   ID: string;
   AccountID: string;
@@ -359,4 +416,34 @@ export async function fetchAutomationJobs(config: ClientConfig, accountID: strin
 export async function fetchTriggers(config: ClientConfig, accountID: string, limit = 50): Promise<Trigger[]> {
   const url = `${config.baseUrl}/accounts/${accountID}/triggers?limit=${limit}`;
   return fetchJSON<Trigger[]>(url, config);
+}
+
+export async function fetchSecrets(config: ClientConfig, accountID: string, limit = 50): Promise<Secret[]> {
+  const url = `${config.baseUrl}/accounts/${accountID}/secrets?limit=${limit}`;
+  return fetchJSON<Secret[]>(url, config);
+}
+
+export async function fetchFunctions(config: ClientConfig, accountID: string, limit = 50): Promise<FunctionSummary[]> {
+  const url = `${config.baseUrl}/accounts/${accountID}/functions?limit=${limit}`;
+  return fetchJSON<FunctionSummary[]>(url, config);
+}
+
+export async function fetchFunctionExecutions(config: ClientConfig, accountID: string, functionID: string, limit = 20): Promise<FunctionExecution[]> {
+  const url = `${config.baseUrl}/accounts/${accountID}/functions/${functionID}/executions?limit=${limit}`;
+  return fetchJSON<FunctionExecution[]>(url, config);
+}
+
+export async function fetchOracleSources(config: ClientConfig, accountID: string, limit = 50): Promise<OracleSource[]> {
+  const url = `${config.baseUrl}/accounts/${accountID}/oracle/sources?limit=${limit}`;
+  return fetchJSON<OracleSource[]>(url, config);
+}
+
+export async function fetchOracleRequests(config: ClientConfig, accountID: string, limit = 50): Promise<OracleRequest[]> {
+  const url = `${config.baseUrl}/accounts/${accountID}/oracle/requests?limit=${limit}`;
+  return fetchJSON<OracleRequest[]>(url, config);
+}
+
+export async function fetchRandomRequests(config: ClientConfig, accountID: string, limit = 50): Promise<RandomRequest[]> {
+  const url = `${config.baseUrl}/accounts/${accountID}/random/requests?limit=${limit}`;
+  return fetchJSON<RandomRequest[]>(url, config);
 }

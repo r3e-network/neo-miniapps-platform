@@ -1,53 +1,65 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   Account,
+  AutomationJob,
   CCIPMessage,
-  Descriptor,
-  Lane,
-  normaliseUrl,
-  VRFKey,
-  VRFRequest,
-  WorkspaceWallet,
+  CREExecutor,
+  CREPlaybook,
+  CRERun,
   Datafeed,
   DatafeedUpdate,
   DatalinkChannel,
   DatalinkDelivery,
   Datastream,
   DatastreamFrame,
+  Descriptor,
   DTAOrder,
   DTAProduct,
   Enclave,
+  FunctionExecution,
+  FunctionSummary,
   GasAccount,
   GasTransaction,
-  AutomationJob,
+  Lane,
+  OracleRequest,
+  OracleSource,
+  RandomRequest,
+  Secret,
   Trigger,
-  CREExecutor,
-  CREPlaybook,
-  CRERun,
+  VRFKey,
+  VRFRequest,
+  WorkspaceWallet,
   fetchAccounts,
-  fetchDescriptors,
-  fetchHealth,
-  fetchLanes,
-  fetchMessages,
-  fetchDatafeeds,
+  fetchAutomationJobs,
+  fetchCREExecutors,
+  fetchCREPlaybooks,
+  fetchCRERuns,
   fetchDatafeedUpdates,
+  fetchDatafeeds,
   fetchDatalinkChannels,
   fetchDatalinkDeliveries,
   fetchDatastreamFrames,
   fetchDatastreams,
+  fetchDescriptors,
   fetchDTAOrders,
   fetchDTAProducts,
   fetchEnclaves,
+  fetchFunctionExecutions,
+  fetchFunctions,
   fetchGasAccounts,
   fetchGasTransactions,
-  fetchAutomationJobs,
+  fetchHealth,
+  fetchLanes,
+  fetchMessages,
+  fetchOracleRequests,
+  fetchOracleSources,
+  fetchRandomRequests,
+  fetchSecrets,
   fetchTriggers,
-  fetchCREExecutors,
-  fetchCREPlaybooks,
-  fetchCRERuns,
-  fetchWorkspaceWallets,
   fetchVRFKeys,
   fetchVRFRequests,
+  fetchWorkspaceWallets,
+  normaliseUrl,
 } from "./api";
 import { useLocalStorage } from "./useLocalStorage";
 import { MetricSample, MetricsConfig, promQuery, promQueryRange, TimeSeries } from "./metrics";
@@ -134,6 +146,30 @@ type AutomationState =
   | { status: "ready"; jobs: AutomationJob[]; triggers: Trigger[] }
   | { status: "error"; message: string };
 
+type SecretsState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; items: Secret[] }
+  | { status: "error"; message: string };
+
+type FunctionsState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; items: { fn: FunctionSummary; executions: FunctionExecution[] }[] }
+  | { status: "error"; message: string };
+
+type OracleState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; sources: OracleSource[]; requests: OracleRequest[] }
+  | { status: "error"; message: string };
+
+type RandomState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; requests: RandomRequest[] }
+  | { status: "error"; message: string };
+
 export function App() {
   const [baseUrl, setBaseUrl] = useLocalStorage("sl-ui.baseUrl", "http://localhost:8080");
   const [token, setToken] = useLocalStorage("sl-ui.token", "");
@@ -166,6 +202,10 @@ export function App() {
   const [conf, setConf] = useState<Record<string, ConfState>>({});
   const [cre, setCRE] = useState<Record<string, CREState>>({});
   const [automation, setAutomation] = useState<Record<string, AutomationState>>({});
+  const [secrets, setSecrets] = useState<Record<string, SecretsState>>({});
+  const [functionsState, setFunctionsState] = useState<Record<string, FunctionsState>>({});
+  const [oracle, setOracle] = useState<Record<string, OracleState>>({});
+  const [random, setRandom] = useState<Record<string, RandomState>>({});
 
   const canQuery = config.baseUrl.length > 0 && config.token.length > 0;
 
@@ -201,6 +241,10 @@ export function App() {
       setConf({});
       setCRE({});
       setAutomation({});
+      setSecrets({});
+      setFunctionsState({});
+      setOracle({});
+      setRandom({});
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setState({ status: "error", message });
@@ -349,6 +393,56 @@ export function App() {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setAutomation((prev) => ({ ...prev, [accountID]: { status: "error", message } }));
+    }
+  }
+
+  async function loadSecrets(accountID: string) {
+    setSecrets((prev) => ({ ...prev, [accountID]: { status: "loading" } }));
+    try {
+      const items = await fetchSecrets(config, accountID);
+      setSecrets((prev) => ({ ...prev, [accountID]: { status: "ready", items } }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setSecrets((prev) => ({ ...prev, [accountID]: { status: "error", message } }));
+    }
+  }
+
+  async function loadFunctions(accountID: string) {
+    setFunctionsState((prev) => ({ ...prev, [accountID]: { status: "loading" } }));
+    try {
+      const funcs = await fetchFunctions(config, accountID);
+      const enriched = await Promise.all(
+        funcs.map(async (fn) => {
+          const executions = await fetchFunctionExecutions(config, accountID, fn.ID, 5);
+          return { fn, executions };
+        }),
+      );
+      setFunctionsState((prev) => ({ ...prev, [accountID]: { status: "ready", items: enriched } }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setFunctionsState((prev) => ({ ...prev, [accountID]: { status: "error", message } }));
+    }
+  }
+
+  async function loadOracle(accountID: string) {
+    setOracle((prev) => ({ ...prev, [accountID]: { status: "loading" } }));
+    try {
+      const [sources, requests] = await Promise.all([fetchOracleSources(config, accountID), fetchOracleRequests(config, accountID)]);
+      setOracle((prev) => ({ ...prev, [accountID]: { status: "ready", sources, requests } }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setOracle((prev) => ({ ...prev, [accountID]: { status: "error", message } }));
+    }
+  }
+
+  async function loadRandom(accountID: string) {
+    setRandom((prev) => ({ ...prev, [accountID]: { status: "loading" } }));
+    try {
+      const requests = await fetchRandomRequests(config, accountID);
+      setRandom((prev) => ({ ...prev, [accountID]: { status: "ready", requests } }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setRandom((prev) => ({ ...prev, [accountID]: { status: "error", message } }));
     }
   }
 
@@ -502,6 +596,18 @@ export function App() {
                           </button>
                           <button type="button" onClick={() => loadAutomation(acct.ID)} disabled={automation[acct.ID]?.status === "loading"}>
                             {automation[acct.ID]?.status === "loading" ? "Loading automation..." : "Automation"}
+                          </button>
+                          <button type="button" onClick={() => loadSecrets(acct.ID)} disabled={secretState.status === "loading"}>
+                            {secretState.status === "loading" ? "Loading secrets..." : "Secrets"}
+                          </button>
+                          <button type="button" onClick={() => loadFunctions(acct.ID)} disabled={funcState.status === "loading"}>
+                            {funcState.status === "loading" ? "Loading functions..." : "Functions"}
+                          </button>
+                          <button type="button" onClick={() => loadOracle(acct.ID)} disabled={oracleState.status === "loading"}>
+                            {oracleState.status === "loading" ? "Loading oracle..." : "Oracle"}
+                          </button>
+                          <button type="button" onClick={() => loadRandom(acct.ID)} disabled={randomState.status === "loading"}>
+                            {randomState.status === "loading" ? "Loading randomness..." : "Randomness"}
                           </button>
                         </div>
                       </div>
@@ -880,6 +986,119 @@ export function App() {
                                   <span className="tag subdued">{tr.Type}</span>
                                 </div>
                                 <div className="muted mono">{tr.Rule}</div>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {secretState.status === "error" && <p className="error">Secrets: {secretState.message}</p>}
+                      {secretState.status === "ready" && (
+                        <div className="vrf">
+                          <div className="row">
+                            <h4 className="tight">Secrets</h4>
+                            <span className="tag subdued">{secretState.items.length}</span>
+                          </div>
+                          <ul className="wallets">
+                            {secretState.items.map((sec) => (
+                              <li key={sec.ID}>
+                                <div className="row">
+                                  <div>
+                                    <strong>{sec.Name}</strong>
+                                    <div className="muted mono">{sec.ID}</div>
+                                  </div>
+                                  <span className="tag subdued">{new Date(sec.UpdatedAt).toLocaleString()}</span>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {funcState.status === "error" && <p className="error">Functions: {funcState.message}</p>}
+                      {funcState.status === "ready" && (
+                        <div className="vrf">
+                          <div className="row">
+                            <h4 className="tight">Functions</h4>
+                            <span className="tag subdued">{funcState.items.length}</span>
+                          </div>
+                          <ul className="wallets">
+                            {funcState.items.map(({ fn, executions }) => (
+                              <li key={fn.ID}>
+                                <div className="row">
+                                  <div>
+                                    <strong>{fn.Name}</strong>
+                                    <div className="muted mono">{fn.Runtime}</div>
+                                  </div>
+                                  {fn.Status && <span className="tag subdued">{fn.Status}</span>}
+                                </div>
+                                {executions.length > 0 ? (
+                                  <ul className="list mono">
+                                    {executions.map((ex) => (
+                                      <li key={ex.ID} className="row">
+                                        <span>{ex.ID}</span>
+                                        <span className="tag subdued">{ex.Status}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <p className="muted">No executions yet.</p>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {oracleState.status === "error" && <p className="error">Oracle: {oracleState.message}</p>}
+                      {oracleState.status === "ready" && (
+                        <div className="vrf">
+                          <div className="row">
+                            <h4 className="tight">Oracle Sources</h4>
+                            <span className="tag subdued">{oracleState.sources.length}</span>
+                          </div>
+                          <ul className="wallets">
+                            {oracleState.sources.map((src) => (
+                              <li key={src.ID}>
+                                <div className="row">
+                                  <div>
+                                    <strong>{src.Name}</strong>
+                                    <div className="muted mono">{src.URL}</div>
+                                  </div>
+                                  {src.Status && <span className="tag subdued">{src.Status}</span>}
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                          <div className="row">
+                            <h4 className="tight">Oracle Requests</h4>
+                            <span className="tag subdued">{oracleState.requests.length}</span>
+                          </div>
+                          <ul className="wallets">
+                            {oracleState.requests.map((req) => (
+                              <li key={req.ID}>
+                                <div className="row">
+                                  <div className="mono">{req.ID}</div>
+                                  <span className="tag subdued">{req.Status}</span>
+                                </div>
+                                <div className="muted mono">Source: {req.SourceID}</div>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {randomState.status === "error" && <p className="error">Randomness: {randomState.message}</p>}
+                      {randomState.status === "ready" && (
+                        <div className="vrf">
+                          <div className="row">
+                            <h4 className="tight">Random Requests</h4>
+                            <span className="tag subdued">{randomState.requests.length}</span>
+                          </div>
+                          <ul className="wallets">
+                            {randomState.requests.map((req) => (
+                              <li key={req.ID}>
+                                <div className="row">
+                                  <div className="mono">{req.ID}</div>
+                                  <span className="tag subdued">{req.Status}</span>
+                                </div>
+                                <div className="muted mono">Length: {req.Length} bytes</div>
                               </li>
                             ))}
                           </ul>
