@@ -51,6 +51,7 @@
 - Support multiple sources per feed with configurable aggregation (e.g., threshold/median), and track request lifecycle states (pending, running, succeeded, failed) with idempotent updates.
 - Allow per-source authentication headers, outbound host allowlisting, and per-account/source rate limits. Runners/resolvers must authenticate when marking requests running/complete, and requests carry TTL/backoff/DLQ metadata so zombie requests are cleaned up.
 - Attach schema/versioning to request payloads and constraints on result size; expose latency/success metrics and SLA windows.
+- Optional signed result/attestation output with chain/job/spec identifiers for downstream consumers.
 
 #### Price Feed Service
 - Create/edit price feed definitions, store historical snapshots, and run periodic refreshers that fetch external data via `PRICEFEED_FETCH_URL` (with optional API keys).

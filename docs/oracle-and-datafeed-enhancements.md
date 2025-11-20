@@ -43,3 +43,25 @@ Feed services closer to production-grade, Chainlink-style behaviours.
 4) Add oracle runner authentication, TTL/backoff, and aggregation support.
 5) Surface health/metrics in the dashboard and CLI (queues, attempts, signer
    thresholds, stale feeds).
+
+## Implementation Plan (proposed)
+1. **Config & Model**: Add runtime/config fields for oracle TTL/retries/DLQ and
+   datafeed signer thresholds/aggregation strategy; extend domain models with
+   signer identity, signatures, and request expiry metadata.
+2. **Data Feed Enforcement**:
+   - Verify signatures against signer set; reject unknown signers.
+   - Require a configurable minimum signer threshold and aggregate (median) per
+     round; enforce deviation/heartbeat and numeric validation.
+   - Record per-signer submissions to prevent replay; emit metrics.
+3. **Oracle Reliability**:
+   - Add request TTL/backoff/DLQ + manual retry; persist attempts.
+   - Require runner/resolver auth to mark running/complete; support multi-source
+     aggregation (median/quorum) with per-source weights.
+4. **Observability & Surfacing**:
+   - Metrics for latencies, success/failure, stale feeds, signer participation,
+     pending/running queues; trace IDs on oracle callbacks.
+   - Dashboard/CLI views for oracle queue/attempts and datafeed signer/round
+     status; alerts for stale/under-signed feeds.
+5. **Attestation/Chain Output**:
+   - Define optional signed report/attestation format (ed25519/ecdsa) for oracle
+     results and aggregated feed rounds; include chain ID/job/spec metadata.
