@@ -191,6 +191,7 @@ export type GasTransaction = {
   ToAddress: string;
   FromAddress: string;
   CreatedAt?: string;
+  UpdatedAt?: string;
   Type?: string;
   Error?: string;
 };
@@ -234,6 +235,15 @@ export type GasbankDeadLetter = {
   Retries: number;
   CreatedAt?: string;
   UpdatedAt?: string;
+};
+
+export type GasbankSettlementAttempt = {
+  TransactionID: string;
+  Attempt: number;
+  StartedAt: string;
+  CompletedAt?: string;
+  Status?: string;
+  Error?: string;
 };
 
 export type Enclave = {
@@ -505,6 +515,17 @@ export async function fetchGasWithdrawals(
 export async function fetchGasDeadLetters(config: ClientConfig, accountID: string, limit = 25): Promise<GasbankDeadLetter[]> {
   const url = `${config.baseUrl}/accounts/${accountID}/gasbank/deadletters?limit=${limit}`;
   return fetchJSON<GasbankDeadLetter[]>(url, config);
+}
+
+export async function fetchWithdrawalAttempts(
+  config: ClientConfig,
+  accountID: string,
+  transactionID: string,
+  limit = 10,
+): Promise<GasbankSettlementAttempt[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  const url = `${config.baseUrl}/accounts/${accountID}/gasbank/withdrawals/${transactionID}/attempts?${params.toString()}`;
+  return fetchJSON<GasbankSettlementAttempt[]>(url, config);
 }
 
 export async function fetchEnclaves(config: ClientConfig, accountID: string, limit = 50): Promise<Enclave[]> {

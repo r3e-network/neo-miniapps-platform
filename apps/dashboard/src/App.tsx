@@ -22,6 +22,7 @@ import {
   GasTransaction,
   GasbankSummary,
   GasbankDeadLetter,
+  GasbankSettlementAttempt,
   PriceFeed,
   PriceSnapshot,
   Lane,
@@ -55,6 +56,7 @@ import {
   fetchGasbankSummary,
   fetchGasWithdrawals,
   fetchGasDeadLetters,
+  fetchWithdrawalAttempts,
   fetchPriceFeeds,
   fetchPriceSnapshots,
   fetchHealth,
@@ -168,6 +170,7 @@ type GasbankState =
       transactions: GasTransaction[];
       withdrawals: GasTransaction[];
       deadletters: GasbankDeadLetter[];
+      attempts: Record<string, GasbankSettlementAttempt[]>;
     }
   | { status: "error"; message: string };
 
@@ -431,16 +434,33 @@ export function App() {
       ]);
       let transactions: GasTransaction[] = [];
       let withdrawals: GasTransaction[] = [];
+      let attempts: Record<string, GasbankSettlementAttempt[]> = {};
       const primaryAccountID = accounts[0]?.ID;
       if (primaryAccountID) {
         [transactions, withdrawals] = await Promise.all([
           fetchGasTransactions(config, accountID, primaryAccountID, 20),
           fetchGasWithdrawals(config, accountID, primaryAccountID, undefined, 15),
         ]);
+        if (withdrawals.length) {
+          const fetched = await Promise.all(
+            withdrawals.map(async (w) => {
+              try {
+                const rows = await fetchWithdrawalAttempts(config, accountID, w.ID, 5);
+                return { id: w.ID, attempts: rows };
+              } catch {
+                return { id: w.ID, attempts: [] };
+              }
+            }),
+          );
+          attempts = fetched.reduce<Record<string, GasbankSettlementAttempt[]>>((acc, curr) => {
+            acc[curr.id] = curr.attempts;
+            return acc;
+          }, {});
+        }
       }
       setGasbank((prev) => ({
         ...prev,
-        [accountID]: { status: "ready", summary, accounts, transactions, withdrawals, deadletters },
+        [accountID]: { status: "ready", summary, accounts, transactions, withdrawals, deadletters, attempts },
       }));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -1104,6 +1124,7 @@ export function App() {
                                       <th>Status</th>
                                       <th>Amount</th>
                                       <th>Created</th>
+                                      <th>Attempts</th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -1113,6 +1134,15 @@ export function App() {
                                         <td>{withdrawal.Status}</td>
                                         <td>{formatAmount(withdrawal.Amount)}</td>
                                         <td>{formatTimestamp(withdrawal.CreatedAt)}</td>
+                                        <td className="mono">
+                                          {(() => {
+                                            const attempts = gasbankState.attempts[withdrawal.ID] || [];
+                                            if (!attempts.length) return "—";
+                                            const latest = attempts[0];
+                                            const label = latest.Status || "attempted";
+                                            return `${attempts.length} (${label})`;
+                                          })()}
+                                        </td>
                                       </tr>
                                     ))}
                                   </tbody>
