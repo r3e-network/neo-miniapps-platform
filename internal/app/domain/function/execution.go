@@ -32,6 +32,11 @@ const (
 	ActionTypeGasBankBalance       = "gasbank.balance"
 	ActionTypeGasBankListTx        = "gasbank.listTransactions"
 	ActionTypeOracleCreateRequest  = "oracle.createRequest"
+	ActionTypePriceFeedSnapshot    = "pricefeed.recordSnapshot"
+	ActionTypeRandomGenerate       = "random.generate"
+	ActionTypeDataFeedSubmit       = "datafeeds.submitUpdate"
+	ActionTypeDatastreamPublish    = "datastreams.publishFrame"
+	ActionTypeDatalinkDeliver      = "datalink.createDelivery"
 	ActionTypeTriggerRegister      = "triggers.register"
 	ActionTypeAutomationSchedule   = "automation.schedule"
 )

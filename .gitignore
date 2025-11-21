@@ -51,3 +51,4 @@ Thumbs.db
 **/logs/**
 **/tmp/**
 **/.next/**
+**/__pycache__/**

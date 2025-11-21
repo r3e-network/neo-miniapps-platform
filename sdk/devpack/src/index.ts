@@ -45,6 +45,26 @@ export interface OracleModule {
   createRequest(params: OracleRequestParams): ActionHandle;
 }
 
+export interface RandomModule {
+  generate(params: RandomGenerateParams): ActionHandle;
+}
+
+export interface PriceFeedsModule {
+  recordSnapshot(params: PriceFeedSnapshotParams): ActionHandle;
+}
+
+export interface DataFeedsModule {
+  submitUpdate(params: DataFeedUpdateParams): ActionHandle;
+}
+
+export interface DataStreamsModule {
+  publishFrame(params: DataStreamFrameParams): ActionHandle;
+}
+
+export interface DataLinkModule {
+  createDelivery(params: DataLinkDeliveryParams): ActionHandle;
+}
+
 export interface TriggersModule {
   register(params: TriggerRegisterParams): ActionHandle;
 }
@@ -59,6 +79,11 @@ export interface DevpackRuntime {
   setContext(ctx: DevpackContext): void;
   gasBank: GasBankModule;
   oracle: OracleModule;
+  random: RandomModule;
+  priceFeeds: PriceFeedsModule;
+  dataFeeds: DataFeedsModule;
+  dataStreams: DataStreamsModule;
+  dataLink: DataLinkModule;
   triggers: TriggersModule;
   automation: AutomationModule;
   respond: {
@@ -98,6 +123,43 @@ export interface OracleRequestParams {
   dataSourceId: string;
   alternateSourceIds?: string[];
   payload?: unknown;
+}
+
+export interface RandomGenerateParams {
+  length?: number;
+  requestId?: string;
+}
+
+export interface PriceFeedSnapshotParams {
+  feedId: string;
+  price: number | string;
+  source?: string;
+  collectedAt?: string;
+}
+
+export interface DataFeedUpdateParams {
+  feedId: string;
+  roundId: number;
+  price: string | number;
+  timestamp?: string;
+  signer?: string;
+  signature?: string;
+  metadata?: Record<string, string>;
+}
+
+export interface DataStreamFrameParams {
+  streamId: string;
+  sequence: number;
+  payload?: Record<string, unknown>;
+  latencyMs?: number;
+  status?: string;
+  metadata?: Record<string, string>;
+}
+
+export interface DataLinkDeliveryParams {
+  channelId: string;
+  payload: Record<string, unknown>;
+  metadata?: Record<string, string>;
 }
 
 export interface TriggerRegisterParams {
@@ -145,6 +207,30 @@ export function listGasTransactions(params: GasBankListTransactionsParams): Acti
 
 export function createOracleRequest(params: OracleRequestParams): ActionHandle {
   return runtime().oracle.createRequest(params);
+}
+
+export function generateRandom(params: RandomGenerateParams = {}): ActionHandle {
+  const next = { ...params };
+  if (!next.length || next.length <= 0) {
+    next.length = 32;
+  }
+  return runtime().random.generate(next);
+}
+
+export function recordPriceSnapshot(params: PriceFeedSnapshotParams): ActionHandle {
+  return runtime().priceFeeds.recordSnapshot(params);
+}
+
+export function submitDataFeedUpdate(params: DataFeedUpdateParams): ActionHandle {
+  return runtime().dataFeeds.submitUpdate(params);
+}
+
+export function publishDataStreamFrame(params: DataStreamFrameParams): ActionHandle {
+  return runtime().dataStreams.publishFrame(params);
+}
+
+export function createDataLinkDelivery(params: DataLinkDeliveryParams): ActionHandle {
+  return runtime().dataLink.createDelivery(params);
 }
 
 export function registerTrigger(params: TriggerRegisterParams): ActionHandle {

@@ -1,5 +1,5 @@
 (function (globalThis) {
-  const VERSION = "0.1.0";
+  const VERSION = "0.6.0";
   let actionCounter = 0;
   const pendingActions = [];
 
@@ -87,6 +87,36 @@
     },
   };
 
+  const random = {
+    generate(options) {
+      return recordAction("random.generate", ensureObject(options));
+    },
+  };
+
+  const priceFeeds = {
+    recordSnapshot(options) {
+      return recordAction("pricefeed.recordSnapshot", ensureObject(options));
+    },
+  };
+
+  const dataFeeds = {
+    submitUpdate(options) {
+      return recordAction("datafeeds.submitUpdate", ensureObject(options));
+    },
+  };
+
+  const dataStreams = {
+    publishFrame(options) {
+      return recordAction("datastreams.publishFrame", ensureObject(options));
+    },
+  };
+
+  const dataLink = {
+    createDelivery(options) {
+      return recordAction("datalink.createDelivery", ensureObject(options));
+    },
+  };
+
   const triggers = {
     register(options) {
       return recordAction("triggers.register", ensureObject(options));
@@ -104,6 +134,11 @@
     respond,
     gasBank,
     oracle,
+    random,
+    priceFeeds,
+    dataFeeds,
+    dataStreams,
+    dataLink,
     triggers,
     automation,
     context: {},

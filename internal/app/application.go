@@ -300,7 +300,7 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 
 	httpClient := options.httpClient
 
-	funcService.AttachDependencies(trigService, automationService, priceFeedService, oracleService, gasService)
+	funcService.AttachDependencies(trigService, automationService, priceFeedService, dataFeedService, dataStreamService, dataLinkService, oracleService, gasService, randomService)
 
 	if options.runtime.creHTTPRunner {
 		creService.WithRunner(cresvc.NewHTTPRunner(httpClient, log))
