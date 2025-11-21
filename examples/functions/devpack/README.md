@@ -7,9 +7,10 @@ Go, Rust, and Python expose the same Devpack action surface if you prefer a
 different language runtime.
 
 See `js/pricefeed_snapshot.js` for a Devpack example that records price feed
-snapshots from a function, and `js/random_generate.js` for using the randomness
-service. TypeScript equivalents live under `src/pricefeed.ts` and `src/random.ts`
-if you prefer typed authoring.
+snapshots from a function, `js/random_generate.js` for randomness, and
+`js/data_pipeline.js` for coordinating data feeds, data streams, and DataLink
+from a single function. TypeScript equivalents live under `src/pricefeed.ts`
+and `src/random.ts` if you prefer typed authoring.
 
 Refer to [`docs/requirements.md`](../../../docs/requirements.md) for the full API
 contract (inputs, outputs, Devpack action semantics) before modifying or extending
