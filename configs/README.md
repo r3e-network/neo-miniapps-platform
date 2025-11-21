@@ -11,7 +11,8 @@ environments.
 - `examples/appserver.json` – JSON version used in documentation snippets.
 - `prometheus.yml` – example scrape config aligned with the `/metrics` surface.
 
-Always update the specification first when adding/removing configuration fields.
+Always update the specification first when adding/removing configuration fields. File
+paths are workspace-relative; you can use absolute paths if preferred.
 
 ## Runtime Block
 
@@ -27,6 +28,17 @@ variables for the orchestration runtime:
 - `gasbank.resolver_url` / `gasbank.resolver_key` — configure the settlement
   poller HTTP resolver, with `gasbank.poll_interval` and `gasbank.max_attempts`
   controlling retry cadence.
+- `oracle.ttl_seconds` / `oracle.max_attempts` / `oracle.backoff` /
+  `oracle.dlq_enabled` — control resolver retry cadence and expiry; exhausted
+  requests are dead-lettered when enabled.
+- `oracle.runner_tokens` — optional list of runner callback tokens; when set,
+  status updates must present a matching `X-Oracle-Runner-Token` (API tokens
+  are still required). Environment overrides (`ORACLE_RUNNER_TOKENS`) accept
+  comma- or semicolon-separated lists.
+- `datafeeds.min_signers` / `datafeeds.aggregation` — defaults for Chainlink
+  data feed submissions (e.g. `median` aggregation).
+- `datastreams` / `datalink` — currently rely on service defaults; no runtime
+  toggles are required.
 - `cre.http_runner` — enables the HTTP CRE runner integration.
 
 Every field still honours its corresponding environment variable, so you can

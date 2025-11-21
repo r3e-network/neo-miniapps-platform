@@ -1,0 +1,10 @@
+[project]
+name = "service-layer-devpack"
+version = "0.6.0"
+description = "Devpack helpers for Service Layer functions (Python experimental)."
+readme = "README.md"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

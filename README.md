@@ -22,9 +22,9 @@ experimentation, or wire itself to PostgreSQL when a DSN is supplied.
 - Account registry with pluggable storage (memory by default, PostgreSQL when
   configured)
 - Function catalogue and executor with trigger, automation, oracle, price-feed,
-  and gas-bank integrations
-- Devpack runtime with declarative action queueing and a TypeScript SDK for
-  authoring functions locally
+  data-feed, data-stream, DataLink, randomness, and gas-bank integrations
+- Devpack runtime with declarative action queueing and SDKs for authoring
+  functions locally (TypeScript, plus matching helpers in Go/Rust/Python)
 - Secret vault with optional encryption and runtime resolution for function
   execution
 - Cryptographically secure random number generation per account
@@ -58,7 +58,7 @@ go run ./cmd/appserver \
 
 (You may also omit `-config` entirely and only pass `-dsn`.)
 
-Examples for Devpack usage live under `examples/functions/devpack`. API examples for all services are in `docs/examples/services.md`.
+Examples for Devpack usage live under `examples/functions/devpack` (JS + TS samples for price feeds, randomness, gasbank/oracle orchestration). API examples for all services are in `docs/examples/services.md`. Polyglot SDKs mirroring the Devpack surface live under `sdk/go`, `sdk/rust`, and `sdk/python`.
 
 Check `examples/functions/devpack` for a TypeScript project that uses the SDK to
 ensure gas accounts and submit oracle requests.
@@ -78,6 +78,8 @@ ensure gas accounts and submit oracle requests.
 - `slctl automation jobs ...` / `slctl secrets ...` — administer schedulers and secret vault entries.
 - `slctl gasbank ...` — view balances and transfer history.
 - `slctl oracle sources|requests ...` — configure HTTP adapters and inspect inflight work.
+- `slctl datastreams ...` — list/create streams or publish frames.
+- `slctl datalink ...` — list/create channels and queue deliveries.
 - `slctl pricefeeds list|create|get|snapshots` — define asset pairs and monitor submissions.
 - `slctl random generate --account <id> --length <n>` — request deterministic bytes.
 - `slctl random list --account <id> [--limit n]` — fetch recent `/random/requests` history.
@@ -115,6 +117,13 @@ in-memory stores.
   present `Authorization: Bearer <token>`; `/healthz` and `/system/version` stay
   public. When no tokens are configured, protected endpoints return 401 and the
   server logs a warning. Always set tokens for any deployment.
+- Oracle dispatcher settings honour the runtime config or `ORACLE_*` env vars:
+  `ORACLE_TTL_SECONDS`, `ORACLE_MAX_ATTEMPTS`, `ORACLE_BACKOFF`, and
+  `ORACLE_DLQ_ENABLED` control retry/backoff/expiry. `ORACLE_RUNNER_TOKENS`
+  (or `runtime.oracle.runner_tokens`) require runner callbacks to include
+  `X-Oracle-Runner-Token: <token>` alongside normal API authentication. When
+  unset, callbacks only require API tokens. Set multiple runner tokens with
+  `ORACLE_RUNNER_TOKENS=tok1,tok2` (`,` or `;` separators).
 - Gas bank settlement requires `GASBANK_RESOLVER_URL` (+ optional
   `GASBANK_RESOLVER_KEY`). Tuning knobs include `GASBANK_POLL_INTERVAL`
   (duration string, default 15s) and `GASBANK_MAX_ATTEMPTS` (default 5) for
@@ -159,6 +168,9 @@ internal/platform/     - database helpers and migrations
 internal/version/      - build/version metadata
 pkg/                   - shared utility packages (logger, errors, etc.)
 sdk/devpack/           - TypeScript SDK consumed by function authors
+sdk/go/devpack/        - Go helpers mirroring the Devpack action surface
+sdk/rust/devpack/      - Rust helpers mirroring the Devpack action surface
+sdk/python/devpack/    - Python helpers mirroring the Devpack action surface
 scripts/               - automation helpers (see scripts/README.md)
 ```
 

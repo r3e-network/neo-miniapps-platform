@@ -50,7 +50,9 @@ REQ_ID=$(curl -s -X POST http://localhost:8080/accounts/<ACCOUNT_ID>/oracle/requ
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"data_source_id":"'"$SRC_ID"'","payload":"{}"}' | jq -r .ID)
 
-# runner marks running/succeeded (requires X-Oracle-Runner-Token if configured)
+# runner marks running/succeeded (requires X-Oracle-Runner-Token when runner
+# tokens are configured; API token still required)
+# configure runner tokens via env: export ORACLE_RUNNER_TOKENS=runner-secret
 curl -s -X PATCH http://localhost:8080/accounts/<ACCOUNT_ID>/oracle/requests/$REQ_ID \
   -H "Authorization: Bearer $TOKEN" -H "X-Oracle-Runner-Token: runner-secret" \
   -H "Content-Type: application/json" -d '{"status":"running"}'
@@ -63,6 +65,16 @@ curl -s -X PATCH http://localhost:8080/accounts/<ACCOUNT_ID>/oracle/requests/$RE
 curl -s -X PATCH http://localhost:8080/accounts/<ACCOUNT_ID>/oracle/requests/$REQ_ID \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"status":"retry"}'
+
+# slctl runner callback example (env-supplied runner tokens)
+# export SERVICE_LAYER_TOKEN=$TOKEN
+# export ORACLE_RUNNER_TOKENS=runner-secret
+slctl oracle requests create --account <ACCOUNT_ID> --source "$SRC_ID" --token "$TOKEN" --payload '{}'
+slctl oracle requests list --account <ACCOUNT_ID> --token "$TOKEN" --status pending --limit 1
+REQ_ID=$(slctl oracle requests list --account <ACCOUNT_ID> --token "$TOKEN" --status pending --limit 1 | jq -r '.[0].ID')
+curl -s -X PATCH http://localhost:8080/accounts/<ACCOUNT_ID>/oracle/requests/$REQ_ID \
+  -H "Authorization: Bearer $TOKEN" -H "X-Oracle-Runner-Token: runner-secret" \
+  -H "Content-Type: application/json" -d '{"status":"running"}'
 
 # paginate + filter
 curl -i -H "Authorization: Bearer $TOKEN" "http://localhost:8080/accounts/<ACCOUNT_ID>/oracle/requests?status=failed&limit=1"
@@ -93,11 +105,60 @@ curl -s -X POST http://localhost:8080/accounts/<ACCOUNT_ID>/gasbank/withdraw \
   -d '{"amount":1.0,"to_address":"ADDR"}'
 ```
 
+## Data Streams
+```bash
+STREAM_ID=$(curl -s -X POST http://localhost:8080/accounts/<ACCOUNT_ID>/datastreams \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"name":"ticker","symbol":"TCKR","description":"demo stream","frequency":"1s","sla_ms":50,"status":"active"}' | jq -r .ID)
+
+curl -s -X POST http://localhost:8080/accounts/<ACCOUNT_ID>/datastreams/$STREAM_ID/frames \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"sequence":1,"payload":{"price":123.45},"latency_ms":10,"status":"delivered"}'
+
+curl -s -H "Authorization: Bearer $TOKEN" "http://localhost:8080/accounts/<ACCOUNT_ID>/datastreams/$STREAM_ID/frames?limit=5"
+```
+
+## DataLink
+```bash
+curl -s -X POST http://localhost:8080/accounts/<ACCOUNT_ID>/workspace-wallets \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"wallet_address":"<WALLET>","label":"link-signer","status":"active"}'
+
+CH_ID=$(curl -s -X POST http://localhost:8080/accounts/<ACCOUNT_ID>/datalink/channels \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"name":"provider-1","endpoint":"https://api.provider.test","signer_set":["<WALLET>"],"status":"active"}' | jq -r .ID)
+
+curl -s -X POST http://localhost:8080/accounts/<ACCOUNT_ID>/datalink/channels/$CH_ID/deliveries \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"payload":{"data":"hello"},"metadata":{"trace":"123"}}'
+
+curl -s -H "Authorization: Bearer $TOKEN" "http://localhost:8080/accounts/<ACCOUNT_ID>/datalink/deliveries?limit=5"
+```
+
 ## Randomness
+
+Devpack action (inside a function):
+```js
+const rand = Devpack.random.generate({ length: 64, requestId: "example" });
+return Devpack.respond.success({ action: rand.asResult() });
+```
+
+HTTP/CLI calls:
 ```bash
 curl -s -X POST http://localhost:8080/accounts/<ACCOUNT_ID>/random \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"length":32,"request_id":"example"}'
+```
+
+## Devpack Quick Actions (inside functions)
+
+```js
+// Data feeds: submit signer update
+Devpack.dataFeeds.submitUpdate({ feedId: "feed-1", roundId: 1, price: "12.34" });
+// Data streams: publish a frame
+Devpack.dataStreams.publishFrame({ streamId: "stream-1", sequence: 42, payload: { price: 99.1 } });
+// DataLink: enqueue delivery to a channel
+Devpack.dataLink.createDelivery({ channelId: "channel-1", payload: { foo: "bar" }, metadata: { trace: "abc" } });
 ```
 
 ## CLI equivalents (slctl)
@@ -107,4 +168,8 @@ slctl oracle requests list --account <ACCOUNT_ID> --token "$TOKEN" --status fail
 slctl oracle requests retry --account <ACCOUNT_ID> --token "$TOKEN" --id "$REQ_ID"
 slctl gasbank deposit --account <ACCOUNT_ID> --token "$TOKEN" --amount 5
 slctl random generate --account <ACCOUNT_ID> --token "$TOKEN" --length 16
+slctl datastreams create --account <ACCOUNT_ID> --name ticker --symbol TCKR --frequency 1s --status active
+slctl datastreams publish --account <ACCOUNT_ID> --stream <STREAM_ID> --sequence 1 --payload '{"price":123.45}'
+slctl datalink channel-create --account <ACCOUNT_ID> --name provider-1 --endpoint https://api.provider.test --signers WALLET1
+slctl datalink deliver --account <ACCOUNT_ID> --channel <CHANNEL_ID> --payload '{"data":"hello"}'
 ```

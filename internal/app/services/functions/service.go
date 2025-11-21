@@ -2,6 +2,7 @@ package functions
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 
 	core "github.com/R3E-Network/service_layer/internal/app/core/service"
 	"github.com/R3E-Network/service_layer/internal/app/domain/automation"
+	domaindatastreams "github.com/R3E-Network/service_layer/internal/app/domain/datastreams"
 	"github.com/R3E-Network/service_layer/internal/app/domain/function"
 	"github.com/R3E-Network/service_layer/internal/app/domain/gasbank"
 	"github.com/R3E-Network/service_layer/internal/app/domain/oracle"
@@ -18,9 +20,13 @@ import (
 	"github.com/R3E-Network/service_layer/internal/app/domain/trigger"
 	"github.com/R3E-Network/service_layer/internal/app/metrics"
 	automationsvc "github.com/R3E-Network/service_layer/internal/app/services/automation"
+	datafeedsvc "github.com/R3E-Network/service_layer/internal/app/services/datafeeds"
+	datalinksvc "github.com/R3E-Network/service_layer/internal/app/services/datalink"
+	datastreamsvc "github.com/R3E-Network/service_layer/internal/app/services/datastreams"
 	gasbanksvc "github.com/R3E-Network/service_layer/internal/app/services/gasbank"
 	oraclesvc "github.com/R3E-Network/service_layer/internal/app/services/oracle"
 	pricefeedsvc "github.com/R3E-Network/service_layer/internal/app/services/pricefeed"
+	randomsvc "github.com/R3E-Network/service_layer/internal/app/services/random"
 	"github.com/R3E-Network/service_layer/internal/app/services/triggers"
 	"github.com/R3E-Network/service_layer/internal/app/storage"
 	"github.com/R3E-Network/service_layer/pkg/logger"
@@ -28,16 +34,20 @@ import (
 
 // Service manages function definitions.
 type Service struct {
-	base       *core.Base
-	store      storage.FunctionStore
-	log        *logger.Logger
-	triggers   *triggers.Service
-	automation *automationsvc.Service
-	priceFeeds *pricefeedsvc.Service
-	oracle     *oraclesvc.Service
-	gasBank    *gasbanksvc.Service
-	executor   FunctionExecutor
-	secrets    SecretResolver
+	base        *core.Base
+	store       storage.FunctionStore
+	log         *logger.Logger
+	triggers    *triggers.Service
+	automation  *automationsvc.Service
+	priceFeeds  *pricefeedsvc.Service
+	dataFeeds   *datafeedsvc.Service
+	dataStreams *datastreamsvc.Service
+	dataLink    *datalinksvc.Service
+	oracle      *oraclesvc.Service
+	gasBank     *gasbanksvc.Service
+	random      *randomsvc.Service
+	executor    FunctionExecutor
+	secrets     SecretResolver
 }
 
 // New constructs a function service.
@@ -49,19 +59,28 @@ func New(accounts storage.AccountStore, store storage.FunctionStore, log *logger
 }
 
 // AttachDependencies wires auxiliary services so function workflows can drive
-// cross-domain actions (triggers, automation, oracle, price feeds, gas bank).
+// cross-domain actions (triggers, automation, feeds, data streams, datalink,
+// oracle, gas bank, randomness).
 func (s *Service) AttachDependencies(
 	triggers *triggers.Service,
 	automation *automationsvc.Service,
 	priceFeeds *pricefeedsvc.Service,
+	dataFeeds *datafeedsvc.Service,
+	dataStreams *datastreamsvc.Service,
+	dataLink *datalinksvc.Service,
 	oracle *oraclesvc.Service,
 	gasBank *gasbanksvc.Service,
+	random *randomsvc.Service,
 ) {
 	s.triggers = triggers
 	s.automation = automation
 	s.priceFeeds = priceFeeds
+	s.dataFeeds = dataFeeds
+	s.dataStreams = dataStreams
+	s.dataLink = dataLink
 	s.oracle = oracle
 	s.gasBank = gasBank
+	s.random = random
 }
 
 // AttachExecutor injects a function executor implementation.
@@ -374,6 +393,46 @@ func (s *Service) processActions(ctx context.Context, def function.Definition, a
 			} else {
 				res.Result = oracleResult
 			}
+		case function.ActionTypePriceFeedSnapshot:
+			priceResult, err := s.handlePriceFeedSnapshot(ctx, def, action.Params)
+			if err != nil {
+				res.Status = function.ActionStatusFailed
+				res.Error = err.Error()
+			} else {
+				res.Result = priceResult
+			}
+		case function.ActionTypeDataFeedSubmit:
+			dfResult, err := s.handleDataFeedSubmit(ctx, def, action.Params)
+			if err != nil {
+				res.Status = function.ActionStatusFailed
+				res.Error = err.Error()
+			} else {
+				res.Result = dfResult
+			}
+		case function.ActionTypeDatastreamPublish:
+			dsResult, err := s.handleDatastreamPublish(ctx, def, action.Params)
+			if err != nil {
+				res.Status = function.ActionStatusFailed
+				res.Error = err.Error()
+			} else {
+				res.Result = dsResult
+			}
+		case function.ActionTypeDatalinkDeliver:
+			dlResult, err := s.handleDatalinkDelivery(ctx, def, action.Params)
+			if err != nil {
+				res.Status = function.ActionStatusFailed
+				res.Error = err.Error()
+			} else {
+				res.Result = dlResult
+			}
+		case function.ActionTypeRandomGenerate:
+			randomResult, err := s.handleRandomGenerate(ctx, def, action.Params)
+			if err != nil {
+				res.Status = function.ActionStatusFailed
+				res.Error = err.Error()
+			} else {
+				res.Result = randomResult
+			}
 		case function.ActionTypeTriggerRegister:
 			triggerResult, err := s.handleTriggerRegister(ctx, def, action.Params)
 			if err != nil {
@@ -570,6 +629,151 @@ func (s *Service) handleOracleCreateRequest(ctx context.Context, def function.De
 	}
 	return map[string]any{
 		"request": structToMap(req),
+	}, nil
+}
+
+func (s *Service) handlePriceFeedSnapshot(ctx context.Context, def function.Definition, params map[string]any) (map[string]any, error) {
+	if s.priceFeeds == nil {
+		return nil, fmt.Errorf("pricefeed: %w", errDependencyUnavailable)
+	}
+	feedID := stringParam(params, "feedId", "")
+	if feedID == "" {
+		feedID = stringParam(params, "feed_id", "")
+	}
+	if feedID == "" {
+		return nil, errors.New("pricefeed.recordSnapshot requires feedId")
+	}
+	price, err := floatParam(params, "price")
+	if err != nil {
+		return nil, fmt.Errorf("price: %w", err)
+	}
+	if price <= 0 {
+		return nil, errors.New("price must be positive")
+	}
+	source := stringParam(params, "source", "")
+	collectedAt := time.Now().UTC()
+	if ts := stringParam(params, "collectedAt", stringParam(params, "collected_at", "")); ts != "" {
+		parsed, err := time.Parse(time.RFC3339, ts)
+		if err != nil {
+			return nil, fmt.Errorf("collected_at: %w", err)
+		}
+		collectedAt = parsed
+	}
+
+	snap, err := s.priceFeeds.RecordSnapshot(ctx, feedID, price, source, collectedAt)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"snapshot": structToMap(snap),
+	}, nil
+}
+
+func (s *Service) handleDataFeedSubmit(ctx context.Context, def function.Definition, params map[string]any) (map[string]any, error) {
+	if s.dataFeeds == nil {
+		return nil, fmt.Errorf("datafeeds: %w", errDependencyUnavailable)
+	}
+	feedID := stringParam(params, "feedId", stringParam(params, "feed_id", ""))
+	if feedID == "" {
+		return nil, errors.New("datafeeds.submitUpdate requires feedId")
+	}
+	roundID := int64(intParam(params, "roundId", intParam(params, "round_id", 0)))
+	if roundID <= 0 {
+		return nil, errors.New("roundId must be positive")
+	}
+	price := stringParam(params, "price", "")
+	if price == "" {
+		return nil, errors.New("price is required")
+	}
+	ts := time.Now().UTC()
+	if tsStr := stringParam(params, "timestamp", ""); tsStr != "" {
+		parsed, err := time.Parse(time.RFC3339, tsStr)
+		if err != nil {
+			return nil, fmt.Errorf("timestamp: %w", err)
+		}
+		ts = parsed
+	}
+	signer := stringParam(params, "signer", "")
+	signature := stringParam(params, "signature", "")
+	meta, _ := mapStringStringParam(params, "metadata")
+
+	update, err := s.dataFeeds.SubmitUpdate(ctx, def.AccountID, feedID, roundID, price, ts, signer, signature, meta)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"update": structToMap(update),
+	}, nil
+}
+
+func (s *Service) handleRandomGenerate(ctx context.Context, def function.Definition, params map[string]any) (map[string]any, error) {
+	if s.random == nil {
+		return nil, fmt.Errorf("random: %w", errDependencyUnavailable)
+	}
+	length := intParam(params, "length", 32)
+	if length <= 0 {
+		length = 32
+	}
+	requestID := stringParam(params, "requestId", stringParam(params, "request_id", ""))
+
+	res, err := s.random.Generate(ctx, def.AccountID, length, requestID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"length":     res.Length,
+		"value":      randomsvc.EncodeResult(res),
+		"created_at": res.CreatedAt,
+		"request_id": res.RequestID,
+		"counter":    res.Counter,
+		"signature":  base64.StdEncoding.EncodeToString(res.Signature),
+		"public_key": base64.StdEncoding.EncodeToString(res.PublicKey),
+	}, nil
+}
+
+func (s *Service) handleDatastreamPublish(ctx context.Context, def function.Definition, params map[string]any) (map[string]any, error) {
+	if s.dataStreams == nil {
+		return nil, fmt.Errorf("datastreams: %w", errDependencyUnavailable)
+	}
+	streamID := stringParam(params, "streamId", stringParam(params, "stream_id", ""))
+	if streamID == "" {
+		return nil, errors.New("datastreams.publishFrame requires streamId")
+	}
+	seq := int64(intParam(params, "sequence", intParam(params, "seq", 0)))
+	if seq <= 0 {
+		return nil, errors.New("sequence must be positive")
+	}
+	payload := mapFromAny(params["payload"])
+	latency := intParam(params, "latencyMs", 0)
+	status := domaindatastreams.FrameStatus(stringParam(params, "status", ""))
+	metadata, _ := mapStringStringParam(params, "metadata")
+
+	frame, err := s.dataStreams.CreateFrame(ctx, def.AccountID, streamID, seq, payload, latency, status, metadata)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"frame": structToMap(frame),
+	}, nil
+}
+
+func (s *Service) handleDatalinkDelivery(ctx context.Context, def function.Definition, params map[string]any) (map[string]any, error) {
+	if s.dataLink == nil {
+		return nil, fmt.Errorf("datalink: %w", errDependencyUnavailable)
+	}
+	channelID := stringParam(params, "channelId", stringParam(params, "channel_id", ""))
+	if channelID == "" {
+		return nil, errors.New("datalink.createDelivery requires channelId")
+	}
+	payload := mapFromAny(params["payload"])
+	metadata, _ := mapStringStringParam(params, "metadata")
+
+	delivery, err := s.dataLink.CreateDelivery(ctx, def.AccountID, channelID, payload, metadata)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"delivery": structToMap(delivery),
 	}, nil
 }
 

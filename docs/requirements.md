@@ -17,7 +17,7 @@
 - `cmd/appserver` is the single Go binary that wires all services (`internal/app/services/*`), HTTP handlers (`internal/app/httpapi`), and storage adapters (`internal/app/storage/{memory,postgres}`).
 - `cmd/slctl` is the CLI wrapper over the HTTP API. It honours `SERVICE_LAYER_ADDR` and `SERVICE_LAYER_TOKEN` for pointing at different environments.
 - `apps/dashboard` hosts the React + Vite front-end surface that consumes the same HTTP API for operator workflows. Additional surfaces must be documented here before landing in the repo.
-- `sdk/devpack` plus `examples/functions/devpack` provide the TypeScript toolchain used to author functions locally. Devpack helpers let functions queue automation, oracle, price feed, gas bank, and trigger actions that execute after the JavaScript runtime completes.
+- `sdk/devpack` plus `examples/functions/devpack` provide the TypeScript toolchain used to author functions locally. Devpack helpers let functions queue automation, oracle, price feed, data feed, data stream, DataLink, gas bank, randomness, and trigger actions that execute after the JavaScript runtime completes. Companion SDKs in Go, Rust, and Python mirror the same action surface for polyglot authoring.
 - Persistence defaults to in-memory stores. Supplying a PostgreSQL DSN (via `-dsn`, `DATABASE_URL`, or config files under `configs/`) switches all services to the Postgres adapters and enables migrations embedded in `internal/platform/migrations` (0001–0017).
 - Optional TEE execution paths use the Goja JavaScript runtime today and can be swapped with Azure Confidential Computing-backed executors when runners are provisioned (see Confidential Compute sections for expectations).
 
@@ -37,7 +37,7 @@
 
 #### Functions Runtime
 - Provide CRUD, execution, and execution-history endpoints for JavaScript functions compiled via Goja.
-- Allow immediate invocation (`/functions/{id}/execute`) and integrate with automation, oracle, price feed, gas bank, trigger, and randomness services through Devpack action queues.
+- Allow immediate invocation (`/functions/{id}/execute`) and integrate with automation, oracle, price feed, data feeds, data streams, DataLink, gas bank, trigger, and randomness services through Devpack action queues.
 - Record execution metadata (inputs, outputs, action results, errors). Store deterministic randomness signatures when `RANDOM_SIGNING_KEY` is configured.
 - Support pluggable executors, including the TEE executor path, with per-execution logging and timeout enforcement.
 
@@ -51,6 +51,7 @@
 - Support multiple sources per feed with configurable aggregation (e.g., threshold/median); requests may specify alternate source IDs and aggregators should median/quorum the results.
 - Track request lifecycle states (pending, running, succeeded, failed) with persisted attempts, TTL/backoff/DLQ metadata, and idempotent updates. Expired/exhausted requests must dead-letter and surface clearly to operators.
 - Provide operator tooling to list failed/expired requests and manually retry them (e.g., via CLI/HTTP PATCH).
+- Require runner authentication when marking requests running/complete: callbacks must present a configured runner token via `X-Oracle-Runner-Token` (in addition to API tokens). When no runner tokens are configured, fall back to standard API tokens only.
 - Allow per-source authentication headers, outbound host allowlisting, and per-account/source rate limits. Runners/resolvers must authenticate when marking requests running/complete via shared runner tokens.
 - Attach schema/versioning to request payloads and constraints on result size; expose latency/success metrics and SLA windows.
 - Optional signed result/attestation output with chain/job/spec identifiers for downstream consumers.
@@ -58,6 +59,7 @@
 #### Price Feed Service
 - Create/edit price feed definitions, store historical snapshots, and run periodic refreshers that fetch external data via `PRICEFEED_FETCH_URL` (with optional API keys).
 - Emit deviation-based triggers and record submission metadata. Guard against updates when feeds are inactive.
+- Support Devpack-driven snapshots via `pricefeed.recordSnapshot` actions (feed ID, price, optional source/collected_at).
 
 #### Gas Bank
 - Manage gas accounts, deposits, withdrawals, and settlement polling. Integrate with external withdrawal resolvers defined by `GASBANK_RESOLVER_URL` and optional bearer tokens.
@@ -141,7 +143,10 @@
 - Reads configuration from flags/environment variables and prints machine-readable tables/JSON for scripting. Extend CLI coverage alongside new HTTP endpoints so every catalogued service eventually ships with parity commands.
 
 ### TypeScript Devpack & SDK
-- Provide helpers for declaring functions, managing secrets, enqueuing Devpack actions (automation jobs, oracle requests, price feed updates, gas bank operations), and validating inputs locally.
+- Provide helpers for declaring functions, managing secrets, enqueuing Devpack actions (automation jobs, oracle requests, price feed updates, data feed submissions, data stream frames, DataLink deliveries, randomness, gas bank operations, and trigger registration), and validating inputs locally.
+- Price feed updates: `pricefeed.recordSnapshot` helper accepts `feedId`, `price`, optional `source`, and optional `collectedAt` (RFC3339); responses surface snapshot metadata in execution action results.
+- Randomness: `random.generate` helper accepts `length` (default 32) and optional `requestId`, returning base64-encoded bytes plus signature/public key metadata in action results.
+- Data feeds: `datafeeds.submitUpdate` helper accepts `feedId`, `roundId`, `price`, optional `timestamp` (RFC3339), signer/signature, and metadata; responses return update records.
 - Include scaffolding/templates under `examples/functions/devpack` to bootstrap projects.
 
 ### Dashboard & External Touchpoints
@@ -195,5 +200,6 @@
 - CI/CD runs via GitHub Actions (`.github/workflows/ci-cd.yml`), ensuring lint/test/build coverage on every change.
 - Local development: `go run ./cmd/appserver` (in-memory) or `docker compose up --build` (Postgres). CLI interactions use `go run ./cmd/slctl` or the installed binary.
 - Configuration: `DATABASE_URL`, `API_TOKENS`, `SECRET_ENCRYPTION_KEY`, `PRICEFEED_FETCH_URL`, `GASBANK_RESOLVER_URL`, `RANDOM_SIGNING_KEY`, and logging level env vars or config files under `configs/` (see `configs/README.md` for the samples).
+- Oracle dispatcher tuning: `ORACLE_TTL_SECONDS`, `ORACLE_MAX_ATTEMPTS`, `ORACLE_BACKOFF`, `ORACLE_DLQ_ENABLED`, and `ORACLE_RUNNER_TOKENS` (or `runtime.oracle.*` in config files) govern expiry, retries, and runner authentication.
 - Deployment artifacts are containerized via `Dockerfile` and `docker-compose.yml`. Rolling updates must respect migrations (run once) and maintain backward compatibility of the HTTP API.
 - Helper automation lives under `scripts/` (see `scripts/README.md`) and mirrors the workflows documented in this section.

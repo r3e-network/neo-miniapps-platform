@@ -9,10 +9,14 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/app/domain/account"
+	datalinkdomain "github.com/R3E-Network/service_layer/internal/app/domain/datalink"
 	"github.com/R3E-Network/service_layer/internal/app/domain/function"
 	automationsvc "github.com/R3E-Network/service_layer/internal/app/services/automation"
+	datalinksvc "github.com/R3E-Network/service_layer/internal/app/services/datalink"
 	gasbanksvc "github.com/R3E-Network/service_layer/internal/app/services/gasbank"
 	oraclesvc "github.com/R3E-Network/service_layer/internal/app/services/oracle"
+	pricefeedsvc "github.com/R3E-Network/service_layer/internal/app/services/pricefeed"
+	randomsvc "github.com/R3E-Network/service_layer/internal/app/services/random"
 	"github.com/R3E-Network/service_layer/internal/app/services/triggers"
 	"github.com/R3E-Network/service_layer/internal/app/storage"
 	"github.com/R3E-Network/service_layer/internal/app/storage/memory"
@@ -247,7 +251,7 @@ func TestService_ExecuteProcessesActions(t *testing.T) {
 	svc := New(store, store, nil)
 	svc.AttachExecutor(&actionExecutor{})
 	gasService := gasbanksvc.New(store, store, nil)
-	svc.AttachDependencies(nil, nil, nil, nil, gasService)
+	svc.AttachDependencies(nil, nil, nil, nil, nil, nil, nil, gasService, nil)
 
 	created, err := svc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "action", Source: "() => 1"})
 	if err != nil {
@@ -289,7 +293,7 @@ func TestService_ExecuteProcessesMultipleActions(t *testing.T) {
 	automationService := automationsvc.New(store, store, store, nil)
 	oracleService := oraclesvc.New(store, store, nil)
 
-	svc.AttachDependencies(triggerService, automationService, nil, oracleService, gasService)
+	svc.AttachDependencies(triggerService, automationService, nil, nil, nil, nil, oracleService, gasService, nil)
 
 	fn, err := svc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "multi", Source: "() => 1"})
 	if err != nil {
@@ -450,6 +454,185 @@ func ExampleService_Execute() {
 	// execution completed
 }
 
+func TestService_ProcessPriceFeedSnapshotAction(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+
+	priceSvc := pricefeedsvc.New(store, store, nil)
+	fnSvc := New(store, store, nil)
+	fnSvc.AttachDependencies(nil, nil, priceSvc, nil, nil, nil, nil, nil, nil)
+
+	randomSvc := randomsvc.New(store, nil)
+	fnSvc.AttachDependencies(nil, nil, priceSvc, nil, nil, nil, nil, nil, randomSvc)
+
+	fn, err := fnSvc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "price", Source: "() => 1"})
+	if err != nil {
+		t.Fatalf("create function: %v", err)
+	}
+
+	feed, err := priceSvc.CreateFeed(context.Background(), acct.ID, "NEO", "USD", "@every 1m", "@every 1h", 0.5)
+	if err != nil {
+		t.Fatalf("create feed: %v", err)
+	}
+
+	now := time.Now().UTC()
+	exec := &staticExecutor{
+		result: function.ExecutionResult{
+			FunctionID:  fn.ID,
+			Output:      map[string]any{},
+			Status:      function.ExecutionStatusSucceeded,
+			StartedAt:   now,
+			CompletedAt: now,
+			Actions: []function.Action{
+				{
+					ID:   "1",
+					Type: function.ActionTypePriceFeedSnapshot,
+					Params: map[string]any{
+						"feedId":      feed.ID,
+						"price":       12.34,
+						"source":      "oracle",
+						"collectedAt": now.Format(time.RFC3339),
+					},
+				},
+			},
+		},
+	}
+	fnSvc.AttachExecutor(exec)
+
+	result, err := fnSvc.Execute(context.Background(), fn.ID, nil)
+	if err != nil {
+		t.Fatalf("execute function: %v", err)
+	}
+	if len(result.Actions) != 1 {
+		t.Fatalf("expected single action result, got %d", len(result.Actions))
+	}
+	action := result.Actions[0]
+	if action.Status != function.ActionStatusSucceeded {
+		t.Fatalf("expected action success, got %s", action.Status)
+	}
+	if action.Result == nil || action.Result["snapshot"] == nil {
+		t.Fatalf("expected snapshot result, got %v", action.Result)
+	}
+}
+
+func TestService_ProcessRandomGenerateAction(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	randomSvc := randomsvc.New(store, nil)
+
+	fnSvc := New(store, store, nil)
+	fnSvc.AttachDependencies(nil, nil, nil, nil, nil, nil, nil, nil, randomSvc)
+
+	fn, err := fnSvc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "random", Source: "() => 1"})
+	if err != nil {
+		t.Fatalf("create function: %v", err)
+	}
+
+	now := time.Now().UTC()
+	exec := &staticExecutor{
+		result: function.ExecutionResult{
+			FunctionID:  fn.ID,
+			Output:      map[string]any{},
+			Status:      function.ExecutionStatusSucceeded,
+			StartedAt:   now,
+			CompletedAt: now,
+			Actions: []function.Action{
+				{
+					ID:     "rand",
+					Type:   function.ActionTypeRandomGenerate,
+					Params: map[string]any{"length": 8, "requestId": "req-123"},
+				},
+			},
+		},
+	}
+	fnSvc.AttachExecutor(exec)
+
+	result, err := fnSvc.Execute(context.Background(), fn.ID, nil)
+	if err != nil {
+		t.Fatalf("execute function: %v", err)
+	}
+	if len(result.Actions) != 1 {
+		t.Fatalf("expected single action result, got %d", len(result.Actions))
+	}
+	action := result.Actions[0]
+	if action.Status != function.ActionStatusSucceeded {
+		t.Fatalf("expected action success, got %s", action.Status)
+	}
+	if action.Result == nil || action.Result["value"] == nil {
+		t.Fatalf("expected random result, got %v", action.Result)
+	}
+}
+
+func TestService_ProcessDataLinkDeliveryAction(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	dlSvc := datalinksvc.New(store, store, nil)
+
+	fnSvc := New(store, store, nil)
+	fnSvc.AttachDependencies(nil, nil, nil, nil, nil, dlSvc, nil, nil, nil)
+
+	channel, err := dlSvc.CreateChannel(context.Background(), datalinkdomain.Channel{
+		AccountID: acct.ID,
+		Name:      "orders",
+		Endpoint:  "https://example.com",
+		AuthToken: "token",
+		Status:    datalinkdomain.ChannelStatusActive,
+	})
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+
+	fn, err := fnSvc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "datalink", Source: "() => 1"})
+	if err != nil {
+		t.Fatalf("create function: %v", err)
+	}
+
+	now := time.Now().UTC()
+	exec := &staticExecutor{
+		result: function.ExecutionResult{
+			FunctionID:  fn.ID,
+			Output:      map[string]any{},
+			Status:      function.ExecutionStatusSucceeded,
+			StartedAt:   now,
+			CompletedAt: now,
+			Actions: []function.Action{
+				{
+					ID:   "dl-1",
+					Type: function.ActionTypeDatalinkDeliver,
+					Params: map[string]any{
+						"channelId": channel.ID,
+						"payload":   map[string]any{"value": "abc"},
+						"metadata":  map[string]any{"trace": 1},
+					},
+				},
+			},
+		},
+	}
+	fnSvc.AttachExecutor(exec)
+
+	result, err := fnSvc.Execute(context.Background(), fn.ID, nil)
+	if err != nil {
+		t.Fatalf("execute function: %v", err)
+	}
+	if len(result.Actions) != 1 {
+		t.Fatalf("expected single action result, got %d", len(result.Actions))
+	}
+	action := result.Actions[0]
+	if action.Status != function.ActionStatusSucceeded {
+		t.Fatalf("expected action success, got %s", action.Status)
+	}
+	if action.Result == nil || action.Result["delivery"] == nil {
+		t.Fatalf("expected delivery result, got %v", action.Result)
+	}
+	deliveries, err := store.ListDeliveries(context.Background(), acct.ID, 10)
+	if err != nil {
+		t.Fatalf("list deliveries: %v", err)
+	}
+	if len(deliveries) != 1 || deliveries[0].ChannelID != channel.ID {
+		t.Fatalf("expected delivery persisted for channel %s, got %v", channel.ID, deliveries)
+	}
+}
+
 type mutatingExecutor struct {
 	output map[string]any
 }
@@ -562,4 +745,12 @@ func (f *failingActionExecutor) Execute(ctx context.Context, def function.Defini
 			{ID: "unknown", Type: "unknown.action"},
 		},
 	}, nil
+}
+
+type staticExecutor struct {
+	result function.ExecutionResult
+}
+
+func (s *staticExecutor) Execute(ctx context.Context, def function.Definition, payload map[string]any) (function.ExecutionResult, error) {
+	return s.result, nil
 }

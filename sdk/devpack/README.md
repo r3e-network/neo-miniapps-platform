@@ -3,7 +3,9 @@
 This package provides TypeScript helpers for writing Service Layer functions
 that target the Neo N3 execution environment. It mirrors the `Devpack` global
 that is injected at runtime, making it easier to build, type-check, and bundle
-functions locally before uploading them to the platform.
+functions locally before uploading them to the platform. Matching Devpack action
+helpers exist in `sdk/go/devpack`, `sdk/rust/devpack`, and `sdk/python/devpack`
+for polyglot authoring.
 
 ## Documentation
 
@@ -31,7 +33,12 @@ the single JavaScript snippet that the Service Layer expects.
 ## Usage
 
 ```ts
-import { ensureGasAccount, createOracleRequest, respond } from "@service-layer/devpack";
+import {
+  ensureGasAccount,
+  createOracleRequest,
+  recordPriceSnapshot,
+  respond,
+} from "@service-layer/devpack";
 
 export default function handler(params: Record<string, unknown>) {
   ensureGasAccount({ wallet: String(params.wallet ?? "") });
@@ -46,6 +53,13 @@ export default function handler(params: Record<string, unknown>) {
   return respond.success({
     pair: params.pair,
     initiatedAt: new Date().toISOString(),
+  });
+
+  // Optionally record a price snapshot for offline sources
+  recordPriceSnapshot({
+    feedId: String(params.feedId ?? ""),
+    price: Number(params.price ?? 0),
+    source: "manual",
   });
 }
 ```
@@ -62,6 +76,11 @@ The emitted execution record will include the queued actions (`gasbank.ensureAcc
 | `balanceGasAccount(params)` | Queue `gasbank.balance`. |
 | `listGasTransactions(params)` | Queue `gasbank.listTransactions`. |
 | `createOracleRequest(params)` | Queue `oracle.createRequest` (supports `alternateSourceIds` for multi-source aggregation). |
+| `recordPriceSnapshot(params)` | Queue `pricefeed.recordSnapshot` with `feedId`, `price`, optional `source`, and `collectedAt`. |
+| `submitDataFeedUpdate(params)` | Queue `datafeeds.submitUpdate` with `feedId`, `roundId`, `price`, optional `timestamp`, signer, signature, metadata. |
+| `publishDataStreamFrame(params)` | Queue `datastreams.publishFrame` with `streamId`, `sequence`, optional `payload`, `latencyMs`, `status`, metadata. |
+| `createDataLinkDelivery(params)` | Queue `datalink.createDelivery` with `channelId`, `payload`, optional `metadata`. |
+| `generateRandom(params)` | Queue `random.generate` (defaults to 32 bytes; optional `requestId`). |
 | `registerTrigger(params)` | Queue `triggers.register`. |
 | `scheduleAutomation(params)` | Queue `automation.schedule`. |
 | `respond.success(data, meta)` | Build a success payload. |

@@ -35,6 +35,7 @@ logs/
 
 # Build artifacts
 dist/
+**/target/**
 
 # Database migration files
 *.sql-undo

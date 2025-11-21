@@ -1,6 +1,6 @@
 {
   "name": "@service-layer/devpack",
-  "version": "0.1.0",
+  "version": "0.6.0",
   "description": "TypeScript helpers for authoring Service Layer functions with Devpack.",
   "type": "module",
   "main": "dist/index.js",
@@ -15,6 +15,11 @@
     "type": "git",
     "url": "https://github.com/r3e-network/service_layer"
   },
+  "files": [
+    "dist",
+    "CHANGELOG.md",
+    "README.md"
+  ],
   "bugs": {
     "url": "https://github.com/r3e-network/service_layer/issues"
   },

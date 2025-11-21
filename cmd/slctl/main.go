@@ -207,6 +207,33 @@ func prettyPrint(data []byte) {
 	fmt.Println(dst.String())
 }
 
+func parseJSONMap(input string) (map[string]any, error) {
+	if strings.TrimSpace(input) == "" {
+		return nil, nil
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(input), &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func splitList(input string) []string {
+	if strings.TrimSpace(input) == "" {
+		return nil
+	}
+	parts := strings.FieldsFunc(input, func(r rune) bool {
+		return r == ',' || r == ';'
+	})
+	var out []string
+	for _, p := range parts {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
+}
+
 // ---------------------------------------------------------------------
 // Services (introspection)
 
@@ -1214,7 +1241,14 @@ func handleOracle(ctx context.Context, client *apiClient, args []string) error {
   slctl oracle sources get --account <id> --source <id>
   slctl oracle requests list --account <id> [--limit n] [--status pending|running|failed|succeeded] [--cursor <id>] [--all]
   slctl oracle requests create --account <id> --source <id> [--payload JSON] [--payload-file path] [--alternate <id>[,<id>...]]
-  slctl oracle requests retry --account <id> --request <id>`)
+  slctl oracle requests retry --account <id> --request <id>
+
+Runner callbacks:
+  export ORACLE_RUNNER_TOKENS=runner-1,runner-2   # accepted tokens (also in config files)
+  curl -X PATCH /accounts/<id>/oracle/requests/<req> \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "X-Oracle-Runner-Token: runner-1" \
+    -d '{"status":"running"}'`)
 		return nil
 	}
 	switch args[0] {
@@ -1850,7 +1884,9 @@ func handleDataLink(ctx context.Context, client *apiClient, args []string) error
 	if len(args) == 0 {
 		fmt.Println(`Usage:
   slctl datalink channels --account <id>
-  slctl datalink deliveries --account <id> [--limit 50]`)
+  slctl datalink channel-create --account <id> --name <name> --endpoint <url> [--signers w1,w2] [--status active] [--metadata '{"env":"dev"}']
+  slctl datalink deliveries --account <id> [--limit 50]
+  slctl datalink deliver --account <id> --channel <id> --payload '{"foo":"bar"}' [--metadata '{"trace":"abc"}']`)
 		return nil
 	}
 	switch args[0] {
@@ -1867,6 +1903,39 @@ func handleDataLink(ctx context.Context, client *apiClient, args []string) error
 		}
 		url := fmt.Sprintf("/accounts/%s/datalink/channels", accountID)
 		data, err := client.request(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
+	case "channel-create":
+		fs := flag.NewFlagSet("datalink channel-create", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var accountID, name, endpoint, signerSet, status, metaStr string
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		fs.StringVar(&name, "name", "", "Channel name (required)")
+		fs.StringVar(&endpoint, "endpoint", "", "Endpoint URL (required)")
+		fs.StringVar(&signerSet, "signers", "", "Comma/semicolon separated signer wallets")
+		fs.StringVar(&status, "status", "", "Channel status (inactive|active|suspended)")
+		fs.StringVar(&metaStr, "metadata", "", "Metadata JSON")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" || name == "" || endpoint == "" {
+			return errors.New("account, name, and endpoint are required")
+		}
+		metadata, err := parseJSONMap(metaStr)
+		if err != nil {
+			return fmt.Errorf("parse metadata: %w", err)
+		}
+		payload := map[string]any{
+			"name":       name,
+			"endpoint":   endpoint,
+			"status":     status,
+			"signer_set": splitList(signerSet),
+			"metadata":   metadata,
+		}
+		url := fmt.Sprintf("/accounts/%s/datalink/channels", accountID)
+		data, err := client.request(ctx, http.MethodPost, url, payload)
 		if err != nil {
 			return err
 		}
@@ -1893,10 +1962,47 @@ func handleDataLink(ctx context.Context, client *apiClient, args []string) error
 			return err
 		}
 		prettyPrint(data)
+	case "deliver":
+		fs := flag.NewFlagSet("datalink deliver", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var accountID, channelID, payloadStr, metaStr string
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		fs.StringVar(&channelID, "channel", "", "Channel ID (required)")
+		fs.StringVar(&payloadStr, "payload", "", "JSON payload (required)")
+		fs.StringVar(&metaStr, "metadata", "", "JSON metadata map")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" || channelID == "" {
+			return errors.New("account and channel are required")
+		}
+		payload, err := parseJSONMap(payloadStr)
+		if err != nil {
+			return fmt.Errorf("parse payload: %w", err)
+		}
+		if payload == nil {
+			return errors.New("payload is required")
+		}
+		metadata, err := parseJSONMap(metaStr)
+		if err != nil {
+			return fmt.Errorf("parse metadata: %w", err)
+		}
+		body := map[string]any{
+			"payload":  payload,
+			"metadata": metadata,
+		}
+		url := fmt.Sprintf("/accounts/%s/datalink/channels/%s/deliveries", accountID, channelID)
+		data, err := client.request(ctx, http.MethodPost, url, body)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
 	default:
 		fmt.Println(`Usage:
   slctl datalink channels --account <id>
-  slctl datalink deliveries --account <id> [--limit 50]`)
+  slctl datalink channel-create --account <id> --name <name> --endpoint <url> [--signers w1,w2] [--status active] [--metadata '{"env":"dev"}']
+  slctl datalink deliveries --account <id> [--limit 50]
+  slctl datalink deliver --account <id> --channel <id> --payload '{"foo":"bar"}' [--metadata '{"trace":"abc"}']`)
 		return fmt.Errorf("unknown datalink subcommand %q", args[0])
 	}
 	return nil
@@ -1968,7 +2074,9 @@ func handleDataStreams(ctx context.Context, client *apiClient, args []string) er
 	if len(args) == 0 {
 		fmt.Println(`Usage:
   slctl datastreams streams --account <id>
-  slctl datastreams frames --account <id> --stream <id> [--limit 20]`)
+  slctl datastreams create --account <id> --name <name> --symbol <symbol> [--description <desc>] [--frequency "1s"] [--sla-ms 50] [--status active] [--metadata '{"env":"dev"}']
+  slctl datastreams frames --account <id> --stream <id> [--limit 20]
+  slctl datastreams publish --account <id> --stream <id> --sequence <n> [--payload '{"price":123}'] [--latency-ms 10] [--status delivered] [--metadata '{"trace":"abc"}']`)
 		return nil
 	}
 	switch args[0] {
@@ -1985,6 +2093,44 @@ func handleDataStreams(ctx context.Context, client *apiClient, args []string) er
 		}
 		url := fmt.Sprintf("/accounts/%s/datastreams", accountID)
 		data, err := client.request(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
+	case "create":
+		fs := flag.NewFlagSet("datastreams create", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var accountID, name, symbol, description, frequency, status, metaStr string
+		var slaMs int
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		fs.StringVar(&name, "name", "", "Stream name (required)")
+		fs.StringVar(&symbol, "symbol", "", "Symbol/identifier (required)")
+		fs.StringVar(&description, "description", "", "Description")
+		fs.StringVar(&frequency, "frequency", "", "Update frequency (e.g. 1s)")
+		fs.IntVar(&slaMs, "sla-ms", 0, "SLA in milliseconds")
+		fs.StringVar(&status, "status", "", "Stream status (active|inactive|suspended)")
+		fs.StringVar(&metaStr, "metadata", "", "Metadata JSON")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" || name == "" || symbol == "" {
+			return errors.New("account, name, and symbol are required")
+		}
+		metadata, err := parseJSONMap(metaStr)
+		if err != nil {
+			return fmt.Errorf("parse metadata: %w", err)
+		}
+		payload := map[string]any{
+			"name":        name,
+			"symbol":      symbol,
+			"description": description,
+			"frequency":   frequency,
+			"sla_ms":      slaMs,
+			"status":      status,
+			"metadata":    metadata,
+		}
+		url := fmt.Sprintf("/accounts/%s/datastreams", accountID)
+		data, err := client.request(ctx, http.MethodPost, url, payload)
 		if err != nil {
 			return err
 		}
@@ -2012,10 +2158,51 @@ func handleDataStreams(ctx context.Context, client *apiClient, args []string) er
 			return err
 		}
 		prettyPrint(data)
+	case "publish":
+		fs := flag.NewFlagSet("datastreams publish", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var accountID, streamID, status, payloadStr, metaStr string
+		var sequence, latency int
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		fs.StringVar(&streamID, "stream", "", "Stream ID (required)")
+		fs.IntVar(&sequence, "sequence", 0, "Sequence number (required)")
+		fs.IntVar(&latency, "latency-ms", 0, "Latency in milliseconds")
+		fs.StringVar(&status, "status", "", "Frame status")
+		fs.StringVar(&payloadStr, "payload", "", "JSON payload")
+		fs.StringVar(&metaStr, "metadata", "", "JSON metadata")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" || streamID == "" || sequence <= 0 {
+			return errors.New("account, stream, and positive sequence are required")
+		}
+		payload, err := parseJSONMap(payloadStr)
+		if err != nil {
+			return fmt.Errorf("parse payload: %w", err)
+		}
+		metadata, err := parseJSONMap(metaStr)
+		if err != nil {
+			return fmt.Errorf("parse metadata: %w", err)
+		}
+		body := map[string]any{
+			"sequence":   sequence,
+			"payload":    payload,
+			"latency_ms": latency,
+			"status":     status,
+			"metadata":   metadata,
+		}
+		url := fmt.Sprintf("/accounts/%s/datastreams/%s/frames", accountID, streamID)
+		data, err := client.request(ctx, http.MethodPost, url, body)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
 	default:
 		fmt.Println(`Usage:
   slctl datastreams streams --account <id>
-  slctl datastreams frames --account <id> --stream <id> [--limit 20]`)
+  slctl datastreams create --account <id> --name <name> --symbol <symbol> [--description <desc>] [--frequency "1s"] [--sla-ms 50] [--status active] [--metadata '{"env":"dev"}']
+  slctl datastreams frames --account <id> --stream <id> [--limit 20]
+  slctl datastreams publish --account <id> --stream <id> --sequence <n> [--payload '{"price":123}'] [--latency-ms 10] [--status delivered] [--metadata '{"trace":"abc"}']`)
 		return fmt.Errorf("unknown datastreams subcommand %q", args[0])
 	}
 	return nil
