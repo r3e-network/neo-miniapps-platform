@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Devpack runtime with declarative action queueing for functions
 - Execution history persistence for action outcomes across storage backends
 - JavaScript/TypeScript Devpack SDK (`@service-layer/devpack`) for local development
+- Added Devpack 0.6.0 across TypeScript/Go/Rust/Python with random, data feed, data stream, DataLink, price feed helpers
 
 ### Changed
 - Consolidated documentation under `docs/`, removed retired LaTeX/PDF exports, and clarified doc-first contribution guidance.
