@@ -78,17 +78,25 @@ export type Datafeed = {
   AccountID: string;
   Pair: string;
   Decimals: number;
+  Heartbeat?: number;
+  ThresholdPPM?: number;
   SignerSet?: string[];
   Metadata?: Record<string, string>;
   Tags?: string[];
+  CreatedAt?: string;
+  UpdatedAt?: string;
 };
 
 export type DatafeedUpdate = {
   ID: string;
   RoundID: number;
   Price: string;
+  Signer?: string;
   Timestamp: string;
   Signature?: string;
+  Status?: string;
+  Error?: string;
+  Metadata?: Record<string, string>;
 };
 
 export type DatalinkChannel = {
@@ -329,11 +337,20 @@ export type OracleSource = {
 export type OracleRequest = {
   ID: string;
   AccountID: string;
-  SourceID: string;
+  DataSourceID: string;
   Status: string;
+  Attempts?: number;
+  Payload?: string;
+  Result?: string;
   CreatedAt?: string;
   UpdatedAt?: string;
+  CompletedAt?: string;
   Error?: string;
+};
+
+export type OracleRequestsPage = {
+  items: OracleRequest[];
+  nextCursor?: string;
 };
 
 export type RandomRequest = {
@@ -578,9 +595,45 @@ export async function fetchOracleSources(config: ClientConfig, accountID: string
   return fetchJSON<OracleSource[]>(url, config);
 }
 
-export async function fetchOracleRequests(config: ClientConfig, accountID: string, limit = 50): Promise<OracleRequest[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/oracle/requests?limit=${limit}`;
-  return fetchJSON<OracleRequest[]>(url, config);
+export async function fetchOracleRequests(config: ClientConfig, accountID: string, limit = 100, status?: string, cursor?: string): Promise<OracleRequestsPage> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (status) {
+    params.set("status", status);
+  }
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+  const url = `${config.baseUrl}/accounts/${accountID}/oracle/requests?${params.toString()}`;
+  const resp = await fetch(url, {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.token}`,
+    },
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`${resp.status} ${resp.statusText}: ${text}`);
+  }
+  const items = (await resp.json()) as OracleRequest[];
+  const nextCursor = resp.headers.get("X-Next-Cursor") || undefined;
+  return { items, nextCursor };
+}
+
+export async function retryOracleRequest(config: ClientConfig, accountID: string, requestID: string): Promise<OracleRequest> {
+  const url = `${config.baseUrl}/accounts/${accountID}/oracle/requests/${requestID}`;
+  const resp = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.token}`,
+    },
+    body: JSON.stringify({ status: "retry" }),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`${resp.status} ${resp.statusText}: ${text}`);
+  }
+  return (await resp.json()) as OracleRequest;
 }
 
 export async function fetchRandomRequests(config: ClientConfig, accountID: string, limit = 50): Promise<RandomRequest[]> {

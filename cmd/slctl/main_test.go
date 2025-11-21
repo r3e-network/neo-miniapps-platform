@@ -1,10 +1,10 @@
 package main
 
 import (
-	"os"
-	"path/filepath"
-	"reflect"
-	"testing"
+    "os"
+    "path/filepath"
+    "reflect"
+    "testing"
 )
 
 func TestParseKeyValue(t *testing.T) {
@@ -40,9 +40,13 @@ func TestLoadJSONPayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadJSONPayload inline returned error: %v", err)
 	}
-	nested, ok := payload["nested"].(map[string]any)
+	payloadMap, ok := payload.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map payload, got %T", payload)
+	}
+	nested, ok := payloadMap["nested"].(map[string]any)
 	if !ok || nested["key"] != "value" {
-		t.Fatalf("unexpected payload: %v", payload)
+		t.Fatalf("unexpected payload: %v", payloadMap)
 	}
 
 	dir := t.TempDir()
@@ -54,7 +58,8 @@ func TestLoadJSONPayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadJSONPayload file returned error: %v", err)
 	}
-	if filePayload["hello"] != "file" {
+	fileMap, ok := filePayload.(map[string]any)
+	if !ok || fileMap["hello"] != "file" {
 		t.Fatalf("unexpected file payload: %v", filePayload)
 	}
 

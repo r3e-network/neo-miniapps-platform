@@ -69,6 +69,8 @@ func run(ctx context.Context, args []string) error {
 		return handleGasBank(ctx, client, remaining[1:])
 	case "oracle":
 		return handleOracle(ctx, client, remaining[1:])
+	case "health":
+		return handleHealth(ctx, client, remaining[1:])
 	case "pricefeeds":
 		return handlePriceFeeds(ctx, client, remaining[1:])
 	case "random":
@@ -127,6 +129,7 @@ Commands:
   secrets      Manage account secrets
   gasbank      Manage gas bank accounts and transfers
   oracle       Manage oracle sources and requests
+  health       Show oracle/datafeed health for an account
   pricefeeds   Manage price feed definitions and snapshots
   random       Request deterministic randomness
   cre          Inspect Chainlink Reliability Engine assets
@@ -149,18 +152,23 @@ type apiClient struct {
 }
 
 func (c *apiClient) request(ctx context.Context, method, path string, payload any) ([]byte, error) {
+	data, _, err := c.requestWithHeaders(ctx, method, path, payload)
+	return data, err
+}
+
+func (c *apiClient) requestWithHeaders(ctx context.Context, method, path string, payload any) ([]byte, http.Header, error) {
 	var body io.Reader
 	if payload != nil {
 		raw, err := json.Marshal(payload)
 		if err != nil {
-			return nil, fmt.Errorf("encode payload: %w", err)
+			return nil, nil, fmt.Errorf("encode payload: %w", err)
 		}
 		body = bytes.NewReader(raw)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -171,19 +179,19 @@ func (c *apiClient) request(ctx context.Context, method, path string, payload an
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer resp.Body.Close()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, resp.Header, err
 	}
 
 	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("%s %s: %s (status %d)", method, path, strings.TrimSpace(string(data)), resp.StatusCode)
+		return nil, resp.Header, fmt.Errorf("%s %s: %s (status %d)", method, path, strings.TrimSpace(string(data)), resp.StatusCode)
 	}
-	return data, nil
+	return data, resp.Header, nil
 }
 
 func prettyPrint(data []byte) {
@@ -251,6 +259,131 @@ func handleStatus(ctx context.Context, client *apiClient) error {
 			fmt.Printf("  - %s (%s) caps=%s\n", name, domain, strings.Join(capStrings, ","))
 		}
 	}
+	return nil
+}
+
+// handleHealth inspects oracle/datafeed health for an account.
+func handleHealth(ctx context.Context, client *apiClient, args []string) error {
+	fs := flag.NewFlagSet("health", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	var accountID string
+	includeOracle := fs.Bool("oracle", true, "Include oracle health")
+	includeDatafeeds := fs.Bool("datafeeds", true, "Include datafeed health")
+	fs.StringVar(&accountID, "account", "", "Account ID (required)")
+	if err := fs.Parse(args); err != nil {
+		return usageError(err)
+	}
+	if accountID == "" {
+		return usageError(errors.New("account is required (use --account)"))
+	}
+
+	if *includeOracle {
+		data, err := client.request(ctx, http.MethodGet, "/accounts/"+accountID+"/oracle/requests", nil)
+		if err != nil {
+			return err
+		}
+		var requests []struct {
+			Status    string `json:"status"`
+			Attempts  int    `json:"attempts"`
+			CreatedAt string `json:"created_at"`
+		}
+		_ = json.Unmarshal(data, &requests)
+		var pending, running, failed, succeeded, maxAttempts int
+		var oldestPending time.Time
+		for _, req := range requests {
+			switch strings.ToLower(req.Status) {
+			case "pending":
+				pending++
+				if t, err := time.Parse(time.RFC3339, req.CreatedAt); err == nil {
+					if oldestPending.IsZero() || t.Before(oldestPending) {
+						oldestPending = t
+					}
+				}
+			case "running":
+				running++
+			case "failed":
+				failed++
+			case "succeeded":
+				succeeded++
+			}
+			if req.Attempts > maxAttempts {
+				maxAttempts = req.Attempts
+			}
+		}
+		fmt.Printf("Oracle: pending=%d running=%d failed=%d succeeded=%d max_attempts=%d", pending, running, failed, succeeded, maxAttempts)
+		if !oldestPending.IsZero() {
+			fmt.Printf(" oldest_pending=%s", time.Since(oldestPending).Round(time.Second))
+		}
+		fmt.Println()
+	}
+
+	if *includeDatafeeds {
+		data, err := client.request(ctx, http.MethodGet, "/accounts/"+accountID+"/datafeeds", nil)
+		if err != nil {
+			return err
+		}
+		var feeds []struct {
+			ID           string   `json:"id"`
+			Pair         string   `json:"pair"`
+			Heartbeat    int64    `json:"heartbeat"`
+			ThresholdPPM int      `json:"threshold_ppm"`
+			SignerSet    []string `json:"signer_set"`
+			Decimals     int      `json:"decimals"`
+		}
+		_ = json.Unmarshal(data, &feeds)
+		if len(feeds) == 0 {
+			fmt.Println("Datafeeds: none configured")
+			return nil
+		}
+		fmt.Println("Datafeeds:")
+		for _, feed := range feeds {
+			latestData, err := client.request(ctx, http.MethodGet, "/accounts/"+accountID+"/datafeeds/"+feed.ID+"/latest", nil)
+			var latest struct {
+				RoundID   int64  `json:"round_id"`
+				Price     string `json:"price"`
+				Timestamp string `json:"timestamp"`
+				Signer    string `json:"signer"`
+			}
+			if err == nil {
+				_ = json.Unmarshal(latestData, &latest)
+			}
+			heartbeat := time.Duration(feed.Heartbeat)
+			if heartbeat == 0 && feed.Heartbeat > 0 {
+				heartbeat = time.Duration(feed.Heartbeat)
+			}
+			var age time.Duration
+			if latest.Timestamp != "" {
+				if ts, err := time.Parse(time.RFC3339, latest.Timestamp); err == nil {
+					age = time.Since(ts)
+				}
+			}
+			status := "empty"
+			if latest.Timestamp != "" {
+				status = "healthy"
+				if heartbeat > 0 && age > heartbeat {
+					status = "stale"
+				}
+			}
+			fmt.Printf("- %s (round %d): %s", feed.Pair, latest.RoundID, status)
+			if latest.Price != "" {
+				fmt.Printf(" price=%s", latest.Price)
+			}
+			if heartbeat > 0 {
+				fmt.Printf(" heartbeat=%s", heartbeat)
+			}
+			if feed.ThresholdPPM > 0 {
+				fmt.Printf(" deviation<=%dppm", feed.ThresholdPPM)
+			}
+			if age > 0 {
+				fmt.Printf(" age=%s", age.Round(time.Second))
+			}
+			if len(feed.SignerSet) > 0 {
+				fmt.Printf(" signers=%d", len(feed.SignerSet))
+			}
+			fmt.Println()
+		}
+	}
+
 	return nil
 }
 
@@ -1079,8 +1212,9 @@ func handleOracle(ctx context.Context, client *apiClient, args []string) error {
   slctl oracle sources list --account <id>
   slctl oracle sources create --account <id> --name <name> --url <url> [--method GET] [--description text]
   slctl oracle sources get --account <id> --source <id>
-  slctl oracle requests list --account <id>
-  slctl oracle requests create --account <id> --source <id> [--payload JSON] [--payload-file path]`)
+  slctl oracle requests list --account <id> [--limit n] [--status pending|running|failed|succeeded] [--cursor <id>] [--all]
+  slctl oracle requests create --account <id> --source <id> [--payload JSON] [--payload-file path] [--alternate <id>[,<id>...]]
+  slctl oracle requests retry --account <id> --request <id>`)
 		return nil
 	}
 	switch args[0] {
@@ -1197,15 +1331,47 @@ func (f *intFlag) Set(v string) error {
 	return nil
 }
 
+type stringSliceFlag struct {
+	values []string
+}
+
+func (s *stringSliceFlag) String() string {
+	return strings.Join(s.values, ",")
+}
+
+func (s *stringSliceFlag) Set(v string) error {
+	parts := strings.FieldsFunc(v, func(r rune) bool {
+		return r == ',' || r == ';'
+	})
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		s.values = append(s.values, p)
+	}
+	return nil
+}
+
 func handleOracleRequests(ctx context.Context, client *apiClient, args []string) error {
 	sub := args[0]
 	fs := flag.NewFlagSet("oracle requests "+sub, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var accountID, sourceID, payloadRaw, payloadFile string
+	var alternates stringSliceFlag
+	var statusFilter string
+	var limit int
+	var cursor string
+	var fetchAll bool
 	fs.StringVar(&accountID, "account", "", "Account ID (required)")
 	fs.StringVar(&sourceID, "source", "", "Source ID")
 	fs.StringVar(&payloadRaw, "payload", "", "Inline JSON payload")
 	fs.StringVar(&payloadFile, "payload-file", "", "Path to JSON payload file")
+	fs.Var(&alternates, "alternate", "Alternate data source IDs (comma-separated, repeatable)")
+	fs.StringVar(&statusFilter, "status", "", "Filter by status (pending,running,failed,succeeded)")
+	fs.IntVar(&limit, "limit", 100, "Limit number of requests returned")
+	fs.StringVar(&cursor, "cursor", "", "Cursor for pagination (use value from X-Next-Cursor)")
+	fs.BoolVar(&fetchAll, "all", false, "Follow cursors until the queue is exhausted")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -1214,11 +1380,70 @@ func handleOracleRequests(ctx context.Context, client *apiClient, args []string)
 	}
 	switch sub {
 	case "list":
-		data, err := client.request(ctx, http.MethodGet, "/accounts/"+accountID+"/oracle/requests", nil)
-		if err != nil {
-			return err
+		path := "/accounts/" + accountID + "/oracle/requests"
+		params := url.Values{}
+		if statusFilter != "" {
+			params.Set("status", statusFilter)
 		}
-		prettyPrint(data)
+		if limit > 0 {
+			params.Set("limit", strconv.Itoa(limit))
+		}
+		if cursor != "" {
+			params.Set("cursor", cursor)
+		}
+		pagePath := path
+		if len(params) > 0 {
+			pagePath += "?" + params.Encode()
+		}
+		if !fetchAll {
+			data, headers, err := client.requestWithHeaders(ctx, http.MethodGet, pagePath, nil)
+			if err != nil {
+				return err
+			}
+			prettyPrint(data)
+			if next := headers.Get("X-Next-Cursor"); next != "" {
+				fmt.Println("\nNext cursor:", next)
+			}
+			return nil
+		}
+
+		allItems := make([]json.RawMessage, 0)
+		nextCursor := cursor
+		const maxPages = 100
+		for i := 0; i < maxPages; i++ {
+			pageParams := url.Values{}
+			for k, vals := range params {
+				for _, v := range vals {
+					pageParams.Add(k, v)
+				}
+			}
+			if nextCursor != "" {
+				pageParams.Set("cursor", nextCursor)
+			}
+			pageURL := path
+			if len(pageParams) > 0 {
+				pageURL += "?" + pageParams.Encode()
+			}
+			data, headers, err := client.requestWithHeaders(ctx, http.MethodGet, pageURL, nil)
+			if err != nil {
+				return err
+			}
+			var page []json.RawMessage
+			if err := json.Unmarshal(data, &page); err != nil {
+				return fmt.Errorf("decode page: %w", err)
+			}
+			allItems = append(allItems, page...)
+			nextCursor = headers.Get("X-Next-Cursor")
+			if nextCursor == "" || len(page) == 0 {
+				break
+			}
+		}
+		combined, err := json.MarshalIndent(allItems, "", "  ")
+		if err != nil {
+			return fmt.Errorf("encode combined: %w", err)
+		}
+		fmt.Println(string(combined))
+		return nil
 	case "create":
 		if sourceID == "" {
 			return errors.New("source is required")
@@ -1227,6 +1452,17 @@ func handleOracleRequests(ctx context.Context, client *apiClient, args []string)
 		if err != nil {
 			return err
 		}
+		if len(alternates.values) > 0 {
+			if payloadBody == nil {
+				payloadBody = make(map[string]any)
+			}
+			if obj, ok := payloadBody.(map[string]any); ok {
+				obj["alternate_source_ids"] = alternates.values
+				payloadBody = obj
+			} else {
+				return fmt.Errorf("payload must be a JSON object when using --alternate")
+			}
+		}
 		requestPayload := map[string]any{
 			"data_source_id": sourceID,
 		}
@@ -1234,6 +1470,24 @@ func handleOracleRequests(ctx context.Context, client *apiClient, args []string)
 			requestPayload["payload"] = payloadBody
 		}
 		data, err := client.request(ctx, http.MethodPost, "/accounts/"+accountID+"/oracle/requests", requestPayload)
+		if err != nil {
+			return err
+		}
+		prettyPrint(data)
+	case "retry":
+		fs := flag.NewFlagSet("oracle requests retry", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		var requestID string
+		fs.StringVar(&accountID, "account", "", "Account ID (required)")
+		fs.StringVar(&requestID, "request", "", "Request ID (required)")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if accountID == "" || requestID == "" {
+			return errors.New("account and request are required")
+		}
+		body := map[string]any{"status": "retry"}
+		data, err := client.request(ctx, http.MethodPatch, "/accounts/"+accountID+"/oracle/requests/"+requestID, body)
 		if err != nil {
 			return err
 		}
@@ -1892,7 +2146,7 @@ func splitCommaList(input string) []string {
 	return result
 }
 
-func loadJSONPayload(inline, file string) (map[string]any, error) {
+func loadJSONPayload(inline, file string) (any, error) {
 	if inline != "" && file != "" {
 		return nil, errors.New("specify either --payload or --payload-file, not both")
 	}
@@ -1910,7 +2164,7 @@ func loadJSONPayload(inline, file string) (map[string]any, error) {
 		return nil, nil
 	}
 
-	var payload map[string]any
+	var payload any
 	if err := json.Unmarshal(data, &payload); err != nil {
 		return nil, fmt.Errorf("decode payload: %w", err)
 	}

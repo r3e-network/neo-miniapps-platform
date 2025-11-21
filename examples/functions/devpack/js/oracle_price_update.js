@@ -8,6 +8,7 @@
 
   Devpack.oracle.createRequest({
     dataSourceId: params.dataSourceId,
+    alternateSourceIds: params.alternateSourceIds,
     payload: {
       symbol: params.symbol,
       window: params.windowMinutes || 5,

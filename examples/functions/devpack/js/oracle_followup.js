@@ -8,6 +8,7 @@
 
   const oracleAction = Devpack.oracle.createRequest({
     dataSourceId: params.dataSourceId,
+    alternateSourceIds: params.alternateSourceIds,
     payload: {
       task: params.task || "price-check",
       context: params.context || {},

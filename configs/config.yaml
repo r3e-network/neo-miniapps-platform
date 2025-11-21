@@ -42,6 +42,22 @@ runtime:
     # Tuning knobs for settlement retries and polling cadence.
     poll_interval: "15s"
     max_attempts: 5
+  oracle:
+    # Optional TTL for oracle requests (seconds). Zero disables TTL expiry.
+    ttl_seconds: 0
+    # Maximum resolver attempts before DLQ.
+    max_attempts: 3
+    # Backoff between attempts (duration string).
+    backoff: "10s"
+    # Enable dead-lettering for exhausted/expired requests.
+    dlq_enabled: true
+    # Optional list of tokens required for runner callbacks (X-Oracle-Runner-Token).
+    runner_tokens: []
+  datafeeds:
+    # Minimum signer threshold for feed definitions (0 to disable).
+    min_signers: 0
+    # Default aggregation strategy for submissions.
+    aggregation: "median"
   cre:
     # Set to true to enable the HTTP CRE runner.
     http_runner: false

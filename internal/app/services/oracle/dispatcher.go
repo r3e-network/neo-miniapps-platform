@@ -2,11 +2,13 @@ package oracle
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	core "github.com/R3E-Network/service_layer/internal/app/core/service"
 	domain "github.com/R3E-Network/service_layer/internal/app/domain/oracle"
+	"github.com/R3E-Network/service_layer/internal/app/metrics"
 	"github.com/R3E-Network/service_layer/internal/app/system"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 )
@@ -16,11 +18,14 @@ var _ system.Service = (*Dispatcher)(nil)
 // Dispatcher periodically inspects pending oracle requests and forwards them
 // to the configured resolver.
 type Dispatcher struct {
-	service  *Service
-	log      *logger.Logger
-	interval time.Duration
-	resolver RequestResolver
-	tracer   core.Tracer
+	service     *Service
+	log         *logger.Logger
+	interval    time.Duration
+	resolver    RequestResolver
+	tracer      core.Tracer
+	maxAttempts int
+	ttl         time.Duration
+	deadLetter  bool
 
 	mu          sync.Mutex
 	cancel      context.CancelFunc
@@ -38,6 +43,9 @@ func NewDispatcher(service *Service, log *logger.Logger) *Dispatcher {
 		service:     service,
 		log:         log,
 		interval:    10 * time.Second,
+		maxAttempts: 0,
+		ttl:         0,
+		deadLetter:  true,
 		nextAttempt: make(map[string]time.Time),
 		tracer:      core.NoopTracer,
 	}
@@ -58,6 +66,28 @@ func (d *Dispatcher) WithTracer(tracer core.Tracer) {
 	} else {
 		d.tracer = tracer
 	}
+	d.mu.Unlock()
+}
+
+// WithRetryPolicy configures attempts/backoff/TTL.
+func (d *Dispatcher) WithRetryPolicy(maxAttempts int, backoff, ttl time.Duration) {
+	d.mu.Lock()
+	if backoff > 0 {
+		d.interval = backoff
+	}
+	if maxAttempts > 0 {
+		d.maxAttempts = maxAttempts
+	}
+	if ttl > 0 {
+		d.ttl = ttl
+	}
+	d.mu.Unlock()
+}
+
+// EnableDeadLetter toggles failing exhausted requests instead of retrying forever.
+func (d *Dispatcher) EnableDeadLetter(enabled bool) {
+	d.mu.Lock()
+	d.deadLetter = enabled
 	d.mu.Unlock()
 }
 
@@ -151,10 +181,22 @@ func (d *Dispatcher) tick(ctx context.Context) {
 		d.log.WithError(err).Warn("oracle dispatcher tick failed")
 		return
 	}
+	if len(reqs) > 0 {
+		oldest := reqs[0].CreatedAt
+		for _, r := range reqs {
+			if r.CreatedAt.Before(oldest) {
+				oldest = r.CreatedAt
+			}
+		}
+		metrics.RecordOracleStaleness(reqs[0].AccountID, time.Since(oldest))
+	}
 
 	d.mu.Lock()
 	resolver := d.resolver
 	tracer := d.tracer
+	maxAttempts := d.maxAttempts
+	ttl := d.ttl
+	deadLetter := d.deadLetter
 	d.mu.Unlock()
 
 	if resolver == nil {
@@ -163,6 +205,18 @@ func (d *Dispatcher) tick(ctx context.Context) {
 
 	now := time.Now()
 	for _, req := range reqs {
+		if ttl > 0 && !req.CreatedAt.IsZero() && now.After(req.CreatedAt.Add(ttl)) {
+			errMsg := "oracle request expired"
+			if deadLetter {
+				errMsg += " (dead-lettered)"
+			}
+			if _, err := d.service.FailRequest(ctx, req.ID, errMsg); err != nil {
+				d.log.WithError(err).WithField("request_id", req.ID).Warn("expire oracle request failed")
+			}
+			d.clearSchedule(req.ID)
+			continue
+		}
+
 		if !d.shouldAttempt(req.ID, now) {
 			continue
 		}
@@ -183,6 +237,22 @@ func (d *Dispatcher) tick(ctx context.Context) {
 			}()
 
 			current := req
+			nextAttempt := req.Attempts + 1
+			if maxAttempts > 0 && nextAttempt > maxAttempts {
+				errMsg := fmt.Sprintf("max attempts exceeded (%d)", maxAttempts)
+				if deadLetter {
+					errMsg += "; dead-lettered"
+				}
+				metrics.RecordOracleAttempt(req.AccountID, "exhausted")
+				if _, err := d.service.FailRequest(spanCtx, req.ID, errMsg); err != nil {
+					spanErr = err
+					d.log.WithError(err).
+						WithField("request_id", req.ID).
+						Warn("fail oracle request after attempts")
+				}
+				d.clearSchedule(req.ID)
+				return
+			}
 			if req.Status == domain.StatusPending {
 				updated, err := d.service.MarkRunning(spanCtx, req.ID)
 				if err != nil {
@@ -190,6 +260,17 @@ func (d *Dispatcher) tick(ctx context.Context) {
 					d.log.WithError(err).
 						WithField("request_id", req.ID).
 						Warn("mark oracle request running failed")
+					d.scheduleNext(req.ID, d.interval)
+					return
+				}
+				current = updated
+			} else {
+				updated, err := d.service.IncrementAttempts(spanCtx, req.ID)
+				if err != nil {
+					spanErr = err
+					d.log.WithError(err).
+						WithField("request_id", req.ID).
+						Warn("record oracle attempt failed")
 					d.scheduleNext(req.ID, d.interval)
 					return
 				}
@@ -212,6 +293,7 @@ func (d *Dispatcher) tick(ctx context.Context) {
 			}
 
 			if success {
+				metrics.RecordOracleAttempt(req.AccountID, "success")
 				if _, err := d.service.CompleteRequest(spanCtx, req.ID, result); err != nil {
 					spanErr = err
 					d.log.WithError(err).
@@ -221,6 +303,7 @@ func (d *Dispatcher) tick(ctx context.Context) {
 					return
 				}
 			} else {
+				metrics.RecordOracleAttempt(req.AccountID, "fail")
 				if _, err := d.service.FailRequest(spanCtx, req.ID, errMsg); err != nil {
 					spanErr = err
 					d.log.WithError(err).

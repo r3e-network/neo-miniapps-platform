@@ -41,6 +41,8 @@ type OracleConfig struct {
 	TTLSeconds  int    `json:"ttl_seconds" env:"ORACLE_TTL_SECONDS"`
 	MaxAttempts int    `json:"max_attempts" env:"ORACLE_MAX_ATTEMPTS"`
 	Backoff     string `json:"backoff" env:"ORACLE_BACKOFF"` // duration string
+	DLQEnabled  bool   `json:"dlq_enabled" env:"ORACLE_DLQ_ENABLED"`
+	RunnerTokens string `json:"runner_tokens" env:"ORACLE_RUNNER_TOKENS"` // comma separated
 }
 
 // DataFeedDefaults controls aggregation/threshold defaults.

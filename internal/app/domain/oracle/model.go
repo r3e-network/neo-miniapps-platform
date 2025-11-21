@@ -33,6 +33,7 @@ type Request struct {
 	AccountID    string
 	DataSourceID string
 	Status       RequestStatus
+	Attempts     int
 	Payload      string
 	Result       string
 	Error        string

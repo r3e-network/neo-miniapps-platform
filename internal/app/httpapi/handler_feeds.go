@@ -130,6 +130,7 @@ func (h *handler) accountDataFeeds(w http.ResponseWriter, r *http.Request, accou
 				var payload struct {
 					RoundID   int64             `json:"round_id"`
 					Price     string            `json:"price"`
+					Signer    string            `json:"signer"`
 					Timestamp time.Time         `json:"timestamp"`
 					Signature string            `json:"signature"`
 					Metadata  map[string]string `json:"metadata"`
@@ -138,7 +139,7 @@ func (h *handler) accountDataFeeds(w http.ResponseWriter, r *http.Request, accou
 					writeError(w, http.StatusBadRequest, err)
 					return
 				}
-				created, err := h.app.DataFeeds.SubmitUpdate(r.Context(), accountID, feedID, payload.RoundID, payload.Price, payload.Timestamp, payload.Signature, payload.Metadata)
+				created, err := h.app.DataFeeds.SubmitUpdate(r.Context(), accountID, feedID, payload.RoundID, payload.Price, payload.Timestamp, payload.Signer, payload.Signature, payload.Metadata)
 				if err != nil {
 					writeError(w, http.StatusBadRequest, err)
 					return

@@ -133,6 +133,8 @@ type RuntimeConfig struct {
 	OracleTTLSeconds    int
 	OracleMaxAttempts   int
 	OracleBackoff       string
+	OracleDLQEnabled    bool
+	OracleRunnerTokens  string
 	DataFeedMinSigners  int
 	DataFeedAggregation string
 }
@@ -171,6 +173,8 @@ type runtimeSettings struct {
 	oracleTTL           time.Duration
 	oracleMaxAttempts   int
 	oracleBackoff       time.Duration
+	oracleDLQ           bool
+	oracleRunnerTokens  []string
 	dataFeedMinSigners  int
 	dataFeedAggregation string
 }
@@ -207,24 +211,25 @@ type Application struct {
 	manager *system.Manager
 	log     *logger.Logger
 
-	Accounts         *accounts.Service
-	Functions        *functions.Service
-	Triggers         *triggers.Service
-	GasBank          *gasbanksvc.Service
-	Automation       *automationsvc.Service
-	PriceFeeds       *pricefeedsvc.Service
-	DataFeeds        *datafeedsvc.Service
-	DataStreams      *datastreamsvc.Service
-	DataLink         *datalinksvc.Service
-	DTA              *dtasvc.Service
-	Confidential     *confsvc.Service
-	Oracle           *oraclesvc.Service
-	Secrets          *secrets.Service
-	Random           *randomsvc.Service
-	CRE              *cresvc.Service
-	CCIP             *ccipsvc.Service
-	VRF              *vrfsvc.Service
-	WorkspaceWallets storage.WorkspaceWalletStore
+	Accounts           *accounts.Service
+	Functions          *functions.Service
+	Triggers           *triggers.Service
+	GasBank            *gasbanksvc.Service
+	Automation         *automationsvc.Service
+	PriceFeeds         *pricefeedsvc.Service
+	DataFeeds          *datafeedsvc.Service
+	DataStreams        *datastreamsvc.Service
+	DataLink           *datalinksvc.Service
+	DTA                *dtasvc.Service
+	Confidential       *confsvc.Service
+	Oracle             *oraclesvc.Service
+	Secrets            *secrets.Service
+	Random             *randomsvc.Service
+	CRE                *cresvc.Service
+	CCIP               *ccipsvc.Service
+	VRF                *vrfsvc.Service
+	OracleRunnerTokens []string
+	WorkspaceWallets   storage.WorkspaceWalletStore
 
 	descriptors []core.Descriptor
 }
@@ -260,6 +265,7 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 	priceFeedService := pricefeedsvc.New(stores.Accounts, stores.PriceFeeds, log)
 	priceFeedService.WithObservationHooks(metrics.PriceFeedSubmissionHooks())
 	dataFeedService := datafeedsvc.New(stores.Accounts, stores.DataFeeds, log)
+	dataFeedService.WithAggregationConfig(options.runtime.dataFeedMinSigners, options.runtime.dataFeedAggregation)
 	dataFeedService.WithObservationHooks(metrics.DataFeedUpdateHooks())
 	dataFeedService.WithWorkspaceWallets(stores.WorkspaceWallets)
 	dataStreamService := datastreamsvc.New(stores.Accounts, stores.DataStreams, log)
@@ -325,6 +331,8 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 
 	oracleRunner := oraclesvc.NewDispatcher(oracleService, log)
 	oracleRunner.WithResolver(oraclesvc.NewHTTPResolver(oracleService, httpClient, log))
+	oracleRunner.WithRetryPolicy(options.runtime.oracleMaxAttempts, options.runtime.oracleBackoff, options.runtime.oracleTTL)
+	oracleRunner.EnableDeadLetter(options.runtime.oracleDLQ)
 
 	var settlement system.Service
 	if endpoint := options.runtime.gasBankResolverURL; endpoint != "" {
@@ -355,27 +363,28 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 	descriptors := manager.Descriptors()
 
 	return &Application{
-		manager:          manager,
-		log:              log,
-		Accounts:         acctService,
-		Functions:        funcService,
-		Triggers:         trigService,
-		GasBank:          gasService,
-		Automation:       automationService,
-		PriceFeeds:       priceFeedService,
-		DataFeeds:        dataFeedService,
-		DataStreams:      dataStreamService,
-		DataLink:         dataLinkService,
-		Oracle:           oracleService,
-		Secrets:          secretsService,
-		Random:           randomService,
-		CRE:              creService,
-		CCIP:             ccipService,
-		VRF:              vrfService,
-		DTA:              dtaService,
-		Confidential:     confService,
-		WorkspaceWallets: stores.WorkspaceWallets,
-		descriptors:      descriptors,
+		manager:            manager,
+		log:                log,
+		Accounts:           acctService,
+		Functions:          funcService,
+		Triggers:           trigService,
+		GasBank:            gasService,
+		Automation:         automationService,
+		PriceFeeds:         priceFeedService,
+		DataFeeds:          dataFeedService,
+		DataStreams:        dataStreamService,
+		DataLink:           dataLinkService,
+		Oracle:             oracleService,
+		Secrets:            secretsService,
+		Random:             randomService,
+		CRE:                creService,
+		CCIP:               ccipService,
+		VRF:                vrfService,
+		DTA:                dtaService,
+		Confidential:       confService,
+		OracleRunnerTokens: options.runtime.oracleRunnerTokens,
+		WorkspaceWallets:   stores.WorkspaceWallets,
+		descriptors:        descriptors,
 	}, nil
 }
 
@@ -450,6 +459,8 @@ func runtimeConfigFromEnv(env Environment) RuntimeConfig {
 		OracleTTLSeconds:    parseIntOrZero(env.Lookup("ORACLE_TTL_SECONDS")),
 		OracleMaxAttempts:   oracleAttempts,
 		OracleBackoff:       env.Lookup("ORACLE_BACKOFF"),
+		OracleDLQEnabled:    parseBool(env.Lookup("ORACLE_DLQ_ENABLED")),
+		OracleRunnerTokens:  env.Lookup("ORACLE_RUNNER_TOKENS"),
 		DataFeedMinSigners:  parseIntOrZero(env.Lookup("DATAFEEDS_MIN_SIGNERS")),
 		DataFeedAggregation: env.Lookup("DATAFEEDS_AGGREGATION"),
 	}
@@ -488,6 +499,7 @@ func normalizeRuntimeConfig(cfg RuntimeConfig) runtimeSettings {
 	if minSigners < 0 {
 		minSigners = 0
 	}
+	runnerTokens := parseTokens(cfg.OracleRunnerTokens)
 	return runtimeSettings{
 		teeMode:             strings.ToLower(strings.TrimSpace(cfg.TEEMode)),
 		randomSigningKey:    strings.TrimSpace(cfg.RandomSigningKey),
@@ -501,6 +513,8 @@ func normalizeRuntimeConfig(cfg RuntimeConfig) runtimeSettings {
 		oracleTTL:           time.Duration(oracleTTL) * time.Second,
 		oracleMaxAttempts:   oracleAttempts,
 		oracleBackoff:       oracleBackoff,
+		oracleDLQ:           cfg.OracleDLQEnabled,
+		oracleRunnerTokens:  runnerTokens,
 		dataFeedMinSigners:  minSigners,
 		dataFeedAggregation: agg,
 	}
@@ -532,6 +546,30 @@ func parseIntOrZero(value string) int {
 		return parsed
 	}
 	return 0
+}
+
+func parseTokens(value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		return r == ',' || r == ';' || r == ' '
+	})
+	seen := make(map[string]struct{}, len(parts))
+	var result []string
+	for _, p := range parts {
+		token := strings.TrimSpace(p)
+		if token == "" {
+			continue
+		}
+		if _, ok := seen[token]; ok {
+			continue
+		}
+		seen[token] = struct{}{}
+		result = append(result, token)
+	}
+	return result
 }
 
 func defaultHTTPClient() *http.Client {

@@ -28,6 +28,17 @@
     },
     "cre": {
       "http_runner": false
+    },
+    "oracle": {
+      "ttl_seconds": 0,
+      "max_attempts": 3,
+      "backoff": "10s",
+      "dlq_enabled": true,
+      "runner_tokens": []
+    },
+    "datafeeds": {
+      "min_signers": 0,
+      "aggregation": "median"
     }
   },
   "auth": {

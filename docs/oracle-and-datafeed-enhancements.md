@@ -40,9 +40,10 @@ Feed services closer to production-grade, Chainlink-style behaviours.
 2) Add runtime flags/settings for oracle TTL/backoff/DLQ and datafeed
    aggregation/signer thresholds.
 3) Implement signer verification and aggregation in the data feed service.
-4) Add oracle runner authentication, TTL/backoff, and aggregation support.
+4) Add oracle runner authentication, TTL/backoff, and multi-source aggregation support.
 5) Surface health/metrics in the dashboard and CLI (queues, attempts, signer
-   thresholds, stale feeds).
+   thresholds, stale feeds, DLQ visibility) and allow manual retries for failed
+   oracle requests.
 
 ## Implementation Plan (proposed)
 1. **Config & Model**: Add runtime/config fields for oracle TTL/retries/DLQ and

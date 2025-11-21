@@ -73,6 +73,11 @@ body {
   color: #0f172a;
 }
 
+.hint {
+  font-size: 12px;
+  color: #64748b;
+}
+
 .settings input {
   padding: 8px 10px;
   border-radius: 8px;
@@ -93,6 +98,30 @@ button {
 button:disabled {
   background: #cbd5e1;
   cursor: not-allowed;
+}
+
+select.select {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 13px;
+  background: #fff;
+  color: #0f172a;
+}
+
+select.small {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+button.ghost {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+button.small {
+  padding: 6px 10px;
+  font-size: 12px;
 }
 
 .error {
@@ -123,6 +152,10 @@ button:disabled {
   gap: 8px;
 }
 
+.row.wrap {
+  flex-wrap: wrap;
+}
+
 .row.gap {
   gap: 6px;
 }
@@ -138,6 +171,12 @@ button:disabled {
 .tag.subdued {
   background: #f1f5f9;
   color: #475569;
+}
+
+.tag.error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
 }
 
 .cap {
@@ -239,6 +278,10 @@ button:disabled {
   font-size: 11px;
   letter-spacing: 0.05em;
   color: #475569;
+}
+
+.data-table td:last-child {
+  white-space: nowrap;
 }
 
 .deadletters li {

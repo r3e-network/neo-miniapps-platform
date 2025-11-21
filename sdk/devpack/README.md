@@ -38,6 +38,8 @@ export default function handler(params: Record<string, unknown>) {
 
   createOracleRequest({
     dataSourceId: String(params.oracleSource),
+    // optional: provide alternates for median/quorum aggregation
+    alternateSourceIds: params.altSources as string[] | undefined,
     payload: { pair: params.pair },
   });
 
@@ -59,7 +61,7 @@ The emitted execution record will include the queued actions (`gasbank.ensureAcc
 | `withdrawGas(params)` | Queue `gasbank.withdraw` (supports `scheduleAt` RFC3339 timestamps; cron is not supported). |
 | `balanceGasAccount(params)` | Queue `gasbank.balance`. |
 | `listGasTransactions(params)` | Queue `gasbank.listTransactions`. |
-| `createOracleRequest(params)` | Queue `oracle.createRequest`. |
+| `createOracleRequest(params)` | Queue `oracle.createRequest` (supports `alternateSourceIds` for multi-source aggregation). |
 | `registerTrigger(params)` | Queue `triggers.register`. |
 | `scheduleAutomation(params)` | Queue `automation.schedule`. |
 | `respond.success(data, meta)` | Build a success payload. |

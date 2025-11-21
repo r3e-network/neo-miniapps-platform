@@ -127,10 +127,10 @@ func (s *Store) CreateDataFeedUpdate(ctx context.Context, upd domaindf.Update) (
 
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO chainlink_data_feed_updates
-			(id, feed_id, account_id, round_id, price, ts, signature, status, error, metadata, created_at, updated_at)
+			(id, feed_id, account_id, round_id, price, signer, ts, signature, status, error, metadata, created_at, updated_at)
 		VALUES
-			($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-	`, upd.ID, upd.FeedID, upd.AccountID, upd.RoundID, upd.Price, upd.Timestamp, upd.Signature, upd.Status, upd.Error, metaJSON, upd.CreatedAt, upd.UpdatedAt)
+			($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+	`, upd.ID, upd.FeedID, upd.AccountID, upd.RoundID, upd.Price, upd.Signer, upd.Timestamp, upd.Signature, upd.Status, upd.Error, metaJSON, upd.CreatedAt, upd.UpdatedAt)
 	if err != nil {
 		return domaindf.Update{}, err
 	}
@@ -139,7 +139,7 @@ func (s *Store) CreateDataFeedUpdate(ctx context.Context, upd domaindf.Update) (
 
 func (s *Store) ListDataFeedUpdates(ctx context.Context, feedID string, limit int) ([]domaindf.Update, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, feed_id, account_id, round_id, price, ts, signature, status, error, metadata, created_at, updated_at
+		SELECT id, feed_id, account_id, round_id, price, signer, ts, signature, status, error, metadata, created_at, updated_at
 		FROM chainlink_data_feed_updates
 		WHERE feed_id = $1
 		ORDER BY round_id DESC
@@ -161,9 +161,32 @@ func (s *Store) ListDataFeedUpdates(ctx context.Context, feedID string, limit in
 	return updates, rows.Err()
 }
 
+func (s *Store) ListDataFeedUpdatesByRound(ctx context.Context, feedID string, roundID int64) ([]domaindf.Update, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, feed_id, account_id, round_id, price, signer, ts, signature, status, error, metadata, created_at, updated_at
+		FROM chainlink_data_feed_updates
+		WHERE feed_id = $1 AND round_id = $2
+		ORDER BY created_at ASC
+	`, feedID, roundID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var updates []domaindf.Update
+	for rows.Next() {
+		upd, err := scanDataFeedUpdate(rows)
+		if err != nil {
+			return nil, err
+		}
+		updates = append(updates, upd)
+	}
+	return updates, rows.Err()
+}
+
 func (s *Store) GetLatestDataFeedUpdate(ctx context.Context, feedID string) (domaindf.Update, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, feed_id, account_id, round_id, price, ts, signature, status, error, metadata, created_at, updated_at
+		SELECT id, feed_id, account_id, round_id, price, signer, ts, signature, status, error, metadata, created_at, updated_at
 		FROM chainlink_data_feed_updates
 		WHERE feed_id = $1
 		ORDER BY round_id DESC
@@ -201,7 +224,7 @@ func scanDataFeedUpdate(scanner rowScanner) (domaindf.Update, error) {
 		metaRaw []byte
 		ts      time.Time
 	)
-	if err := scanner.Scan(&upd.ID, &upd.FeedID, &upd.AccountID, &upd.RoundID, &upd.Price, &ts, &upd.Signature, &upd.Status, &upd.Error, &metaRaw, &upd.CreatedAt, &upd.UpdatedAt); err != nil {
+	if err := scanner.Scan(&upd.ID, &upd.FeedID, &upd.AccountID, &upd.RoundID, &upd.Price, &upd.Signer, &ts, &upd.Signature, &upd.Status, &upd.Error, &metaRaw, &upd.CreatedAt, &upd.UpdatedAt); err != nil {
 		return domaindf.Update{}, err
 	}
 	upd.Timestamp = ts.UTC()

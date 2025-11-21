@@ -90,6 +90,36 @@ var (
 		[]string{"job_id"},
 	)
 
+	oracleAttempts = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "service_layer",
+			Subsystem: "oracle",
+			Name:      "request_attempts_total",
+			Help:      "Total oracle dispatch attempts grouped by account and status.",
+		},
+		[]string{"account_id", "status"},
+	)
+
+	oracleStaleness = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "service_layer",
+			Subsystem: "oracle",
+			Name:      "oldest_pending_seconds",
+			Help:      "Age in seconds of the oldest pending oracle request.",
+		},
+		[]string{"account_id"},
+	)
+
+	datafeedStaleness = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "service_layer",
+			Subsystem: "datafeeds",
+			Name:      "stale_seconds",
+			Help:      "Age in seconds of the latest datafeed update; status label marks healthy|stale|empty.",
+		},
+		[]string{"feed_id", "status"},
+	)
+
 	observationCollectors sync.Map
 )
 
@@ -102,6 +132,9 @@ func init() {
 		functionDuration,
 		automationExecutions,
 		automationDuration,
+		oracleAttempts,
+		oracleStaleness,
+		datafeedStaleness,
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		collectors.NewGoCollector(),
 	)
@@ -160,6 +193,39 @@ func RecordAutomationExecution(jobID string, duration time.Duration, success boo
 	}
 	automationExecutions.WithLabelValues(jobID, result).Inc()
 	automationDuration.WithLabelValues(jobID).Observe(duration.Seconds())
+}
+
+// RecordOracleAttempt records oracle dispatch attempts and outcomes.
+func RecordOracleAttempt(accountID, status string) {
+	if accountID == "" {
+		accountID = "unknown"
+	}
+	if status == "" {
+		status = "unknown"
+	}
+	oracleAttempts.WithLabelValues(accountID, status).Inc()
+}
+
+// RecordOracleStaleness tracks the age of the oldest pending oracle request per account.
+func RecordOracleStaleness(accountID string, age time.Duration) {
+	if accountID == "" {
+		accountID = "unknown"
+	}
+	oracleStaleness.WithLabelValues(accountID).Set(age.Seconds())
+}
+
+// RecordDatafeedStaleness tracks feed freshness and status labels.
+func RecordDatafeedStaleness(feedID, status string, age time.Duration) {
+	if feedID == "" {
+		feedID = "unknown"
+	}
+	if status == "" {
+		status = "unknown"
+	}
+	if age < 0 {
+		age = 0
+	}
+	datafeedStaleness.WithLabelValues(feedID, status).Set(age.Seconds())
 }
 
 type observationCollector struct {

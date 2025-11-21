@@ -2,6 +2,7 @@ package oracle
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -141,6 +142,45 @@ func TestHTTPResolver_RetryableStatus(t *testing.T) {
 	}
 	if retry <= 0 || retry > defaultHTTPResolverRetry {
 		t.Fatalf("unexpected retry duration: %v", retry)
+	}
+}
+
+func TestHTTPResolver_MultiSourceAggregate(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	svc := New(store, store, nil)
+
+	server1 := newOracleHTTPServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("10"))
+	}))
+	defer server1.Close()
+	server2 := newOracleHTTPServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("30"))
+	}))
+	defer server2.Close()
+
+	src1, _ := svc.CreateSource(context.Background(), acct.ID, "oracle-1", server1.URL, "GET", "", nil, "")
+	src2, _ := svc.CreateSource(context.Background(), acct.ID, "oracle-2", server2.URL, "GET", "", nil, "")
+
+	resolver := NewHTTPResolver(svc, server1.Client(), nil)
+	req := domain.Request{
+		ID:           "req-agg",
+		AccountID:    acct.ID,
+		DataSourceID: src1.ID,
+		Payload:      fmt.Sprintf(`{"alternate_source_ids":["%s"]}`, src2.ID),
+	}
+
+	done, success, result, errMsg, retry, err := resolver.Resolve(context.Background(), req)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if !done || !success || retry != 0 || errMsg != "" {
+		t.Fatalf("unexpected state: done=%v success=%v retry=%v errMsg=%q", done, success, retry, errMsg)
+	}
+	if strings.TrimSpace(result) != "20" && strings.TrimSpace(result) != "20.0" {
+		t.Fatalf("expected median aggregated result, got %q", result)
 	}
 }
 

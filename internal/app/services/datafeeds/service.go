@@ -3,11 +3,15 @@ package datafeeds
 import (
 	"context"
 	"fmt"
+	"math/big"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	core "github.com/R3E-Network/service_layer/internal/app/core/service"
 	domaindf "github.com/R3E-Network/service_layer/internal/app/domain/datafeeds"
+	"github.com/R3E-Network/service_layer/internal/app/metrics"
 	"github.com/R3E-Network/service_layer/internal/app/storage"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 )
@@ -18,6 +22,9 @@ type Service struct {
 	store storage.DataFeedStore
 	log   *logger.Logger
 	hooks core.ObservationHooks
+	// aggregation defaults
+	minSigners  int
+	aggregation string
 }
 
 // New constructs a data feed service.
@@ -31,6 +38,18 @@ func New(accounts storage.AccountStore, store storage.DataFeedStore, log *logger
 // WithWorkspaceWallets enforces signer set ownership when provided.
 func (s *Service) WithWorkspaceWallets(store storage.WorkspaceWalletStore) {
 	s.base.SetWallets(store)
+}
+
+// WithAggregationConfig sets baseline aggregation parameters.
+func (s *Service) WithAggregationConfig(minSigners int, aggregation string) {
+	if minSigners > 0 {
+		s.minSigners = minSigners
+	}
+	agg := strings.ToLower(strings.TrimSpace(aggregation))
+	if agg == "" {
+		agg = "median"
+	}
+	s.aggregation = agg
 }
 
 // WithObservationHooks configures observability callbacks for updates.
@@ -105,8 +124,9 @@ func (s *Service) ListFeeds(ctx context.Context, accountID string) ([]domaindf.F
 	return s.store.ListDataFeeds(ctx, accountID)
 }
 
-// SubmitUpdate stores a price update for a feed.
-func (s *Service) SubmitUpdate(ctx context.Context, accountID, feedID string, roundID int64, price string, ts time.Time, signature string, metadata map[string]string) (domaindf.Update, error) {
+// SubmitUpdate stores a price update for a feed, enforcing signer verification,
+// heartbeat/deviation thresholds, and the configured aggregation strategy.
+func (s *Service) SubmitUpdate(ctx context.Context, accountID, feedID string, roundID int64, price string, ts time.Time, signer string, signature string, metadata map[string]string) (domaindf.Update, error) {
 	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
 		return domaindf.Update{}, err
 	}
@@ -117,31 +137,102 @@ func (s *Service) SubmitUpdate(ctx context.Context, accountID, feedID string, ro
 	if feed.AccountID != accountID {
 		return domaindf.Update{}, fmt.Errorf("feed %s does not belong to account %s", feedID, accountID)
 	}
-	if strings.TrimSpace(price) == "" {
-		return domaindf.Update{}, fmt.Errorf("price is required")
-	}
 	if roundID <= 0 {
 		return domaindf.Update{}, fmt.Errorf("round_id must be positive")
 	}
 	if ts.IsZero() {
 		ts = time.Now().UTC()
 	}
+	ts = ts.UTC()
+
+	signer = strings.TrimSpace(signer)
+	if len(feed.SignerSet) > 0 {
+		if signer == "" {
+			return domaindf.Update{}, fmt.Errorf("signer is required")
+		}
+		if !containsCaseInsensitive(feed.SignerSet, signer) {
+			return domaindf.Update{}, fmt.Errorf("signer %s is not authorized for feed %s", signer, feedID)
+		}
+	}
+
+	sig := strings.TrimSpace(signature)
+	if signer != "" && sig == "" {
+		return domaindf.Update{}, fmt.Errorf("signature is required for signer submissions")
+	}
+
+	priceInt, normalizedPrice, err := normalizePrice(price, feed.Decimals)
+	if err != nil {
+		return domaindf.Update{}, err
+	}
+
 	latest, err := s.store.GetLatestDataFeedUpdate(ctx, feedID)
 	if err == nil {
-		if roundID <= latest.RoundID {
-			return domaindf.Update{}, fmt.Errorf("round_id must be greater than %d", latest.RoundID)
+		if roundID < latest.RoundID {
+			return domaindf.Update{}, fmt.Errorf("round_id must be at least %d", latest.RoundID)
 		}
+		if roundID > latest.RoundID {
+			latestInt, _, parseErr := normalizePrice(latest.Price, feed.Decimals)
+			if parseErr == nil && !shouldPublishDatafeed(latestInt, priceInt, latest.Timestamp, ts, feed.ThresholdPPM, feed.Heartbeat) {
+				return domaindf.Update{}, fmt.Errorf("heartbeat/deviation thresholds not met for new round %d", roundID)
+			}
+		}
+	}
+
+	existingRound, err := s.store.ListDataFeedUpdatesByRound(ctx, feedID, roundID)
+	if err != nil {
+		return domaindf.Update{}, err
+	}
+	for _, upd := range existingRound {
+		if signer != "" && strings.EqualFold(upd.Signer, signer) {
+			return domaindf.Update{}, fmt.Errorf("signer %s already submitted for round %d", signer, roundID)
+		}
+	}
+
+	meta := core.NormalizeMetadata(metadata)
+	if meta == nil {
+		meta = make(map[string]string)
+	}
+	aggregation := s.aggregation
+	if aggregation == "" {
+		aggregation = "median"
+	}
+	aggregation = strings.ToLower(strings.TrimSpace(aggregation))
+
+	threshold := s.signerThreshold(feed)
+	submissions := len(existingRound) + 1
+	meta["aggregation"] = aggregation
+	meta["signer_count"] = strconv.Itoa(submissions)
+	meta["quorum"] = strconv.Itoa(threshold)
+
+	allPrices := append(make([]*big.Int, 0, len(existingRound)+1), priceInt)
+	for _, upd := range existingRound {
+		parsed, parseErr := normalizePriceInt(upd.Price, feed.Decimals)
+		if parseErr != nil {
+			continue
+		}
+		allPrices = append(allPrices, parsed)
+	}
+
+	status := domaindf.UpdateStatusPending
+	if submissions >= threshold {
+		status = domaindf.UpdateStatusAccepted
+		aggPrice := aggregatePrices(allPrices, aggregation)
+		meta["aggregated_price"] = formatPrice(aggPrice, feed.Decimals)
+		meta["quorum_met"] = "true"
+	} else {
+		meta["quorum_met"] = "false"
 	}
 
 	upd := domaindf.Update{
 		AccountID: accountID,
 		FeedID:    feedID,
 		RoundID:   roundID,
-		Price:     strings.TrimSpace(price),
-		Timestamp: ts.UTC(),
-		Signature: strings.TrimSpace(signature),
-		Status:    domaindf.UpdateStatusAccepted,
-		Metadata:  core.NormalizeMetadata(metadata),
+		Price:     normalizedPrice,
+		Signer:    signer,
+		Timestamp: ts,
+		Signature: sig,
+		Status:    status,
+		Metadata:  meta,
 	}
 	attrs := map[string]string{"feed_id": feedID}
 	finish := core.StartObservation(ctx, s.hooks, attrs)
@@ -152,6 +243,7 @@ func (s *Service) SubmitUpdate(ctx context.Context, accountID, feedID string, ro
 	}
 	finish(nil)
 	s.log.WithField("feed_id", feedID).WithField("round_id", roundID).Info("data feed update stored")
+	s.recordStaleness(feedID, upd.Timestamp)
 	return created, nil
 }
 
@@ -169,7 +261,11 @@ func (s *Service) LatestUpdate(ctx context.Context, accountID, feedID string) (d
 	if _, err := s.GetFeed(ctx, accountID, feedID); err != nil {
 		return domaindf.Update{}, err
 	}
-	return s.store.GetLatestDataFeedUpdate(ctx, feedID)
+	upd, err := s.store.GetLatestDataFeedUpdate(ctx, feedID)
+	if err == nil {
+		s.recordStaleness(feedID, upd.Timestamp)
+	}
+	return upd, err
 }
 
 // Descriptor advertises the service placement and capabilities.
@@ -182,12 +278,157 @@ func (s *Service) Descriptor() core.Descriptor {
 	}
 }
 
+func (s *Service) recordStaleness(feedID string, ts time.Time) {
+	status := "empty"
+	age := time.Duration(0)
+	if !ts.IsZero() {
+		age = time.Since(ts)
+		status = "healthy"
+		if age <= 0 {
+			age = 0
+		}
+	}
+	metrics.RecordDatafeedStaleness(feedID, status, age)
+}
+
+func (s *Service) signerThreshold(feed domaindf.Feed) int {
+	threshold := s.minSigners
+	if threshold <= 0 {
+		threshold = len(feed.SignerSet)
+	}
+	if threshold <= 0 {
+		threshold = 1
+	}
+	if len(feed.SignerSet) > 0 && threshold > len(feed.SignerSet) {
+		threshold = len(feed.SignerSet)
+	}
+	return threshold
+}
+
+func shouldPublishDatafeed(prevPrice *big.Int, newPrice *big.Int, prevTs, newTs time.Time, thresholdPPM int, heartbeat time.Duration) bool {
+	if prevPrice == nil || prevPrice.Sign() == 0 {
+		return true
+	}
+	if heartbeat > 0 && !prevTs.IsZero() && newTs.Sub(prevTs) >= heartbeat {
+		return true
+	}
+	if thresholdPPM <= 0 {
+		return true
+	}
+	diff := new(big.Int).Sub(newPrice, prevPrice)
+	diff.Abs(diff)
+
+	limit := new(big.Int).Mul(prevPrice, big.NewInt(int64(thresholdPPM)))
+	diffScaled := new(big.Int).Mul(diff, big.NewInt(1_000_000))
+	return diffScaled.Cmp(limit) >= 0
+}
+
+func normalizePrice(value string, decimals int) (*big.Int, string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, "", fmt.Errorf("price is required")
+	}
+	scaled, err := normalizePriceInt(value, decimals)
+	if err != nil {
+		return nil, "", err
+	}
+	if scaled.Sign() <= 0 {
+		return nil, "", fmt.Errorf("price must be positive")
+	}
+	return scaled, formatPrice(scaled, decimals), nil
+}
+
+func normalizePriceInt(value string, decimals int) (*big.Int, error) {
+	parts := strings.Split(value, ".")
+	if len(parts) > 2 {
+		return nil, fmt.Errorf("invalid price format")
+	}
+	intPart := parts[0]
+	fracPart := ""
+	if len(parts) == 2 {
+		fracPart = parts[1]
+	}
+	if intPart == "" {
+		intPart = "0"
+	}
+	if strings.HasPrefix(intPart, "+") {
+		intPart = strings.TrimPrefix(intPart, "+")
+	}
+	if strings.HasPrefix(intPart, "-") {
+		return nil, fmt.Errorf("price must be positive")
+	}
+	if len(fracPart) > decimals {
+		return nil, fmt.Errorf("price exceeds maximum decimals (%d)", decimals)
+	}
+	fracPart = fracPart + strings.Repeat("0", decimals-len(fracPart))
+	combined := strings.TrimLeft(intPart, "0") + fracPart
+	if combined == "" {
+		combined = "0"
+	}
+	valueInt := new(big.Int)
+	if _, ok := valueInt.SetString(combined, 10); !ok {
+		return nil, fmt.Errorf("invalid price digits")
+	}
+	return valueInt, nil
+}
+
+func formatPrice(value *big.Int, decimals int) string {
+	if value == nil {
+		return "0"
+	}
+	str := value.String()
+	if decimals == 0 {
+		return str
+	}
+	if len(str) <= decimals {
+		str = strings.Repeat("0", decimals-len(str)+1) + str
+	}
+	intPart := str[:len(str)-decimals]
+	fracPart := strings.TrimRight(str[len(str)-decimals:], "0")
+	if fracPart == "" {
+		return intPart
+	}
+	return intPart + "." + fracPart
+}
+
+func aggregatePrices(prices []*big.Int, strategy string) *big.Int {
+	if strategy != "median" {
+		strategy = "median"
+	}
+	if len(prices) == 0 {
+		return big.NewInt(0)
+	}
+	sorted := make([]*big.Int, len(prices))
+	for i, p := range prices {
+		sorted[i] = new(big.Int).Set(p)
+	}
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Cmp(sorted[j]) < 0 })
+	mid := len(sorted) / 2
+	if len(sorted)%2 == 0 {
+		sum := new(big.Int).Add(sorted[mid-1], sorted[mid])
+		return sum.Div(sum, big.NewInt(2))
+	}
+	return sorted[mid]
+}
+
+func containsCaseInsensitive(list []string, target string) bool {
+	for _, item := range list {
+		if strings.EqualFold(item, target) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Service) normalizeFeed(feed *domaindf.Feed) error {
 	feed.Pair = strings.ToUpper(strings.TrimSpace(feed.Pair))
 	feed.Description = strings.TrimSpace(feed.Description)
 	feed.Metadata = core.NormalizeMetadata(feed.Metadata)
 	feed.Tags = core.NormalizeTags(feed.Tags)
 	feed.SignerSet = core.NormalizeTags(feed.SignerSet)
+	if s.minSigners > 0 && len(feed.SignerSet) < s.minSigners {
+		return fmt.Errorf("signer_set must include at least %d signers", s.minSigners)
+	}
 	if feed.Pair == "" {
 		return fmt.Errorf("pair is required")
 	}

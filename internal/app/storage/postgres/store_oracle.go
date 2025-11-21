@@ -123,9 +123,9 @@ func (s *Store) CreateRequest(ctx context.Context, req oracle.Request) (oracle.R
 	req.UpdatedAt = now
 
 	_, err := s.db.ExecContext(ctx, `
-        INSERT INTO app_oracle_requests (id, account_id, data_source_id, status, payload, result, error, created_at, updated_at, completed_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-    `, req.ID, req.AccountID, req.DataSourceID, req.Status, req.Payload, req.Result, req.Error, req.CreatedAt, req.UpdatedAt, toNullTime(req.CompletedAt))
+        INSERT INTO app_oracle_requests (id, account_id, data_source_id, status, attempts, payload, result, error, created_at, updated_at, completed_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `, req.ID, req.AccountID, req.DataSourceID, req.Status, req.Attempts, req.Payload, req.Result, req.Error, req.CreatedAt, req.UpdatedAt, toNullTime(req.CompletedAt))
 	if err != nil {
 		return oracle.Request{}, err
 	}
@@ -145,9 +145,9 @@ func (s *Store) UpdateRequest(ctx context.Context, req oracle.Request) (oracle.R
 
 	result, err := s.db.ExecContext(ctx, `
         UPDATE app_oracle_requests
-        SET status = $2, payload = $3, result = $4, error = $5, updated_at = $6, completed_at = $7
+        SET status = $2, attempts = $3, payload = $4, result = $5, error = $6, updated_at = $7, completed_at = $8
         WHERE id = $1
-    `, req.ID, req.Status, req.Payload, req.Result, req.Error, req.UpdatedAt, toNullTime(req.CompletedAt))
+    `, req.ID, req.Status, req.Attempts, req.Payload, req.Result, req.Error, req.UpdatedAt, toNullTime(req.CompletedAt))
 	if err != nil {
 		return oracle.Request{}, err
 	}
@@ -159,7 +159,7 @@ func (s *Store) UpdateRequest(ctx context.Context, req oracle.Request) (oracle.R
 
 func (s *Store) GetRequest(ctx context.Context, id string) (oracle.Request, error) {
 	row := s.db.QueryRowContext(ctx, `
-        SELECT id, account_id, data_source_id, status, payload, result, error, created_at, updated_at, completed_at
+        SELECT id, account_id, data_source_id, status, attempts, payload, result, error, created_at, updated_at, completed_at
         FROM app_oracle_requests
         WHERE id = $1
     `, id)
@@ -168,7 +168,7 @@ func (s *Store) GetRequest(ctx context.Context, id string) (oracle.Request, erro
 		req         oracle.Request
 		completedAt sql.NullTime
 	)
-	if err := row.Scan(&req.ID, &req.AccountID, &req.DataSourceID, &req.Status, &req.Payload, &req.Result, &req.Error, &req.CreatedAt, &req.UpdatedAt, &completedAt); err != nil {
+	if err := row.Scan(&req.ID, &req.AccountID, &req.DataSourceID, &req.Status, &req.Attempts, &req.Payload, &req.Result, &req.Error, &req.CreatedAt, &req.UpdatedAt, &completedAt); err != nil {
 		return oracle.Request{}, err
 	}
 	if completedAt.Valid {
@@ -177,13 +177,18 @@ func (s *Store) GetRequest(ctx context.Context, id string) (oracle.Request, erro
 	return req, nil
 }
 
-func (s *Store) ListRequests(ctx context.Context, accountID string) ([]oracle.Request, error) {
+func (s *Store) ListRequests(ctx context.Context, accountID string, limit int, status string) ([]oracle.Request, error) {
+	max := limit
+	if max <= 0 || max > 500 {
+		max = 100
+	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, account_id, data_source_id, status, payload, result, error, created_at, updated_at, completed_at
+		SELECT id, account_id, data_source_id, status, attempts, payload, result, error, created_at, updated_at, completed_at
 		FROM app_oracle_requests
-        WHERE $1 = '' OR account_id = $1
+        WHERE ($1 = '' OR account_id = $1) AND ($3 = '' OR status = $3)
         ORDER BY created_at DESC
-    `, accountID)
+        LIMIT $2
+    `, accountID, max, status)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +200,7 @@ func (s *Store) ListRequests(ctx context.Context, accountID string) ([]oracle.Re
 			req         oracle.Request
 			completedAt sql.NullTime
 		)
-		if err := rows.Scan(&req.ID, &req.AccountID, &req.DataSourceID, &req.Status, &req.Payload, &req.Result, &req.Error, &req.CreatedAt, &req.UpdatedAt, &completedAt); err != nil {
+		if err := rows.Scan(&req.ID, &req.AccountID, &req.DataSourceID, &req.Status, &req.Attempts, &req.Payload, &req.Result, &req.Error, &req.CreatedAt, &req.UpdatedAt, &completedAt); err != nil {
 			return nil, err
 		}
 		if completedAt.Valid {
@@ -208,7 +213,7 @@ func (s *Store) ListRequests(ctx context.Context, accountID string) ([]oracle.Re
 
 func (s *Store) ListPendingRequests(ctx context.Context) ([]oracle.Request, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, account_id, data_source_id, status, payload, result, error, created_at, updated_at, completed_at
+		SELECT id, account_id, data_source_id, status, attempts, payload, result, error, created_at, updated_at, completed_at
 		FROM app_oracle_requests
 		WHERE status IN ('pending','running')
 		ORDER BY created_at
@@ -224,7 +229,7 @@ func (s *Store) ListPendingRequests(ctx context.Context) ([]oracle.Request, erro
 			req         oracle.Request
 			completedAt sql.NullTime
 		)
-		if err := rows.Scan(&req.ID, &req.AccountID, &req.DataSourceID, &req.Status, &req.Payload, &req.Result, &req.Error, &req.CreatedAt, &req.UpdatedAt, &completedAt); err != nil {
+		if err := rows.Scan(&req.ID, &req.AccountID, &req.DataSourceID, &req.Status, &req.Attempts, &req.Payload, &req.Result, &req.Error, &req.CreatedAt, &req.UpdatedAt, &completedAt); err != nil {
 			return nil, err
 		}
 		if completedAt.Valid {

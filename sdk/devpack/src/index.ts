@@ -96,6 +96,7 @@ export interface GasBankListTransactionsParams {
 
 export interface OracleRequestParams {
   dataSourceId: string;
+  alternateSourceIds?: string[];
   payload?: unknown;
 }
 

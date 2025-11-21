@@ -334,7 +334,7 @@ func TestService_ExecuteProcessesMultipleActions(t *testing.T) {
 		t.Fatalf("expected trigger stored, got %d", len(triggersList))
 	}
 
-	requests, _ := store.ListRequests(context.Background(), acct.ID)
+	requests, _ := store.ListRequests(context.Background(), acct.ID, 10, "")
 	if len(requests) != 1 {
 		t.Fatalf("expected oracle request stored, got %d", len(requests))
 	}

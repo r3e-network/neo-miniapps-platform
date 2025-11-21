@@ -116,6 +116,7 @@ type DataFeedStore interface {
 
 	CreateDataFeedUpdate(ctx context.Context, upd datafeeds.Update) (datafeeds.Update, error)
 	ListDataFeedUpdates(ctx context.Context, feedID string, limit int) ([]datafeeds.Update, error)
+	ListDataFeedUpdatesByRound(ctx context.Context, feedID string, roundID int64) ([]datafeeds.Update, error)
 	GetLatestDataFeedUpdate(ctx context.Context, feedID string) (datafeeds.Update, error)
 }
 
@@ -192,7 +193,7 @@ type OracleStore interface {
 	CreateRequest(ctx context.Context, req oracle.Request) (oracle.Request, error)
 	UpdateRequest(ctx context.Context, req oracle.Request) (oracle.Request, error)
 	GetRequest(ctx context.Context, id string) (oracle.Request, error)
-	ListRequests(ctx context.Context, accountID string) ([]oracle.Request, error)
+	ListRequests(ctx context.Context, accountID string, limit int, status string) ([]oracle.Request, error)
 	ListPendingRequests(ctx context.Context) ([]oracle.Request, error)
 }
 

@@ -1298,6 +1298,8 @@ func (s *Store) UpdateRequest(_ context.Context, req oracle.Request) (oracle.Req
 		return oracle.Request{}, fmt.Errorf("oracle request %s not found", req.ID)
 	}
 
+	req.AccountID = original.AccountID
+	req.DataSourceID = original.DataSourceID
 	req.CreatedAt = original.CreatedAt
 	if req.CompletedAt.IsZero() {
 		req.CompletedAt = original.CompletedAt
@@ -1319,15 +1321,30 @@ func (s *Store) GetRequest(_ context.Context, id string) (oracle.Request, error)
 	return req, nil
 }
 
-func (s *Store) ListRequests(_ context.Context, accountID string) ([]oracle.Request, error) {
+func (s *Store) ListRequests(_ context.Context, accountID string, limit int, status string) ([]oracle.Request, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	result := make([]oracle.Request, 0)
+	max := limit
+	if max <= 0 || max > 500 {
+		max = 100
+	}
+
+	result := make([]oracle.Request, 0, max)
 	for _, req := range s.oracleRequests {
-		if accountID == "" || req.AccountID == accountID {
-			result = append(result, req)
+		if accountID != "" && req.AccountID != accountID {
+			continue
 		}
+		if status != "" && !strings.EqualFold(string(req.Status), status) {
+			continue
+		}
+		result = append(result, req)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].CreatedAt.After(result[j].CreatedAt)
+	})
+	if len(result) > max {
+		result = result[:max]
 	}
 	return result, nil
 }
@@ -1958,11 +1975,13 @@ func (s *Store) CreateDataFeedUpdate(_ context.Context, upd datafeeds.Update) (d
 
 	if upd.ID == "" {
 		upd.ID = s.nextIDLocked()
-	} else {
-		for _, existing := range s.dataFeedUpdates[upd.FeedID] {
-			if existing.ID == upd.ID {
-				return datafeeds.Update{}, fmt.Errorf("data feed update %s already exists", upd.ID)
-			}
+	}
+	for _, existing := range s.dataFeedUpdates[upd.FeedID] {
+		if existing.ID == upd.ID {
+			return datafeeds.Update{}, fmt.Errorf("data feed update %s already exists", upd.ID)
+		}
+		if existing.RoundID == upd.RoundID && strings.EqualFold(existing.Signer, upd.Signer) {
+			return datafeeds.Update{}, fmt.Errorf("data feed update for signer %s round %d already exists", upd.Signer, upd.RoundID)
 		}
 	}
 	now := time.Now().UTC()
@@ -2001,6 +2020,27 @@ func (s *Store) GetLatestDataFeedUpdate(_ context.Context, feedID string) (dataf
 		return datafeeds.Update{}, fmt.Errorf("no updates for feed %s", feedID)
 	}
 	return cloneDataFeedUpdate(list[0]), nil
+}
+
+func (s *Store) ListDataFeedUpdatesByRound(_ context.Context, feedID string, roundID int64) ([]datafeeds.Update, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	list := s.dataFeedUpdates[feedID]
+	result := make([]datafeeds.Update, 0)
+	for i := len(list) - 1; i >= 0; i-- { // preserve chronological order
+		if list[i].RoundID == roundID {
+			result = append(result, cloneDataFeedUpdate(list[i]))
+		}
+	}
+	if len(result) == 0 {
+		return nil, nil
+	}
+	// restore ascending creation order
+	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
+		result[i], result[j] = result[j], result[i]
+	}
+	return result, nil
 }
 
 func cloneDataFeed(feed datafeeds.Feed) datafeeds.Feed {

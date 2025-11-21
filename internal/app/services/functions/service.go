@@ -550,6 +550,20 @@ func (s *Service) handleOracleCreateRequest(ctx context.Context, def function.De
 	if err != nil {
 		return nil, fmt.Errorf("payload: %w", err)
 	}
+	alternateSources := stringSliceParam(params, "alternateSourceIds")
+	if len(alternateSources) > 0 {
+		var payloadObj map[string]any
+		if trimmed := strings.TrimSpace(payloadStr); trimmed != "" {
+			_ = json.Unmarshal([]byte(trimmed), &payloadObj)
+		}
+		if payloadObj == nil {
+			payloadObj = make(map[string]any)
+		}
+		payloadObj["alternate_source_ids"] = alternateSources
+		if updated, err := json.Marshal(payloadObj); err == nil {
+			payloadStr = string(updated)
+		}
+	}
 	req, err := s.oracle.CreateRequest(ctx, def.AccountID, dataSourceID, payloadStr)
 	if err != nil {
 		return nil, err
@@ -743,6 +757,46 @@ func stringParam(params map[string]any, key, fallback string) string {
 		}
 	}
 	return fallback
+}
+
+func stringSliceParam(params map[string]any, key string) []string {
+	if params == nil {
+		return nil
+	}
+	value, ok := params[key]
+	if !ok {
+		return nil
+	}
+	var list []string
+	add := func(v string) {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			list = append(list, v)
+		}
+	}
+	switch v := value.(type) {
+	case []string:
+		for _, item := range v {
+			add(item)
+		}
+	case []any:
+		for _, item := range v {
+			add(fmt.Sprint(item))
+		}
+	case string:
+		parts := strings.FieldsFunc(v, func(r rune) bool {
+			return r == ',' || r == ';'
+		})
+		for _, item := range parts {
+			add(item)
+		}
+	default:
+		add(fmt.Sprint(v))
+	}
+	if len(list) == 0 {
+		return nil
+	}
+	return list
 }
 
 func floatParam(params map[string]any, key string) (float64, error) {

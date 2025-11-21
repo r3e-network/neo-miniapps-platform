@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -283,10 +284,41 @@ func (h *handler) accountOracleRequests(w http.ResponseWriter, r *http.Request, 
 	if len(rest) == 0 {
 		switch r.Method {
 		case http.MethodGet:
-			reqs, err := h.app.Oracle.ListRequests(r.Context(), accountID)
+			status := strings.TrimSpace(r.URL.Query().Get("status"))
+			cursorID := strings.TrimSpace(r.URL.Query().Get("cursor"))
+			limit, err := parseLimitParam(r.URL.Query().Get("limit"), 100)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			fetchLimit := limit
+			if cursorID != "" && fetchLimit < 500 {
+				fetchLimit = 500
+			}
+			reqs, err := h.app.Oracle.ListRequests(r.Context(), accountID, fetchLimit, status)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err)
 				return
+			}
+			if cursorID != "" {
+				start := 0
+				for i, req := range reqs {
+					if req.ID == cursorID {
+						start = i + 1
+						break
+					}
+				}
+				if start < len(reqs) {
+					reqs = reqs[start:]
+				} else {
+					reqs = []oracle.Request{}
+				}
+			}
+			if len(reqs) > limit {
+				reqs = reqs[:limit]
+			}
+			if len(reqs) == limit {
+				w.Header().Set("X-Next-Cursor", reqs[len(reqs)-1].ID)
 			}
 			writeJSON(w, http.StatusOK, reqs)
 		case http.MethodPost:
@@ -347,19 +379,33 @@ func (h *handler) accountOracleRequests(w http.ResponseWriter, r *http.Request, 
 		var updated oracle.Request
 		switch status {
 		case "running":
+			if !h.requireOracleRunner(r) {
+				writeError(w, http.StatusUnauthorized, fmt.Errorf("oracle runner token required"))
+				return
+			}
 			updated, err = h.app.Oracle.MarkRunning(r.Context(), requestID)
 		case "succeeded", "completed":
+			if !h.requireOracleRunner(r) {
+				writeError(w, http.StatusUnauthorized, fmt.Errorf("oracle runner token required"))
+				return
+			}
 			if payload.Result == nil {
 				writeError(w, http.StatusBadRequest, fmt.Errorf("result is required for succeeded status"))
 				return
 			}
 			updated, err = h.app.Oracle.CompleteRequest(r.Context(), requestID, *payload.Result)
 		case "failed":
+			if !h.requireOracleRunner(r) {
+				writeError(w, http.StatusUnauthorized, fmt.Errorf("oracle runner token required"))
+				return
+			}
 			errMsg := ""
 			if payload.Error != nil {
 				errMsg = *payload.Error
 			}
 			updated, err = h.app.Oracle.FailRequest(r.Context(), requestID, errMsg)
+		case "retry":
+			updated, err = h.app.Oracle.RetryRequest(r.Context(), requestID)
 		default:
 			writeError(w, http.StatusBadRequest, fmt.Errorf("unsupported status %s", status))
 			return
@@ -391,6 +437,29 @@ func writeError(w http.ResponseWriter, status int, err error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+}
+
+func (h *handler) requireOracleRunner(r *http.Request) bool {
+	tokens := h.app.OracleRunnerTokens
+	if len(tokens) == 0 {
+		return true
+	}
+	header := strings.TrimSpace(r.Header.Get("X-Oracle-Runner-Token"))
+	if header == "" {
+		auth := strings.TrimSpace(r.Header.Get("Authorization"))
+		if strings.HasPrefix(strings.ToLower(auth), "bearer ") {
+			header = strings.TrimSpace(strings.TrimPrefix(auth, "Bearer"))
+		}
+	}
+	if header == "" {
+		return false
+	}
+	for _, token := range tokens {
+		if subtle.ConstantTimeCompare([]byte(header), []byte(token)) == 1 {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *handler) health(w http.ResponseWriter, r *http.Request) {

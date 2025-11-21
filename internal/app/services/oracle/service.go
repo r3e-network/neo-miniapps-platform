@@ -223,6 +223,17 @@ func (s *Service) MarkRunning(ctx context.Context, requestID string) (oracle.Req
 		return oracle.Request{}, fmt.Errorf("cannot mark request in status %s as running", req.Status)
 	}
 	req.Status = oracle.StatusRunning
+	req.Attempts++
+	return s.store.UpdateRequest(ctx, req)
+}
+
+// IncrementAttempts increments the attempt counter without changing status.
+func (s *Service) IncrementAttempts(ctx context.Context, requestID string) (oracle.Request, error) {
+	req, err := s.store.GetRequest(ctx, requestID)
+	if err != nil {
+		return oracle.Request{}, err
+	}
+	req.Attempts++
 	return s.store.UpdateRequest(ctx, req)
 }
 
@@ -256,10 +267,8 @@ func (s *Service) FailRequest(ctx context.Context, requestID string, errMsg stri
 		return oracle.Request{}, err
 	}
 	switch req.Status {
-	case oracle.StatusRunning:
+	case oracle.StatusRunning, oracle.StatusPending:
 		// allowed transition
-	case oracle.StatusPending:
-		return oracle.Request{}, fmt.Errorf("cannot fail request in status %s", req.Status)
 	case oracle.StatusSucceeded, oracle.StatusFailed:
 		return oracle.Request{}, fmt.Errorf("request already %s", req.Status)
 	default:
@@ -271,9 +280,26 @@ func (s *Service) FailRequest(ctx context.Context, requestID string, errMsg stri
 	return s.store.UpdateRequest(ctx, req)
 }
 
+// RetryRequest resets a failed request back to pending and clears error/result.
+func (s *Service) RetryRequest(ctx context.Context, requestID string) (oracle.Request, error) {
+	req, err := s.store.GetRequest(ctx, requestID)
+	if err != nil {
+		return oracle.Request{}, err
+	}
+	if req.Status != oracle.StatusFailed {
+		return oracle.Request{}, fmt.Errorf("cannot retry request in status %s", req.Status)
+	}
+	req.Status = oracle.StatusPending
+	req.Attempts = 0
+	req.Error = ""
+	req.Result = ""
+	req.CompletedAt = time.Time{}
+	return s.store.UpdateRequest(ctx, req)
+}
+
 // ListRequests returns requests for an account.
-func (s *Service) ListRequests(ctx context.Context, accountID string) ([]oracle.Request, error) {
-	return s.store.ListRequests(ctx, accountID)
+func (s *Service) ListRequests(ctx context.Context, accountID string, limit int, status string) ([]oracle.Request, error) {
+	return s.store.ListRequests(ctx, accountID, limit, status)
 }
 
 // ListPending returns requests that are awaiting fulfilment.

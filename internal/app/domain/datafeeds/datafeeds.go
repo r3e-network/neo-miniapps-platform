@@ -34,6 +34,7 @@ type Update struct {
 	FeedID    string            `json:"feed_id"`
 	RoundID   int64             `json:"round_id"`
 	Price     string            `json:"price"`
+	Signer    string            `json:"signer"`
 	Timestamp time.Time         `json:"timestamp"`
 	Signature string            `json:"signature"`
 	Status    UpdateStatus      `json:"status"`
