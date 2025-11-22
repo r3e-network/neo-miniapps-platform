@@ -42,6 +42,7 @@ func (c *countingAccumulator) Accumulate(_ context.Context, _ WorkReport, _ []Me
 
 func TestHTTPHandlerEndToEnd(t *testing.T) {
 	store := NewInMemoryStore()
+	store.SetAccumulatorsEnabled(true)
 	preimages := NewMemPreimageStore()
 	accum := &countingAccumulator{}
 	engine := Engine{
@@ -51,8 +52,8 @@ func TestHTTPHandlerEndToEnd(t *testing.T) {
 		Accumulator: accum,
 		Threshold:   1,
 	}
-	coord := Coordinator{Store: store, Engine: engine}
-	handler := NewHTTPHandler(store, preimages, coord, Config{Enabled: true, AuthRequired: false}, nil)
+	coord := Coordinator{Store: store, Engine: engine, AccumulatorsEnabled: true}
+	handler := NewHTTPHandler(store, preimages, coord, Config{Enabled: true, AuthRequired: false, AccumulatorsEnabled: true}, nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -79,20 +80,26 @@ func TestHTTPHandlerEndToEnd(t *testing.T) {
 		},
 	}
 	body, _ := json.Marshal(payload)
-	resp, err = http.Post(server.URL+"/jam/packages", "application/json", bytes.NewReader(body))
+	resp, err = http.Post(server.URL+"/jam/packages?include_receipt=true", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("post package err: %v", err)
 	}
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("package status %d", resp.StatusCode)
 	}
-	var pkgResp WorkPackage
+	var pkgResp struct {
+		Package WorkPackage `json:"package"`
+		Receipt Receipt     `json:"receipt"`
+	}
 	if err := json.NewDecoder(resp.Body).Decode(&pkgResp); err != nil {
 		t.Fatalf("decode package: %v", err)
 	}
 	resp.Body.Close()
-	if pkgResp.ID == "" || len(pkgResp.Items) != 1 {
+	if pkgResp.Package.ID == "" || len(pkgResp.Package.Items) != 1 {
 		t.Fatalf("bad package response: %+v", pkgResp)
+	}
+	if pkgResp.Receipt.Hash == "" {
+		t.Fatalf("expected receipt in create response")
 	}
 
 	// Process next package.
@@ -106,23 +113,29 @@ func TestHTTPHandlerEndToEnd(t *testing.T) {
 	resp.Body.Close()
 
 	// Fetch package and report.
-	resp, err = http.Get(server.URL + "/jam/packages/" + pkgResp.ID)
+	resp, err = http.Get(server.URL + "/jam/packages/" + pkgResp.Package.ID + "?include_receipt=true")
 	if err != nil {
 		t.Fatalf("get package: %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("get package status %d", resp.StatusCode)
 	}
-	var pkgFetched WorkPackage
+	var pkgFetched struct {
+		Package WorkPackage `json:"package"`
+		Receipt Receipt     `json:"receipt"`
+	}
 	if err := json.NewDecoder(resp.Body).Decode(&pkgFetched); err != nil {
 		t.Fatalf("decode pkg fetched: %v", err)
 	}
 	resp.Body.Close()
-	if pkgFetched.Status != PackageStatusApplied {
-		t.Fatalf("expected applied status, got %s", pkgFetched.Status)
+	if pkgFetched.Package.Status != PackageStatusApplied {
+		t.Fatalf("expected applied status, got %s", pkgFetched.Package.Status)
+	}
+	if pkgFetched.Receipt.Hash == "" {
+		t.Fatalf("expected receipt in get response")
 	}
 
-	resp, err = http.Get(server.URL + "/jam/packages/" + pkgResp.ID + "/report")
+	resp, err = http.Get(server.URL + "/jam/packages/" + pkgResp.Package.ID + "/report")
 	if err != nil {
 		t.Fatalf("get report: %v", err)
 	}
@@ -137,7 +150,7 @@ func TestHTTPHandlerEndToEnd(t *testing.T) {
 		t.Fatalf("decode report: %v", err)
 	}
 	resp.Body.Close()
-	if reportPayload.Report.PackageID != pkgResp.ID {
+	if reportPayload.Report.PackageID != pkgResp.Package.ID {
 		t.Fatalf("report package mismatch")
 	}
 	if len(reportPayload.Attestations) != 1 {

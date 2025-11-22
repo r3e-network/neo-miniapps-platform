@@ -2,6 +2,7 @@ package jam
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -81,6 +82,40 @@ func (h *httpHandler) statusHandler(w http.ResponseWriter, r *http.Request) {
 		resp["accumulator_root"] = root
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *httpHandler) appendReceiptIfNeeded(ctx context.Context, obj any) (Receipt, error) {
+	if !h.cfg.AccumulatorsEnabled {
+		return Receipt{}, nil
+	}
+	recorder, ok := h.store.(interface {
+		AppendReceipt(context.Context, ReceiptInput) (Receipt, error)
+	})
+	if !ok {
+		return Receipt{}, nil
+	}
+	switch v := obj.(type) {
+	case WorkPackage:
+		return recorder.AppendReceipt(ctx, ReceiptInput{
+			Hash:         v.ID,
+			ServiceID:    v.ServiceID,
+			EntryType:    ReceiptTypePackage,
+			Status:       string(v.Status),
+			ProcessedAt:  time.Now().UTC(),
+			MetadataHash: packageMetadataHash(v, accumulatorHash(h.store)),
+		})
+	case WorkReport:
+		return recorder.AppendReceipt(ctx, ReceiptInput{
+			Hash:         v.RefineOutputHash,
+			ServiceID:    v.ServiceID,
+			EntryType:    ReceiptTypeReport,
+			Status:       string(PackageStatusApplied),
+			ProcessedAt:  v.CreatedAt,
+			MetadataHash: reportMetadataHash(v, accumulatorHash(h.store)),
+		})
+	default:
+		return Receipt{}, nil
+	}
 }
 
 func (h *httpHandler) preimagesHandler(w http.ResponseWriter, r *http.Request) {
@@ -221,6 +256,14 @@ func (h *httpHandler) packagesHandler(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
+		if includeReceipt := strings.EqualFold(r.URL.Query().Get("include_receipt"), "true"); includeReceipt {
+			resp := map[string]any{"package": pkg}
+			if rcpt, err := h.appendReceiptIfNeeded(r.Context(), pkg); err == nil && rcpt.Hash != "" {
+				resp["receipt"] = rcpt
+			}
+			writeJSON(w, http.StatusCreated, resp)
+			return
+		}
 		writeJSON(w, http.StatusCreated, pkg)
 	case http.MethodGet:
 		if !h.checkRate(w, r) {
@@ -247,6 +290,22 @@ func (h *httpHandler) packagesHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		resp := map[string]any{
 			"items": pkgs,
+		}
+		if includeReceipt := strings.EqualFold(r.URL.Query().Get("include_receipt"), "true"); includeReceipt {
+			for i := range pkgs {
+				rcpt, err := h.appendReceiptIfNeeded(r.Context(), pkgs[i])
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err)
+					return
+				}
+				if rcpt.Hash != "" {
+					if resp["receipts"] == nil {
+						resp["receipts"] = []Receipt{rcpt}
+					} else {
+						resp["receipts"] = append(resp["receipts"].([]Receipt), rcpt)
+					}
+				}
+			}
 		}
 		if !h.cfg.LegacyListResponse {
 			resp["next_offset"] = filter.Offset + len(pkgs)
@@ -286,6 +345,14 @@ func (h *httpHandler) packageResource(w http.ResponseWriter, r *http.Request) {
 				status = http.StatusNotFound
 			}
 			writeError(w, status, err)
+			return
+		}
+		if includeReceipt := strings.EqualFold(r.URL.Query().Get("include_receipt"), "true"); includeReceipt {
+			resp := map[string]any{"package": pkg}
+			if rcpt, err := h.appendReceiptIfNeeded(r.Context(), pkg); err == nil && rcpt.Hash != "" {
+				resp["receipt"] = rcpt
+			}
+			writeJSON(w, http.StatusOK, resp)
 			return
 		}
 		writeJSON(w, http.StatusOK, pkg)
@@ -367,6 +434,22 @@ func (h *httpHandler) reportsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := map[string]any{
 		"items": reports,
+	}
+	if includeReceipt := strings.EqualFold(r.URL.Query().Get("include_receipt"), "true"); includeReceipt {
+		var rcpts []Receipt
+		for _, rpt := range reports {
+			rcpt, err := h.appendReceiptIfNeeded(r.Context(), rpt)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err)
+				return
+			}
+			if rcpt.Hash != "" {
+				rcpts = append(rcpts, rcpt)
+			}
+		}
+		if len(rcpts) > 0 {
+			resp["receipts"] = rcpts
+		}
 	}
 	if !h.cfg.LegacyListResponse {
 		resp["next_offset"] = filter.Offset + len(reports)
