@@ -247,3 +247,72 @@ func (s *PGStore) GetReportByPackage(ctx context.Context, pkgID string) (WorkRep
 	}
 	return report, attns, nil
 }
+
+// ListPackages returns recent packages up to the provided limit.
+func (s *PGStore) ListPackages(ctx context.Context, limit int) ([]WorkPackage, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.DB.QueryContext(ctx, `
+		SELECT id, service_id, created_by, nonce, expiry, signature, preimage_hashes, status, created_at
+		FROM jam_work_packages
+		ORDER BY created_at DESC
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var pkgs []WorkPackage
+	for rows.Next() {
+		var pkg WorkPackage
+		var preimages []string
+		if err := rows.Scan(&pkg.ID, &pkg.ServiceID, &pkg.CreatedBy, &pkg.Nonce, &pkg.Expiry, &pkg.Signature, pq.Array(&preimages), &pkg.Status, &pkg.CreatedAt); err != nil {
+			return nil, err
+		}
+		pkg.PreimageHashes = preimages
+		pkgs = append(pkgs, pkg)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Attach items per package.
+	if len(pkgs) == 0 {
+		return pkgs, nil
+	}
+	ids := make([]any, len(pkgs))
+	for i, pkg := range pkgs {
+		ids[i] = pkg.ID
+	}
+	query := `
+		SELECT package_id, id, kind, params_hash, preimage_hashes, max_fee, memo
+		FROM jam_work_items
+		WHERE package_id = ANY($1)
+	`
+	itemRows, err := s.DB.QueryContext(ctx, query, pq.Array(ids))
+	if err != nil {
+		return nil, err
+	}
+	defer itemRows.Close()
+	itemsByPkg := make(map[string][]WorkItem)
+	for itemRows.Next() {
+		var pkgID string
+		var it WorkItem
+		var ph []string
+		if err := itemRows.Scan(&pkgID, &it.ID, &it.Kind, &it.ParamsHash, pq.Array(&ph), &it.MaxFee, &it.Memo); err != nil {
+			return nil, err
+		}
+		it.PackageID = pkgID
+		it.PreimageHashes = ph
+		itemsByPkg[pkgID] = append(itemsByPkg[pkgID], it)
+	}
+	if err := itemRows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range pkgs {
+		pkgs[i].Items = itemsByPkg[pkgs[i].ID]
+	}
+	return pkgs, nil
+}

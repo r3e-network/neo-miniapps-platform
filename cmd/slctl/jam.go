@@ -21,6 +21,8 @@ func handleJAM(ctx context.Context, client *apiClient, args []string) error {
 		return handleJAMPreimage(ctx, client, args[1:])
 	case "package":
 		return handleJAMPackage(ctx, client, args[1:])
+	case "packages":
+		return handleJAMPackagesList(ctx, client)
 	case "process":
 		return handleJAMProcess(ctx, client)
 	case "report":
@@ -85,6 +87,15 @@ func handleJAMPackage(ctx context.Context, client *apiClient, args []string) err
 		pkg["preimage_hashes"] = hashes
 	}
 	data, err := client.request(ctx, "POST", "/jam/packages", pkg)
+	if err != nil {
+		return err
+	}
+	prettyPrint(data)
+	return nil
+}
+
+func handleJAMPackagesList(ctx context.Context, client *apiClient) error {
+	data, err := client.request(ctx, "GET", "/jam/packages", nil)
 	if err != nil {
 		return err
 	}

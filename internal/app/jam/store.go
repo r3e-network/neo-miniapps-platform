@@ -8,6 +8,7 @@ import (
 // PackageStore defines persistence for work packages and reports.
 type PackageStore interface {
 	EnqueuePackage(ctx context.Context, pkg WorkPackage) error
+	ListPackages(ctx context.Context, limit int) ([]WorkPackage, error)
 	NextPending(ctx context.Context) (WorkPackage, bool, error)
 	SaveReport(ctx context.Context, report WorkReport, attns []Attestation) error
 	UpdatePackageStatus(ctx context.Context, pkgID string, status PackageStatus) error
@@ -88,6 +89,23 @@ func (s *InMemoryStore) GetPackage(_ context.Context, pkgID string) (WorkPackage
 		return WorkPackage{}, ErrNotFound
 	}
 	return pkg, nil
+}
+
+// ListPackages returns up to limit packages (unsorted).
+func (s *InMemoryStore) ListPackages(_ context.Context, limit int) ([]WorkPackage, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if limit <= 0 || limit > len(s.pkgs) {
+		limit = len(s.pkgs)
+	}
+	out := make([]WorkPackage, 0, limit)
+	for _, pkg := range s.pkgs {
+		out = append(out, pkg)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
 }
 
 // GetReportByPackage returns a report and attestations for a package id.
