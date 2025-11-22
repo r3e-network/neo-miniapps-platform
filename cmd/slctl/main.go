@@ -345,6 +345,7 @@ func handleStatus(ctx context.Context, client *apiClient) error {
 		preimageMax, _ := toInt64(payload.JAM["max_preimage_bytes"])
 		pendingMax, _ := toInt(payload.JAM["max_pending_packages"])
 		authReq, _ := payload.JAM["auth_required"].(bool)
+		legacyList, _ := payload.JAM["legacy_list_response"].(bool)
 		fmt.Printf("JAM: enabled=%t", enabled)
 		if store != "" {
 			fmt.Printf(" store=%s", store)
@@ -360,6 +361,9 @@ func handleStatus(ctx context.Context, client *apiClient) error {
 		}
 		if authReq {
 			fmt.Printf(" auth_required=%t", authReq)
+		}
+		if legacyList {
+			fmt.Printf(" legacy_list_response=%t", legacyList)
 		}
 		fmt.Println()
 	}

@@ -234,6 +234,7 @@ func (h *handler) systemStatus(w http.ResponseWriter, r *http.Request) {
 			"max_preimage_bytes":   h.jamCfg.MaxPreimageBytes,
 			"max_pending_packages": h.jamCfg.MaxPendingPackages,
 			"auth_required":        h.jamCfg.AuthRequired,
+			"legacy_list_response": h.jamCfg.LegacyListResponse,
 		},
 	})
 }
