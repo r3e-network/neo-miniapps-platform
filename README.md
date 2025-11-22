@@ -90,6 +90,7 @@ ensure gas accounts and submit oracle requests.
 - `slctl dta products|orders --account <id>` — inspect DTA product catalogues and order history.
 - `slctl datastreams streams|frames --account <id>` — inspect high-frequency streams and recent frames.
 - `slctl confcompute enclaves --account <id>` — inspect confidential-compute enclave inventory.
+- `slctl jam status|packages|reports|receipt|receipts` — inspect JAM status, packages/reports, and accumulator receipts/roots.
 - `slctl workspace-wallets list --account <id>` — inspect registered signing wallets.
 - `slctl services list` — dump `/system/descriptors` for feature discovery.
 - `slctl status` — fetch `/system/status` to inspect server health, version, and services.
