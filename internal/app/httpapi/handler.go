@@ -12,6 +12,7 @@ import (
 
 	app "github.com/R3E-Network/service_layer/internal/app"
 	"github.com/R3E-Network/service_layer/internal/app/domain/oracle"
+	"github.com/R3E-Network/service_layer/internal/app/jam"
 	"github.com/R3E-Network/service_layer/internal/app/metrics"
 	"github.com/R3E-Network/service_layer/internal/version"
 )
@@ -33,6 +34,20 @@ func NewHandler(application *app.Application) http.Handler {
 	mux.HandleFunc("/system/status", h.systemStatus)
 	mux.HandleFunc("/accounts", h.accounts)
 	mux.HandleFunc("/accounts/", h.accountResources)
+
+	// Experimental JAM endpoints (prototype, in-memory backing).
+	jamStore := jam.NewInMemoryStore()
+	jamPreimages := jam.NewMemPreimageStore()
+	jamEngine := jam.Engine{
+		Preimages:   jamPreimages,
+		Refiner:     jam.HashRefiner{},
+		Attestors:   []jam.Attestor{jam.StaticAttestor{WorkerID: "local", Weight: 1}},
+		Accumulator: jam.NoopAccumulator{},
+		Threshold:   1,
+	}
+	jamCoordinator := jam.Coordinator{Store: jamStore, Engine: jamEngine}
+	jamHandler := jam.NewHTTPHandler(jamStore, jamPreimages, jamCoordinator)
+	mux.Handle("/jam/", jamHandler)
 	return mux
 }
 
