@@ -258,16 +258,17 @@ func handleJAMStatus(ctx context.Context, client *apiClient, args []string) erro
 		return err
 	}
 	var payload struct {
-		Enabled             bool           `json:"enabled"`
-		Store               string         `json:"store"`
-		RateLimitPerMinute  int            `json:"rate_limit_per_min"`
-		MaxPreimageBytes    int64          `json:"max_preimage_bytes"`
-		MaxPendingPackages  int            `json:"max_pending_packages"`
-		AuthRequired        bool           `json:"auth_required"`
-		LegacyListResponse  bool           `json:"legacy_list_response"`
-		AccumulatorsEnabled bool           `json:"accumulators_enabled"`
-		AccumulatorHash     string         `json:"accumulator_hash"`
-		AccumulatorRoot     map[string]any `json:"accumulator_root"`
+		Enabled             bool             `json:"enabled"`
+		Store               string           `json:"store"`
+		RateLimitPerMinute  int              `json:"rate_limit_per_min"`
+		MaxPreimageBytes    int64            `json:"max_preimage_bytes"`
+		MaxPendingPackages  int              `json:"max_pending_packages"`
+		AuthRequired        bool             `json:"auth_required"`
+		LegacyListResponse  bool             `json:"legacy_list_response"`
+		AccumulatorsEnabled bool             `json:"accumulators_enabled"`
+		AccumulatorHash     string           `json:"accumulator_hash"`
+		AccumulatorRoot     map[string]any   `json:"accumulator_root"`
+		AccumulatorRoots    []map[string]any `json:"accumulator_roots"`
 	}
 	if err := json.Unmarshal(data, &payload); err != nil {
 		return fmt.Errorf("decode status: %w", err)
@@ -286,6 +287,15 @@ func handleJAMStatus(ctx context.Context, client *apiClient, args []string) erro
 	if len(payload.AccumulatorRoot) > 0 {
 		pretty, _ := json.MarshalIndent(payload.AccumulatorRoot, "", "  ")
 		fmt.Printf("Accumulator root:\n%s\n", string(pretty))
+	}
+	if len(payload.AccumulatorRoots) > 0 {
+		fmt.Println("Accumulator roots:")
+		for _, root := range payload.AccumulatorRoots {
+			svc, _ := root["service_id"].(string)
+			seq, _ := toInt64(root["seq"])
+			r, _ := root["root"].(string)
+			fmt.Printf("  - %s seq=%d root=%s\n", svc, seq, r)
+		}
 	}
 	return nil
 }
@@ -328,6 +338,22 @@ func handleJAMReceipts(ctx context.Context, client *apiClient, args []string) er
 	data, err := client.request(ctx, http.MethodGet, query, nil)
 	if err != nil {
 		return err
+	}
+	var envelope struct {
+		Items      []map[string]any `json:"items"`
+		NextOffset int              `json:"next_offset"`
+	}
+	if err := json.Unmarshal(data, &envelope); err == nil && len(envelope.Items) > 0 {
+		for _, item := range envelope.Items {
+			hash, _ := item["hash"].(string)
+			svc, _ := item["service_id"].(string)
+			et, _ := item["entry_type"].(string)
+			seq, _ := toInt64(item["seq"])
+			root, _ := item["new_root"].(string)
+			fmt.Printf("- hash=%s service=%s entry_type=%s seq=%d new_root=%s\n", hash, svc, et, seq, root)
+		}
+		fmt.Printf("next_offset=%d\n", envelope.NextOffset)
+		return nil
 	}
 	prettyPrint(data)
 	return nil
