@@ -178,7 +178,11 @@ func NewApplication(options ...Option) (*Application, error) {
 	}
 	jamCfg.Normalize()
 	if jamCfg.Enabled {
-		log.Infof("JAM API enabled (store=%s)", jamCfg.Store)
+		msg := fmt.Sprintf("JAM API enabled (store=%s, base=/jam)", jamCfg.Store)
+		if jamCfg.Store == "memory" {
+			msg += " — data is ephemeral"
+		}
+		log.Info(msg)
 	}
 
 	httpSvc := httpapi.NewService(application, listenAddr, tokens, jamCfg, log)
