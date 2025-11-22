@@ -27,6 +27,7 @@ Accumulator roots track the head of each service’s chain and can be listed via
 - `slctl jam receipt --hash <hash>`: fetch a receipt.
 - `slctl jam receipts --service <id> --limit 50 --offset 0`: list receipts with pagination.
 - `slctl jam packages --include-receipt`, `slctl jam reports --include-receipt`: include receipts in responses.
+- `--table` flag: `slctl jam packages|reports|receipts` renders concise rows instead of raw JSON envelopes.
 
 ## Notes
 - Accumulators are gated by config (`JAM_ACCUMULATORS_ENABLED`, `JAM_ACCUMULATOR_HASH`).
