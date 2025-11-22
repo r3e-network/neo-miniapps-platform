@@ -25,6 +25,8 @@ func handleJAM(ctx context.Context, client *apiClient, args []string) error {
 		return handleJAMProcess(ctx, client)
 	case "report":
 		return handleJAMReport(ctx, client, args[1:])
+	case "status":
+		return handleJAMStatus(ctx, client)
 	default:
 		return usageError(fmt.Errorf("unknown jam command %q", args[0]))
 	}
@@ -123,5 +125,26 @@ func handleJAMReport(ctx context.Context, client *apiClient, args []string) erro
 	}
 	pretty, _ := json.MarshalIndent(out, "", "  ")
 	fmt.Println(string(pretty))
+	return nil
+}
+
+func handleJAMStatus(ctx context.Context, client *apiClient) error {
+	data, err := client.request(ctx, "GET", "/system/status", nil)
+	if err != nil {
+		return err
+	}
+	var payload struct {
+		JAM map[string]any `json:"jam"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return fmt.Errorf("decode status: %w", err)
+	}
+	enabled, _ := payload.JAM["enabled"].(bool)
+	store, _ := payload.JAM["store"].(string)
+	fmt.Printf("JAM enabled=%t", enabled)
+	if store != "" {
+		fmt.Printf(" store=%s", store)
+	}
+	fmt.Println()
 	return nil
 }
