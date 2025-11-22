@@ -8,6 +8,9 @@ have been consolidated into that specification.
 - [Neo Service Layer Specification](requirements.md)
 - [Service Layer Review Checklist](review-checklist.md)
 - [CLI Quick Reference](../README.md#cli-quick-reference)
+- JAM integration notes:
+  - [Polkadot JAM-inspired integration](polkadot-jam-integration-design.md)
+  - [JAM hardening and auth/quotas](jam-hardening.md), [jam-auth-and-quotas.md](jam-auth-and-quotas.md), [jam-hardening-implementation.md](jam-hardening-implementation.md)
 
 All other documents have been retired to avoid drift. Update the specification
 directly when behaviour changes so the documentation remains clean, clear, and
