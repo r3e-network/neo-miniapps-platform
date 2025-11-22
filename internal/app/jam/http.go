@@ -82,6 +82,19 @@ func (h *httpHandler) statusHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		resp["accumulator_root"] = root
+	} else if h.cfg.AccumulatorsEnabled {
+		if lister, ok := h.store.(interface {
+			AccumulatorRoots(context.Context) ([]AccumulatorRoot, error)
+		}); ok {
+			roots, err := lister.AccumulatorRoots(r.Context())
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err)
+				return
+			}
+			if len(roots) > 0 {
+				resp["accumulator_roots"] = roots
+			}
+		}
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

@@ -15,6 +15,7 @@ type PackageStore interface {
 	ListPackages(ctx context.Context, filter PackageFilter) ([]WorkPackage, error)
 	ListReports(ctx context.Context, filter ReportFilter) ([]WorkReport, error)
 	ListReceipts(ctx context.Context, filter ReceiptFilter) ([]Receipt, error)
+	AccumulatorRoots(ctx context.Context) ([]AccumulatorRoot, error)
 	NextPending(ctx context.Context) (WorkPackage, bool, error)
 	SaveReport(ctx context.Context, report WorkReport, attns []Attestation) error
 	UpdatePackageStatus(ctx context.Context, pkgID string, status PackageStatus) error
@@ -289,6 +290,21 @@ func (s *InMemoryStore) AccumulatorRoot(_ context.Context, serviceID string) (Ac
 		return AccumulatorRoot{ServiceID: serviceID}, nil
 	}
 	return root, nil
+}
+
+// AccumulatorRoots returns all roots.
+func (s *InMemoryStore) AccumulatorRoots(_ context.Context) ([]AccumulatorRoot, error) {
+	if !s.accumEnable {
+		return nil, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var roots []AccumulatorRoot
+	for _, root := range s.roots {
+		roots = append(roots, root)
+	}
+	sort.Slice(roots, func(i, j int) bool { return roots[i].ServiceID < roots[j].ServiceID })
+	return roots, nil
 }
 
 // Receipt returns a stored receipt by hash.

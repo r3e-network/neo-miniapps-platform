@@ -483,6 +483,34 @@ func (s *PGStore) AccumulatorRoot(ctx context.Context, serviceID string) (Accumu
 	return root, nil
 }
 
+// AccumulatorRoots returns all roots.
+func (s *PGStore) AccumulatorRoots(ctx context.Context) ([]AccumulatorRoot, error) {
+	if !s.accumEnabled {
+		return nil, nil
+	}
+	rows, err := s.DB.QueryContext(ctx, `
+		SELECT service_id, seq, root, updated_at
+		FROM jam_accumulators
+		ORDER BY service_id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var roots []AccumulatorRoot
+	for rows.Next() {
+		var r AccumulatorRoot
+		if err := rows.Scan(&r.ServiceID, &r.Seq, &r.Root, &r.UpdatedAt); err != nil {
+			return nil, err
+		}
+		roots = append(roots, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return roots, nil
+}
+
 // SetAccumulatorHash sets the hash algorithm used for roots.
 func (s *PGStore) SetAccumulatorHash(algo string) {
 	algo = strings.TrimSpace(strings.ToLower(algo))
