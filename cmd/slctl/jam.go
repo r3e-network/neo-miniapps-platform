@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 )
@@ -39,11 +40,24 @@ func handleJAMPreimage(ctx context.Context, client *apiClient, args []string) er
 	hash := fs.String("hash", "", "sha256 hash of the preimage (computed if empty)")
 	file := fs.String("file", "", "path to file to upload")
 	contentType := fs.String("content-type", "application/octet-stream", "content type to send")
+	stat := fs.Bool("stat", false, "return metadata (HEAD) instead of uploading content")
 	if err := fs.Parse(args); err != nil {
 		return usageError(err)
 	}
+	if *stat {
+		if *hash == "" {
+			return usageError(errors.New("hash is required for stat"))
+		}
+		_, headers, err := client.requestWithHeaders(ctx, http.MethodHead, "/jam/preimages/"+*hash, nil)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("hash=%s size=%s media_type=%s\n", headers.Get("X-Preimage-Hash"), headers.Get("X-Preimage-Size"), headers.Get("X-Preimage-Media-Type"))
+		return nil
+	}
+
 	if *file == "" {
-		return usageError(errors.New("file is required"))
+		return usageError(errors.New("file is required for upload"))
 	}
 	data, err := os.ReadFile(*file)
 	if err != nil {
