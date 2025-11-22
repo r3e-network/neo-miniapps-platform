@@ -343,3 +343,47 @@ func (s *PGStore) ListPackages(ctx context.Context, filter PackageFilter) ([]Wor
 	}
 	return pkgs, nil
 }
+
+// ListReports returns reports filtered by service with pagination.
+func (s *PGStore) ListReports(ctx context.Context, filter ReportFilter) ([]WorkReport, error) {
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	var args []any
+	clauses := []string{"1=1"}
+	if filter.ServiceID != "" {
+		args = append(args, filter.ServiceID)
+		clauses = append(clauses, fmt.Sprintf("service_id = $%d", len(args)))
+	}
+	args = append(args, limit)
+	args = append(args, filter.Offset)
+	limitIdx := len(args) - 1
+	offsetIdx := len(args)
+	query := fmt.Sprintf(`
+		SELECT id, package_id, service_id, refine_output_hash, refine_output_compact, traces, created_at
+		FROM jam_work_reports
+		WHERE %s
+		ORDER BY created_at DESC
+		LIMIT $%d OFFSET $%d
+	`, strings.Join(clauses, " AND "), limitIdx, offsetIdx)
+
+	rows, err := s.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var reports []WorkReport
+	for rows.Next() {
+		var r WorkReport
+		if err := rows.Scan(&r.ID, &r.PackageID, &r.ServiceID, &r.RefineOutputHash, &r.RefineOutputCompact, &r.Traces, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		reports = append(reports, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return reports, nil
+}

@@ -10,6 +10,7 @@ type PackageStore interface {
 	EnqueuePackage(ctx context.Context, pkg WorkPackage) error
 	PendingCount(ctx context.Context) (int, error)
 	ListPackages(ctx context.Context, filter PackageFilter) ([]WorkPackage, error)
+	ListReports(ctx context.Context, filter ReportFilter) ([]WorkReport, error)
 	NextPending(ctx context.Context) (WorkPackage, bool, error)
 	SaveReport(ctx context.Context, report WorkReport, attns []Attestation) error
 	UpdatePackageStatus(ctx context.Context, pkgID string, status PackageStatus) error
@@ -20,6 +21,13 @@ type PackageStore interface {
 // PackageFilter controls list queries.
 type PackageFilter struct {
 	Status    PackageStatus
+	ServiceID string
+	Limit     int
+	Offset    int
+}
+
+// ReportFilter controls report queries.
+type ReportFilter struct {
 	ServiceID string
 	Limit     int
 	Offset    int
@@ -179,4 +187,30 @@ func (s *InMemoryStore) PendingCount(_ context.Context) (int, error) {
 		}
 	}
 	return count, nil
+}
+
+// ListReports returns reports filtered by service if set.
+func (s *InMemoryStore) ListReports(_ context.Context, filter ReportFilter) ([]WorkReport, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	limit := filter.Limit
+	if limit <= 0 || limit > len(s.reports) {
+		limit = len(s.reports)
+	}
+	offset := filter.Offset
+	out := make([]WorkReport, 0, limit)
+	for _, r := range s.reports {
+		if filter.ServiceID != "" && r.ServiceID != filter.ServiceID {
+			continue
+		}
+		if offset > 0 {
+			offset--
+			continue
+		}
+		out = append(out, r)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
 }

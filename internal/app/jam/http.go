@@ -33,6 +33,7 @@ func NewHTTPHandler(store PackageStore, preimages PreimageStore, coord Coordinat
 	mux.HandleFunc("/jam/preimages/", h.preimagesHandler)
 	mux.HandleFunc("/jam/packages", h.packagesHandler)
 	mux.HandleFunc("/jam/packages/", h.packageResource)
+	mux.HandleFunc("/jam/reports", h.reportsHandler)
 	mux.HandleFunc("/jam/process", h.processHandler)
 	return mux
 }
@@ -298,6 +299,46 @@ func (h *httpHandler) processHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"processed": true})
+}
+
+func (h *httpHandler) reportsHandler(w http.ResponseWriter, r *http.Request) {
+	if !h.authorize(w, r) {
+		return
+	}
+	if !h.checkRate(w, r) {
+		return
+	}
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	filter := ReportFilter{
+		ServiceID: r.URL.Query().Get("service_id"),
+	}
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			filter.Limit = parsed
+		}
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
+			filter.Offset = parsed
+		}
+	}
+	reports, err := h.store.ListReports(r.Context(), filter)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	resp := map[string]any{
+		"items": reports,
+	}
+	if !h.cfg.LegacyListResponse {
+		resp["next_offset"] = filter.Offset + len(reports)
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+	writeJSON(w, http.StatusOK, reports)
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
