@@ -33,6 +33,8 @@ func handleJAM(ctx context.Context, client *apiClient, args []string) error {
 		return handleJAMStatus(ctx, client, args[1:])
 	case "reports":
 		return handleJAMReports(ctx, client, args[1:])
+	case "receipt":
+		return handleJAMReceipt(ctx, client, args[1:])
 	default:
 		return usageError(fmt.Errorf("unknown jam command %q", args[0]))
 	}
@@ -283,5 +285,28 @@ func handleJAMStatus(ctx context.Context, client *apiClient, args []string) erro
 		pretty, _ := json.MarshalIndent(payload.AccumulatorRoot, "", "  ")
 		fmt.Printf("Accumulator root:\n%s\n", string(pretty))
 	}
+	return nil
+}
+
+func handleJAMReceipt(ctx context.Context, client *apiClient, args []string) error {
+	fs := flag.NewFlagSet("jam receipt", flag.ContinueOnError)
+	hash := fs.String("hash", "", "receipt hash to fetch")
+	if err := fs.Parse(args); err != nil {
+		return usageError(err)
+	}
+	if *hash == "" {
+		if len(args) > 0 {
+			*hash = args[0]
+		}
+		if *hash == "" {
+			return usageError(errors.New("hash is required"))
+		}
+	}
+	path := "/jam/receipts/" + url.PathEscape(strings.TrimSpace(*hash))
+	data, err := client.request(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return err
+	}
+	prettyPrint(data)
 	return nil
 }
