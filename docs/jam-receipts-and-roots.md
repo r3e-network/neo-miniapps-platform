@@ -20,6 +20,7 @@ Accumulator roots track the head of each service’s chain and can be listed via
 - `GET /jam/receipts/{hash}`: fetch a specific receipt (auth + rate limit).
 - `GET /jam/receipts?service_id=&limit=&offset=`: list receipts, optionally filtered by service; returns `items` and `next_offset`.
 - Package/report endpoints: `include_receipt=true` returns receipts without mutating the accumulator.
+- Pagination: `limit` defaults to 50; `next_offset` is `offset + len(items)` for simple cursor-less paging.
 
 ## CLI (`slctl`)
 - `slctl jam status --service <id>`: shows accumulator hash and root.
