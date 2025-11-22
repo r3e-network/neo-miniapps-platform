@@ -139,6 +139,7 @@ func handleJAMPackagesList(ctx context.Context, client *apiClient, args []string
 	limit := fs.Int("limit", 50, "max packages to return")
 	offset := fs.Int("offset", 0, "offset for pagination")
 	includeReceipt := fs.Bool("include-receipt", false, "include receipts in response")
+	tabular := fs.Bool("table", false, "print packages in a table")
 	if err := fs.Parse(args); err != nil {
 		return usageError(err)
 	}
@@ -156,14 +157,24 @@ func handleJAMPackagesList(ctx context.Context, client *apiClient, args []string
 	if err != nil {
 		return err
 	}
-	var envelope struct {
-		Items      []any `json:"items"`
-		NextOffset any   `json:"next_offset"`
-	}
-	if err := json.Unmarshal(data, &envelope); err == nil && len(envelope.Items) > 0 {
-		pretty, _ := json.MarshalIndent(envelope, "", "  ")
-		fmt.Println(string(pretty))
-		return nil
+	if *tabular {
+		var envelope struct {
+			Items []struct {
+				ID        string `json:"id"`
+				ServiceID string `json:"service_id"`
+				Status    string `json:"status"`
+				CreatedAt string `json:"created_at"`
+			} `json:"items"`
+			NextOffset int `json:"next_offset"`
+		}
+		if err := json.Unmarshal(data, &envelope); err == nil && len(envelope.Items) > 0 {
+			fmt.Println("Packages:")
+			for _, item := range envelope.Items {
+				fmt.Printf("- id=%s service=%s status=%s created_at=%s\n", item.ID, item.ServiceID, item.Status, item.CreatedAt)
+			}
+			fmt.Printf("next_offset=%d\n", envelope.NextOffset)
+			return nil
+		}
 	}
 	prettyPrint(data)
 	return nil
@@ -175,6 +186,7 @@ func handleJAMReports(ctx context.Context, client *apiClient, args []string) err
 	limit := fs.Int("limit", 50, "max reports to return")
 	offset := fs.Int("offset", 0, "offset for pagination")
 	includeReceipt := fs.Bool("include-receipt", false, "include receipts in response")
+	tabular := fs.Bool("table", false, "print reports in a table")
 	if err := fs.Parse(args); err != nil {
 		return usageError(err)
 	}
@@ -189,14 +201,24 @@ func handleJAMReports(ctx context.Context, client *apiClient, args []string) err
 	if err != nil {
 		return err
 	}
-	var envelope struct {
-		Items      []any `json:"items"`
-		NextOffset any   `json:"next_offset"`
-	}
-	if err := json.Unmarshal(data, &envelope); err == nil && len(envelope.Items) > 0 {
-		pretty, _ := json.MarshalIndent(envelope, "", "  ")
-		fmt.Println(string(pretty))
-		return nil
+	if *tabular {
+		var envelope struct {
+			Items []struct {
+				ID        string `json:"id"`
+				ServiceID string `json:"service_id"`
+				PackageID string `json:"package_id"`
+				CreatedAt string `json:"created_at"`
+			} `json:"items"`
+			NextOffset int `json:"next_offset"`
+		}
+		if err := json.Unmarshal(data, &envelope); err == nil && len(envelope.Items) > 0 {
+			fmt.Println("Reports:")
+			for _, item := range envelope.Items {
+				fmt.Printf("- id=%s service=%s package=%s created_at=%s\n", item.ID, item.ServiceID, item.PackageID, item.CreatedAt)
+			}
+			fmt.Printf("next_offset=%d\n", envelope.NextOffset)
+			return nil
+		}
 	}
 	prettyPrint(data)
 	return nil
@@ -328,6 +350,7 @@ func handleJAMReceipts(ctx context.Context, client *apiClient, args []string) er
 	service := fs.String("service", "", "filter by service id")
 	limit := fs.Int("limit", 50, "limit results")
 	offset := fs.Int("offset", 0, "offset for pagination")
+	tabular := fs.Bool("table", true, "print receipts in a table")
 	if err := fs.Parse(args); err != nil {
 		return usageError(err)
 	}
@@ -344,16 +367,18 @@ func handleJAMReceipts(ctx context.Context, client *apiClient, args []string) er
 		NextOffset int              `json:"next_offset"`
 	}
 	if err := json.Unmarshal(data, &envelope); err == nil && len(envelope.Items) > 0 {
-		for _, item := range envelope.Items {
-			hash, _ := item["hash"].(string)
-			svc, _ := item["service_id"].(string)
-			et, _ := item["entry_type"].(string)
-			seq, _ := toInt64(item["seq"])
-			root, _ := item["new_root"].(string)
-			fmt.Printf("- hash=%s service=%s entry_type=%s seq=%d new_root=%s\n", hash, svc, et, seq, root)
+		if *tabular {
+			for _, item := range envelope.Items {
+				hash, _ := item["hash"].(string)
+				svc, _ := item["service_id"].(string)
+				et, _ := item["entry_type"].(string)
+				seq, _ := toInt64(item["seq"])
+				root, _ := item["new_root"].(string)
+				fmt.Printf("- hash=%s service=%s entry_type=%s seq=%d new_root=%s\n", hash, svc, et, seq, root)
+			}
+			fmt.Printf("next_offset=%d\n", envelope.NextOffset)
+			return nil
 		}
-		fmt.Printf("next_offset=%d\n", envelope.NextOffset)
-		return nil
 	}
 	prettyPrint(data)
 	return nil
