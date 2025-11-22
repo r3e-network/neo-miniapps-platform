@@ -82,7 +82,7 @@ Hashing: default SHA-256 over canonical JSON or protobuf; keep CBOR option open 
       store: postgres   # or memory
       pg_dsn: postgres://user:pass@localhost:5432/service_layer?sslmode=disable
   ```
-- CLI (prototype, requires JAM_ENABLED=1): `slctl jam preimage --file <path> [--hash <sha256>]`, `slctl jam package --service <id> --kind <k> --params-hash <h>`, `slctl jam process`, `slctl jam report --package <id>`.
+- CLI (prototype, requires JAM_ENABLED=1): `slctl jam preimage --file <path> [--hash <sha256>]`, `slctl jam package --service <id> --kind <k> --params-hash <h>`, `slctl jam packages` (list), `slctl jam process`, `slctl jam report --package <id>`.
 
 ### Compute Sandbox
 - Keep Wasm executor for compatibility; prototype a RISC-V sandbox (e.g., rvemu or wasmtime-riscv) for better continuation support and metering.
