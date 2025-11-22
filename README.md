@@ -1,6 +1,6 @@
 # Neo N3 Service Layer
 
-![Service Layer logo](https://raw.githubusercontent.com/R3E-Network/service_layer/master/docs/assets/service-layer-logo.svg?sanitize=true)
+![Service Layer logo](docs/assets/service-layer-logo.svg)
 
 [![Build Status](https://github.com/R3E-Network/service_layer/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/R3E-Network/service_layer/actions/workflows/ci-cd.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/R3E-Network/service_layer)](https://goreportcard.com/report/github.com/R3E-Network/service_layer)
