@@ -33,6 +33,7 @@ func NewHTTPHandler(store PackageStore, preimages PreimageStore, coord Coordinat
 	mux := http.NewServeMux()
 	mux.HandleFunc("/jam/status", h.statusHandler)
 	mux.HandleFunc("/jam/receipts/", h.receiptsHandler)
+	mux.HandleFunc("/jam/receipts", h.receiptsHandler)
 	mux.HandleFunc("/jam/preimages/", h.preimagesHandler)
 	mux.HandleFunc("/jam/packages", h.packagesHandler)
 	mux.HandleFunc("/jam/packages/", h.packageResource)
@@ -96,6 +97,41 @@ func (h *httpHandler) receiptsHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	trimmed := strings.TrimPrefix(r.URL.Path, "/jam/receipts")
+	trimmed = strings.Trim(trimmed, "/")
+	if trimmed == "" {
+		lister, ok := h.store.(interface {
+			ListReceipts(context.Context, ReceiptFilter) ([]Receipt, error)
+		})
+		if !ok || !h.cfg.AccumulatorsEnabled {
+			writeError(w, http.StatusNotFound, errors.New("receipts not available"))
+			return
+		}
+		filter := ReceiptFilter{
+			ServiceID: r.URL.Query().Get("service_id"),
+		}
+		if l := r.URL.Query().Get("limit"); l != "" {
+			if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+				filter.Limit = parsed
+			}
+		}
+		if o := r.URL.Query().Get("offset"); o != "" {
+			if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
+				filter.Offset = parsed
+			}
+		}
+		rcpts, err := lister.ListReceipts(r.Context(), filter)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		resp := map[string]any{
+			"items": rcpts,
+		}
+		resp["next_offset"] = filter.Offset + len(rcpts)
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
 	recorder, ok := h.store.(interface {
 		Receipt(context.Context, string) (Receipt, error)
 	})
@@ -103,8 +139,7 @@ func (h *httpHandler) receiptsHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, errors.New("receipts not available"))
 		return
 	}
-	hash := strings.TrimPrefix(r.URL.Path, "/jam/receipts/")
-	hash = strings.TrimSpace(hash)
+	hash := strings.TrimSpace(trimmed)
 	if hash == "" {
 		writeError(w, http.StatusBadRequest, errors.New("missing receipt hash"))
 		return

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -374,5 +375,45 @@ func TestJAMReceiptFetch(t *testing.T) {
 	}
 	if payload.Hash != rcpt.Hash || payload.ServiceID != rcpt.ServiceID {
 		t.Fatalf("receipt mismatch: %+v", payload)
+	}
+}
+
+func TestJAMReceiptList(t *testing.T) {
+	store := NewInMemoryStore()
+	store.SetAccumulatorsEnabled(true)
+	store.SetAccumulatorHash("blake3-256")
+	for i := 0; i < 3; i++ {
+		_, err := store.AppendReceipt(context.Background(), ReceiptInput{
+			Hash:        fmt.Sprintf("hash-%d", i),
+			ServiceID:   "svc-list",
+			EntryType:   ReceiptTypeReport,
+			Status:      string(PackageStatusApplied),
+			ProcessedAt: time.Now().UTC(),
+			Extra:       map[string]any{"i": i},
+		})
+		if err != nil {
+			t.Fatalf("append receipt %d: %v", i, err)
+		}
+	}
+	preimages := NewMemPreimageStore()
+	handler := NewHTTPHandler(store, preimages, Coordinator{
+		Store:               store,
+		Engine:              Engine{Preimages: preimages, Refiner: autoRefiner{}, Attestors: []Attestor{autoAttestor{}}, Accumulator: &countingAccumulator{}, Threshold: 1},
+		AccumulatorsEnabled: true,
+	}, Config{Enabled: true, AccumulatorsEnabled: true, AccumulatorHash: "blake3-256"}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/jam/receipts?service_id=svc-list&limit=2", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	items, ok := payload["items"].([]any)
+	if !ok || len(items) != 2 {
+		t.Fatalf("expected 2 items, got %v", payload)
 	}
 }

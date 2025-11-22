@@ -524,3 +524,50 @@ func (s *PGStore) Receipt(ctx context.Context, hash string) (Receipt, error) {
 	}
 	return rcpt, nil
 }
+
+// ListReceipts returns receipts filtered by service with pagination.
+func (s *PGStore) ListReceipts(ctx context.Context, filter ReceiptFilter) ([]Receipt, error) {
+	if !s.accumEnabled {
+		return nil, nil
+	}
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	var args []any
+	clauses := []string{"1=1"}
+	if filter.ServiceID != "" {
+		args = append(args, filter.ServiceID)
+		clauses = append(clauses, fmt.Sprintf("service_id = $%d", len(args)))
+	}
+	args = append(args, limit)
+	args = append(args, filter.Offset)
+	limitIdx := len(args) - 1
+	offsetIdx := len(args)
+	query := fmt.Sprintf(`
+		SELECT hash, service_id, entry_type, seq, prev_root, new_root, status, processed_at, metadata_hash, extra
+		FROM jam_receipts
+		WHERE %s
+		ORDER BY processed_at DESC
+		LIMIT $%d OFFSET $%d
+	`, strings.Join(clauses, " AND "), limitIdx, offsetIdx)
+
+	rows, err := s.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var rcpts []Receipt
+	for rows.Next() {
+		var rcpt Receipt
+		if err := rows.Scan(&rcpt.Hash, &rcpt.ServiceID, &rcpt.EntryType, &rcpt.Seq, &rcpt.PrevRoot, &rcpt.NewRoot, &rcpt.Status, &rcpt.ProcessedAt, &rcpt.MetadataHash, &rcpt.Extra); err != nil {
+			return nil, err
+		}
+		rcpts = append(rcpts, rcpt)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return rcpts, nil
+}

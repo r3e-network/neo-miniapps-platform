@@ -2,6 +2,7 @@ package jam
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +14,7 @@ type PackageStore interface {
 	PendingCount(ctx context.Context) (int, error)
 	ListPackages(ctx context.Context, filter PackageFilter) ([]WorkPackage, error)
 	ListReports(ctx context.Context, filter ReportFilter) ([]WorkReport, error)
+	ListReceipts(ctx context.Context, filter ReceiptFilter) ([]Receipt, error)
 	NextPending(ctx context.Context) (WorkPackage, bool, error)
 	SaveReport(ctx context.Context, report WorkReport, attns []Attestation) error
 	UpdatePackageStatus(ctx context.Context, pkgID string, status PackageStatus) error
@@ -33,6 +35,13 @@ type PackageFilter struct {
 
 // ReportFilter controls report queries.
 type ReportFilter struct {
+	ServiceID string
+	Limit     int
+	Offset    int
+}
+
+// ReceiptFilter controls receipt queries.
+type ReceiptFilter struct {
 	ServiceID string
 	Limit     int
 	Offset    int
@@ -294,6 +303,37 @@ func (s *InMemoryStore) Receipt(_ context.Context, hash string) (Receipt, error)
 		return Receipt{}, ErrNotFound
 	}
 	return rcpt, nil
+}
+
+// ListReceipts returns receipts with basic pagination.
+func (s *InMemoryStore) ListReceipts(_ context.Context, filter ReceiptFilter) ([]Receipt, error) {
+	if !s.accumEnable {
+		return nil, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var all []Receipt
+	for _, rcpt := range s.receipts {
+		if filter.ServiceID != "" && rcpt.ServiceID != filter.ServiceID {
+			continue
+		}
+		all = append(all, rcpt)
+	}
+	// Sort by seq descending for deterministic output.
+	sort.Slice(all, func(i, j int) bool { return all[i].Seq > all[j].Seq })
+	limit := filter.Limit
+	if limit <= 0 || limit > len(all) {
+		limit = len(all)
+	}
+	offset := filter.Offset
+	if offset < 0 || offset > len(all) {
+		offset = 0
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+	return append([]Receipt(nil), all[offset:end]...), nil
 }
 
 // SetAccumulatorHash overrides the hash algorithm used for roots/metadata.
