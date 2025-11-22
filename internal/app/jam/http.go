@@ -32,6 +32,7 @@ func NewHTTPHandler(store PackageStore, preimages PreimageStore, coord Coordinat
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/jam/status", h.statusHandler)
+	mux.HandleFunc("/jam/receipts/", h.receiptsHandler)
 	mux.HandleFunc("/jam/preimages/", h.preimagesHandler)
 	mux.HandleFunc("/jam/packages", h.packagesHandler)
 	mux.HandleFunc("/jam/packages/", h.packageResource)
@@ -82,6 +83,42 @@ func (h *httpHandler) statusHandler(w http.ResponseWriter, r *http.Request) {
 		resp["accumulator_root"] = root
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *httpHandler) receiptsHandler(w http.ResponseWriter, r *http.Request) {
+	if !h.authorize(w, r) {
+		return
+	}
+	if !h.checkRate(w, r) {
+		return
+	}
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	recorder, ok := h.store.(interface {
+		Receipt(context.Context, string) (Receipt, error)
+	})
+	if !ok || !h.cfg.AccumulatorsEnabled {
+		writeError(w, http.StatusNotFound, errors.New("receipts not available"))
+		return
+	}
+	hash := strings.TrimPrefix(r.URL.Path, "/jam/receipts/")
+	hash = strings.TrimSpace(hash)
+	if hash == "" {
+		writeError(w, http.StatusBadRequest, errors.New("missing receipt hash"))
+		return
+	}
+	rcpt, err := recorder.Receipt(r.Context(), hash)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if err == ErrNotFound {
+			status = http.StatusNotFound
+		}
+		writeError(w, status, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rcpt)
 }
 
 func (h *httpHandler) receiptFor(ctx context.Context, obj any, allowCreate bool) (Receipt, error) {

@@ -332,3 +332,47 @@ func TestJAMStatusReportsAccumulatorRoot(t *testing.T) {
 		t.Fatalf("expected seq >= 1, got %v", seq)
 	}
 }
+
+func TestJAMReceiptFetch(t *testing.T) {
+	store := NewInMemoryStore()
+	store.SetAccumulatorsEnabled(true)
+	store.SetAccumulatorHash("blake3-256")
+	now := time.Now().UTC()
+	rcpt, err := store.AppendReceipt(context.Background(), ReceiptInput{
+		Hash:        "hash-rcpt",
+		ServiceID:   "svc-accum",
+		EntryType:   ReceiptTypeReport,
+		Status:      string(PackageStatusApplied),
+		ProcessedAt: now,
+	})
+	if err != nil {
+		t.Fatalf("append receipt: %v", err)
+	}
+	preimages := NewMemPreimageStore()
+	coord := Coordinator{Store: store, Engine: Engine{
+		Preimages:   preimages,
+		Refiner:     autoRefiner{},
+		Attestors:   []Attestor{autoAttestor{}},
+		Accumulator: &countingAccumulator{},
+		Threshold:   1,
+	}}
+	cfg := Config{
+		Enabled:             true,
+		AccumulatorsEnabled: true,
+		AccumulatorHash:     "blake3-256",
+	}
+	handler := NewHTTPHandler(store, preimages, coord, cfg, nil)
+	req := httptest.NewRequest(http.MethodGet, "/jam/receipts/"+rcpt.Hash, nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	var payload Receipt
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode receipt: %v", err)
+	}
+	if payload.Hash != rcpt.Hash || payload.ServiceID != rcpt.ServiceID {
+		t.Fatalf("receipt mismatch: %+v", payload)
+	}
+}
