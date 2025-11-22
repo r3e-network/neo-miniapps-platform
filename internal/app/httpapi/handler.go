@@ -30,6 +30,7 @@ type handler struct {
 
 // NewHandler returns a mux exposing the core REST API.
 func NewHandler(application *app.Application, jamCfg jam.Config) http.Handler {
+	jamCfg.Normalize()
 	h := &handler{app: application, jamCfg: jamCfg}
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", metrics.Handler())
@@ -220,6 +221,10 @@ func (h *handler) systemStatus(w http.ResponseWriter, r *http.Request) {
 			"go_version": version.GoVersion,
 		},
 		"services": h.app.Descriptors(),
+		"jam": map[string]any{
+			"enabled": h.jamCfg.Enabled,
+			"store":   h.jamCfg.Store,
+		},
 	})
 }
 

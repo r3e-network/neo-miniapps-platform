@@ -256,6 +256,11 @@ func TestHandlerLifecycle(t *testing.T) {
 	if statusPayload["status"] != "ok" {
 		t.Fatalf("expected ok status, got %v", statusPayload["status"])
 	}
+	if jamStatus, ok := statusPayload["jam"].(map[string]any); ok {
+		if jamStatus["enabled"] == nil {
+			t.Fatalf("expected jam status")
+		}
+	}
 
 	randomBody := marshal(map[string]any{"length": 16, "request_id": "req-http"})
 	resp = httptest.NewRecorder()
