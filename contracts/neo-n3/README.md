@@ -14,3 +14,4 @@ Included stubs so far:
 - RandomnessHub
 - DataFeedHub
 - SecretsVault
+- AccountManager
