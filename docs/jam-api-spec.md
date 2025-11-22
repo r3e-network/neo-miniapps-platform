@@ -13,7 +13,7 @@ Scope: document the current JAM prototype endpoints, payloads, and expectations 
 - `PUT /jam/preimages/{hash}`
   - Body: raw bytes of the blob.
   - Headers: `Content-Type` optional (defaults to `application/octet-stream`).
-  - Hash must be sha256 of the body; size enforced client-side for now.
+  - Hash must be sha256 of the body; size enforced server-side when configured.
   - Responses: `201 Created` with JSON metadata `{hash,size,media_type,created_at,...}` or `400` on hash mismatch.
 - `GET /jam/preimages/{hash}/meta`
   - Returns JSON metadata (hash, size, media type, created_at).
@@ -45,8 +45,8 @@ Scope: document the current JAM prototype endpoints, payloads, and expectations 
   - Responses: `201 Created` with the stored package, or `400` on validation error.
 
 - `GET /jam/packages?limit=50`
-  - Lists recent packages (default limit 50). Unfiltered in the prototype.
-  - Response: `200 OK` with array of packages (no pagination token yet).
+  - Lists recent packages (default limit 50). Unfiltered in the prototype; filters/pagination are planned.
+  - Response: `200 OK` with array of packages (envelope/pagination planned).
 
 - `GET /jam/packages/{id}`
   - Fetch a single package by ID.
