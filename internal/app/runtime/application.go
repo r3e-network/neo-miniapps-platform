@@ -176,6 +176,10 @@ func NewApplication(options ...Option) (*Application, error) {
 		Store:   cfg.Runtime.JAM.Store,
 		PGDSN:   cfg.Runtime.JAM.PGDSN,
 	}
+	jamCfg.Normalize()
+	if jamCfg.Enabled {
+		log.Infof("JAM API enabled (store=%s)", jamCfg.Store)
+	}
 
 	httpSvc := httpapi.NewService(application, listenAddr, tokens, jamCfg, log)
 	if err := application.Attach(httpSvc); err != nil {
