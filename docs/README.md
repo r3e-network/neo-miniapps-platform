@@ -14,6 +14,8 @@ have been consolidated into that specification.
   - [JAM receipts and roots](jam-receipts-and-roots.md)
   - [JAM status fields](jam-status-fields.md)
   - [JAM hardening and auth/quotas](jam-hardening.md), [jam-auth-and-quotas.md](jam-auth-and-quotas.md), [jam-hardening-implementation.md](jam-hardening-implementation.md)
+- Neo N3 contracts:
+  - [Contract set and manager layout](neo-n3-contract-set.md)
 
 All other documents have been retired to avoid drift. Update the specification
 directly when behaviour changes so the documentation remains clean, clear, and
