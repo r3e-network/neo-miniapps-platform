@@ -17,6 +17,7 @@ import (
 	"github.com/R3E-Network/service_layer/internal/app/domain/gasbank"
 	"github.com/R3E-Network/service_layer/internal/app/domain/oracle"
 	"github.com/R3E-Network/service_layer/internal/app/domain/pricefeed"
+	"github.com/R3E-Network/service_layer/internal/app/domain/trigger"
 	domainvrf "github.com/R3E-Network/service_layer/internal/app/domain/vrf"
 )
 
@@ -68,6 +69,22 @@ func TestTenantFiltersAcrossStores(t *testing.T) {
 	expectListed(t, "functions filtered", 0, len(mustListFunctions(ctx, store, acct.ID)))
 	expectListed(t, "automation filtered", 0, len(mustListAutomation(ctx, store, acct.ID)))
 
+	// Triggers
+	trg, err := store.CreateTrigger(ctx, trigger.Trigger{
+		AccountID:  acct.ID,
+		FunctionID: fn.ID,
+		Rule:       "cron:* * * * *",
+		Enabled:    true,
+	})
+	if err != nil {
+		t.Fatalf("create trigger: %v", err)
+	}
+	expectListed(t, "triggers present", 1, len(mustListTriggers(ctx, store, acct.ID)))
+	if _, err := store.db.ExecContext(ctx, `UPDATE app_triggers SET tenant = 'tenant-b' WHERE id = $1`, trg.ID); err != nil {
+		t.Fatalf("mismatch trigger tenant: %v", err)
+	}
+	expectListed(t, "triggers filtered", 0, len(mustListTriggers(ctx, store, acct.ID)))
+
 	// Data feeds
 	feed, err := store.CreateDataFeed(ctx, domaindf.Feed{
 		AccountID:    acct.ID,
@@ -84,6 +101,23 @@ func TestTenantFiltersAcrossStores(t *testing.T) {
 		t.Fatalf("mismatch datafeed tenant: %v", err)
 	}
 	expectListed(t, "datafeeds filtered", 0, len(mustListDataFeeds(ctx, store, acct.ID)))
+	// Data feed updates list filtered by tenant
+	if _, err := store.CreateDataFeedUpdate(ctx, domaindf.Update{
+		AccountID: acct.ID,
+		FeedID:    feed.ID,
+		RoundID:   1,
+		Price:     "10",
+		Signer:    "signer",
+		Timestamp: time.Now().UTC(),
+		Status:    domaindf.UpdateStatusAccepted,
+	}); err != nil {
+		t.Fatalf("create datafeed update: %v", err)
+	}
+	expectListed(t, "datafeed updates present", 1, len(mustListDataFeedUpdates(ctx, store, feed.ID)))
+	if _, err := store.db.ExecContext(ctx, `UPDATE chainlink_data_feed_updates SET tenant = 'tenant-b' WHERE feed_id = $1`, feed.ID); err != nil {
+		t.Fatalf("mismatch datafeed update tenant: %v", err)
+	}
+	expectListed(t, "datafeed updates filtered", 0, len(mustListDataFeedUpdates(ctx, store, feed.ID)))
 
 	// Price feeds
 	pf, err := store.CreatePriceFeed(ctx, pricefeed.Feed{
@@ -232,6 +266,22 @@ func TestTenantFiltersAcrossStores(t *testing.T) {
 		t.Fatalf("create datastream: %v", err)
 	}
 	expectListed(t, "datastream present", 1, len(mustListStreams(ctx, store, acct.ID)))
+	frame, err := store.CreateFrame(ctx, domainds.Frame{
+		AccountID: acct.ID,
+		StreamID:  stream.ID,
+		Sequence:  1,
+		Payload:   map[string]any{"p": 1},
+		LatencyMS: 1,
+		Status:    domainds.FrameStatusOK,
+	})
+	if err != nil {
+		t.Fatalf("create frame: %v", err)
+	}
+	expectListed(t, "frames present", 1, len(mustListFrames(ctx, store, stream.ID)))
+	if _, err := store.db.ExecContext(ctx, `UPDATE chainlink_datastream_frames SET tenant = 'tenant-b' WHERE id = $1`, frame.ID); err != nil {
+		t.Fatalf("mismatch frame tenant: %v", err)
+	}
+	expectListed(t, "frames filtered", 0, len(mustListFrames(ctx, store, stream.ID)))
 	if _, err := store.db.ExecContext(ctx, `UPDATE chainlink_datastreams SET tenant = 'tenant-b' WHERE id = $1`, stream.ID); err != nil {
 		t.Fatalf("mismatch stream tenant: %v", err)
 	}
@@ -249,6 +299,24 @@ func TestTenantFiltersAcrossStores(t *testing.T) {
 		t.Fatalf("create dta product: %v", err)
 	}
 	expectListed(t, "dta product present", 1, len(mustListProducts(ctx, store, acct.ID)))
+	order, err := store.CreateOrder(ctx, domaindta.Order{
+		AccountID: acct.ID,
+		ProductID: product.ID,
+		Type:      domaindta.OrderTypeSubscription,
+		Amount:    "10",
+		Wallet:    "0xabc",
+		Status:    domaindta.OrderStatusPending,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("create dta order: %v", err)
+	}
+	expectListed(t, "dta orders present", 1, len(mustListOrders(ctx, store, acct.ID)))
+	if _, err := store.db.ExecContext(ctx, `UPDATE chainlink_dta_orders SET tenant = 'tenant-b' WHERE id = $1`, order.ID); err != nil {
+		t.Fatalf("mismatch dta order tenant: %v", err)
+	}
+	expectListed(t, "dta orders filtered", 0, len(mustListOrders(ctx, store, acct.ID)))
 	if _, err := store.db.ExecContext(ctx, `UPDATE chainlink_dta_products SET tenant = 'tenant-b' WHERE id = $1`, product.ID); err != nil {
 		t.Fatalf("mismatch dta product tenant: %v", err)
 	}
@@ -265,6 +333,21 @@ func TestTenantFiltersAcrossStores(t *testing.T) {
 		t.Fatalf("create enclave: %v", err)
 	}
 	expectListed(t, "conf enclaves present", 1, len(mustListEnclaves(ctx, store, acct.ID)))
+	att, err := store.CreateAttestation(ctx, domainconf.Attestation{
+		AccountID: acct.ID,
+		EnclaveID: enclave.ID,
+		Report:    "r",
+		Status:    "valid",
+		CreatedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("create attestation: %v", err)
+	}
+	expectListed(t, "conf attestations present", 1, len(mustListAttestations(ctx, store, acct.ID, enclave.ID)))
+	if _, err := store.db.ExecContext(ctx, `UPDATE confidential_attestations SET tenant = 'tenant-b' WHERE id = $1`, att.ID); err != nil {
+		t.Fatalf("mismatch attestation tenant: %v", err)
+	}
+	expectListed(t, "conf attestations filtered", 0, len(mustListAttestations(ctx, store, acct.ID, enclave.ID)))
 	if _, err := store.db.ExecContext(ctx, `UPDATE confidential_enclaves SET tenant = 'tenant-b' WHERE id = $1`, enclave.ID); err != nil {
 		t.Fatalf("mismatch enclave tenant: %v", err)
 	}
@@ -300,14 +383,6 @@ func TestTenantFiltersAcrossStores(t *testing.T) {
 	expectListed(t, "gas tx filtered", 0, len(mustListGasTx(ctx, store, gasAcct.ID)))
 }
 
-func mustListDeliveries(ctx context.Context, store *Store, accountID string) []domainlink.Delivery {
-	list, err := store.ListDeliveries(ctx, accountID, 10)
-	if err != nil {
-		panic(err)
-	}
-	return list
-}
-
 func mustListFunctions(ctx context.Context, store *Store, accountID string) []function.Definition {
 	list, err := store.ListFunctions(ctx, accountID)
 	if err != nil {
@@ -324,8 +399,24 @@ func mustListAutomation(ctx context.Context, store *Store, accountID string) []a
 	return list
 }
 
+func mustListTriggers(ctx context.Context, store *Store, accountID string) []trigger.Trigger {
+	list, err := store.ListTriggers(ctx, accountID)
+	if err != nil {
+		panic(err)
+	}
+	return list
+}
+
 func mustListDataFeeds(ctx context.Context, store *Store, accountID string) []domaindf.Feed {
 	list, err := store.ListDataFeeds(ctx, accountID)
+	if err != nil {
+		panic(err)
+	}
+	return list
+}
+
+func mustListDataFeedUpdates(ctx context.Context, store *Store, feedID string) []domaindf.Update {
+	list, err := store.ListDataFeedUpdates(ctx, feedID, 10)
 	if err != nil {
 		panic(err)
 	}
@@ -356,8 +447,24 @@ func mustListChannels(ctx context.Context, store *Store, accountID string) []dom
 	return list
 }
 
+func mustListDeliveries(ctx context.Context, store *Store, accountID string) []domainlink.Delivery {
+	list, err := store.ListDeliveries(ctx, accountID, 10)
+	if err != nil {
+		panic(err)
+	}
+	return list
+}
+
 func mustListLanes(ctx context.Context, store *Store, accountID string) []domainccip.Lane {
 	list, err := store.ListLanes(ctx, accountID)
+	if err != nil {
+		panic(err)
+	}
+	return list
+}
+
+func mustListMessages(ctx context.Context, store *Store, accountID string) []domainccip.Message {
+	list, err := store.ListMessages(ctx, accountID, 10)
 	if err != nil {
 		panic(err)
 	}
@@ -372,16 +479,16 @@ func mustListVRFKeys(ctx context.Context, store *Store, accountID string) []doma
 	return list
 }
 
-func mustListGasTx(ctx context.Context, store *Store, gasAccountID string) []gasbank.Transaction {
-	list, err := store.ListGasTransactions(ctx, gasAccountID, 10)
+func mustListVRFRequests(ctx context.Context, store *Store, accountID string) []domainvrf.Request {
+	list, err := store.ListVRFRequests(ctx, accountID, 10)
 	if err != nil {
 		panic(err)
 	}
 	return list
 }
 
-func mustListVRFRequests(ctx context.Context, store *Store, accountID string) []domainvrf.Request {
-	list, err := store.ListVRFRequests(ctx, accountID, 10)
+func mustListGasTx(ctx context.Context, store *Store, gasAccountID string) []gasbank.Transaction {
+	list, err := store.ListGasTransactions(ctx, gasAccountID, 10)
 	if err != nil {
 		panic(err)
 	}
@@ -396,8 +503,24 @@ func mustListStreams(ctx context.Context, store *Store, accountID string) []doma
 	return list
 }
 
+func mustListFrames(ctx context.Context, store *Store, streamID string) []domainds.Frame {
+	list, err := store.ListFrames(ctx, streamID, 10)
+	if err != nil {
+		panic(err)
+	}
+	return list
+}
+
 func mustListProducts(ctx context.Context, store *Store, accountID string) []domaindta.Product {
 	list, err := store.ListProducts(ctx, accountID)
+	if err != nil {
+		panic(err)
+	}
+	return list
+}
+
+func mustListOrders(ctx context.Context, store *Store, accountID string) []domaindta.Order {
+	list, err := store.ListOrders(ctx, accountID, 10)
 	if err != nil {
 		panic(err)
 	}
@@ -412,8 +535,8 @@ func mustListEnclaves(ctx context.Context, store *Store, accountID string) []dom
 	return list
 }
 
-func mustListMessages(ctx context.Context, store *Store, accountID string) []domainccip.Message {
-	list, err := store.ListMessages(ctx, accountID, 10)
+func mustListAttestations(ctx context.Context, store *Store, accountID, enclaveID string) []domainconf.Attestation {
+	list, err := store.ListAttestations(ctx, accountID, enclaveID, 10)
 	if err != nil {
 		panic(err)
 	}
