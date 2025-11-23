@@ -84,6 +84,8 @@ help:
 	@echo "make down              - Stop the compose stack and remove orphans"
 	@echo "make ps                - Show docker compose service status"
 	@echo "make logs              - Tail appserver logs from the compose stack"
+	@echo "make neo-up            - Start NEO mainnet/testnet nodes (compose profile 'neo')"
+	@echo "make neo-down          - Stop NEO nodes (compose profile 'neo')"
 
 typecheck:
 	@echo "Running dashboard typecheck..."
@@ -91,3 +93,11 @@ typecheck:
 
 smoke: test typecheck
 	@echo "Smoke checks complete."
+
+neo-up:
+	@echo "Starting NEO mainnet/testnet nodes (profile: neo)..."
+	@docker compose --profile neo up -d neo-mainnet neo-testnet
+
+neo-down:
+	@echo "Stopping NEO nodes (profile: neo)..."
+	@docker compose --profile neo down --remove-orphans
