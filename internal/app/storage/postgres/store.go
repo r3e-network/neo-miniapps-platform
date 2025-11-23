@@ -51,6 +51,7 @@ func (s *Store) CreateAccount(ctx context.Context, acct account.Account) (accoun
 	now := time.Now().UTC()
 	acct.CreatedAt = now
 	acct.UpdatedAt = now
+	tenant := tenantFromMetadata(acct.Metadata)
 
 	metadataJSON, err := json.Marshal(acct.Metadata)
 	if err != nil {
@@ -58,9 +59,9 @@ func (s *Store) CreateAccount(ctx context.Context, acct account.Account) (accoun
 	}
 
 	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO app_accounts (id, owner, metadata, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5)
-	`, acct.ID, acct.Owner, metadataJSON, acct.CreatedAt, acct.UpdatedAt)
+		INSERT INTO app_accounts (id, owner, metadata, tenant, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, acct.ID, acct.Owner, metadataJSON, tenant, acct.CreatedAt, acct.UpdatedAt)
 	if err != nil {
 		return account.Account{}, err
 	}
@@ -75,6 +76,7 @@ func (s *Store) UpdateAccount(ctx context.Context, acct account.Account) (accoun
 
 	acct.CreatedAt = existing.CreatedAt
 	acct.UpdatedAt = time.Now().UTC()
+	tenant := tenantFromMetadata(acct.Metadata)
 
 	metadataJSON, err := json.Marshal(acct.Metadata)
 	if err != nil {
@@ -83,9 +85,9 @@ func (s *Store) UpdateAccount(ctx context.Context, acct account.Account) (accoun
 
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE app_accounts
-		SET owner = $2, metadata = $3, updated_at = $4
+		SET owner = $2, metadata = $3, tenant = $4, updated_at = $5
 		WHERE id = $1
-	`, acct.ID, acct.Owner, metadataJSON, acct.UpdatedAt)
+	`, acct.ID, acct.Owner, metadataJSON, tenant, acct.UpdatedAt)
 	if err != nil {
 		return account.Account{}, err
 	}
@@ -97,7 +99,7 @@ func (s *Store) UpdateAccount(ctx context.Context, acct account.Account) (accoun
 
 func (s *Store) GetAccount(ctx context.Context, id string) (account.Account, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, owner, metadata, created_at, updated_at
+		SELECT id, owner, metadata, tenant, created_at, updated_at
 		FROM app_accounts
 		WHERE id = $1
 	`, id)
@@ -105,14 +107,21 @@ func (s *Store) GetAccount(ctx context.Context, id string) (account.Account, err
 	var (
 		acct        account.Account
 		metadataRaw []byte
+		tenant      sql.NullString
 	)
 
-	if err := row.Scan(&acct.ID, &acct.Owner, &metadataRaw, &acct.CreatedAt, &acct.UpdatedAt); err != nil {
+	if err := row.Scan(&acct.ID, &acct.Owner, &metadataRaw, &tenant, &acct.CreatedAt, &acct.UpdatedAt); err != nil {
 		return account.Account{}, err
 	}
 
 	if len(metadataRaw) > 0 {
 		_ = json.Unmarshal(metadataRaw, &acct.Metadata)
+	}
+	if tenant.Valid {
+		if acct.Metadata == nil {
+			acct.Metadata = map[string]string{}
+		}
+		acct.Metadata["tenant"] = tenant.String
 	}
 
 	return acct, nil
@@ -120,7 +129,7 @@ func (s *Store) GetAccount(ctx context.Context, id string) (account.Account, err
 
 func (s *Store) ListAccounts(ctx context.Context) ([]account.Account, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, owner, metadata, created_at, updated_at
+		SELECT id, owner, metadata, tenant, created_at, updated_at
 		FROM app_accounts
 		ORDER BY created_at
 	`)
@@ -134,17 +143,31 @@ func (s *Store) ListAccounts(ctx context.Context) ([]account.Account, error) {
 		var (
 			acct        account.Account
 			metadataRaw []byte
+			tenant      sql.NullString
 		)
 
-		if err := rows.Scan(&acct.ID, &acct.Owner, &metadataRaw, &acct.CreatedAt, &acct.UpdatedAt); err != nil {
+		if err := rows.Scan(&acct.ID, &acct.Owner, &metadataRaw, &tenant, &acct.CreatedAt, &acct.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if len(metadataRaw) > 0 {
 			_ = json.Unmarshal(metadataRaw, &acct.Metadata)
 		}
+		if tenant.Valid {
+			if acct.Metadata == nil {
+				acct.Metadata = map[string]string{}
+			}
+			acct.Metadata["tenant"] = tenant.String
+		}
 		result = append(result, acct)
 	}
 	return result, rows.Err()
+}
+
+func tenantFromMetadata(meta map[string]string) string {
+	if meta == nil {
+		return ""
+	}
+	return meta["tenant"]
 }
 
 func (s *Store) DeleteAccount(ctx context.Context, id string) error {
