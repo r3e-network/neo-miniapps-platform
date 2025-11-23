@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/version"
@@ -358,6 +359,7 @@ func handleAudit(ctx context.Context, client *apiClient, args []string) error {
 	method := fs.String("method", "", "filter by HTTP method (get/post/...)")
 	contains := fs.String("contains", "", "path contains substring")
 	status := fs.Int("status", 0, "filter by status code")
+	format := fs.String("format", "json", "output format: json|table")
 	if err := fs.Parse(args); err != nil {
 		return usageError(err)
 	}
@@ -393,6 +395,30 @@ func handleAudit(ctx context.Context, client *apiClient, args []string) error {
 	data, err := client.request(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return err
+	}
+	if strings.EqualFold(*format, "table") {
+		var entries []struct {
+			Time       string `json:"time"`
+			User       string `json:"user"`
+			Role       string `json:"role"`
+			Tenant     string `json:"tenant"`
+			Path       string `json:"path"`
+			Method     string `json:"method"`
+			Status     int    `json:"status"`
+			RemoteAddr string `json:"remote_addr"`
+			UserAgent  string `json:"user_agent"`
+		}
+		if err := json.Unmarshal(data, &entries); err != nil {
+			return fmt.Errorf("decode audit response: %w", err)
+		}
+		w := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
+		fmt.Fprintln(w, "TIME\tSTATUS\tMETHOD\tPATH\tUSER\tROLE\tTENANT\tIP\tUA")
+		for _, e := range entries {
+			fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				e.Time, e.Status, e.Method, e.Path, e.User, e.Role, e.Tenant, e.RemoteAddr, e.UserAgent)
+		}
+		_ = w.Flush()
+		return nil
 	}
 	prettyPrint(data)
 	return nil
