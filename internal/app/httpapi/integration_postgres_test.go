@@ -281,4 +281,95 @@ func TestIntegrationPostgres(t *testing.T) {
 	if noTenantOracle.Code != http.StatusForbidden {
 		t.Fatalf("expected forbidden for oracle sources without tenant, got %d", noTenantOracle.Code)
 	}
+	wrongTenantOracleReqs := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/oracle/requests", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   "other-tenant",
+	})
+	if wrongTenantOracleReqs.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for oracle requests with wrong tenant, got %d", wrongTenantOracleReqs.Code)
+	}
+	noTenantOracleReqs := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/oracle/requests", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+	})
+	if noTenantOracleReqs.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for oracle requests without tenant, got %d", noTenantOracleReqs.Code)
+	}
+	wrongTenantAutomation := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/automation/jobs", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   "other-tenant",
+	})
+	if wrongTenantAutomation.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for automation with wrong tenant, got %d", wrongTenantAutomation.Code)
+	}
+	noTenantAutomation := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/automation/jobs", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+	})
+	if noTenantAutomation.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for automation without tenant, got %d", noTenantAutomation.Code)
+	}
+	wrongTenantRandom := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/random/requests", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   "other-tenant",
+	})
+	if wrongTenantRandom.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for random with wrong tenant, got %d", wrongTenantRandom.Code)
+	}
+	noTenantRandom := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/random/requests", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+	})
+	if noTenantRandom.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for random without tenant, got %d", noTenantRandom.Code)
+	}
+	wrongTenantCCIP := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/ccip/lanes", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   "other-tenant",
+	})
+	if wrongTenantCCIP.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for ccip with wrong tenant, got %d", wrongTenantCCIP.Code)
+	}
+	noTenantCCIP := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/ccip/lanes", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+	})
+	if noTenantCCIP.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for ccip without tenant, got %d", noTenantCCIP.Code)
+	}
+	wrongTenantVRF := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/vrf/keys", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   "other-tenant",
+	})
+	if wrongTenantVRF.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for vrf with wrong tenant, got %d", wrongTenantVRF.Code)
+	}
+	noTenantVRF := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/vrf/keys", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+	})
+	if noTenantVRF.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for vrf without tenant, got %d", noTenantVRF.Code)
+	}
+	wrongTenantStreams := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/datastreams", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   "other-tenant",
+	})
+	if wrongTenantStreams.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for datastreams with wrong tenant, got %d", wrongTenantStreams.Code)
+	}
+	noTenantStreams := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/datastreams", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+	})
+	if noTenantStreams.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for datastreams without tenant, got %d", noTenantStreams.Code)
+	}
+	wrongTenantDTA := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/dta/products", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   "other-tenant",
+	})
+	if wrongTenantDTA.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for dta with wrong tenant, got %d", wrongTenantDTA.Code)
+	}
+	noTenantDTA := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/dta/products", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+	})
+	if noTenantDTA.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for dta without tenant, got %d", noTenantDTA.Code)
+	}
 }
