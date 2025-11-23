@@ -244,6 +244,7 @@ treated with equal priority.
 - Run **all** tests: `go test ./...`
 - Go modules are vendored for offline Docker builds; run `go mod vendor` after
   updating dependencies.
+- `make neo-up` / `make neo-down` start/stop optional neo-cli mainnet/testnet nodes (compose profile `neo`).
 
 ### Tenant quickstart
 - See `docs/tenant-quickstart.md` for headers, dashboard deep links, CLI flags, and common 403 fixes when running with tenants locally.
@@ -259,3 +260,4 @@ curl -H "Authorization: Bearer dev-token" -H "X-Tenant-ID: tenant-a" http://loca
 
 ### NEO layering plan
 - See `docs/neo-layering.md` for the roadmap to run full NEO nodes (mainnet/testnet), indexers, and per-block stateless state snapshots with trusted state roots.
+- See `docs/neo-ops.md` for running neo-cli nodes via the `neo` compose profile (ports, plugins, volumes).
