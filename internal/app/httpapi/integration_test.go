@@ -275,6 +275,20 @@ func TestIntegrationHTTPAPI(t *testing.T) {
 	if noTenantDatalink.Code != http.StatusForbidden {
 		t.Fatalf("expected forbidden for datalink without tenant, got %d", noTenantDatalink.Code)
 	}
+	// Oracle must enforce tenant.
+	wrongTenantOracle := doWithHeaders(t, client, server.URL+"/accounts/"+accountID+"/oracle/sources", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   "tenant-b",
+	})
+	if wrongTenantOracle.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for oracle sources with wrong tenant, got %d", wrongTenantOracle.Code)
+	}
+	noTenantOracle := doWithHeaders(t, client, server.URL+"/accounts/"+accountID+"/oracle/sources", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+	})
+	if noTenantOracle.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for oracle sources without tenant, got %d", noTenantOracle.Code)
+	}
 
 	// Oracle source + request
 	srcResp := do(t, client, server.URL+"/accounts/"+accountID+"/oracle/sources", http.MethodPost, marshalBody(t, map[string]any{

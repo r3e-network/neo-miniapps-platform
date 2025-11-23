@@ -268,4 +268,17 @@ func TestIntegrationPostgres(t *testing.T) {
 	if noTenantDatalink.Code != http.StatusForbidden {
 		t.Fatalf("expected forbidden for datalink without tenant, got %d", noTenantDatalink.Code)
 	}
+	wrongTenantOracle := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/oracle/sources", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   "other-tenant",
+	})
+	if wrongTenantOracle.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for oracle sources with wrong tenant, got %d", wrongTenantOracle.Code)
+	}
+	noTenantOracle := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/oracle/sources", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+	})
+	if noTenantOracle.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for oracle sources without tenant, got %d", noTenantOracle.Code)
+	}
 }
