@@ -467,8 +467,26 @@ export async function fetchSystemStatus(config: ClientConfig): Promise<SystemSta
   return fetchJSON<SystemStatus>(url, config);
 }
 
-export async function fetchAudit(config: ClientConfig, limit = 200): Promise<AuditEntry[]> {
-  const url = `${config.baseUrl}/admin/audit?limit=${limit}`;
+export type AuditQuery = {
+  limit?: number;
+  user?: string;
+  role?: string;
+  tenant?: string;
+  method?: string;
+  contains?: string;
+  status?: number;
+};
+
+export async function fetchAudit(config: ClientConfig, query: AuditQuery = {}): Promise<AuditEntry[]> {
+  const params = new URLSearchParams();
+  params.set("limit", String(query.limit ?? 200));
+  if (query.user) params.set("user", query.user);
+  if (query.role) params.set("role", query.role);
+  if (query.tenant) params.set("tenant", query.tenant);
+  if (query.method) params.set("method", query.method);
+  if (query.contains) params.set("contains", query.contains);
+  if (typeof query.status === "number") params.set("status", String(query.status));
+  const url = `${config.baseUrl}/admin/audit?${params.toString()}`;
   return fetchJSON<AuditEntry[]>(url, config);
 }
 

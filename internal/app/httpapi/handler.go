@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -600,5 +601,45 @@ func (h *handler) adminAudit(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, h.audit.listLimit(limit))
+	entries := h.audit.listLimit(limit)
+	q := r.URL.Query()
+	user := strings.ToLower(strings.TrimSpace(q.Get("user")))
+	role := strings.ToLower(strings.TrimSpace(q.Get("role")))
+	tenant := strings.ToLower(strings.TrimSpace(q.Get("tenant")))
+	method := strings.ToLower(strings.TrimSpace(q.Get("method")))
+	pathContains := strings.ToLower(strings.TrimSpace(q.Get("contains")))
+	statusStr := strings.TrimSpace(q.Get("status"))
+	var statusFilter *int
+	if statusStr != "" {
+		if v, convErr := strconv.Atoi(statusStr); convErr == nil && v > 0 {
+			statusFilter = &v
+		} else {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("status must be a positive integer"))
+			return
+		}
+	}
+
+	var filtered []auditEntry
+	for _, e := range entries {
+		if user != "" && strings.ToLower(e.User) != user {
+			continue
+		}
+		if role != "" && strings.ToLower(e.Role) != role {
+			continue
+		}
+		if tenant != "" && strings.ToLower(e.Tenant) != tenant {
+			continue
+		}
+		if method != "" && strings.ToLower(e.Method) != method {
+			continue
+		}
+		if pathContains != "" && !strings.Contains(strings.ToLower(e.Path), pathContains) {
+			continue
+		}
+		if statusFilter != nil && e.Status != *statusFilter {
+			continue
+		}
+		filtered = append(filtered, e)
+	}
+	writeJSON(w, http.StatusOK, filtered)
 }

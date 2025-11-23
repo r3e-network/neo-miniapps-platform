@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AuditEntry, ClientConfig, fetchAudit } from "../api";
 import { SystemState } from "../hooks/useSystemInfo";
 
@@ -11,14 +11,34 @@ type Props = {
 export function AdminPanel({ systemState, baseUrl, token }: Props) {
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [auditError, setAuditError] = useState<string>();
+  const [limit, setLimit] = useState(50);
+  const [userFilter, setUserFilter] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [tenantFilter, setTenantFilter] = useState("");
+  const [methodFilter, setMethodFilter] = useState("");
+  const [pathFilter, setPathFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("");
+
+  const query = useMemo(
+    () => ({
+      limit,
+      user: userFilter || undefined,
+      role: roleFilter || undefined,
+      tenant: tenantFilter || undefined,
+      method: methodFilter || undefined,
+      contains: pathFilter || undefined,
+      status: statusFilter ? Number(statusFilter) : undefined,
+    }),
+    [limit, methodFilter, pathFilter, roleFilter, statusFilter, tenantFilter, userFilter],
+  );
 
   useEffect(() => {
     if (!baseUrl || !token) return;
     const config: ClientConfig = { baseUrl, token };
-    void fetchAudit(config, 200)
+    void fetchAudit(config, query)
       .then(setAudit)
       .catch((err) => setAuditError(err instanceof Error ? err.message : String(err)));
-  }, [baseUrl, token]);
+  }, [baseUrl, token, query]);
 
   if (systemState.status !== "ready") return null;
   const { descriptors, version, jam, accounts } = systemState;
@@ -82,6 +102,27 @@ export function AdminPanel({ systemState, baseUrl, token }: Props) {
         <p className="muted">
           Requires admin role (JWT). Use <code>admin/changeme</code> in local compose via <code>/auth/login</code>. Token-only auth is not admin.
         </p>
+        <div className="form-grid">
+          <input value={userFilter} onChange={(e) => setUserFilter(e.target.value)} placeholder="User" />
+          <input value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} placeholder="Role" />
+          <input value={tenantFilter} onChange={(e) => setTenantFilter(e.target.value)} placeholder="Tenant" />
+          <input value={methodFilter} onChange={(e) => setMethodFilter(e.target.value)} placeholder="Method (get/post)" />
+          <input value={pathFilter} onChange={(e) => setPathFilter(e.target.value)} placeholder="Path contains" />
+          <input
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            placeholder="Status (e.g. 200)"
+            inputMode="numeric"
+          />
+          <input
+            type="number"
+            min={1}
+            max={200}
+            value={limit}
+            onChange={(e) => setLimit(Number(e.target.value) || 50)}
+            placeholder="Limit"
+          />
+        </div>
         {auditError && <p className="error">Audit error: {auditError}</p>}
         {!auditError && audit.length === 0 && <p className="muted">No entries yet.</p>}
         {audit.length > 0 && (
