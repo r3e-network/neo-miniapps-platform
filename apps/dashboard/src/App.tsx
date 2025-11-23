@@ -133,6 +133,7 @@ export function App() {
     { label: "DataLink Quickstart", href: "https://github.com/R3E-Network/service_layer/blob/master/docs/examples/datalink.md" },
     { label: "JAM Quickstart", href: "https://github.com/R3E-Network/service_layer/blob/master/docs/examples/jam.md" },
     { label: "Dashboard Smoke Checklist", href: "https://github.com/R3E-Network/service_layer/blob/master/docs/dashboard-smoke.md" },
+    { label: "Tenant Quickstart", href: "https://github.com/R3E-Network/service_layer/blob/master/docs/tenant-quickstart.md" },
   ];
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -208,6 +209,11 @@ export function App() {
       </header>
 
       <section className="card">
+        {!config.tenant && (
+          <div className="notice warning">
+            <strong>No tenant set.</strong> Tenant-scoped accounts will return 403s until you set a tenant in Settings or open the tenant quickstart.
+          </div>
+        )}
         <WalletGate
           wallet={wallet}
           onConnect={(w) => setWallet(w)}
