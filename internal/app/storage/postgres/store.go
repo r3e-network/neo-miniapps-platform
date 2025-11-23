@@ -170,6 +170,19 @@ func tenantFromMetadata(meta map[string]string) string {
 	return meta["tenant"]
 }
 
+// accountTenant fetches the tenant for the given account ID (empty if none). It is best-effort
+// and intentionally ignores errors to avoid failing core operations when tenant is unset.
+func (s *Store) accountTenant(ctx context.Context, accountID string) string {
+	var tenant sql.NullString
+	_ = s.db.QueryRowContext(ctx, `
+		SELECT tenant FROM app_accounts WHERE id = $1
+	`, accountID).Scan(&tenant)
+	if tenant.Valid {
+		return tenant.String
+	}
+	return ""
+}
+
 func (s *Store) DeleteAccount(ctx context.Context, id string) error {
 	result, err := s.db.ExecContext(ctx, `
 		DELETE FROM app_accounts WHERE id = $1
@@ -200,11 +213,12 @@ func (s *Store) CreateFunction(ctx context.Context, def function.Definition) (fu
 	if err != nil {
 		return function.Definition{}, err
 	}
+	tenant := s.accountTenant(ctx, def.AccountID)
 
 	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO app_functions (id, account_id, name, description, source, secrets, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	`, def.ID, def.AccountID, def.Name, def.Description, def.Source, secretsJSON, def.CreatedAt, def.UpdatedAt)
+		INSERT INTO app_functions (id, account_id, name, description, source, secrets, tenant, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`, def.ID, def.AccountID, def.Name, def.Description, def.Source, secretsJSON, tenant, def.CreatedAt, def.UpdatedAt)
 	if err != nil {
 		return function.Definition{}, err
 	}
@@ -220,6 +234,7 @@ func (s *Store) UpdateFunction(ctx context.Context, def function.Definition) (fu
 	def.AccountID = existing.AccountID
 	def.CreatedAt = existing.CreatedAt
 	def.UpdatedAt = time.Now().UTC()
+	tenant := s.accountTenant(ctx, def.AccountID)
 
 	secretsJSON, err := json.Marshal(def.Secrets)
 	if err != nil {
@@ -228,9 +243,9 @@ func (s *Store) UpdateFunction(ctx context.Context, def function.Definition) (fu
 
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE app_functions
-		SET name = $2, description = $3, source = $4, secrets = $5, updated_at = $6
+		SET name = $2, description = $3, source = $4, secrets = $5, tenant = $6, updated_at = $7
 		WHERE id = $1
-	`, def.ID, def.Name, def.Description, def.Source, secretsJSON, def.UpdatedAt)
+	`, def.ID, def.Name, def.Description, def.Source, secretsJSON, tenant, def.UpdatedAt)
 	if err != nil {
 		return function.Definition{}, err
 	}
@@ -386,11 +401,12 @@ func (s *Store) CreateTrigger(ctx context.Context, trg trigger.Trigger) (trigger
 	now := time.Now().UTC()
 	trg.CreatedAt = now
 	trg.UpdatedAt = now
+	tenant := s.accountTenant(ctx, trg.AccountID)
 
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO app_triggers (id, account_id, function_id, rule, enabled, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, trg.ID, trg.AccountID, trg.FunctionID, trg.Rule, trg.Enabled, trg.CreatedAt, trg.UpdatedAt)
+		INSERT INTO app_triggers (id, account_id, function_id, rule, enabled, tenant, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`, trg.ID, trg.AccountID, trg.FunctionID, trg.Rule, trg.Enabled, tenant, trg.CreatedAt, trg.UpdatedAt)
 	if err != nil {
 		return trigger.Trigger{}, err
 	}
@@ -406,12 +422,13 @@ func (s *Store) UpdateTrigger(ctx context.Context, trg trigger.Trigger) (trigger
 	trg.FunctionID = existing.FunctionID
 	trg.CreatedAt = existing.CreatedAt
 	trg.UpdatedAt = time.Now().UTC()
+	tenant := s.accountTenant(ctx, trg.AccountID)
 
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE app_triggers
-		SET rule = $2, enabled = $3, updated_at = $4
+		SET rule = $2, enabled = $3, tenant = $4, updated_at = $5
 		WHERE id = $1
-	`, trg.ID, trg.Rule, trg.Enabled, trg.UpdatedAt)
+	`, trg.ID, trg.Rule, trg.Enabled, tenant, trg.UpdatedAt)
 	if err != nil {
 		return trigger.Trigger{}, err
 	}
@@ -423,13 +440,16 @@ func (s *Store) UpdateTrigger(ctx context.Context, trg trigger.Trigger) (trigger
 
 func (s *Store) GetTrigger(ctx context.Context, id string) (trigger.Trigger, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, account_id, function_id, rule, enabled, created_at, updated_at
+		SELECT id, account_id, function_id, rule, enabled, tenant, created_at, updated_at
 		FROM app_triggers
 		WHERE id = $1
 	`, id)
 
-	var trg trigger.Trigger
-	if err := row.Scan(&trg.ID, &trg.AccountID, &trg.FunctionID, &trg.Rule, &trg.Enabled, &trg.CreatedAt, &trg.UpdatedAt); err != nil {
+	var (
+		trg    trigger.Trigger
+		tenant sql.NullString
+	)
+	if err := row.Scan(&trg.ID, &trg.AccountID, &trg.FunctionID, &trg.Rule, &trg.Enabled, &tenant, &trg.CreatedAt, &trg.UpdatedAt); err != nil {
 		return trigger.Trigger{}, err
 	}
 	return trg, nil
@@ -437,7 +457,7 @@ func (s *Store) GetTrigger(ctx context.Context, id string) (trigger.Trigger, err
 
 func (s *Store) ListTriggers(ctx context.Context, accountID string) ([]trigger.Trigger, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, account_id, function_id, rule, enabled, created_at, updated_at
+		SELECT id, account_id, function_id, rule, enabled, tenant, created_at, updated_at
 		FROM app_triggers
 		WHERE $1 = '' OR account_id = $1
 		ORDER BY created_at
@@ -449,8 +469,11 @@ func (s *Store) ListTriggers(ctx context.Context, accountID string) ([]trigger.T
 
 	var result []trigger.Trigger
 	for rows.Next() {
-		var trg trigger.Trigger
-		if err := rows.Scan(&trg.ID, &trg.AccountID, &trg.FunctionID, &trg.Rule, &trg.Enabled, &trg.CreatedAt, &trg.UpdatedAt); err != nil {
+		var (
+			trg    trigger.Trigger
+			tenant sql.NullString
+		)
+		if err := rows.Scan(&trg.ID, &trg.AccountID, &trg.FunctionID, &trg.Rule, &trg.Enabled, &tenant, &trg.CreatedAt, &trg.UpdatedAt); err != nil {
 			return nil, err
 		}
 		result = append(result, trg)
