@@ -601,7 +601,16 @@ func (h *handler) adminAudit(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	entries := h.audit.listLimit(limit)
+	offset := 0
+	if raw := strings.TrimSpace(r.URL.Query().Get("offset")); raw != "" {
+		val, convErr := strconv.Atoi(raw)
+		if convErr != nil || val < 0 {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("offset must be a non-negative integer"))
+			return
+		}
+		offset = val
+	}
+	entries := h.audit.listLimit(limit + offset)
 	q := r.URL.Query()
 	user := strings.ToLower(strings.TrimSpace(q.Get("user")))
 	role := strings.ToLower(strings.TrimSpace(q.Get("role")))
@@ -640,6 +649,14 @@ func (h *handler) adminAudit(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		filtered = append(filtered, e)
+	}
+	if offset > 0 && offset < len(filtered) {
+		filtered = filtered[offset:]
+	} else if offset >= len(filtered) {
+		filtered = []auditEntry{}
+	}
+	if len(filtered) > limit {
+		filtered = filtered[:limit]
 	}
 	writeJSON(w, http.StatusOK, filtered)
 }

@@ -351,6 +351,7 @@ func handleAudit(ctx context.Context, client *apiClient, args []string) error {
 	fs := flag.NewFlagSet("audit", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	limit := fs.Int("limit", 50, "max entries to return")
+	offset := fs.Int("offset", 0, "offset for pagination")
 	user := fs.String("user", "", "filter by user")
 	role := fs.String("role", "", "filter by role")
 	tenant := fs.String("tenant", "", "filter by tenant")
@@ -363,6 +364,9 @@ func handleAudit(ctx context.Context, client *apiClient, args []string) error {
 	params := url.Values{}
 	if *limit > 0 {
 		params.Set("limit", strconv.Itoa(*limit))
+	}
+	if *offset > 0 {
+		params.Set("offset", strconv.Itoa(*offset))
 	}
 	if v := strings.TrimSpace(*user); v != "" {
 		params.Set("user", v)

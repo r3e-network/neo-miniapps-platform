@@ -12,6 +12,7 @@ export function AdminPanel({ systemState, baseUrl, token }: Props) {
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [auditError, setAuditError] = useState<string>();
   const [limit, setLimit] = useState(50);
+  const [offset, setOffset] = useState(0);
   const [userFilter, setUserFilter] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [tenantFilter, setTenantFilter] = useState("");
@@ -28,8 +29,9 @@ export function AdminPanel({ systemState, baseUrl, token }: Props) {
       method: methodFilter || undefined,
       contains: pathFilter || undefined,
       status: statusFilter ? Number(statusFilter) : undefined,
+      offset,
     }),
-    [limit, methodFilter, pathFilter, roleFilter, statusFilter, tenantFilter, userFilter],
+    [limit, methodFilter, offset, pathFilter, roleFilter, statusFilter, tenantFilter, userFilter],
   );
 
   useEffect(() => {
@@ -121,6 +123,13 @@ export function AdminPanel({ systemState, baseUrl, token }: Props) {
             value={limit}
             onChange={(e) => setLimit(Number(e.target.value) || 50)}
             placeholder="Limit"
+          />
+          <input
+            type="number"
+            min={0}
+            value={offset}
+            onChange={(e) => setOffset(Number(e.target.value) || 0)}
+            placeholder="Offset"
           />
         </div>
         {auditError && <p className="error">Audit error: {auditError}</p>}

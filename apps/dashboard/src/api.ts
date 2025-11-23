@@ -469,6 +469,7 @@ export async function fetchSystemStatus(config: ClientConfig): Promise<SystemSta
 
 export type AuditQuery = {
   limit?: number;
+  offset?: number;
   user?: string;
   role?: string;
   tenant?: string;
@@ -480,6 +481,7 @@ export type AuditQuery = {
 export async function fetchAudit(config: ClientConfig, query: AuditQuery = {}): Promise<AuditEntry[]> {
   const params = new URLSearchParams();
   params.set("limit", String(query.limit ?? 200));
+  if (query.offset !== undefined) params.set("offset", String(query.offset));
   if (query.user) params.set("user", query.user);
   if (query.role) params.set("role", query.role);
   if (query.tenant) params.set("tenant", query.tenant);
