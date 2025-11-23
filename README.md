@@ -111,6 +111,7 @@ ensure gas accounts and submit oracle requests.
 - `slctl version` — print CLI build info and query `/system/version` on the server.
 - `slctl gasbank summary --account <id>` — view balances, pending withdrawals, and recent gas bank activity.
 - See `docs/gasbank-workflows.md` for a full ensure → deposit → scheduled/multi-sig withdraw walkthrough (CLI + HTTP) plus settlement retry/DLQ commands embraced by both Devpack and the dashboard.
+- `slctl audit [--limit N] [--offset N] [--user u] [--role r] [--tenant t] [--method get] [--contains /path] [--status 200] [--format table]` — admin-only; fetch recent audit entries (requires admin JWT, not token-only auth).
 
 ### Docker
 

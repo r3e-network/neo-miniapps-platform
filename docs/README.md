@@ -14,6 +14,8 @@ have been consolidated into that specification.
   - [JAM Quickstart](examples/jam.md)
 - Dashboard:
   - [Dashboard Smoke Checklist](dashboard-smoke.md)
+- Auditing:
+  - `/admin/audit?limit=...&offset=...` (admin JWT) with filters for user/role/tenant/method/path/status. CLI helper: `slctl audit ...`.
 - JAM integration notes:
   - [Polkadot JAM-inspired integration](polkadot-jam-integration-design.md)
   - [JAM accumulator & receipt plan](jam-accumulator-plan.md)
