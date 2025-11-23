@@ -8,8 +8,11 @@ import (
 	"github.com/R3E-Network/service_layer/internal/app/domain/account"
 	"github.com/R3E-Network/service_layer/internal/app/domain/automation"
 	domainccip "github.com/R3E-Network/service_layer/internal/app/domain/ccip"
+	domainconf "github.com/R3E-Network/service_layer/internal/app/domain/confidential"
 	domaindf "github.com/R3E-Network/service_layer/internal/app/domain/datafeeds"
 	domainlink "github.com/R3E-Network/service_layer/internal/app/domain/datalink"
+	domainds "github.com/R3E-Network/service_layer/internal/app/domain/datastreams"
+	domaindta "github.com/R3E-Network/service_layer/internal/app/domain/dta"
 	"github.com/R3E-Network/service_layer/internal/app/domain/function"
 	"github.com/R3E-Network/service_layer/internal/app/domain/gasbank"
 	"github.com/R3E-Network/service_layer/internal/app/domain/oracle"
@@ -168,6 +171,58 @@ func TestTenantFiltersAcrossStores(t *testing.T) {
 	}
 	expectListed(t, "vrf keys filtered", 0, len(mustListVRFKeys(ctx, store, acct.ID)))
 
+	// Datastreams
+	stream, err := store.CreateStream(ctx, domainds.Stream{
+		AccountID:   acct.ID,
+		Name:        "ticker",
+		Symbol:      "TCKR",
+		Description: "demo",
+		Frequency:   "1s",
+		SLAms:       10,
+		Status:      domainds.StreamStatusActive,
+	})
+	if err != nil {
+		t.Fatalf("create datastream: %v", err)
+	}
+	expectListed(t, "datastream present", 1, len(mustListStreams(ctx, store, acct.ID)))
+	if _, err := store.db.ExecContext(ctx, `UPDATE chainlink_datastreams SET tenant = 'tenant-b' WHERE id = $1`, stream.ID); err != nil {
+		t.Fatalf("mismatch stream tenant: %v", err)
+	}
+	expectListed(t, "datastream filtered", 0, len(mustListStreams(ctx, store, acct.ID)))
+
+	// DTA
+	product, err := store.CreateProduct(ctx, domaindta.Product{
+		AccountID: acct.ID,
+		Name:      "Fund A",
+		Symbol:    "FNDA",
+		Type:      "open",
+		Status:    domaindta.ProductStatusActive,
+	})
+	if err != nil {
+		t.Fatalf("create dta product: %v", err)
+	}
+	expectListed(t, "dta product present", 1, len(mustListProducts(ctx, store, acct.ID)))
+	if _, err := store.db.ExecContext(ctx, `UPDATE chainlink_dta_products SET tenant = 'tenant-b' WHERE id = $1`, product.ID); err != nil {
+		t.Fatalf("mismatch dta product tenant: %v", err)
+	}
+	expectListed(t, "dta product filtered", 0, len(mustListProducts(ctx, store, acct.ID)))
+
+	// Confidential
+	enclave, err := store.CreateEnclave(ctx, domainconf.Enclave{
+		AccountID: acct.ID,
+		Name:      "enc",
+		Endpoint:  "https://enc",
+		Status:    domainconf.EnclaveStatusActive,
+	})
+	if err != nil {
+		t.Fatalf("create enclave: %v", err)
+	}
+	expectListed(t, "conf enclaves present", 1, len(mustListEnclaves(ctx, store, acct.ID)))
+	if _, err := store.db.ExecContext(ctx, `UPDATE confidential_enclaves SET tenant = 'tenant-b' WHERE id = $1`, enclave.ID); err != nil {
+		t.Fatalf("mismatch enclave tenant: %v", err)
+	}
+	expectListed(t, "conf enclaves filtered", 0, len(mustListEnclaves(ctx, store, acct.ID)))
+
 	// Gas bank
 	gasAcct, err := store.CreateGasAccount(ctx, gasbank.Account{
 		AccountID:     acct.ID,
@@ -264,6 +319,30 @@ func mustListVRFKeys(ctx context.Context, store *Store, accountID string) []doma
 
 func mustListGasTx(ctx context.Context, store *Store, gasAccountID string) []gasbank.Transaction {
 	list, err := store.ListGasTransactions(ctx, gasAccountID, 10)
+	if err != nil {
+		panic(err)
+	}
+	return list
+}
+
+func mustListStreams(ctx context.Context, store *Store, accountID string) []domainds.Stream {
+	list, err := store.ListStreams(ctx, accountID)
+	if err != nil {
+		panic(err)
+	}
+	return list
+}
+
+func mustListProducts(ctx context.Context, store *Store, accountID string) []domaindta.Product {
+	list, err := store.ListProducts(ctx, accountID)
+	if err != nil {
+		panic(err)
+	}
+	return list
+}
+
+func mustListEnclaves(ctx context.Context, store *Store, accountID string) []domainconf.Enclave {
+	list, err := store.ListEnclaves(ctx, accountID)
 	if err != nil {
 		panic(err)
 	}
