@@ -41,11 +41,12 @@ func (s *Store) CreateLane(ctx context.Context, lane ccip.Lane) (ccip.Lane, erro
 	if err != nil {
 		return ccip.Lane{}, err
 	}
+	tenant := s.accountTenant(ctx, lane.AccountID)
 
 	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO app_ccip_lanes (id, account_id, name, source_chain, dest_chain, signer_set, allowed_tokens, delivery_policy, metadata, tags, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-	`, lane.ID, lane.AccountID, lane.Name, lane.SourceChain, lane.DestChain, signerJSON, tokensJSON, policyJSON, metaJSON, tagsJSON, lane.CreatedAt, lane.UpdatedAt)
+		INSERT INTO app_ccip_lanes (id, account_id, name, source_chain, dest_chain, signer_set, allowed_tokens, delivery_policy, metadata, tags, tenant, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+	`, lane.ID, lane.AccountID, lane.Name, lane.SourceChain, lane.DestChain, signerJSON, tokensJSON, policyJSON, metaJSON, tagsJSON, tenant, lane.CreatedAt, lane.UpdatedAt)
 	if err != nil {
 		return ccip.Lane{}, err
 	}
@@ -81,12 +82,13 @@ func (s *Store) UpdateLane(ctx context.Context, lane ccip.Lane) (ccip.Lane, erro
 	if err != nil {
 		return ccip.Lane{}, err
 	}
+	tenant := s.accountTenant(ctx, lane.AccountID)
 
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE app_ccip_lanes
-		SET name = $2, source_chain = $3, dest_chain = $4, signer_set = $5, allowed_tokens = $6, delivery_policy = $7, metadata = $8, tags = $9, updated_at = $10
+		SET name = $2, source_chain = $3, dest_chain = $4, signer_set = $5, allowed_tokens = $6, delivery_policy = $7, metadata = $8, tags = $9, tenant = $10, updated_at = $11
 		WHERE id = $1
-	`, lane.ID, lane.Name, lane.SourceChain, lane.DestChain, signerJSON, tokensJSON, policyJSON, metaJSON, tagsJSON, lane.UpdatedAt)
+	`, lane.ID, lane.Name, lane.SourceChain, lane.DestChain, signerJSON, tokensJSON, policyJSON, metaJSON, tagsJSON, tenant, lane.UpdatedAt)
 	if err != nil {
 		return ccip.Lane{}, err
 	}
@@ -157,11 +159,12 @@ func (s *Store) CreateMessage(ctx context.Context, msg ccip.Message) (ccip.Messa
 	if err != nil {
 		return ccip.Message{}, err
 	}
+	tenant := s.accountTenant(ctx, msg.AccountID)
 
 	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO app_ccip_messages (id, account_id, lane_id, status, payload, token_transfers, trace, error, metadata, tags, created_at, updated_at, delivered_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-	`, msg.ID, msg.AccountID, msg.LaneID, msg.Status, payloadJSON, tokensJSON, traceJSON, msg.Error, metaJSON, tagsJSON, msg.CreatedAt, msg.UpdatedAt, toNullTime(ptrTime(msg.DeliveredAt)))
+		INSERT INTO app_ccip_messages (id, account_id, lane_id, status, payload, token_transfers, trace, error, metadata, tags, tenant, created_at, updated_at, delivered_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+	`, msg.ID, msg.AccountID, msg.LaneID, msg.Status, payloadJSON, tokensJSON, traceJSON, msg.Error, metaJSON, tagsJSON, tenant, msg.CreatedAt, msg.UpdatedAt, toNullTime(ptrTime(msg.DeliveredAt)))
 	if err != nil {
 		return ccip.Message{}, err
 	}
@@ -198,12 +201,13 @@ func (s *Store) UpdateMessage(ctx context.Context, msg ccip.Message) (ccip.Messa
 	if err != nil {
 		return ccip.Message{}, err
 	}
+	tenant := s.accountTenant(ctx, msg.AccountID)
 
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE app_ccip_messages
-		SET status = $2, payload = $3, token_transfers = $4, trace = $5, error = $6, metadata = $7, tags = $8, updated_at = $9, delivered_at = $10
+		SET status = $2, payload = $3, token_transfers = $4, trace = $5, error = $6, metadata = $7, tags = $8, tenant = $9, updated_at = $10, delivered_at = $11
 		WHERE id = $1
-	`, msg.ID, msg.Status, payloadJSON, tokensJSON, traceJSON, msg.Error, metaJSON, tagsJSON, msg.UpdatedAt, toNullTime(ptrTime(msg.DeliveredAt)))
+	`, msg.ID, msg.Status, payloadJSON, tokensJSON, traceJSON, msg.Error, metaJSON, tagsJSON, tenant, msg.UpdatedAt, toNullTime(ptrTime(msg.DeliveredAt)))
 	if err != nil {
 		return ccip.Message{}, err
 	}

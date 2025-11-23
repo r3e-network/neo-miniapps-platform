@@ -21,6 +21,7 @@ func (s *Store) CreateVRFKey(ctx context.Context, key vrf.Key) (vrf.Key, error) 
 	now := time.Now().UTC()
 	key.CreatedAt = now
 	key.UpdatedAt = now
+	tenant := s.accountTenant(ctx, key.AccountID)
 
 	metaJSON, err := json.Marshal(key.Metadata)
 	if err != nil {
@@ -28,9 +29,9 @@ func (s *Store) CreateVRFKey(ctx context.Context, key vrf.Key) (vrf.Key, error) 
 	}
 
 	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO app_vrf_keys (id, account_id, public_key, label, status, wallet_address, attestation, metadata, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, key.ID, key.AccountID, key.PublicKey, key.Label, key.Status, key.WalletAddress, key.Attestation, metaJSON, key.CreatedAt, key.UpdatedAt)
+		INSERT INTO app_vrf_keys (id, account_id, public_key, label, status, wallet_address, attestation, metadata, tenant, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	`, key.ID, key.AccountID, key.PublicKey, key.Label, key.Status, key.WalletAddress, key.Attestation, metaJSON, tenant, key.CreatedAt, key.UpdatedAt)
 	if err != nil {
 		return vrf.Key{}, err
 	}
@@ -46,6 +47,7 @@ func (s *Store) UpdateVRFKey(ctx context.Context, key vrf.Key) (vrf.Key, error) 
 	key.WalletAddress = normalizeWallet(key.WalletAddress)
 	key.CreatedAt = existing.CreatedAt
 	key.UpdatedAt = time.Now().UTC()
+	tenant := s.accountTenant(ctx, key.AccountID)
 
 	metaJSON, err := json.Marshal(key.Metadata)
 	if err != nil {
@@ -54,9 +56,9 @@ func (s *Store) UpdateVRFKey(ctx context.Context, key vrf.Key) (vrf.Key, error) 
 
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE app_vrf_keys
-		SET public_key = $2, label = $3, status = $4, wallet_address = $5, attestation = $6, metadata = $7, updated_at = $8
+		SET public_key = $2, label = $3, status = $4, wallet_address = $5, attestation = $6, metadata = $7, tenant = $8, updated_at = $9
 		WHERE id = $1
-	`, key.ID, key.PublicKey, key.Label, key.Status, key.WalletAddress, key.Attestation, metaJSON, key.UpdatedAt)
+	`, key.ID, key.PublicKey, key.Label, key.Status, key.WalletAddress, key.Attestation, metaJSON, tenant, key.UpdatedAt)
 	if err != nil {
 		return vrf.Key{}, err
 	}
@@ -105,6 +107,7 @@ func (s *Store) CreateVRFRequest(ctx context.Context, req vrf.Request) (vrf.Requ
 	now := time.Now().UTC()
 	req.CreatedAt = now
 	req.UpdatedAt = now
+	tenant := s.accountTenant(ctx, req.AccountID)
 
 	metaJSON, err := json.Marshal(req.Metadata)
 	if err != nil {
@@ -112,9 +115,9 @@ func (s *Store) CreateVRFRequest(ctx context.Context, req vrf.Request) (vrf.Requ
 	}
 
 	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO app_vrf_requests (id, account_id, key_id, consumer, seed, status, result, error, metadata, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	`, req.ID, req.AccountID, req.KeyID, req.Consumer, req.Seed, req.Status, req.Result, req.Error, metaJSON, req.CreatedAt, req.UpdatedAt)
+		INSERT INTO app_vrf_requests (id, account_id, key_id, consumer, seed, status, result, error, metadata, tenant, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	`, req.ID, req.AccountID, req.KeyID, req.Consumer, req.Seed, req.Status, req.Result, req.Error, metaJSON, tenant, req.CreatedAt, req.UpdatedAt)
 	if err != nil {
 		return vrf.Request{}, err
 	}

@@ -28,13 +28,14 @@ func (s *Store) CreateChannel(ctx context.Context, ch domainlink.Channel) (domai
 	if err != nil {
 		return domainlink.Channel{}, err
 	}
+	tenant := s.accountTenant(ctx, ch.AccountID)
 
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO chainlink_datalink_channels
-			(id, account_id, name, endpoint, auth_token, signer_set, status, metadata, created_at, updated_at)
+			(id, account_id, name, endpoint, auth_token, signer_set, status, metadata, tenant, created_at, updated_at)
 		VALUES
-			($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, ch.ID, ch.AccountID, ch.Name, ch.Endpoint, ch.AuthToken, signerJSON, ch.Status, metaJSON, ch.CreatedAt, ch.UpdatedAt)
+			($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	`, ch.ID, ch.AccountID, ch.Name, ch.Endpoint, ch.AuthToken, signerJSON, ch.Status, metaJSON, tenant, ch.CreatedAt, ch.UpdatedAt)
 	if err != nil {
 		return domainlink.Channel{}, err
 	}
@@ -57,12 +58,13 @@ func (s *Store) UpdateChannel(ctx context.Context, ch domainlink.Channel) (domai
 	if err != nil {
 		return domainlink.Channel{}, err
 	}
+	tenant := s.accountTenant(ctx, ch.AccountID)
 
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE chainlink_datalink_channels
-		SET name = $2, endpoint = $3, auth_token = $4, signer_set = $5, status = $6, metadata = $7, updated_at = $8
+		SET name = $2, endpoint = $3, auth_token = $4, signer_set = $5, status = $6, metadata = $7, tenant = $8, updated_at = $9
 		WHERE id = $1
-	`, ch.ID, ch.Name, ch.Endpoint, ch.AuthToken, signerJSON, ch.Status, metaJSON, ch.UpdatedAt)
+	`, ch.ID, ch.Name, ch.Endpoint, ch.AuthToken, signerJSON, ch.Status, metaJSON, tenant, ch.UpdatedAt)
 	if err != nil {
 		return domainlink.Channel{}, err
 	}
@@ -120,13 +122,14 @@ func (s *Store) CreateDelivery(ctx context.Context, del domainlink.Delivery) (do
 	if err != nil {
 		return domainlink.Delivery{}, err
 	}
+	tenant := s.accountTenant(ctx, del.AccountID)
 
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO chainlink_datalink_deliveries
-			(id, account_id, channel_id, payload, attempts, status, error, metadata, created_at, updated_at)
+			(id, account_id, channel_id, payload, attempts, status, error, metadata, tenant, created_at, updated_at)
 		VALUES
-			($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, del.ID, del.AccountID, del.ChannelID, payloadJSON, del.Attempts, del.Status, del.Error, metaJSON, del.CreatedAt, del.UpdatedAt)
+			($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	`, del.ID, del.AccountID, del.ChannelID, payloadJSON, del.Attempts, del.Status, del.Error, metaJSON, tenant, del.CreatedAt, del.UpdatedAt)
 	if err != nil {
 		return domainlink.Delivery{}, err
 	}

@@ -25,11 +25,12 @@ func (s *Store) CreateDataSource(ctx context.Context, src oracle.DataSource) (or
 	if err != nil {
 		return oracle.DataSource{}, err
 	}
+	tenant := s.accountTenant(ctx, src.AccountID)
 
 	_, err = s.db.ExecContext(ctx, `
-        INSERT INTO app_oracle_sources (id, account_id, name, description, url, method, headers, body, enabled, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-    `, src.ID, src.AccountID, src.Name, src.Description, src.URL, src.Method, headersJSON, src.Body, src.Enabled, src.CreatedAt, src.UpdatedAt)
+        INSERT INTO app_oracle_sources (id, account_id, name, description, url, method, headers, body, enabled, tenant, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    `, src.ID, src.AccountID, src.Name, src.Description, src.URL, src.Method, headersJSON, src.Body, src.Enabled, tenant, src.CreatedAt, src.UpdatedAt)
 	if err != nil {
 		return oracle.DataSource{}, err
 	}
@@ -50,12 +51,13 @@ func (s *Store) UpdateDataSource(ctx context.Context, src oracle.DataSource) (or
 	if err != nil {
 		return oracle.DataSource{}, err
 	}
+	tenant := s.accountTenant(ctx, src.AccountID)
 
 	result, err := s.db.ExecContext(ctx, `
         UPDATE app_oracle_sources
-        SET name = $2, description = $3, url = $4, method = $5, headers = $6, body = $7, enabled = $8, updated_at = $9
+        SET name = $2, description = $3, url = $4, method = $5, headers = $6, body = $7, enabled = $8, tenant = $9, updated_at = $10
         WHERE id = $1
-    `, src.ID, src.Name, src.Description, src.URL, src.Method, headersJSON, src.Body, src.Enabled, src.UpdatedAt)
+    `, src.ID, src.Name, src.Description, src.URL, src.Method, headersJSON, src.Body, src.Enabled, tenant, src.UpdatedAt)
 	if err != nil {
 		return oracle.DataSource{}, err
 	}
@@ -121,11 +123,12 @@ func (s *Store) CreateRequest(ctx context.Context, req oracle.Request) (oracle.R
 	now := time.Now().UTC()
 	req.CreatedAt = now
 	req.UpdatedAt = now
+	tenant := s.accountTenant(ctx, req.AccountID)
 
 	_, err := s.db.ExecContext(ctx, `
-        INSERT INTO app_oracle_requests (id, account_id, data_source_id, status, attempts, payload, result, error, created_at, updated_at, completed_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-    `, req.ID, req.AccountID, req.DataSourceID, req.Status, req.Attempts, req.Payload, req.Result, req.Error, req.CreatedAt, req.UpdatedAt, toNullTime(req.CompletedAt))
+        INSERT INTO app_oracle_requests (id, account_id, data_source_id, status, attempts, payload, result, error, tenant, created_at, updated_at, completed_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    `, req.ID, req.AccountID, req.DataSourceID, req.Status, req.Attempts, req.Payload, req.Result, req.Error, tenant, req.CreatedAt, req.UpdatedAt, toNullTime(req.CompletedAt))
 	if err != nil {
 		return oracle.Request{}, err
 	}
@@ -142,12 +145,13 @@ func (s *Store) UpdateRequest(ctx context.Context, req oracle.Request) (oracle.R
 	req.DataSourceID = existing.DataSourceID
 	req.CreatedAt = existing.CreatedAt
 	req.UpdatedAt = time.Now().UTC()
+	tenant := s.accountTenant(ctx, req.AccountID)
 
 	result, err := s.db.ExecContext(ctx, `
         UPDATE app_oracle_requests
-        SET status = $2, attempts = $3, payload = $4, result = $5, error = $6, updated_at = $7, completed_at = $8
+        SET status = $2, attempts = $3, payload = $4, result = $5, error = $6, tenant = $7, updated_at = $8, completed_at = $9
         WHERE id = $1
-    `, req.ID, req.Status, req.Attempts, req.Payload, req.Result, req.Error, req.UpdatedAt, toNullTime(req.CompletedAt))
+    `, req.ID, req.Status, req.Attempts, req.Payload, req.Result, req.Error, tenant, req.UpdatedAt, toNullTime(req.CompletedAt))
 	if err != nil {
 		return oracle.Request{}, err
 	}

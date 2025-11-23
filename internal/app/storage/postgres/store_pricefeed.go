@@ -20,11 +20,12 @@ func (s *Store) CreatePriceFeed(ctx context.Context, feed pricefeed.Feed) (price
 	now := time.Now().UTC()
 	feed.CreatedAt = now
 	feed.UpdatedAt = now
+	tenant := s.accountTenant(ctx, feed.AccountID)
 
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO app_price_feeds (id, account_id, base_asset, quote_asset, pair, update_interval, deviation_percent, heartbeat_interval, active, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	`, feed.ID, feed.AccountID, feed.BaseAsset, feed.QuoteAsset, feed.Pair, feed.UpdateInterval, feed.DeviationPercent, feed.Heartbeat, feed.Active, feed.CreatedAt, feed.UpdatedAt)
+		INSERT INTO app_price_feeds (id, account_id, base_asset, quote_asset, pair, update_interval, deviation_percent, heartbeat_interval, active, tenant, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	`, feed.ID, feed.AccountID, feed.BaseAsset, feed.QuoteAsset, feed.Pair, feed.UpdateInterval, feed.DeviationPercent, feed.Heartbeat, feed.Active, tenant, feed.CreatedAt, feed.UpdatedAt)
 	if err != nil {
 		return pricefeed.Feed{}, err
 	}
@@ -43,12 +44,13 @@ func (s *Store) UpdatePriceFeed(ctx context.Context, feed pricefeed.Feed) (price
 	feed.Pair = existing.Pair
 	feed.CreatedAt = existing.CreatedAt
 	feed.UpdatedAt = time.Now().UTC()
+	tenant := s.accountTenant(ctx, feed.AccountID)
 
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE app_price_feeds
-		SET update_interval = $2, deviation_percent = $3, heartbeat_interval = $4, active = $5, updated_at = $6
+		SET update_interval = $2, deviation_percent = $3, heartbeat_interval = $4, active = $5, tenant = $6, updated_at = $7
 		WHERE id = $1
-	`, feed.ID, feed.UpdateInterval, feed.DeviationPercent, feed.Heartbeat, feed.Active, feed.UpdatedAt)
+	`, feed.ID, feed.UpdateInterval, feed.DeviationPercent, feed.Heartbeat, feed.Active, tenant, feed.UpdatedAt)
 	if err != nil {
 		return pricefeed.Feed{}, err
 	}
