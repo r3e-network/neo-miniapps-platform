@@ -898,6 +898,38 @@ func TestCREPlaybooksAndRunsHTTP(t *testing.T) {
 	}
 }
 
+func TestTenantIsolationEnforced(t *testing.T) {
+	application, err := app.New(app.Stores{}, nil)
+	if err != nil {
+		t.Fatalf("new application: %v", err)
+	}
+	if err := application.Start(context.Background()); err != nil {
+		t.Fatalf("start application: %v", err)
+	}
+	t.Cleanup(func() { stopApplication(t, application) })
+
+	handler := wrapWithAuth(NewHandler(application, jam.Config{}, authTokens, nil, newAuditLog(50, nil)), authTokens, testLogger, nil)
+
+	accountA := createAccountWithTenant(t, handler, "alice", "tenant-a")
+	accountB := createAccountWithTenant(t, handler, "bob", "tenant-b")
+
+	// Cross-tenant account access should be forbidden
+	assertStatus(t, doJSONWithTenant(handler, http.MethodGet, "/accounts/"+accountB, nil, "tenant-a"), http.StatusForbidden)
+	assertStatus(t, doJSONWithTenant(handler, http.MethodGet, "/accounts/"+accountA, nil, "tenant-b"), http.StatusForbidden)
+
+	// Create a function under tenant-a, then ensure tenant-b cannot access or create against that account.
+	fnPayload := map[string]any{
+		"name":   "hello",
+		"source": "(p,s)=>({ok:true})",
+	}
+	assertStatus(t, doJSONWithTenant(handler, http.MethodPost, "/accounts/"+accountA+"/functions", fnPayload, "tenant-a"), http.StatusCreated)
+	assertStatus(t, doJSONWithTenant(handler, http.MethodGet, "/accounts/"+accountA+"/functions", nil, "tenant-b"), http.StatusForbidden)
+	assertStatus(t, doJSONWithTenant(handler, http.MethodPost, "/accounts/"+accountA+"/functions", fnPayload, "tenant-b"), http.StatusForbidden)
+
+	// Likewise, tenant-a cannot list tenant-b resources.
+	assertStatus(t, doJSONWithTenant(handler, http.MethodGet, "/accounts/"+accountB+"/functions", nil, "tenant-a"), http.StatusForbidden)
+}
+
 func TestDataFeedsWalletGatedHTTP(t *testing.T) {
 	application, err := app.New(app.Stores{}, nil)
 	if err != nil {
@@ -1449,6 +1481,10 @@ func TestIntegration_AutomationExecutesFunction(t *testing.T) {
 }
 
 func authedRequest(method, url string, body []byte) *http.Request {
+	return authedRequestWithTenant(method, url, "tenant-a", body)
+}
+
+func authedRequestWithTenant(method, url, tenant string, body []byte) *http.Request {
 	var reader *bytes.Reader
 	if body != nil {
 		reader = bytes.NewReader(body)
@@ -1457,7 +1493,7 @@ func authedRequest(method, url string, body []byte) *http.Request {
 	}
 	req := httptest.NewRequest(method, url, reader)
 	req.Header.Set("Authorization", "Bearer "+testAuthToken)
-	req.Header.Set("X-Tenant-ID", "tenant-a")
+	req.Header.Set("X-Tenant-ID", tenant)
 	return req
 }
 
@@ -1473,7 +1509,11 @@ func getFunctionID(body []byte) string {
 }
 
 func createAccount(t *testing.T, handler http.Handler, owner string) string {
-	resp := doJSON(handler, http.MethodPost, "/accounts", map[string]any{"owner": owner})
+	return createAccountWithTenant(t, handler, owner, "tenant-a")
+}
+
+func createAccountWithTenant(t *testing.T, handler http.Handler, owner, tenant string) string {
+	resp := doJSONWithTenant(handler, http.MethodPost, "/accounts", map[string]any{"owner": owner}, tenant)
 	assertStatus(t, resp, http.StatusCreated)
 	var acct map[string]any
 	if err := json.Unmarshal(resp.Body.Bytes(), &acct); err != nil {
@@ -1484,6 +1524,10 @@ func createAccount(t *testing.T, handler http.Handler, owner string) string {
 }
 
 func doJSON(handler http.Handler, method, path string, payload any) *httptest.ResponseRecorder {
+	return doJSONWithTenant(handler, method, path, payload, "tenant-a")
+}
+
+func doJSONWithTenant(handler http.Handler, method, path string, payload any, tenant string) *httptest.ResponseRecorder {
 	var body []byte
 	switch v := payload.(type) {
 	case nil:
@@ -1492,7 +1536,7 @@ func doJSON(handler http.Handler, method, path string, payload any) *httptest.Re
 	default:
 		body = marshal(v)
 	}
-	req := authedRequest(method, path, body)
+	req := authedRequestWithTenant(method, path, tenant, body)
 	resp := httptest.NewRecorder()
 	handler.ServeHTTP(resp, req)
 	return resp
