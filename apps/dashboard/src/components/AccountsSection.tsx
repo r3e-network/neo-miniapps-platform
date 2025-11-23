@@ -63,6 +63,10 @@ type Props = {
   onLoadMoreFailedOracle: (accountID: string) => void;
   onRetryOracle: (accountID: string, requestID: string) => void;
   onCopyCursor: (accountID: string, cursor: string) => void;
+  onSetAggregation: (accountID: string, feedId: string, aggregation: string) => void;
+  onCreateChannel: (accountID: string, payload: { name: string; endpoint: string; signers: string[]; status?: string; metadata?: Record<string, string> }) => void;
+  onCreateDelivery: (accountID: string, payload: { channelId: string; body: Record<string, any>; metadata?: Record<string, string> }) => void;
+  onNotify: (type: "success" | "error", message: string) => void;
   setFilter: (accountID: string, value: string) => void;
   formatAmount: (value: number | undefined) => string;
   formatTimestamp: (value?: string) => string;
@@ -115,6 +119,10 @@ export function AccountsSection({
   onLoadMoreFailedOracle,
   onRetryOracle,
   onCopyCursor,
+  onSetAggregation,
+  onCreateChannel,
+  onCreateDelivery,
+  onNotify,
   setFilter,
   formatAmount,
   formatTimestamp,
@@ -188,6 +196,10 @@ export function AccountsSection({
             onLoadMoreFailed={() => onLoadMoreFailedOracle(acct.ID)}
             onRetry={(requestID) => onRetryOracle(acct.ID, requestID)}
             onCopyCursor={(c) => onCopyCursor(acct.ID, c)}
+            onSetAggregation={(feedId, agg) => onSetAggregation(acct.ID, feedId, agg)}
+            onCreateChannel={(payload) => onCreateChannel(acct.ID, payload)}
+            onCreateDelivery={(payload) => onCreateDelivery(acct.ID, payload)}
+            onNotify={onNotify}
             formatSnippet={formatSnippet}
             formatTimestamp={formatTimestamp}
             formatDuration={formatDuration}

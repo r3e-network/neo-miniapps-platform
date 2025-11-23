@@ -113,7 +113,11 @@ func TestSettlementPollerHonoursNextAttemptFromStore(t *testing.T) {
 	if err := poller.Start(ctx); err != nil {
 		t.Fatalf("start poller: %v", err)
 	}
-	defer poller.Stop(context.Background())
+	defer func() {
+		if err := poller.Stop(context.Background()); err != nil {
+			t.Fatalf("stop poller: %v", err)
+		}
+	}()
 
 	// Immediately after start, resolver should not be called because next attempt is in the future.
 	time.Sleep(50 * time.Millisecond)

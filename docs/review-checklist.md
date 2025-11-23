@@ -1,6 +1,6 @@
 # Service Layer Review Checklist
 
-_Last reviewed: 2025-11-19 (UTC)_
+_Last reviewed: 2025-11-23 (UTC)_
 
 Use this checklist whenever you touch platform behaviour. Work through it in
 order, and reset the checkboxes the next time you audit the repo.
@@ -15,13 +15,18 @@ order, and reset the checkboxes the next time you audit the repo.
 - [ ] Verify `go test ./...` succeeds after code changes.
 - [ ] Verify `npm run build` inside `apps/dashboard` compiles the dashboard with
       all service panels present.
+- [ ] Verify dashboard typecheck (`npm test` in `apps/dashboard`) passes locally
+      and in CI.
+- [ ] Ensure the dashboard typecheck job is marked as a required status check in
+      branch protection.
 - [ ] Confirm CLI documentation matches the subcommands currently shipped in `cmd/slctl`.
 - [ ] Confirm every service descriptor reports the `platform` layer so all capabilities share the same priority.
 
 ## Service Coverage (HTTP API + Dashboard)
 Each item requires an HTTP surface documented in
 [`docs/requirements.md`](requirements.md) and a corresponding panel or control in
-`apps/dashboard/src/App.tsx`.
+`apps/dashboard/src/App.tsx`. Run through the smoke checklist in
+[`docs/dashboard-smoke.md`](dashboard-smoke.md) after backend changes.
 
 - [ ] Accounts & Authentication — `/accounts`, account grid on the dashboard header card.
 - [ ] Workspace Wallets — `/accounts/{id}/workspace-wallets`, wallet list within each account card.
@@ -50,6 +55,7 @@ Each item requires an HTTP surface documented in
 - [ ] `slctl cre playbooks|executors|runs` — docs show how to inspect CRE inventory and run history.
 - [ ] `slctl ccip lanes|messages` — CLI docs mirror CCIP lane/message inspection APIs.
 - [ ] `slctl vrf keys|requests` — README/spec reference VRF CLI coverage for keys and requests.
+- [ ] `slctl datafeeds` — docs cover feed CRUD and submissions with aggregation options.
 - [ ] `slctl datalink channels|deliveries` — CLI docs reflect DataLink channel + delivery inspection flows.
 - [ ] `slctl dta products|orders` — docs describe DTA product/order inspection via CLI.
 - [ ] `slctl datastreams streams|frames` — docs reference stream + frame inspection flows.

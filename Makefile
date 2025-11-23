@@ -1,59 +1,84 @@
-.PHONY: build run test clean tidy help docker-build docker-run docker-compose migrate-up migrate-down
+.PHONY: build run run-local test clean docker docker-run docker-compose docker-compose-run help build-dashboard
 
-# Default target
-all: help
-
-BIN?=./bin/appserver
+BIN_DIR?=./bin
+APP_BIN?=$(BIN_DIR)/appserver
+CLI_BIN?=$(BIN_DIR)/slctl
+APP_IMAGE?=service-layer:latest
 
 build:
-	@echo "Building appserver..."
-	@go build -o $(BIN) ./cmd/appserver
+	@echo "Building appserver -> $(APP_BIN)"
+	@mkdir -p $(BIN_DIR)
+	@go build -o $(APP_BIN) ./cmd/appserver
+	@echo "Building CLI -> $(CLI_BIN)"
+	@go build -o $(CLI_BIN) ./cmd/slctl
 
 run:
-	@echo "Running appserver..."
+	@echo "Starting stack via docker compose (appserver + postgres + dashboard)..."
+	@echo "API:       http://localhost:8080   (Authorization: Bearer dev-token or JWT from /auth/login)"
+	@echo "Dashboard: http://localhost:8081   (use admin/changeme via /auth/login to obtain JWT)"
+	@echo "Site:      http://localhost:8082   (public marketing/docs entry)"
+	@echo "Ensuring .env exists (copying .env.example if missing)..."
+	@[ -f .env ] || (cp .env.example .env && echo "  > created .env from .env.example")
+	@echo "Stopping any existing stack..."
+	@docker compose down --remove-orphans >/dev/null 2>&1 || true
+	@docker compose up -d --build
+	@docker compose ps
+
+run-local:
+	@echo "Running appserver locally (expects Postgres via DATABASE_URL or config)..."
 	@go run ./cmd/appserver
 
 test:
 	@echo "Running tests..."
 	@go test ./...
 
-tidy:
-	@echo "Tidying modules..."
-	@go mod tidy
-
 clean:
 	@echo "Cleaning build artifacts..."
 	@rm -rf ./bin
 
-migrate-up:
-	@echo "Running database migrations up..."
-	@migrate -path internal/platform/migrations -database "$(shell grep DATABASE_URL .env 2>/dev/null | cut -d '=' -f2)" up
+build-dashboard:
+	@echo "Building dashboard..."
+	@cd apps/dashboard && npm install && npm run build
 
-migrate-down:
-	@echo "Running database migrations down..."
-	@migrate -path internal/platform/migrations -database "$(shell grep DATABASE_URL .env 2>/dev/null | cut -d '=' -f2)" down
-
-docker-build:
-	@echo "Building Docker image for appserver..."
-	@docker build -t service-layer:latest .
+docker:
+	@echo "Building Docker images (appserver + dashboard)..."
+	@docker build -t $(APP_IMAGE) .
+	@docker build -t service-layer-dashboard:latest ./apps/dashboard
 
 docker-run:
-	@echo "Running Docker image..."
-	@docker run -p 8080:8080 --env-file .env service-layer:latest
+	@echo "Running appserver image..."
+	@docker run -p 8080:8080 --env-file .env $(APP_IMAGE)
 
 docker-compose:
-	@echo "Running with Docker Compose..."
-	@docker compose up -d
+	@echo "Starting stack with docker compose (appserver + postgres + dashboard)..."
+	@docker compose up -d --build
+
+docker-compose-run:
+	@echo "Running stack in foreground (Ctrl+C to stop)..."
+	@docker compose up --build
+
+down:
+	@echo "Stopping stack (docker compose down)..."
+	@docker compose down --remove-orphans
+
+ps:
+	@docker compose ps
+
+logs:
+	@echo "Tailing appserver logs (Ctrl+C to stop)..."
+	@docker compose logs -f service-layer
 
 help:
-	@echo "service_layer make commands:"
-	@echo "  build          - Build the refactored appserver"
-	@echo "  run            - Run the refactored appserver"
-	@echo "  test           - Run tests for the refactored runtime"
-	@echo "  tidy           - Run go mod tidy"
-	@echo "  clean          - Remove build artifacts"
-	@echo "  migrate-up     - Apply database migrations"
-	@echo "  migrate-down   - Rollback database migrations"
-	@echo "  docker-build   - Build Docker image"
-	@echo "  docker-run     - Run Docker image"
-	@echo "  docker-compose - Start Docker Compose stack"
+	@echo "make build             - Build appserver and CLI binaries into $(BIN_DIR)"
+	@echo "make run               - Start the stack with docker compose (detached; uses .env)"
+	@echo "make run-local         - Run appserver locally (requires Postgres available)"
+	@echo "make test              - Run Go tests"
+	@echo "make clean             - Remove build artifacts"
+	@echo "make build-dashboard   - Build the React dashboard (needs npm)"
+	@echo "make docker            - Build appserver and dashboard Docker images"
+	@echo "make docker-run        - Run appserver image (reads .env)"
+	@echo "make docker-compose    - Bring up appserver+postgres+dashboard"
+	@echo "make docker-compose-run - Bring up stack in foreground"
+	@echo "make down              - Stop the compose stack and remove orphans"
+	@echo "make ps                - Show docker compose service status"
+	@echo "make logs              - Tail appserver logs from the compose stack"

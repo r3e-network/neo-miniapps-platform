@@ -1,27 +1,54 @@
-version: '3.9'
-
 services:
   service-layer:
     build:
       context: .
       dockerfile: Dockerfile
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/service_layer?sslmode=disable
+      # Defaults for local compose; override via .env
+      - DATABASE_URL=${DATABASE_URL:-postgres://service_layer:service_layer@postgres:5432/service_layer?sslmode=disable}
+      - API_TOKENS=${API_TOKENS:-dev-token}
+      - SECRET_ENCRYPTION_KEY=${SECRET_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}
+      - AUTH_JWT_SECRET=${AUTH_JWT_SECRET:-change-me-jwt-secret}
+      - AUTH_USERS=${AUTH_USERS:-admin:changeme:admin}
     ports:
       - "8080:8080"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+
+  dashboard:
+    build:
+      context: ./apps/dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "8081:80"
+    depends_on:
+      - service-layer
+
+  site:
+    build:
+      context: ./apps/site
+      dockerfile: Dockerfile
+    ports:
+      - "8082:80"
+    depends_on:
+      - service-layer
 
   postgres:
     image: postgres:14-alpine
     ports:
       - "5432:5432"
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=service_layer
+      - POSTGRES_PASSWORD=service_layer
       - POSTGRES_DB=service_layer
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U service_layer"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
 volumes:
   postgres-data:

@@ -236,7 +236,7 @@ func (d *Dispatcher) tick(ctx context.Context) {
 				finishSpan(spanErr)
 			}()
 
-			current := req
+			var current domain.Request
 			nextAttempt := req.Attempts + 1
 			if maxAttempts > 0 && nextAttempt > maxAttempts {
 				errMsg := fmt.Sprintf("max attempts exceeded (%d)", maxAttempts)

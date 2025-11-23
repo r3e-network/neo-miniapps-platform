@@ -15,6 +15,10 @@ docker run -p 8081:80 service-layer-dashboard
 ```
 
 Then open `http://localhost:8081` and configure API + Prometheus URLs in the UI.
+For local compose defaults you can prefill from the URL:
+`http://localhost:8081/?baseUrl=http://localhost:8080&token=dev-token`.
+JWT login is available at `/auth/login` using the users configured via
+`AUTH_USERS` (default: `admin/changeme`).
 
 ## Project structure (UI)
 - `src/App.tsx` stays lean and composes domain hooks + panel components.
@@ -42,3 +46,5 @@ values.
   co-host with nginx.
 - Refer back to the specification before adding new views or metrics so the UX
   remains consistent across CLI, docs, and dashboard.
+- Before releases, walk through the UI using the [dashboard smoke checklist](../../docs/dashboard-smoke.md)
+  to catch console/API drift (datafeeds, DataLink, JAM, gas bank, system cards).

@@ -8,6 +8,7 @@ import (
 
 	domaindf "github.com/R3E-Network/service_layer/internal/app/domain/datafeeds"
 	"github.com/google/uuid"
+	"strings"
 )
 
 // --- DataFeedStore ----------------------------------------------------------
@@ -15,6 +16,9 @@ import (
 func (s *Store) CreateDataFeed(ctx context.Context, feed domaindf.Feed) (domaindf.Feed, error) {
 	if feed.ID == "" {
 		feed.ID = uuid.NewString()
+	}
+	if strings.TrimSpace(feed.Aggregation) == "" {
+		feed.Aggregation = "median"
 	}
 	now := time.Now().UTC()
 	feed.CreatedAt = now
@@ -35,10 +39,10 @@ func (s *Store) CreateDataFeed(ctx context.Context, feed domaindf.Feed) (domaind
 
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO chainlink_data_feeds
-			(id, account_id, pair, description, decimals, heartbeat_seconds, threshold_ppm, signer_set, metadata, tags, created_at, updated_at)
+			(id, account_id, pair, description, decimals, heartbeat_seconds, threshold_ppm, signer_set, aggregation, metadata, tags, created_at, updated_at)
 		VALUES
-			($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-	`, feed.ID, feed.AccountID, feed.Pair, feed.Description, feed.Decimals, int64(feed.Heartbeat/time.Second), feed.ThresholdPPM, signerJSON, metaJSON, tagsJSON, feed.CreatedAt, feed.UpdatedAt)
+			($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+	`, feed.ID, feed.AccountID, feed.Pair, feed.Description, feed.Decimals, int64(feed.Heartbeat/time.Second), feed.ThresholdPPM, signerJSON, feed.Aggregation, metaJSON, tagsJSON, feed.CreatedAt, feed.UpdatedAt)
 	if err != nil {
 		return domaindf.Feed{}, err
 	}
@@ -49,6 +53,9 @@ func (s *Store) UpdateDataFeed(ctx context.Context, feed domaindf.Feed) (domaind
 	existing, err := s.GetDataFeed(ctx, feed.ID)
 	if err != nil {
 		return domaindf.Feed{}, err
+	}
+	if strings.TrimSpace(feed.Aggregation) == "" {
+		feed.Aggregation = existing.Aggregation
 	}
 	feed.CreatedAt = existing.CreatedAt
 	feed.UpdatedAt = time.Now().UTC()
@@ -68,9 +75,9 @@ func (s *Store) UpdateDataFeed(ctx context.Context, feed domaindf.Feed) (domaind
 
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE chainlink_data_feeds
-		SET pair = $2, description = $3, decimals = $4, heartbeat_seconds = $5, threshold_ppm = $6, signer_set = $7, metadata = $8, tags = $9, updated_at = $10
+		SET pair = $2, description = $3, decimals = $4, heartbeat_seconds = $5, threshold_ppm = $6, signer_set = $7, aggregation = $8, metadata = $9, tags = $10, updated_at = $11
 		WHERE id = $1
-	`, feed.ID, feed.Pair, feed.Description, feed.Decimals, int64(feed.Heartbeat/time.Second), feed.ThresholdPPM, signerJSON, metaJSON, tagsJSON, feed.UpdatedAt)
+	`, feed.ID, feed.Pair, feed.Description, feed.Decimals, int64(feed.Heartbeat/time.Second), feed.ThresholdPPM, signerJSON, feed.Aggregation, metaJSON, tagsJSON, feed.UpdatedAt)
 	if err != nil {
 		return domaindf.Feed{}, err
 	}
@@ -82,7 +89,7 @@ func (s *Store) UpdateDataFeed(ctx context.Context, feed domaindf.Feed) (domaind
 
 func (s *Store) GetDataFeed(ctx context.Context, id string) (domaindf.Feed, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, account_id, pair, description, decimals, heartbeat_seconds, threshold_ppm, signer_set, metadata, tags, created_at, updated_at
+		SELECT id, account_id, pair, description, decimals, heartbeat_seconds, threshold_ppm, signer_set, aggregation, metadata, tags, created_at, updated_at
 		FROM chainlink_data_feeds
 		WHERE id = $1
 	`, id)
@@ -91,7 +98,7 @@ func (s *Store) GetDataFeed(ctx context.Context, id string) (domaindf.Feed, erro
 
 func (s *Store) ListDataFeeds(ctx context.Context, accountID string) ([]domaindf.Feed, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, account_id, pair, description, decimals, heartbeat_seconds, threshold_ppm, signer_set, metadata, tags, created_at, updated_at
+		SELECT id, account_id, pair, description, decimals, heartbeat_seconds, threshold_ppm, signer_set, aggregation, metadata, tags, created_at, updated_at
 		FROM chainlink_data_feeds
 		WHERE account_id = $1
 		ORDER BY created_at DESC
@@ -202,7 +209,7 @@ func scanDataFeed(scanner rowScanner) (domaindf.Feed, error) {
 		signerRaw, metaRaw []byte
 		tagsRaw            []byte
 	)
-	if err := scanner.Scan(&feed.ID, &feed.AccountID, &feed.Pair, &feed.Description, &feed.Decimals, &heartbeatSeconds, &feed.ThresholdPPM, &signerRaw, &metaRaw, &tagsRaw, &feed.CreatedAt, &feed.UpdatedAt); err != nil {
+	if err := scanner.Scan(&feed.ID, &feed.AccountID, &feed.Pair, &feed.Description, &feed.Decimals, &heartbeatSeconds, &feed.ThresholdPPM, &signerRaw, &feed.Aggregation, &metaRaw, &tagsRaw, &feed.CreatedAt, &feed.UpdatedAt); err != nil {
 		return domaindf.Feed{}, err
 	}
 	feed.Heartbeat = time.Duration(heartbeatSeconds) * time.Second

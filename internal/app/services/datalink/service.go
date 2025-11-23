@@ -212,6 +212,9 @@ func (s *Service) normalizeChannel(ch *domainlink.Channel) error {
 	if ch.Endpoint == "" {
 		return fmt.Errorf("endpoint is required")
 	}
+	if len(ch.SignerSet) == 0 {
+		return fmt.Errorf("signer_set is required")
+	}
 	status := domainlink.ChannelStatus(strings.ToLower(strings.TrimSpace(string(ch.Status))))
 	if status == "" {
 		status = domainlink.ChannelStatusInactive

@@ -2,7 +2,7 @@
 
 CREATE TABLE IF NOT EXISTS chainlink_data_feeds (
     id UUID PRIMARY KEY,
-    account_id UUID NOT NULL REFERENCES app_accounts(id) ON DELETE CASCADE,
+    account_id TEXT NOT NULL REFERENCES app_accounts(id) ON DELETE CASCADE,
     pair TEXT NOT NULL,
     description TEXT,
     decimals INTEGER NOT NULL,
@@ -21,7 +21,7 @@ CREATE INDEX IF NOT EXISTS idx_chainlink_data_feeds_pair ON chainlink_data_feeds
 CREATE TABLE IF NOT EXISTS chainlink_data_feed_updates (
     id UUID PRIMARY KEY,
     feed_id UUID NOT NULL REFERENCES chainlink_data_feeds(id) ON DELETE CASCADE,
-    account_id UUID NOT NULL REFERENCES app_accounts(id) ON DELETE CASCADE,
+    account_id TEXT NOT NULL REFERENCES app_accounts(id) ON DELETE CASCADE,
     round_id BIGINT NOT NULL,
     price TEXT NOT NULL,
     ts TIMESTAMPTZ NOT NULL,

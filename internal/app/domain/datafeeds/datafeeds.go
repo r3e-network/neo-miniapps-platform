@@ -12,6 +12,7 @@ type Feed struct {
 	Heartbeat    time.Duration     `json:"heartbeat"`
 	ThresholdPPM int               `json:"threshold_ppm"`
 	SignerSet    []string          `json:"signer_set"`
+	Aggregation  string            `json:"aggregation,omitempty"`
 	Metadata     map[string]string `json:"metadata,omitempty"`
 	Tags         []string          `json:"tags,omitempty"`
 	CreatedAt    time.Time         `json:"created_at"`

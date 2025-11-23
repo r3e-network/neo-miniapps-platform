@@ -67,6 +67,10 @@ type Props = {
   onLoadMoreFailed: () => void;
   onRetry: (requestID: string) => void;
   onCopyCursor: (cursor: string) => void;
+  onSetAggregation: (feedId: string, aggregation: string) => void;
+  onCreateChannel: (payload: { name: string; endpoint: string; signers: string[]; status?: string; metadata?: Record<string, string> }) => void;
+  onCreateDelivery: (payload: { channelId: string; body: Record<string, any>; metadata?: Record<string, string> }) => void;
+  onNotify: (type: "success" | "error", message: string) => void;
   formatAmount: (value: number | undefined) => string;
   formatTimestamp: (value?: string) => string;
   formatDuration: (value?: number) => string;
@@ -119,6 +123,10 @@ export function AccountCard({
   onLoadMoreFailed,
   onRetry,
   onCopyCursor,
+  onSetAggregation,
+  onCreateChannel,
+  onCreateDelivery,
+  onNotify,
   formatAmount,
   formatTimestamp,
   formatDuration,
@@ -198,9 +206,19 @@ export function AccountCard({
       )}
       <VRFPanel vrfState={vrfState} />
       <CCIPPanel ccipState={ccipState} />
-      <DatafeedsPanel datafeedState={datafeedState} formatDuration={formatDuration} />
+      <DatafeedsPanel
+        datafeedState={datafeedState}
+        formatDuration={formatDuration}
+        onUpdateAggregation={(feedId, agg) => onSetAggregation(feedId, agg)}
+        onNotify={onNotify}
+      />
       <PricefeedsPanel pricefeedState={pricefeedState} formatTimestamp={formatTimestamp} />
-      <DatalinkPanel datalinkState={datalinkState} />
+      <DatalinkPanel
+        datalinkState={datalinkState}
+        onCreateChannel={(payload) => onCreateChannel(payload)}
+        onCreateDelivery={(payload) => onCreateDelivery(payload)}
+        onNotify={onNotify}
+      />
       <DatastreamsPanel datastreamsState={datastreamsState} />
       <DTAPanel dtaState={dtaState} />
       <GasbankPanel gasbankState={gasbankState} formatAmount={formatAmount} formatTimestamp={formatTimestamp} />

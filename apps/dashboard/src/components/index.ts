@@ -18,3 +18,8 @@ export * from "./SecretsPanel";
 export * from "./SettingsForm";
 export * from "./SystemOverview";
 export * from "./VRFPanel";
+export * from "./JamPanel";
+export * from "./Notifications";
+export * from "./WalletGate";
+export * from "./AdminPanel";
+export * from "./AuthPanel";

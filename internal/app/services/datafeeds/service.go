@@ -45,9 +45,9 @@ func (s *Service) WithAggregationConfig(minSigners int, aggregation string) {
 	if minSigners > 0 {
 		s.minSigners = minSigners
 	}
-	agg := strings.ToLower(strings.TrimSpace(aggregation))
-	if agg == "" {
-		agg = "median"
+	agg, err := normalizeAggregation(aggregation)
+	if err != nil {
+		s.log.WithField("aggregation", aggregation).Warn("unsupported datafeed aggregation; defaulting to median")
 	}
 	s.aggregation = agg
 }
@@ -192,11 +192,14 @@ func (s *Service) SubmitUpdate(ctx context.Context, accountID, feedID string, ro
 	if meta == nil {
 		meta = make(map[string]string)
 	}
-	aggregation := s.aggregation
+	aggregation := feed.Aggregation
 	if aggregation == "" {
-		aggregation = "median"
+		aggregation = s.aggregation
 	}
-	aggregation = strings.ToLower(strings.TrimSpace(aggregation))
+	aggregation, aggErr := normalizeAggregation(aggregation)
+	if aggErr != nil {
+		s.log.WithField("aggregation", aggregation).WithError(aggErr).Warn("falling back to median aggregation")
+	}
 
 	threshold := s.signerThreshold(feed)
 	submissions := len(existingRound) + 1
@@ -351,9 +354,7 @@ func normalizePriceInt(value string, decimals int) (*big.Int, error) {
 	if intPart == "" {
 		intPart = "0"
 	}
-	if strings.HasPrefix(intPart, "+") {
-		intPart = strings.TrimPrefix(intPart, "+")
-	}
+	intPart = strings.TrimPrefix(intPart, "+")
 	if strings.HasPrefix(intPart, "-") {
 		return nil, fmt.Errorf("price must be positive")
 	}
@@ -391,13 +392,43 @@ func formatPrice(value *big.Int, decimals int) string {
 	return intPart + "." + fracPart
 }
 
-func aggregatePrices(prices []*big.Int, strategy string) *big.Int {
-	if strategy != "median" {
-		strategy = "median"
+func normalizeAggregation(strategy string) (string, error) {
+	agg := strings.ToLower(strings.TrimSpace(strategy))
+	if agg == "" {
+		return "median", nil
 	}
+	switch agg {
+	case "median":
+		return "median", nil
+	case "mean", "avg", "average":
+		return "mean", nil
+	case "min":
+		return "min", nil
+	case "max":
+		return "max", nil
+	default:
+		return "median", fmt.Errorf("unsupported aggregation %q", agg)
+	}
+}
+
+func aggregatePrices(prices []*big.Int, strategy string) *big.Int {
 	if len(prices) == 0 {
 		return big.NewInt(0)
 	}
+	agg, _ := normalizeAggregation(strategy)
+	switch agg {
+	case "mean":
+		return meanPrice(prices)
+	case "min":
+		return extremumPrice(prices, false)
+	case "max":
+		return extremumPrice(prices, true)
+	default:
+		return medianPrice(prices)
+	}
+}
+
+func medianPrice(prices []*big.Int) *big.Int {
 	sorted := make([]*big.Int, len(prices))
 	for i, p := range prices {
 		sorted[i] = new(big.Int).Set(p)
@@ -409,6 +440,37 @@ func aggregatePrices(prices []*big.Int, strategy string) *big.Int {
 		return sum.Div(sum, big.NewInt(2))
 	}
 	return sorted[mid]
+}
+
+func meanPrice(prices []*big.Int) *big.Int {
+	if len(prices) == 0 {
+		return big.NewInt(0)
+	}
+	sum := big.NewInt(0)
+	for _, p := range prices {
+		sum = sum.Add(sum, p)
+	}
+	return sum.Div(sum, big.NewInt(int64(len(prices))))
+}
+
+func extremumPrice(prices []*big.Int, wantMax bool) *big.Int {
+	if len(prices) == 0 {
+		return big.NewInt(0)
+	}
+	choice := new(big.Int).Set(prices[0])
+	for i := 1; i < len(prices); i++ {
+		switch prices[i].Cmp(choice) {
+		case -1:
+			if !wantMax {
+				choice = prices[i]
+			}
+		case 1:
+			if wantMax {
+				choice = prices[i]
+			}
+		}
+	}
+	return choice
 }
 
 func containsCaseInsensitive(list []string, target string) bool {
@@ -426,6 +488,14 @@ func (s *Service) normalizeFeed(feed *domaindf.Feed) error {
 	feed.Metadata = core.NormalizeMetadata(feed.Metadata)
 	feed.Tags = core.NormalizeTags(feed.Tags)
 	feed.SignerSet = core.NormalizeTags(feed.SignerSet)
+	if feed.Aggregation == "" {
+		feed.Aggregation = s.aggregation
+	}
+	agg, err := normalizeAggregation(feed.Aggregation)
+	if err != nil {
+		return err
+	}
+	feed.Aggregation = agg
 	if s.minSigners > 0 && len(feed.SignerSet) < s.minSigners {
 		return fmt.Errorf("signer_set must include at least %d signers", s.minSigners)
 	}

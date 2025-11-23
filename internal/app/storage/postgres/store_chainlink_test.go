@@ -38,6 +38,7 @@ func TestStoreChainlinkIntegration(t *testing.T) {
 		Decimals:     8,
 		Heartbeat:    time.Minute,
 		ThresholdPPM: 500,
+		Aggregation:  "median",
 		Metadata:     map[string]string{"env": "test"},
 	}
 	feed, err = store.CreateDataFeed(ctx, feed)

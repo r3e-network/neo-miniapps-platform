@@ -221,6 +221,10 @@ func (h *handler) accountDataLinkChannels(w http.ResponseWriter, r *http.Request
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
+			if len(payload.SignerSet) == 0 {
+				writeError(w, http.StatusBadRequest, fmt.Errorf("signer_set is required"))
+				return
+			}
 			ch := domainlink.Channel{
 				AccountID: accountID,
 				Name:      payload.Name,
@@ -263,6 +267,10 @@ func (h *handler) accountDataLinkChannels(w http.ResponseWriter, r *http.Request
 			}
 			if err := decodeJSON(r.Body, &payload); err != nil {
 				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			if len(payload.SignerSet) == 0 {
+				writeError(w, http.StatusBadRequest, fmt.Errorf("signer_set is required"))
 				return
 			}
 			ch := domainlink.Channel{

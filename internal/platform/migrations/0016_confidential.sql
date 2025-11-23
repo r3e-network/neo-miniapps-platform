@@ -2,7 +2,7 @@
 
 CREATE TABLE IF NOT EXISTS confidential_enclaves (
     id UUID PRIMARY KEY,
-    account_id UUID NOT NULL REFERENCES app_accounts(id) ON DELETE CASCADE,
+    account_id TEXT NOT NULL REFERENCES app_accounts(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     endpoint TEXT NOT NULL,
     attestation TEXT,
@@ -16,7 +16,7 @@ CREATE INDEX IF NOT EXISTS idx_confidential_enclaves_account ON confidential_enc
 
 CREATE TABLE IF NOT EXISTS confidential_sealed_keys (
     id UUID PRIMARY KEY,
-    account_id UUID NOT NULL REFERENCES app_accounts(id) ON DELETE CASCADE,
+    account_id TEXT NOT NULL REFERENCES app_accounts(id) ON DELETE CASCADE,
     enclave_id UUID NOT NULL REFERENCES confidential_enclaves(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     blob BYTEA NOT NULL,
@@ -29,7 +29,7 @@ CREATE INDEX IF NOT EXISTS idx_confidential_sealed_keys_enclave ON confidential_
 
 CREATE TABLE IF NOT EXISTS confidential_attestations (
     id UUID PRIMARY KEY,
-    account_id UUID NOT NULL REFERENCES app_accounts(id) ON DELETE CASCADE,
+    account_id TEXT NOT NULL REFERENCES app_accounts(id) ON DELETE CASCADE,
     enclave_id UUID NOT NULL REFERENCES confidential_enclaves(id) ON DELETE CASCADE,
     report TEXT NOT NULL,
     valid_until TIMESTAMPTZ,

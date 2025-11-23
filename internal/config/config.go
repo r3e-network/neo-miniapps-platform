@@ -48,7 +48,15 @@ type SecurityConfig struct {
 
 // AuthConfig controls HTTP API authentication.
 type AuthConfig struct {
-	Tokens []string `json:"tokens"`
+	Tokens    []string   `json:"tokens"`
+	JWTSecret string     `json:"jwt_secret" env:"AUTH_JWT_SECRET"`
+	Users     []UserSpec `json:"users"`
+}
+
+type UserSpec struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Role     string `json:"role"`
 }
 
 // Config is the top-level configuration structure.
@@ -109,7 +117,12 @@ func Load() (*Config, error) {
 	}
 
 	if err := envdecode.Decode(cfg); err != nil {
-		return nil, fmt.Errorf("decode env: %w", err)
+		// envdecode returns an error when no tagged fields are present in the
+		// environment; treat that case as "no overrides" so local runs work
+		// without exporting vars.
+		if !strings.Contains(err.Error(), "none of the target fields were set") {
+			return nil, fmt.Errorf("decode env: %w", err)
+		}
 	}
 
 	return cfg, nil

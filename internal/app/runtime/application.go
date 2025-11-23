@@ -11,6 +11,7 @@ import (
 	_ "github.com/lib/pq"
 
 	app "github.com/R3E-Network/service_layer/internal/app"
+	appauth "github.com/R3E-Network/service_layer/internal/app/auth"
 	"github.com/R3E-Network/service_layer/internal/app/httpapi"
 	"github.com/R3E-Network/service_layer/internal/app/jam"
 	"github.com/R3E-Network/service_layer/internal/app/storage/postgres"
@@ -168,7 +169,7 @@ func NewApplication(options ...Option) (*Application, error) {
 		tokens = resolveAPITokens(cfg)
 	}
 	if len(tokens) == 0 {
-		log.Warn("no API tokens configured; HTTP API will reject requests")
+		log.Warn("no API tokens configured; prefer JWT /auth/login or wallet login")
 	}
 
 	jamCfg := jam.Config{
@@ -193,7 +194,12 @@ func NewApplication(options ...Option) (*Application, error) {
 		log.Info(msg)
 	}
 
-	httpSvc := httpapi.NewService(application, listenAddr, tokens, jamCfg, log)
+	authMgr := buildAuthManager(cfg)
+	if authMgr != nil && authMgr.HasUsers() && len(tokens) == 0 {
+		log.Info("login enabled via /auth/login (JWT); API tokens also supported")
+	}
+
+	httpSvc := httpapi.NewService(application, listenAddr, tokens, jamCfg, authMgr, log)
 	if err := application.Attach(httpSvc); err != nil {
 		if db != nil {
 			_ = db.Close()
@@ -353,4 +359,47 @@ func resolveSecretEncryptionKey(cfg *config.Config) string {
 		return strings.TrimSpace(cfg.Security.SecretEncryptionKey)
 	}
 	return ""
+}
+
+func buildAuthManager(cfg *config.Config) *appauth.Manager {
+	if cfg == nil {
+		return nil
+	}
+	// Allow env override for JWT secret/users.
+	secret := strings.TrimSpace(cfg.Auth.JWTSecret)
+	if envSecret := strings.TrimSpace(os.Getenv("AUTH_JWT_SECRET")); envSecret != "" {
+		secret = envSecret
+	}
+	var users []appauth.User
+	for _, u := range cfg.Auth.Users {
+		if strings.TrimSpace(u.Username) == "" || strings.TrimSpace(u.Password) == "" {
+			continue
+		}
+		users = append(users, appauth.User{
+			Username: u.Username,
+			Password: u.Password,
+			Role:     u.Role,
+		})
+	}
+	if envUsers := strings.TrimSpace(os.Getenv("AUTH_USERS")); envUsers != "" {
+		for _, spec := range strings.Split(envUsers, ",") {
+			parts := strings.Split(spec, ":")
+			if len(parts) < 2 {
+				continue
+			}
+			role := "user"
+			if len(parts) >= 3 && strings.TrimSpace(parts[2]) != "" {
+				role = strings.TrimSpace(parts[2])
+			}
+			users = append(users, appauth.User{
+				Username: strings.TrimSpace(parts[0]),
+				Password: strings.TrimSpace(parts[1]),
+				Role:     role,
+			})
+		}
+	}
+	if len(users) == 0 || secret == "" {
+		return nil
+	}
+	return appauth.NewManager(secret, users)
 }

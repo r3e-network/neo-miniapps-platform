@@ -1912,6 +1912,9 @@ func (s *Store) CreateDataFeed(_ context.Context, feed datafeeds.Feed) (datafeed
 	} else if _, exists := s.dataFeeds[feed.ID]; exists {
 		return datafeeds.Feed{}, fmt.Errorf("data feed %s already exists", feed.ID)
 	}
+	if strings.TrimSpace(feed.Aggregation) == "" {
+		feed.Aggregation = "median"
+	}
 	now := time.Now().UTC()
 	feed.CreatedAt = now
 	feed.UpdatedAt = now
@@ -1932,6 +1935,9 @@ func (s *Store) UpdateDataFeed(_ context.Context, feed datafeeds.Feed) (datafeed
 		return datafeeds.Feed{}, fmt.Errorf("data feed %s not found", feed.ID)
 	}
 
+	if strings.TrimSpace(feed.Aggregation) == "" {
+		feed.Aggregation = existing.Aggregation
+	}
 	feed.CreatedAt = existing.CreatedAt
 	feed.UpdatedAt = time.Now().UTC()
 	feed.Metadata = cloneMap(feed.Metadata)
@@ -2047,6 +2053,7 @@ func cloneDataFeed(feed datafeeds.Feed) datafeeds.Feed {
 	feed.Metadata = cloneMap(feed.Metadata)
 	feed.Tags = append([]string(nil), feed.Tags...)
 	feed.SignerSet = append([]string(nil), feed.SignerSet...)
+	feed.Aggregation = strings.TrimSpace(feed.Aggregation)
 	return feed
 }
 

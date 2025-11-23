@@ -28,35 +28,45 @@ experimentation, or wire itself to PostgreSQL when a DSN is supplied.
 - Secret vault with optional encryption and runtime resolution for function
   execution
 - Cryptographically secure random number generation per account
+- Workspace wallets gate data feeds and DataLink channels; signer sets are enforced per account.
 - Modular service manager that wires the domain services together
 - HTTP API located in `internal/app/httpapi`, exposing the new surface under
   `/accounts/...`
+- Auditing: in-memory by default, with optional JSONL persistence via `AUDIT_LOG_PATH` and an admin-only `/admin/audit` endpoint (dashboard viewer included).
 
 ## Quick Start
+
+Local full-stack (API + Postgres + dashboard + marketing site):
 
 ```bash
 git clone https://github.com/R3E-Network/service_layer.git
 cd service_layer
+make run  # copies .env.example if missing, then docker compose up -d --build
+```
 
-export API_TOKENS=dev-token   # required for authenticated API access
+Once up:
+- API: http://localhost:8080 (auth: `Authorization: Bearer dev-token` or JWT via `/auth/login` using admin/changeme)
+- Dashboard: http://localhost:8081 (prefills when opened as `http://localhost:8081/?baseUrl=http://localhost:8080&token=dev-token`)
+- Public site: http://localhost:8082
 
-# In-memory mode (no external dependencies)
+CLI or manual server (in-memory):
+
+```bash
+export API_TOKENS=dev-token   # or set AUTH_USERS for JWT: admin:changeme:admin
 go run ./cmd/appserver
-
-# Interact with a running instance via CLI (defaults to http://localhost:8080)
 go run ./cmd/slctl --token "$API_TOKENS" accounts list
 ```
 
-To use PostgreSQL, supply a DSN via flag or environment variable. Migrations are
-embedded and executed automatically when `-migrate` is left enabled.
+To force PostgreSQL without docker compose, supply a DSN via flag or env. Migrations
+are embedded and executed automatically when `-migrate` is left enabled:
 
 ```bash
-go run ./cmd/appserver \
-  -config configs/examples/appserver.json \
-  -dsn "postgres://user:pass@localhost:5432/service_layer?sslmode=disable"
+go run ./cmd/appserver -dsn "postgres://user:pass@localhost:5432/service_layer?sslmode=disable"
 ```
 
-(You may also omit `-config` entirely and only pass `-dsn`.)
+Auditing (optional):
+- Set `AUDIT_LOG_PATH=/var/log/service-layer-audit.jsonl` to persist audit events (JSONL) in addition to the in-memory buffer.
+- View recent audit entries via `GET /admin/audit?limit=200` (admin JWT required) or the dashboard Admin panel. Token-only auth is not admin.
 
 Examples for Devpack usage live under `examples/functions/devpack` (JS + TS samples for price feeds, randomness, gasbank/oracle orchestration). API examples for all services are in `docs/examples/services.md`. Polyglot SDKs mirroring the Devpack surface live under `sdk/go`, `sdk/rust`, and `sdk/python`.
 
@@ -80,7 +90,9 @@ ensure gas accounts and submit oracle requests.
 - `slctl oracle sources|requests ...` — configure HTTP adapters and inspect inflight work.
 - `slctl datastreams ...` — list/create streams or publish frames.
 - `slctl datalink ...` — list/create channels and queue deliveries.
+- `slctl datafeeds ...` — manage data feed definitions and submit/list rounds (with per-feed aggregation).
 - `slctl pricefeeds list|create|get|snapshots` — define asset pairs and monitor submissions.
+- `slctl jam ...` — upload preimages and submit/list packages/reports.
 - `slctl random generate --account <id> --length <n>` — request deterministic bytes.
 - `slctl random list --account <id> [--limit n]` — fetch recent `/random/requests` history.
 - `slctl cre playbooks|executors|runs --account <id>` — inspect Chainlink Reliability Engine assets and activity.
@@ -101,13 +113,27 @@ ensure gas accounts and submit oracle requests.
 ### Docker
 
 ```bash
-cp .env.example .env   # optional, customise DSN / encryption key
 docker compose up --build
 ```
 
-The compose file launches PostgreSQL and the appserver. If `DATABASE_URL` is
-left empty (either in the environment or `.env`) the runtime falls back to the
-in-memory stores.
+The compose file launches PostgreSQL, the appserver (port 8080), and the
+dashboard (port 8081). Defaults include `API_TOKENS=dev-token` and a sample
+`SECRET_ENCRYPTION_KEY` for local use. If `DATABASE_URL` is left empty (either
+in the environment or `.env`) and the config DSN is cleared, the runtime falls
+back to the in-memory stores; by default compose supplies a Postgres DSN so
+everything is persisted. The compose stack waits for Postgres health
+(`pg_isready`) before starting the appserver.
+Compose will read a `.env` file automatically if present; copy `.env.example`
+to `.env` when you want to override the defaults.
+- Any endpoint also accepts a query token for convenience, e.g.
+  `http://localhost:8080/system/status?token=dev-token`.
+
+Once running:
+- API: `http://localhost:8080` (use `Authorization: Bearer <jwt>`; obtain via `/auth/login` or wallet login)
+- Dashboard: `http://localhost:8081` (configure API URL/token in settings)
+- Public site: `http://localhost:8082` (marketing/docs entry)
+- Login (JWT): `POST /auth/login` with configured `AUTH_USERS` and `AUTH_JWT_SECRET`; all endpoints also accept `?token=<API_TOKEN>`.
+- **Production:** override `API_TOKENS`, `AUTH_USERS`, and `AUTH_JWT_SECRET` (the repo defaults are for local compose only).
 
 ## Configuration Notes
 
@@ -140,6 +166,10 @@ in-memory stores.
   to the external services responsible for price data and
   withdrawal settlement. Optional `*_KEY` environment variables attach bearer
   tokens when calling those endpoints.
+- Data feed aggregation supports `median` (default), `mean`, `min`, and `max`.
+  Set a global default via `runtime.datafeeds.aggregation` / `DATAFEEDS_AGGREGATION`,
+  and override per feed by supplying `aggregation` in the data feed create/update
+  payloads.
 - Oracle data sources are configured per-feed via the HTTP API; no global
   resolver URL is required.
 - `RANDOM_SIGNING_KEY` (base64 or hex encoded ed25519 private key) enables
@@ -186,6 +216,20 @@ confirm the documentation, CLI, and dashboard remain in lockstep. Service
 descriptors all advertise the same `platform` layer so every capability is
 treated with equal priority.
 
+### Tutorials
+- Data Feeds: `docs/examples/datafeeds.md`
+- DataLink: `docs/examples/datalink.md`
+- JAM: `docs/examples/jam.md`
+
 ## Development
 
+- Quick targets:
+  - `make build` / `make test` (build outputs land in `./bin`)
+  - `make run` brings up Postgres + appserver + dashboard via docker compose (detached) and prints port info.
+  - `make run-local` runs the appserver binary directly; export `DATABASE_URL` to point at Postgres.
+  - `make build-dashboard` builds the React UI (Node 20+, npm).
+  - `make docker` builds the appserver + dashboard images.
+  - `make docker-compose` (or `make docker-compose-run`) brings up Postgres + appserver + dashboard with sensible defaults.
 - Run **all** tests: `go test ./...`
+- Go modules are vendored for offline Docker builds; run `go mod vendor` after
+  updating dependencies.

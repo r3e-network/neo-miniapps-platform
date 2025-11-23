@@ -87,7 +87,7 @@
 
 #### Data Feeds
 - Manage the feed registry, signer sets, decimals, and update submission metadata.
-- Enforce wallet-gated permissions for submissions and store historic rounds + signatures for auditing. Submissions must validate cryptographic signatures against the configured signer set, enforce minimum signer thresholds, and aggregate (e.g., median) multiple submissions per round.
+- Enforce wallet-gated permissions for submissions and store historic rounds + signatures for auditing. Submissions must validate cryptographic signatures against the configured signer set, enforce minimum signer thresholds, and aggregate multiple submissions per round using a per-feed strategy (median/mean/min/max; defaults to median).
 - Apply price/decimals validation, heartbeat/deviation enforcement, and replay protection per signer/round. Expose metrics for stale/under-signed rounds, signer participation, submission latency, and deviations.
 
 #### Data Streams
@@ -114,6 +114,10 @@
 - Maintain parity between CLI commands, HTTP endpoints, and SDK helpers so every capability is scriptable.
 - Publish runnable examples (`go test ./...`) for each service to serve as living documentation.
 - Provide dashboard modules for operator visibility, backed by the same API routes.
+- Ship a docker-compose stack (appserver + Postgres + dashboard) for local bring-up.
+  `make docker-compose` or `docker compose up --build` should start the stack with
+  sensible defaults (`API_TOKENS`, `SECRET_ENCRYPTION_KEY`, Postgres DSN); the
+  dashboard must point to the running API.
 
 ## API & Interface Requirements
 ### HTTP API

@@ -1,6 +1,7 @@
 import { Descriptor } from "../api";
 import { MetricSample, TimeSeries } from "../metrics";
 import { Chart } from "./Chart";
+import { JamStatus } from "../api";
 
 type Metrics = {
   rps?: MetricSample[];
@@ -15,11 +16,12 @@ type Props = {
   buildVersion?: string;
   baseUrl: string;
   promBase?: string;
+  jam?: JamStatus;
   metrics?: Metrics;
   formatDuration: (value?: number) => string;
 };
 
-export function SystemOverview({ descriptors, version, buildVersion, baseUrl, promBase, metrics, formatDuration }: Props) {
+export function SystemOverview({ descriptors, version, buildVersion, baseUrl, promBase, jam, metrics, formatDuration }: Props) {
   return (
     <div className="grid">
       <div className="card inner">
@@ -41,6 +43,31 @@ export function SystemOverview({ descriptors, version, buildVersion, baseUrl, pr
           </p>
         )}
       </div>
+      {jam && (
+        <div className="card inner">
+          <h3>JAM</h3>
+          <p>
+            Status: <span className={`tag ${jam.enabled ? "subdued" : "error"}`}>{jam.enabled ? "enabled" : "disabled"}</span>
+          </p>
+          <p className="muted mono">
+            Store: {jam.store || "n/a"} • Rate limit: {jam.rate_limit_per_min ?? 0}/min • Max preimage bytes: {jam.max_preimage_bytes ?? 0}
+          </p>
+          <p className="muted mono">
+            Pending packages: {jam.max_pending_packages ?? 0} • Auth required: {jam.auth_required ? "yes" : "no"}
+          </p>
+          {jam.accumulators_enabled && (
+            <p className="muted mono">
+              Accumulators enabled • Hash: {jam.accumulator_hash || "n/a"}
+              {jam.accumulator_roots && jam.accumulator_roots.length > 0 && (
+                <>
+                  <br />
+                  Roots: {jam.accumulator_roots.map((r) => r.root).join(", ")}
+                </>
+              )}
+            </p>
+          )}
+        </div>
+      )}
       <div className="card inner">
         <h3>Descriptors ({descriptors.length})</h3>
         <ul className="list">

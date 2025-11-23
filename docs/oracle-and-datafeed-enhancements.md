@@ -51,8 +51,9 @@ Feed services closer to production-grade, Chainlink-style behaviours.
    signer identity, signatures, and request expiry metadata.
 2. **Data Feed Enforcement**:
    - Verify signatures against signer set; reject unknown signers.
-   - Require a configurable minimum signer threshold and aggregate (median) per
-     round; enforce deviation/heartbeat and numeric validation.
+   - Require a configurable minimum signer threshold and aggregate per round;
+     enforce deviation/heartbeat and numeric validation. Supported strategies:
+     median (default), mean, min, max; per-feed overrides are allowed.
    - Record per-signer submissions to prevent replay; emit metrics.
 3. **Oracle Reliability**:
    - Add request TTL/backoff/DLQ + manual retry; persist attempts.

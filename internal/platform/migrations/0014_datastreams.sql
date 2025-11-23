@@ -2,7 +2,7 @@
 
 CREATE TABLE IF NOT EXISTS chainlink_datastreams (
     id UUID PRIMARY KEY,
-    account_id UUID NOT NULL REFERENCES app_accounts(id) ON DELETE CASCADE,
+    account_id TEXT NOT NULL REFERENCES app_accounts(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     symbol TEXT NOT NULL,
     description TEXT,
@@ -18,7 +18,7 @@ CREATE INDEX IF NOT EXISTS idx_datastreams_account ON chainlink_datastreams(acco
 
 CREATE TABLE IF NOT EXISTS chainlink_datastream_frames (
     id UUID PRIMARY KEY,
-    account_id UUID NOT NULL REFERENCES app_accounts(id) ON DELETE CASCADE,
+    account_id TEXT NOT NULL REFERENCES app_accounts(id) ON DELETE CASCADE,
     stream_id UUID NOT NULL REFERENCES chainlink_datastreams(id) ON DELETE CASCADE,
     sequence BIGINT NOT NULL,
     payload JSONB,

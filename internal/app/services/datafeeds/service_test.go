@@ -174,6 +174,94 @@ func TestService_SubmitUpdateSignerVerificationAndAggregation(t *testing.T) {
 	}
 }
 
+func TestService_SubmitUpdateUnknownAggregationDefaultsToMedian(t *testing.T) {
+	store := memory.New()
+	acct, err := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	svc := New(store, store, nil)
+	svc.WithWorkspaceWallets(store)
+
+	signerA := testFeedSigner
+	signerB := "0xffffeeeeaaaa9999888877776666555544443333"
+	for _, signer := range []string{signerA, signerB} {
+		if _, err := store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct.ID, WalletAddress: signer}); err != nil {
+			t.Fatalf("seed wallet %s: %v", signer, err)
+		}
+	}
+
+	svc.WithAggregationConfig(2, "bogus-strategy") // unsupported strategy should fall back to median
+	feed, err := svc.CreateFeed(context.Background(), domaindf.Feed{
+		AccountID: acct.ID,
+		Pair:      "N3/USD",
+		Decimals:  2,
+		SignerSet: []string{signerA, signerB},
+	})
+	if err != nil {
+		t.Fatalf("create feed: %v", err)
+	}
+
+	_, err = svc.SubmitUpdate(context.Background(), acct.ID, feed.ID, 1, "10.00", time.Now(), signerA, "sig-a", nil)
+	if err != nil {
+		t.Fatalf("first update: %v", err)
+	}
+	second, err := svc.SubmitUpdate(context.Background(), acct.ID, feed.ID, 1, "20.00", time.Now(), signerB, "sig-b", nil)
+	if err != nil {
+		t.Fatalf("second update: %v", err)
+	}
+	if second.Metadata["aggregation"] != "median" {
+		t.Fatalf("expected aggregation metadata to reflect median fallback, got %q", second.Metadata["aggregation"])
+	}
+	if second.Metadata["aggregated_price"] != "15" && second.Metadata["aggregated_price"] != "15.00" {
+		t.Fatalf("expected median aggregated price, got %q", second.Metadata["aggregated_price"])
+	}
+	if second.Status != domaindf.UpdateStatusAccepted {
+		t.Fatalf("expected accepted status after quorum")
+	}
+}
+
+func TestService_SubmitUpdateMeanAggregation(t *testing.T) {
+	store := memory.New()
+	acct, err := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	svc := New(store, store, nil)
+	svc.WithWorkspaceWallets(store)
+	signerA := testFeedSigner
+	signerB := "0xaaaabbbbccccddddeeeeffff0000111122223333"
+	for _, signer := range []string{signerA, signerB} {
+		if _, err := store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct.ID, WalletAddress: signer}); err != nil {
+			t.Fatalf("seed wallet %s: %v", signer, err)
+		}
+	}
+	svc.WithAggregationConfig(2, "mean")
+	feed, err := svc.CreateFeed(context.Background(), domaindf.Feed{
+		AccountID: acct.ID,
+		Pair:      "GAS/USD",
+		Decimals:  2,
+		SignerSet: []string{signerA, signerB},
+	})
+	if err != nil {
+		t.Fatalf("create feed: %v", err)
+	}
+
+	if _, err := svc.SubmitUpdate(context.Background(), acct.ID, feed.ID, 1, "10.00", time.Now(), signerA, "sig-a", nil); err != nil {
+		t.Fatalf("first update: %v", err)
+	}
+	second, err := svc.SubmitUpdate(context.Background(), acct.ID, feed.ID, 1, "20.00", time.Now(), signerB, "sig-b", nil)
+	if err != nil {
+		t.Fatalf("second update: %v", err)
+	}
+	if second.Metadata["aggregation"] != "mean" {
+		t.Fatalf("expected aggregation metadata mean, got %q", second.Metadata["aggregation"])
+	}
+	if second.Metadata["aggregated_price"] != "15" && second.Metadata["aggregated_price"] != "15.00" {
+		t.Fatalf("expected mean aggregated price, got %q", second.Metadata["aggregated_price"])
+	}
+}
+
 func TestService_SubmitUpdateHeartbeatDeviation(t *testing.T) {
 	store := memory.New()
 	acct, err := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})

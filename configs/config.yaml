@@ -56,7 +56,7 @@ runtime:
   datafeeds:
     # Minimum signer threshold for feed definitions (0 to disable).
     min_signers: 0
-    # Default aggregation strategy for submissions.
+    # Default aggregation strategy for submissions (median|mean|min|max).
     aggregation: "median"
   cre:
     # Set to true to enable the HTTP CRE runner.
@@ -66,7 +66,13 @@ auth:
   # Static bearer tokens accepted by the HTTP API. Combine with the
   # API_TOKENS / API_TOKEN environment variables for runtime overrides.
   tokens:
-    - "change-me"
+    - "dev-token"   # Local-only default; override in production.
+  # JWT secret and users enable /auth/login for dashboard/console logins.
+  jwt_secret: "change-me-jwt-secret"
+  users:
+    - username: "admin"
+      password: "changeme"
+      role: "admin"
 
 security:
   # Secret encryption key used for vault storage. Required when using

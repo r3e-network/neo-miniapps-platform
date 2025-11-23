@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Neo Service Layer</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-content">
+      <p class="eyebrow">Neo Service Layer</p>
+      <h1>Operate data and automation at SaaS speed</h1>
+      <p class="subtitle">Feeds, DataLink, streams, JAM, gas bank, oracle, automation — unified under one API, one console, one control plane.</p>
+      <div class="cta">
+        <a class="btn primary" href="http://localhost:8081/?baseUrl=http://localhost:8080&token=dev-token" target="_blank" rel="noreferrer">Open Console</a>
+        <a class="btn ghost" href="http://localhost:8080/system/status?token=dev-token" target="_blank" rel="noreferrer">Live Status</a>
+      </div>
+      <div class="tagline">Connect wallet or token-based auth. Multi-tenant ready. Local defaults: dev-token or admin/changeme via /auth/login.</div>
+    </div>
+    <div class="hero-card">
+      <div class="pill">New</div>
+      <h3>Service Layer Quickstart</h3>
+      <ol>
+        <li>Run <code>make run</code> (compose starts API, Postgres, dashboard, site).</li>
+        <li>Open <code>http://localhost:8081</code> (query params prefill API/token), or login via admin/changeme.</li>
+        <li>Create an account, connect a wallet, explore feeds/DataLink/JAM.</li>
+      </ol>
+      <a class="link" href="../docs/README.md" target="_blank" rel="noreferrer">Docs in repo</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="grid features">
+      <div>
+        <h2>Service catalog</h2>
+        <p>Data feeds with aggregation, DataLink deliveries, high-frequency streams, oracle dispatch, JAM packages, gas bank, CRE, CCIP, automation, secrets.</p>
+      </div>
+      <div class="card">
+        <h3>Operations</h3>
+        <ul>
+          <li>Workspace accounts & wallets</li>
+          <li>Per-feed aggregation and signer sets</li>
+          <li>Channels & deliveries with retry</li>
+          <li>Streams & frames with SLA tracking</li>
+          <li>JAM preimages and packages</li>
+          <li>Gas bank balances and settlements</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Reliability</h3>
+        <ul>
+          <li>Health & version endpoints</li>
+          <li>Prometheus metrics ready</li>
+          <li>DLQ and retry hooks for oracle/DataLink</li>
+          <li>Postgres or in-memory stores</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Access</h3>
+        <ul>
+          <li>Token auth or wallet connect (dashboard)</li>
+          <li>Multi-tenant ready: accounts as projects</li>
+          <li>Role-based admin view (planned)</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="grid two-cols">
+      <div>
+        <h2>Use cases</h2>
+        <ul class="list">
+          <li><strong>Price & data feeds</strong> — aggregated oracle-style submissions with per-feed strategies.</li>
+          <li><strong>Data movement</strong> — DataLink channels + deliveries with signer enforcement.</li>
+          <li><strong>Streaming</strong> — high-frequency frames with latency/SLA tracking.</li>
+          <li><strong>JAM</strong> — preimages, packages, receipts for accumulator flows.</li>
+          <li><strong>Automation</strong> — scheduled jobs and triggers.</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3>Developer quick links</h3>
+        <ul class="links">
+          <li><a href="http://localhost:8080/system/status?token=dev-token" target="_blank" rel="noreferrer">System status (API)</a></li>
+          <li><a href="http://localhost:8081" target="_blank" rel="noreferrer">Operator console (dashboard)</a></li>
+          <li><a href="https://github.com/R3E-Network/service_layer" target="_blank" rel="noreferrer">Source repo</a></li>
+          <li><a href="../docs/examples/datafeeds.md" target="_blank" rel="noreferrer">Data Feeds quickstart</a></li>
+          <li><a href="../docs/examples/datalink.md" target="_blank" rel="noreferrer">DataLink quickstart</a></li>
+          <li><a href="../docs/examples/jam.md" target="_blank" rel="noreferrer">JAM quickstart</a></li>
+          <li><a href="../docs/dashboard-smoke.md" target="_blank" rel="noreferrer">Dashboard smoke checklist</a></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="grid three-cols">
+      <div class="card highlight">
+        <h3>Multi-user & wallets</h3>
+        <p>Use account IDs as projects. Dashboard supports token auth and wallet connect for operator sign-in. Admins get a dedicated view.</p>
+      </div>
+      <div class="card highlight">
+        <h3>Admin plane</h3>
+        <p>Monitor all services, retry jobs, view DLQs, and manage quotas from the admin view (same compose stack).</p>
+      </div>
+      <div class="card highlight">
+        <h3>Deployment</h3>
+        <p>`make run` or `docker compose up --build` brings API, Postgres, dashboard, and this site online with sensible defaults.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div>Neo Service Layer • Built for operators and developers</div>
+    <div class="footer-links">
+      <a href="http://localhost:8081" target="_blank" rel="noreferrer">Console</a>
+      <a href="http://localhost:8080/system/status?token=dev-token" target="_blank" rel="noreferrer">Status</a>
+      <a href="https://github.com/R3E-Network/service_layer" target="_blank" rel="noreferrer">GitHub</a>
+    </div>
+  </footer>
+</body>
+</html>

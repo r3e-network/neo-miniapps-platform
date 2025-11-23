@@ -4,13 +4,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/R3E-Network/service_layer/pkg/logger"
 )
 
 func TestWrapWithAuthRejectsWhenNoTokensConfigured(t *testing.T) {
 	var called bool
 	wrapped := wrapWithAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
-	}), nil, nil)
+	}), nil, logger.NewDefault("test"), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/accounts", nil)
 	rec := httptest.NewRecorder()

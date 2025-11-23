@@ -81,6 +81,7 @@ export type Datafeed = {
   Heartbeat?: number;
   ThresholdPPM?: number;
   SignerSet?: string[];
+  Aggregation?: string;
   Metadata?: Record<string, string>;
   Tags?: string[];
   CreatedAt?: string;
@@ -104,6 +105,7 @@ export type DatalinkChannel = {
   AccountID: string;
   Name: string;
   Endpoint: string;
+  Status?: string;
   SignerSet?: string[];
   Metadata?: Record<string, string>;
   Tags?: string[];
@@ -115,6 +117,49 @@ export type DatalinkDelivery = {
   ChannelID: string;
   Status: string;
   Metadata?: Record<string, string>;
+};
+
+export type JamAccumulatorRoot = {
+  root: string;
+  height?: number;
+  created_at?: string;
+};
+
+export type JamStatus = {
+  enabled: boolean;
+  store?: string;
+  rate_limit_per_min?: number;
+  max_preimage_bytes?: number;
+  max_pending_packages?: number;
+  auth_required?: boolean;
+  legacy_list_response?: boolean;
+  accumulators_enabled?: boolean;
+  accumulator_hash?: string;
+  accumulator_roots?: JamAccumulatorRoot[];
+};
+
+export type SystemStatus = {
+  status?: string;
+  version?: {
+    version: string;
+    commit: string;
+    built_at: string;
+    go_version: string;
+  };
+  services?: Descriptor[];
+  jam?: JamStatus;
+};
+
+export type AuditEntry = {
+  time: string;
+  user?: string;
+  role?: string;
+  tenant?: string;
+  path: string;
+  method: string;
+  status: number;
+  remote_addr?: string;
+  user_agent?: string;
 };
 
 export type Datastream = {
@@ -381,13 +426,13 @@ export function normaliseUrl(url: string) {
   return url.trim().replace(/\/$/, "");
 }
 
-export async function fetchJSON<T>(url: string, config: ClientConfig): Promise<T> {
-  const resp = await fetch(url, {
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.token}`,
-    },
-  });
+export async function fetchJSON<T>(url: string, config: ClientConfig, init?: RequestInit): Promise<T> {
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${config.token}`,
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+  const resp = await fetch(url, { ...init, headers });
   if (!resp.ok) {
     const text = await resp.text();
     throw new Error(`${resp.status} ${resp.statusText}: ${text}`);
@@ -415,6 +460,16 @@ export type SystemVersion = {
 export async function fetchVersion(config: ClientConfig): Promise<SystemVersion> {
   const url = `${config.baseUrl}/system/version`;
   return fetchJSON<SystemVersion>(url, config);
+}
+
+export async function fetchSystemStatus(config: ClientConfig): Promise<SystemStatus> {
+  const url = `${config.baseUrl}/system/status`;
+  return fetchJSON<SystemStatus>(url, config);
+}
+
+export async function fetchAudit(config: ClientConfig, limit = 200): Promise<AuditEntry[]> {
+  const url = `${config.baseUrl}/admin/audit?limit=${limit}`;
+  return fetchJSON<AuditEntry[]>(url, config);
 }
 
 export async function fetchAccounts(config: ClientConfig, limit = 50): Promise<Account[]> {
@@ -452,6 +507,27 @@ export async function fetchDatafeeds(config: ClientConfig, accountID: string, li
   return fetchJSON<Datafeed[]>(url, config);
 }
 
+export async function updateDatafeedAggregation(
+  config: ClientConfig,
+  accountID: string,
+  feed: Datafeed,
+  aggregation: string,
+): Promise<Datafeed> {
+  const url = `${config.baseUrl}/accounts/${accountID}/datafeeds/${feed.ID}`;
+  const payload = {
+    pair: feed.Pair,
+    description: (feed as any).Description || "",
+    decimals: feed.Decimals,
+    heartbeat_seconds: feed.Heartbeat ? Math.round(Number(feed.Heartbeat) / 1_000_000_000) : 0,
+    threshold_ppm: feed.ThresholdPPM ?? 0,
+    signer_set: feed.SignerSet ?? [],
+    aggregation,
+    metadata: feed.Metadata ?? {},
+    tags: feed.Tags ?? [],
+  };
+  return fetchJSON<Datafeed>(url, config, { method: "PUT", body: JSON.stringify(payload) });
+}
+
 export async function fetchDatafeedUpdates(config: ClientConfig, accountID: string, feedID: string, limit = 20): Promise<DatafeedUpdate[]> {
   const url = `${config.baseUrl}/accounts/${accountID}/datafeeds/${feedID}/updates?limit=${limit}`;
   return fetchJSON<DatafeedUpdate[]>(url, config);
@@ -465,6 +541,36 @@ export async function fetchDatalinkChannels(config: ClientConfig, accountID: str
 export async function fetchDatalinkDeliveries(config: ClientConfig, accountID: string, limit = 50): Promise<DatalinkDelivery[]> {
   const url = `${config.baseUrl}/accounts/${accountID}/datalink/deliveries?limit=${limit}`;
   return fetchJSON<DatalinkDelivery[]>(url, config);
+}
+
+export async function createDatalinkChannel(
+  config: ClientConfig,
+  accountID: string,
+  payload: { name: string; endpoint: string; signers: string[]; status?: string; metadata?: Record<string, string> },
+): Promise<DatalinkChannel> {
+  const url = `${config.baseUrl}/accounts/${accountID}/datalink/channels`;
+  const body = {
+    name: payload.name,
+    endpoint: payload.endpoint,
+    signer_set: payload.signers,
+    status: payload.status || "active",
+    metadata: payload.metadata ?? {},
+  };
+  return fetchJSON<DatalinkChannel>(url, config, { method: "POST", body: JSON.stringify(body) });
+}
+
+export async function createDatalinkDelivery(
+  config: ClientConfig,
+  accountID: string,
+  channelID: string,
+  payload: { body: Record<string, any>; metadata?: Record<string, string> },
+): Promise<DatalinkDelivery> {
+  const url = `${config.baseUrl}/accounts/${accountID}/datalink/channels/${channelID}/deliveries`;
+  const body = {
+    payload: payload.body,
+    metadata: payload.metadata ?? {},
+  };
+  return fetchJSON<DatalinkDelivery>(url, config, { method: "POST", body: JSON.stringify(body) });
 }
 
 export async function fetchDatastreams(config: ClientConfig, accountID: string, limit = 50): Promise<Datastream[]> {
@@ -639,4 +745,24 @@ export async function retryOracleRequest(config: ClientConfig, accountID: string
 export async function fetchRandomRequests(config: ClientConfig, accountID: string, limit = 50): Promise<RandomRequest[]> {
   const url = `${config.baseUrl}/accounts/${accountID}/random/requests?limit=${limit}`;
   return fetchJSON<RandomRequest[]>(url, config);
+}
+
+export async function jamUploadPreimage(config: ClientConfig, hash: string, data: ArrayBuffer, contentType: string) {
+  const url = `${config.baseUrl}/jam/preimages/${hash}`;
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${config.token}`,
+  };
+  if (contentType) {
+    headers["Content-Type"] = contentType;
+  }
+  const resp = await fetch(url, { method: "PUT", headers, body: new Blob([data], { type: contentType }) });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(text || `upload failed (${resp.status})`);
+  }
+}
+
+export async function jamSubmitPackage(config: ClientConfig, payload: any) {
+  const url = `${config.baseUrl}/jam/packages`;
+  return fetchJSON<any>(url, config, { method: "POST", body: JSON.stringify(payload) });
 }

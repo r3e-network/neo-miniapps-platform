@@ -1,8 +1,11 @@
 import { useCallback, useState } from "react";
 import {
+  Datafeed,
   DatafeedUpdate,
   DatastreamFrame,
   PriceSnapshot,
+  createDatalinkChannel,
+  createDatalinkDelivery,
   fetchDatafeedUpdates,
   fetchDatafeeds,
   fetchDatalinkChannels,
@@ -13,6 +16,7 @@ import {
   fetchDTAProducts,
   fetchPriceFeeds,
   fetchPriceSnapshots,
+  updateDatafeedAggregation,
 } from "../api";
 import { DatafeedsState } from "../components/DatafeedsPanel";
 import { DatalinkState } from "../components/DatalinkPanel";
@@ -127,6 +131,30 @@ export function useFeedsResources(config: { baseUrl: string; token: string }) {
     [config],
   );
 
+  const setAggregation = useCallback(
+    async (accountID: string, feed: Datafeed, aggregation: string) => {
+      await updateDatafeedAggregation(config, accountID, feed, aggregation);
+      await loadDatafeeds(accountID);
+    },
+    [config, loadDatafeeds],
+  );
+
+  const createChannel = useCallback(
+    async (accountID: string, payload: { name: string; endpoint: string; signers: string[]; status?: string; metadata?: Record<string, string> }) => {
+      await createDatalinkChannel(config, accountID, payload);
+      await loadDatalink(accountID);
+    },
+    [config, loadDatalink],
+  );
+
+  const createDelivery = useCallback(
+    async (accountID: string, channelID: string, payload: { body: Record<string, any>; metadata?: Record<string, string> }) => {
+      await createDatalinkDelivery(config, accountID, channelID, payload);
+      await loadDatalink(accountID);
+    },
+    [config, loadDatalink],
+  );
+
   return {
     datafeeds,
     pricefeeds,
@@ -138,6 +166,9 @@ export function useFeedsResources(config: { baseUrl: string; token: string }) {
     loadDatalink,
     loadDatastreams,
     loadDTA,
+    setAggregation,
+    createChannel,
+    createDelivery,
     resetFeeds,
   };
 }

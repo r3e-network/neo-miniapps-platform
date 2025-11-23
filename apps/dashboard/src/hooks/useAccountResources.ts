@@ -39,5 +39,8 @@ export function useAccountResources(config: { baseUrl: string; token: string }) 
     loadSecrets: ops.loadSecrets,
     loadFunctions: ops.loadFunctions,
     loadRandom: ops.loadRandom,
+    setAggregation: feeds.setAggregation,
+    createChannel: feeds.createChannel,
+    createDelivery: feeds.createDelivery,
   };
 }

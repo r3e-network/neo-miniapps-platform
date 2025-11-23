@@ -1,3 +1,3 @@
+-- Make idempotent for reruns
 ALTER TABLE app_function_executions
-    ADD COLUMN actions JSONB NOT NULL DEFAULT '[]'::jsonb;
-
+    ADD COLUMN IF NOT EXISTS actions JSONB NOT NULL DEFAULT '[]'::jsonb;

@@ -1,20 +1,35 @@
-import { FormEvent, useEffect, useMemo } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { normaliseUrl } from "./api";
 import { useLocalStorage } from "./useLocalStorage";
 import { MetricsConfig } from "./metrics";
-import { AccountsSection, SettingsForm, SystemOverview } from "./components";
+import { AccountsSection, AdminPanel, AuthPanel, JamPanel, Notifications, SettingsForm, SystemOverview, WalletGate } from "./components";
 import { useAccountsData, useSystemInfo } from "./hooks";
 import { formatAmount, formatDuration, formatSnippet, formatTimestamp } from "./utils";
+import type { Notification } from "./components/Notifications";
+
+type WalletSession = { address: string; label?: string; signature?: string };
 
 export function App() {
   const [baseUrl, setBaseUrl] = useLocalStorage("sl-ui.baseUrl", "http://localhost:8080");
-  const [token, setToken] = useLocalStorage("sl-ui.token", "");
+  const [token, setToken] = useLocalStorage("sl-ui.token", "dev-token");
+  const [wallet, setWallet] = useState<WalletSession>(() => {
+    try {
+      const raw = window.localStorage.getItem("sl-ui.wallet");
+      return raw ? (JSON.parse(raw) as WalletSession) : { address: "", label: "", signature: "" };
+    } catch {
+      return { address: "", label: "", signature: "" };
+    }
+  });
+  useEffect(() => {
+    window.localStorage.setItem("sl-ui.wallet", JSON.stringify(wallet));
+  }, [wallet]);
   const config = useMemo(
     () => ({
       baseUrl: normaliseUrl(baseUrl),
       token: token.trim(),
+      wallet,
     }),
-    [baseUrl, token],
+    [baseUrl, token, wallet],
   );
   const [promBase, setPromBase] = useLocalStorage("sl-ui.prometheus", "http://localhost:9090");
   const promConfig: MetricsConfig = useMemo(
@@ -27,6 +42,17 @@ export function App() {
   );
 
   const canQuery = config.baseUrl.length > 0 && config.token.length > 0;
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const qsBase = params.get("api") || params.get("base") || params.get("baseUrl") || params.get("endpoint");
+    const qsToken = params.get("token") || params.get("api_token");
+    if (qsBase) {
+      setBaseUrl(normaliseUrl(qsBase));
+    }
+    if (qsToken) {
+      setToken(qsToken);
+    }
+  }, [setBaseUrl, setToken]);
 
   const {
     wallets,
@@ -74,6 +100,9 @@ export function App() {
     loadMoreFailedOracle,
     retryOracle,
     copyCursor,
+    setAggregation,
+    createChannel,
+    createDelivery,
   } = useAccountsData(config);
   const { state, systemVersion, load } = useSystemInfo(config, promConfig, canQuery);
 
@@ -89,17 +118,62 @@ export function App() {
     void load();
   }
 
+  const docsLinks = [
+    { label: "Data Feeds Quickstart", href: "https://github.com/R3E-Network/service_layer/blob/master/docs/examples/datafeeds.md" },
+    { label: "DataLink Quickstart", href: "https://github.com/R3E-Network/service_layer/blob/master/docs/examples/datalink.md" },
+    { label: "JAM Quickstart", href: "https://github.com/R3E-Network/service_layer/blob/master/docs/examples/jam.md" },
+    { label: "Dashboard Smoke Checklist", href: "https://github.com/R3E-Network/service_layer/blob/master/docs/dashboard-smoke.md" },
+  ];
+
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const notify = useCallback((type: "success" | "error", message: string) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setNotifications((prev) => [...prev, { id, type, message }]);
+    setTimeout(() => {
+      setNotifications((prev) => prev.filter((n) => n.id != id));
+    }, 4000);
+  }, []);
+  const dismissNotification = useCallback((id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
+
+  const handleSetAggregation = useCallback(
+    async (accountID: string, feedID: string, aggregation: string) => {
+      const state = datafeeds[accountID];
+      if (!state || state.status !== "ready") return;
+      const feed = state.feeds.find((f) => f.ID === feedID);
+      if (!feed) return;
+      await setAggregation(accountID, feed, aggregation);
+    },
+    [datafeeds, setAggregation],
+  );
+
   return (
     <div className="app">
       <header className="hero">
         <div>
           <p className="eyebrow">Neo N3 Service Layer</p>
           <h1>Dashboard bootstrap</h1>
-          <p className="muted">Configure the API endpoint and token, then explore system descriptors to toggle feature-aware views.</p>
+          <p className="muted">
+            Configure the API endpoint and token, then explore system descriptors to toggle feature-aware views. Defaults (local compose):
+            API <code>http://localhost:8080</code>, token <code>dev-token</code>, or login via admin/changeme.
+          </p>
         </div>
       </header>
 
       <section className="card">
+        <WalletGate
+          wallet={wallet}
+          onConnect={(w) => setWallet(w)}
+          onDisconnect={() => setWallet({ address: "", label: "", signature: "" })}
+        />
+        <AuthPanel
+          baseUrl={config.baseUrl}
+          onLoggedIn={(tok, role) => {
+            setToken(tok);
+            notify("success", `Logged in${role ? ` (${role})` : ""}`);
+          }}
+        />
         <SettingsForm
           baseUrl={baseUrl}
           token={token}
@@ -171,6 +245,10 @@ export function App() {
                 onLoadMoreFailedOracle={loadMoreFailedOracle}
                 onRetryOracle={retryOracle}
                 onCopyCursor={copyCursor}
+                onSetAggregation={handleSetAggregation}
+                onCreateChannel={(accountID, payload) => createChannel(accountID, payload)}
+                onCreateDelivery={(accountID, payload) => createDelivery(accountID, payload.channelId, { body: payload.body, metadata: payload.metadata })}
+                onNotify={notify}
                 setFilter={(accountID, value) => setOracleFilters((prev) => ({ ...prev, [accountID]: value }))}
                 formatSnippet={formatSnippet}
                 formatTimestamp={formatTimestamp}
@@ -178,10 +256,27 @@ export function App() {
                 formatAmount={formatAmount}
               />
             </div>
+            {canQuery && <JamPanel baseUrl={config.baseUrl} token={config.token} onNotify={notify} />}
           </>
         )}
         {state.status === "idle" && <p className="muted">Enter a base URL and token to connect.</p>}
+        <AdminPanel systemState={state} baseUrl={config.baseUrl} token={config.token} />
       </section>
+
+      <section className="card inner">
+        <h3>Docs</h3>
+        <p className="muted">Quick references to keep the dashboard in sync with the backend.</p>
+        <ul className="wallets">
+          {docsLinks.map((link) => (
+            <li key={link.href}>
+              <a href={link.href} target="_blank" rel="noreferrer">
+                {link.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+      <Notifications items={notifications} onDismiss={dismissNotification} />
     </div>
   );
 }

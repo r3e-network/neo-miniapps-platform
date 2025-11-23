@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Account, Descriptor, fetchAccounts, fetchDescriptors, fetchHealth, fetchVersion } from "../api";
+import { Account, Descriptor, JamStatus, fetchAccounts, fetchDescriptors, fetchHealth, fetchSystemStatus, fetchVersion } from "../api";
 import { MetricSample, MetricsConfig, promQuery, promQueryRange, TimeSeries } from "../metrics";
 
 export type SystemState =
@@ -10,6 +10,7 @@ export type SystemState =
       descriptors: Descriptor[];
       accounts: Account[];
       version?: string;
+      jam?: JamStatus;
       metrics?: {
         rps?: MetricSample[];
         duration?: TimeSeries[];
@@ -19,7 +20,9 @@ export type SystemState =
     }
   | { status: "error"; message: string };
 
-export function useSystemInfo(config: { baseUrl: string; token: string }, promConfig: MetricsConfig, canQuery: boolean) {
+type ServerConfig = { baseUrl: string; token: string };
+
+export function useSystemInfo(config: ServerConfig, promConfig: MetricsConfig, canQuery: boolean) {
   const [state, setState] = useState<SystemState>({ status: "idle" });
   const [systemVersion, setSystemVersion] = useState<string>("");
 
@@ -30,11 +33,12 @@ export function useSystemInfo(config: { baseUrl: string; token: string }, promCo
     }
     setState({ status: "loading" });
     try {
-      const [health, descriptors, accounts, version] = await Promise.all([
+      const [health, descriptors, accounts, version, systemStatus] = await Promise.all([
         fetchHealth(config),
         fetchDescriptors(config),
         fetchAccounts(config),
         fetchVersion(config),
+        fetchSystemStatus(config),
       ]);
       let metrics:
         | { rps?: MetricSample[]; duration?: TimeSeries[]; oracleQueue?: MetricSample[]; datafeedStaleness?: MetricSample[] }
@@ -59,7 +63,7 @@ export function useSystemInfo(config: { baseUrl: string; token: string }, promCo
           metrics = undefined;
         }
       }
-      setState({ status: "ready", descriptors, accounts, version: health.version ?? version.version, metrics });
+      setState({ status: "ready", descriptors, accounts, version: health.version ?? version.version, metrics, jam: systemStatus.jam });
       setSystemVersion(version.version);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

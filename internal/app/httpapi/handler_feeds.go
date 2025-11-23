@@ -31,6 +31,7 @@ func (h *handler) accountDataFeeds(w http.ResponseWriter, r *http.Request, accou
 				HeartbeatSec int64             `json:"heartbeat_seconds"`
 				ThresholdPPM int               `json:"threshold_ppm"`
 				SignerSet    []string          `json:"signer_set"`
+				Aggregation  string            `json:"aggregation"`
 				Metadata     map[string]string `json:"metadata"`
 				Tags         []string          `json:"tags"`
 			}
@@ -46,6 +47,7 @@ func (h *handler) accountDataFeeds(w http.ResponseWriter, r *http.Request, accou
 				Heartbeat:    time.Duration(payload.HeartbeatSec) * time.Second,
 				ThresholdPPM: payload.ThresholdPPM,
 				SignerSet:    payload.SignerSet,
+				Aggregation:  payload.Aggregation,
 				Metadata:     payload.Metadata,
 				Tags:         payload.Tags,
 			}
@@ -79,6 +81,7 @@ func (h *handler) accountDataFeeds(w http.ResponseWriter, r *http.Request, accou
 				HeartbeatSec int64             `json:"heartbeat_seconds"`
 				ThresholdPPM int               `json:"threshold_ppm"`
 				SignerSet    []string          `json:"signer_set"`
+				Aggregation  string            `json:"aggregation"`
 				Metadata     map[string]string `json:"metadata"`
 				Tags         []string          `json:"tags"`
 			}
@@ -95,6 +98,7 @@ func (h *handler) accountDataFeeds(w http.ResponseWriter, r *http.Request, accou
 				Heartbeat:    time.Duration(payload.HeartbeatSec) * time.Second,
 				ThresholdPPM: payload.ThresholdPPM,
 				SignerSet:    payload.SignerSet,
+				Aggregation:  payload.Aggregation,
 				Metadata:     payload.Metadata,
 				Tags:         payload.Tags,
 			}

@@ -8,6 +8,12 @@ have been consolidated into that specification.
 - [Neo Service Layer Specification](requirements.md)
 - [Service Layer Review Checklist](review-checklist.md)
 - [CLI Quick Reference](../README.md#cli-quick-reference)
+- Tutorials:
+  - [Data Feeds Quickstart](examples/datafeeds.md)
+  - [DataLink Quickstart](examples/datalink.md)
+  - [JAM Quickstart](examples/jam.md)
+- Dashboard:
+  - [Dashboard Smoke Checklist](dashboard-smoke.md)
 - JAM integration notes:
   - [Polkadot JAM-inspired integration](polkadot-jam-integration-design.md)
   - [JAM accumulator & receipt plan](jam-accumulator-plan.md)

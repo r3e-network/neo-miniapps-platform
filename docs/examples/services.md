@@ -81,10 +81,20 @@ curl -i -H "Authorization: Bearer $TOKEN" "http://localhost:8080/accounts/<ACCOU
 ```
 
 ## Datafeeds
+Create a feed with per-feed aggregation (median|mean|min|max):
 ```bash
 curl -s -X POST http://localhost:8080/accounts/<ACCOUNT_ID>/datafeeds \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"pair":"NEO/USD","threshold_ppm":5000,"signer_set":["'"$TEST_WALLET"'"]}'
+  -d '{"pair":"NEO/USD","decimals":8,"aggregation":"median","threshold_ppm":5000,"signer_set":["'"$TEST_WALLET"'"]}'
+```
+
+Submit signed updates:
+```bash
+curl -s -X POST http://localhost:8080/accounts/<ACCOUNT_ID>/datafeeds/<FEED_ID>/updates \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"round_id":1,"price":"12.34","signer":"'"$TEST_WALLET"'","signature":"sig"}'
+
+curl -s -H "Authorization: Bearer $TOKEN" "http://localhost:8080/accounts/<ACCOUNT_ID>/datafeeds/<FEED_ID>/latest"
 ```
 
 ## Pricefeeds

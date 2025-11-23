@@ -577,6 +577,7 @@ func TestService_ProcessDataLinkDeliveryAction(t *testing.T) {
 		Endpoint:  "https://example.com",
 		AuthToken: "token",
 		Status:    datalinkdomain.ChannelStatusActive,
+		SignerSet: []string{"nwallet"},
 	})
 	if err != nil {
 		t.Fatalf("create channel: %v", err)

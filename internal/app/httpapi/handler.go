@@ -12,8 +12,10 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	app "github.com/R3E-Network/service_layer/internal/app"
+	"github.com/R3E-Network/service_layer/internal/app/auth"
 	"github.com/R3E-Network/service_layer/internal/app/domain/oracle"
 	"github.com/R3E-Network/service_layer/internal/app/jam"
 	"github.com/R3E-Network/service_layer/internal/app/metrics"
@@ -24,16 +26,27 @@ import (
 
 // handler bundles HTTP endpoints for the application services.
 type handler struct {
-	app      *app.Application
-	jamCfg   jam.Config
-	jamAuth  []string
-	jamStore jam.PackageStore
+	app         *app.Application
+	jamCfg      jam.Config
+	jamAuth     []string
+	jamStore    jam.PackageStore
+	authManager authManager
+	audit       *auditLog
+}
+
+type authManager interface {
+	HasUsers() bool
+	Authenticate(username, password string) (auth.User, error)
+	Issue(user auth.User, ttl time.Duration) (string, time.Time, error)
+	Validate(token string) (*auth.Claims, error)
+	IssueWalletChallenge(wallet string, ttl time.Duration) (string, time.Time, error)
+	VerifyWalletSignature(wallet, signature, pubKey string) (auth.User, error)
 }
 
 // NewHandler returns a mux exposing the core REST API.
-func NewHandler(application *app.Application, jamCfg jam.Config, tokens []string) http.Handler {
+func NewHandler(application *app.Application, jamCfg jam.Config, tokens []string, authMgr authManager, audit *auditLog) http.Handler {
 	jamCfg.Normalize()
-	h := &handler{app: application, jamCfg: jamCfg, jamAuth: tokens}
+	h := &handler{app: application, jamCfg: jamCfg, jamAuth: tokens, authManager: authMgr, audit: audit}
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", metrics.Handler())
 	mux.HandleFunc("/healthz", h.health)
@@ -41,8 +54,13 @@ func NewHandler(application *app.Application, jamCfg jam.Config, tokens []string
 	mux.HandleFunc("/system/descriptors.html", h.systemDescriptorsHTML)
 	mux.HandleFunc("/system/version", h.systemVersion)
 	mux.HandleFunc("/system/status", h.systemStatus)
+	mux.HandleFunc("/auth/login", h.login)
+	mux.HandleFunc("/auth/wallet/challenge", h.walletChallenge)
+	mux.HandleFunc("/auth/wallet/login", h.walletLogin)
+	mux.HandleFunc("/auth/whoami", h.whoami)
 	mux.HandleFunc("/accounts", h.accounts)
 	mux.HandleFunc("/accounts/", h.accountResources)
+	mux.HandleFunc("/admin/audit", h.adminAudit)
 
 	h.maybeMountJAM(mux)
 	return mux
@@ -566,4 +584,21 @@ func (h *handler) health(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *handler) adminAudit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if h.audit == nil {
+		writeJSON(w, http.StatusOK, []auditEntry{})
+		return
+	}
+	limit, err := parseLimitParam(r.URL.Query().Get("limit"), 200)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, h.audit.listLimit(limit))
 }

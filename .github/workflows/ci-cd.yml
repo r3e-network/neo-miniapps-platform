@@ -158,15 +158,29 @@ jobs:
           DATABASE_HOST: localhost
           DATABASE_PORT: 5432
           DATABASE_NAME: service_layer_test
-          DATABASE_USER: postgres
-          DATABASE_PASSWORD: postgres
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+  dashboard-typecheck:
+    name: Dashboard Typecheck
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
-          file: ./coverage.out
-          flags: unittests
-          name: codecov-umbrella
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: apps/dashboard/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/dashboard
+        run: npm ci
+
+      - name: Typecheck dashboard
+        working-directory: apps/dashboard
+        run: npm test
 
   integration-tests:
     name: Integration Tests
