@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { fetchWorkspaceWallets } from "../api";
 import { WalletState } from "../components/AccountCard";
 
-export function useWalletResources(config: { baseUrl: string; token: string }) {
+export function useWalletResources(config: { baseUrl: string; token: string; tenant?: string }) {
   const [wallets, setWallets] = useState<Record<string, WalletState>>({});
 
   const resetWallets = useCallback(() => setWallets({}), []);

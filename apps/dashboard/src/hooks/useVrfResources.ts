@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { fetchVRFKeys, fetchVRFRequests } from "../api";
 import { VRFState } from "../components/VRFPanel";
 
-export function useVrfResources(config: { baseUrl: string; token: string }) {
+export function useVrfResources(config: { baseUrl: string; token: string; tenant?: string }) {
   const [vrf, setVRF] = useState<Record<string, VRFState>>({});
 
   const resetVRF = useCallback(() => setVRF({}), []);

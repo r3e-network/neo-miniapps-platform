@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { fetchFunctionExecutions, fetchFunctions } from "../api";
 import { FunctionsState } from "../components/FunctionsPanel";
 
-export function useFunctionsResources(config: { baseUrl: string; token: string }) {
+export function useFunctionsResources(config: { baseUrl: string; token: string; tenant?: string }) {
   const [functionsState, setFunctionsState] = useState<Record<string, FunctionsState>>({});
 
   const resetFunctions = useCallback(() => setFunctionsState({}), []);

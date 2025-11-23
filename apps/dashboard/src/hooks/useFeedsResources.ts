@@ -24,7 +24,7 @@ import { DatastreamsState } from "../components/DatastreamsPanel";
 import { DTAState } from "../components/DTAPanel";
 import { PricefeedsState } from "../components/PricefeedsPanel";
 
-export function useFeedsResources(config: { baseUrl: string; token: string }) {
+export function useFeedsResources(config: { baseUrl: string; token: string; tenant?: string }) {
   const [datafeeds, setDatafeeds] = useState<Record<string, DatafeedsState>>({});
   const [pricefeeds, setPricefeeds] = useState<Record<string, PricefeedsState>>({});
   const [datalink, setDatalink] = useState<Record<string, DatalinkState>>({});

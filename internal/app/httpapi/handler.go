@@ -17,6 +17,7 @@ import (
 
 	app "github.com/R3E-Network/service_layer/internal/app"
 	"github.com/R3E-Network/service_layer/internal/app/auth"
+	domainaccount "github.com/R3E-Network/service_layer/internal/app/domain/account"
 	"github.com/R3E-Network/service_layer/internal/app/domain/oracle"
 	"github.com/R3E-Network/service_layer/internal/app/jam"
 	"github.com/R3E-Network/service_layer/internal/app/metrics"
@@ -133,6 +134,7 @@ func (h *handler) maybeMountJAM(mux *http.ServeMux) {
 }
 
 func (h *handler) accounts(w http.ResponseWriter, r *http.Request) {
+	tenant := tenantFromCtx(r.Context())
 	switch r.Method {
 	case http.MethodPost:
 		var payload struct {
@@ -143,11 +145,20 @@ func (h *handler) accounts(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
+		if tenant != "" {
+			if payload.Metadata == nil {
+				payload.Metadata = map[string]string{}
+			}
+			payload.Metadata["tenant"] = tenant
+		}
 
 		acct, err := h.app.Accounts.Create(r.Context(), payload.Owner, payload.Metadata)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
+		}
+		if tenant != "" {
+			acct.Metadata["tenant"] = tenant
 		}
 		writeJSON(w, http.StatusCreated, acct)
 
@@ -157,7 +168,21 @@ func (h *handler) accounts(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, accts)
+		filtered := make([]domainaccount.Account, 0, len(accts))
+		for _, a := range accts {
+			accountTenant := strings.TrimSpace(tenantFromMetadata(a.Metadata))
+			if tenant != "" {
+				if accountTenant == tenant {
+					filtered = append(filtered, a)
+				}
+				continue
+			}
+			// Without a tenant header, only return unscoped accounts to avoid leakage.
+			if accountTenant == "" {
+				filtered = append(filtered, a)
+			}
+		}
+		writeJSON(w, http.StatusOK, filtered)
 
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -172,6 +197,20 @@ func (h *handler) accountResources(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	accountID := parts[0]
+	accountTenant, err := h.accountTenant(r.Context(), accountID)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if isNotFound(err) {
+			status = http.StatusNotFound
+		}
+		writeError(w, status, err)
+		return
+	}
+	requestTenant := strings.TrimSpace(tenantFromCtx(r.Context()))
+	if accountTenant != "" && accountTenant != requestTenant {
+		writeError(w, http.StatusForbidden, fmt.Errorf("forbidden: tenant mismatch"))
+		return
+	}
 
 	if len(parts) == 1 {
 		switch r.Method {
@@ -237,6 +276,32 @@ func (h *handler) accountResources(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
+}
+
+// accountTenant returns the tenant string for an account (from metadata) or an empty string if none.
+func (h *handler) accountTenant(ctx context.Context, accountID string) (string, error) {
+	acct, err := h.app.Accounts.Get(ctx, accountID)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(tenantFromMetadata(acct.Metadata)), nil
+}
+
+func tenantFromMetadata(meta map[string]string) string {
+	if meta == nil {
+		return ""
+	}
+	return strings.TrimSpace(meta["tenant"])
+}
+
+func isNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "not found")
 }
 
 func (h *handler) systemVersion(w http.ResponseWriter, r *http.Request) {

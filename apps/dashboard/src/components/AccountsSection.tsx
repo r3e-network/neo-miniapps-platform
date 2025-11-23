@@ -20,6 +20,7 @@ type Banner = { tone: "success" | "error"; message: string };
 
 type Props = {
   accounts: Account[];
+  activeTenant?: string;
   wallets: Record<string, WalletState>;
   vrf: Record<string, VRFState>;
   ccip: Record<string, CCIPState>;
@@ -72,10 +73,12 @@ type Props = {
   formatTimestamp: (value?: string) => string;
   formatDuration: (value?: number) => string;
   formatSnippet: (value: string, limit?: number) => string;
+  linkBase?: string;
 };
 
 export function AccountsSection({
   accounts,
+  activeTenant,
   wallets,
   vrf,
   ccip,
@@ -128,6 +131,7 @@ export function AccountsSection({
   formatTimestamp,
   formatDuration,
   formatSnippet,
+  linkBase,
 }: Props) {
   return (
     <ul className="list">
@@ -204,6 +208,8 @@ export function AccountsSection({
             formatTimestamp={formatTimestamp}
             formatDuration={formatDuration}
             formatAmount={formatAmount}
+            activeTenant={activeTenant}
+            linkBase={linkBase}
           />
         );
       })}

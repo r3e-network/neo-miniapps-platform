@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { fetchCREExecutors, fetchCREPlaybooks, fetchCRERuns } from "../api";
 import { CREState } from "../components/CREPanel";
 
-export function useCreResources(config: { baseUrl: string; token: string }) {
+export function useCreResources(config: { baseUrl: string; token: string; tenant?: string }) {
   const [cre, setCRE] = useState<Record<string, CREState>>({});
 
   const resetCRE = useCallback(() => setCRE({}), []);

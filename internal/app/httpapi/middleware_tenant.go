@@ -9,3 +9,12 @@ func withTenantContext(ctx context.Context, tenant string) context.Context {
 	}
 	return context.WithValue(ctx, ctxTenantKey, tenant)
 }
+
+// tenantFromCtx extracts the tenant string from context.
+func tenantFromCtx(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	tenant, _ := ctx.Value(ctxTenantKey).(string)
+	return tenant
+}

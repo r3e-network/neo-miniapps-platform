@@ -153,6 +153,81 @@ func TestIntegrationHTTPAPI(t *testing.T) {
 	if secretList.Code != http.StatusOK {
 		t.Fatalf("list secrets status: %d", secretList.Code)
 	}
+	// Tenant scoping on accounts list: create an account under tenant-b and ensure tenant-a list filters it out.
+	tenantBResp := doWithHeaders(t, client, server.URL+"/accounts", http.MethodPost, marshalBody(t, map[string]any{
+		"owner": "tenant-b-owner",
+	}), map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   "tenant-b",
+	})
+	if tenantBResp.Code != http.StatusCreated {
+		t.Fatalf("create account tenant-b status: %d", tenantBResp.Code)
+	}
+	tenantAList := doWithHeaders(t, client, server.URL+"/accounts", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   "tenant-a",
+	})
+	if tenantAList.Code != http.StatusOK {
+		t.Fatalf("tenant-a list status: %d", tenantAList.Code)
+	}
+	var tenantAAccounts []map[string]any
+	_ = json.Unmarshal(tenantAList.Body.Bytes(), &tenantAAccounts)
+	for _, acc := range tenantAAccounts {
+		if acc["Owner"] == "tenant-b-owner" {
+			t.Fatalf("tenant-a list should not include tenant-b accounts")
+		}
+	}
+	// Account fetch across tenant should be forbidden.
+	tenantBAccount := getID(decodeMap(t, tenantBResp.Body.Bytes()))
+	crossTenant := doWithHeaders(t, client, server.URL+"/accounts/"+tenantBAccount, http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   "tenant-a",
+	})
+	if crossTenant.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden when accessing other tenant account, got %d", crossTenant.Code)
+	}
+	noTenant := doWithHeaders(t, client, server.URL+"/accounts/"+tenantBAccount, http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+	})
+	if noTenant.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden without tenant when account is tenant-scoped, got %d", noTenant.Code)
+	}
+	// List without tenant should not leak tenant-tagged accounts.
+	publicList := doWithHeaders(t, client, server.URL+"/accounts", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+	})
+	if publicList.Code != http.StatusOK {
+		t.Fatalf("public list status: %d", publicList.Code)
+	}
+	var publicAccounts []map[string]any
+	_ = json.Unmarshal(publicList.Body.Bytes(), &publicAccounts)
+	for _, acc := range publicAccounts {
+		meta, _ := acc["Metadata"].(map[string]any)
+		if meta != nil && meta["tenant"] != nil && meta["tenant"] != "" {
+			t.Fatalf("public list should not include tenant-scoped accounts")
+		}
+	}
+	// Access tenant-scoped resources should fail without or with mismatched tenant, succeed with correct tenant.
+	noTenantSecret := doWithHeaders(t, client, server.URL+"/accounts/"+tenantBAccount+"/secrets", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+	})
+	if noTenantSecret.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for tenant-scoped secret list without tenant, got %d", noTenantSecret.Code)
+	}
+	wrongTenantSecret := doWithHeaders(t, client, server.URL+"/accounts/"+tenantBAccount+"/secrets", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   "tenant-a",
+	})
+	if wrongTenantSecret.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for tenant-scoped secret list with wrong tenant, got %d", wrongTenantSecret.Code)
+	}
+	okTenantSecret := doWithHeaders(t, client, server.URL+"/accounts/"+tenantBAccount+"/secrets", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   "tenant-b",
+	})
+	if okTenantSecret.Code != http.StatusOK {
+		t.Fatalf("expected ok for tenant-scoped secret list with correct tenant, got %d", okTenantSecret.Code)
+	}
 
 	// Oracle source + request
 	srcResp := do(t, client, server.URL+"/accounts/"+accountID+"/oracle/sources", http.MethodPost, marshalBody(t, map[string]any{
@@ -325,4 +400,13 @@ func getID(m map[string]any) string {
 		}
 	}
 	return ""
+}
+
+func decodeMap(t *testing.T, raw []byte) map[string]any {
+	t.Helper()
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatalf("decode map: %v", err)
+	}
+	return m
 }

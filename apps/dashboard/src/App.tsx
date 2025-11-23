@@ -12,6 +12,7 @@ type WalletSession = { address: string; label?: string; signature?: string };
 export function App() {
   const [baseUrl, setBaseUrl] = useLocalStorage("sl-ui.baseUrl", "http://localhost:8080");
   const [token, setToken] = useLocalStorage("sl-ui.token", "dev-token");
+  const [tenant, setTenant] = useLocalStorage("sl-ui.tenant", "");
   const [wallet, setWallet] = useState<WalletSession>(() => {
     try {
       const raw = window.localStorage.getItem("sl-ui.wallet");
@@ -27,9 +28,10 @@ export function App() {
     () => ({
       baseUrl: normaliseUrl(baseUrl),
       token: token.trim(),
+      tenant: tenant.trim() || undefined,
       wallet,
     }),
-    [baseUrl, token, wallet],
+    [baseUrl, token, tenant, wallet],
   );
   const [promBase, setPromBase] = useLocalStorage("sl-ui.prometheus", "http://localhost:9090");
   const promConfig: MetricsConfig = useMemo(
@@ -46,13 +48,17 @@ export function App() {
     const params = new URLSearchParams(window.location.search);
     const qsBase = params.get("api") || params.get("base") || params.get("baseUrl") || params.get("endpoint");
     const qsToken = params.get("token") || params.get("api_token");
+    const qsTenant = params.get("tenant");
     if (qsBase) {
       setBaseUrl(normaliseUrl(qsBase));
     }
     if (qsToken) {
       setToken(qsToken);
     }
-  }, [setBaseUrl, setToken]);
+    if (qsTenant) {
+      setTenant(qsTenant);
+    }
+  }, [setBaseUrl, setTenant, setToken]);
 
   const {
     wallets,
@@ -158,6 +164,10 @@ export function App() {
             Configure the API endpoint and token, then explore system descriptors to toggle feature-aware views. Defaults (local compose):
             API <code>http://localhost:8080</code>, token <code>dev-token</code>, or login via admin/changeme.
           </p>
+          <div className="row" style={{ gap: "8px" }}>
+            <span className="tag">Tenant: {config.tenant || "none"}</span>
+            <span className="tag subdued">Auth: Bearer token</span>
+          </div>
         </div>
       </header>
 
@@ -177,12 +187,14 @@ export function App() {
         <SettingsForm
           baseUrl={baseUrl}
           token={token}
+          tenant={tenant}
           promBase={promBase}
           canQuery={canQuery}
           status={state.status}
           onSubmit={onSubmit}
           onBaseUrlChange={setBaseUrl}
           onTokenChange={setToken}
+          onTenantChange={setTenant}
           onPromChange={setPromBase}
         />
         {state.status === "error" && <p className="error">Failed to load: {state.message}</p>}
@@ -199,9 +211,14 @@ export function App() {
             />
             <div className="card inner accounts">
               <h3>Accounts ({state.accounts.length})</h3>
+              {state.accounts.some((a) => a.Metadata?.tenant) && !config.tenant && (
+                <p className="warning">Tenant-scoped accounts detected. Set Tenant in Settings to avoid 403s.</p>
+              )}
               {state.accounts.length === 0 && <p className="muted">No accounts found.</p>}
               <AccountsSection
                 accounts={state.accounts}
+                activeTenant={config.tenant}
+                linkBase={window.location.origin + window.location.pathname}
                 wallets={wallets}
                 vrf={vrf}
                 ccip={ccip}
@@ -260,7 +277,7 @@ export function App() {
           </>
         )}
         {state.status === "idle" && <p className="muted">Enter a base URL and token to connect.</p>}
-        <AdminPanel systemState={state} baseUrl={config.baseUrl} token={config.token} />
+        <AdminPanel systemState={state} baseUrl={config.baseUrl} token={config.token} tenant={config.tenant} />
       </section>
 
       <section className="card inner">

@@ -4,17 +4,21 @@ package httpapi
 
 import (
 	"context"
-	"database/sql"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"testing"
+	"time"
 
 	app "github.com/R3E-Network/service_layer/internal/app"
 	"github.com/R3E-Network/service_layer/internal/app/auth"
 	"github.com/R3E-Network/service_layer/internal/app/jam"
-	"github.com/R3E-Network/service_layer/internal/app/runtime"
+	"github.com/R3E-Network/service_layer/internal/app/storage/postgres"
 	"github.com/R3E-Network/service_layer/internal/platform/database"
+	"github.com/R3E-Network/service_layer/internal/platform/migrations"
 	"github.com/joho/godotenv"
 )
 
@@ -33,25 +37,40 @@ func TestIntegrationPostgres(t *testing.T) {
 	}
 	defer db.Close()
 
-	cfg, err := runtime.LoadConfig()
-	if err != nil {
-		t.Fatalf("load config: %v", err)
+	if err := migrations.Apply(ctx, db); err != nil {
+		t.Fatalf("apply migrations: %v", err)
 	}
-	cfg.Database.Driver = "postgres"
-	cfg.Database.DSN = dsn
 
-	appRuntime, err := runtime.NewApplication(cfg, true)
+	pgStore := postgres.New(db)
+	stores := app.Stores{
+		Accounts:         pgStore,
+		Functions:        pgStore,
+		Triggers:         pgStore,
+		GasBank:          pgStore,
+		Automation:       pgStore,
+		PriceFeeds:       pgStore,
+		DataFeeds:        pgStore,
+		DataStreams:      pgStore,
+		DataLink:         pgStore,
+		DTA:              pgStore,
+		Confidential:     pgStore,
+		Oracle:           pgStore,
+		Secrets:          pgStore,
+		CRE:              pgStore,
+		CCIP:             pgStore,
+		VRF:              pgStore,
+		WorkspaceWallets: pgStore,
+	}
+	appInstance, err := app.New(stores, nil)
 	if err != nil {
-		t.Fatalf("new runtime: %v", err)
+		t.Fatalf("new application: %v", err)
 	}
-	t.Cleanup(func() { _ = appRuntime.Shutdown(ctx) })
-
-	if err := appRuntime.Run(ctx); err != nil {
-		t.Fatalf("run runtime: %v", err)
+	if err := appInstance.Start(ctx); err != nil {
+		t.Fatalf("start application: %v", err)
 	}
+	t.Cleanup(func() { _ = appInstance.Stop(context.Background()) })
 
 	// Wire handler with JWT + tokens backed by persisted db
-	appInstance := appRuntime.App()
 	tokens := []string{"dev-token"}
 	authMgr := auth.NewManager("integration-secret", []auth.User{{Username: "admin", Password: "pass", Role: "admin"}})
 	auditBuf := newAuditLog(100, newPostgresAuditSink(db))
@@ -65,11 +84,69 @@ func TestIntegrationPostgres(t *testing.T) {
 
 	client := server.Client()
 
-	// Create account (persisted)
-	acctResp := do(t, client, server.URL+"/accounts", http.MethodPost, marshalBody(t, map[string]any{"owner": "pg-integration"}), "dev-token")
+	tenant := "tenant-pg"
+	owner := fmt.Sprintf("pg-integration-%d", time.Now().UnixNano())
+	acctResp := doWithHeaders(t, client, server.URL+"/accounts", http.MethodPost, marshalBody(t, map[string]any{"owner": owner}), map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   tenant,
+	})
 	if acctResp.Code != http.StatusCreated {
 		t.Fatalf("create account status: %d", acctResp.Code)
 	}
+	acctID := getID(decodeMap(t, acctResp.Body.Bytes()))
+
+	// Workspace wallet to satisfy signer requirements
+	walletResp := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/workspace-wallets", http.MethodPost, marshalBody(t, map[string]any{
+		"wallet_address": "npg-" + strconv.FormatInt(time.Now().UnixNano(), 10),
+		"label":          "signer",
+		"status":         "active",
+	}), map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   tenant,
+	})
+	if walletResp.Code != http.StatusCreated {
+		t.Fatalf("create wallet status: %d", walletResp.Code)
+	}
+	walletPayload := decodeMap(t, walletResp.Body.Bytes())
+	walletAddress, _ := walletPayload["wallet_address"].(string)
+	if walletAddress == "" {
+		t.Fatalf("wallet address missing from response")
+	}
+
+	// Create datafeed (persists to Postgres)
+	dfResp := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/datafeeds", http.MethodPost, marshalBody(t, map[string]any{
+		"pair":              "pg/usd",
+		"decimals":          8,
+		"heartbeat_seconds": 30,
+		"threshold_ppm":     0,
+		"signer_set":        []string{walletAddress},
+	}), map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   tenant,
+	})
+	if dfResp.Code != http.StatusCreated {
+		t.Fatalf("create datafeed status: %d", dfResp.Code)
+	}
+
+	// Secret create/list
+	secretResp := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/secrets", http.MethodPost, marshalBody(t, map[string]any{
+		"name":  "apiKey",
+		"value": "secret-value",
+	}), map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   tenant,
+	})
+	if secretResp.Code != http.StatusCreated {
+		t.Fatalf("create secret status: %d", secretResp.Code)
+	}
+	secretList := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/secrets", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   tenant,
+	})
+	if secretList.Code != http.StatusOK {
+		t.Fatalf("list secrets status: %d", secretList.Code)
+	}
+
 	// Health & audit endpoints should work
 	if resp, err := client.Get(server.URL + "/healthz"); err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("healthz failed: %v status %d", err, resp.StatusCode)
@@ -80,5 +157,69 @@ func TestIntegrationPostgres(t *testing.T) {
 	}), "")
 	if loginResp.Code != http.StatusOK {
 		t.Fatalf("login status: %d", loginResp.Code)
+	}
+	var login map[string]any
+	_ = json.Unmarshal(loginResp.Body.Bytes(), &login)
+	jwtToken := login["token"].(string)
+
+	// Admin audit requires tenant header
+	auditNoTenant := doWithHeaders(t, client, server.URL+"/admin/audit?limit=1", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer " + jwtToken,
+	})
+	if auditNoTenant.Code != http.StatusForbidden {
+		t.Fatalf("expected admin audit to be forbidden without tenant, got %d", auditNoTenant.Code)
+	}
+	auditOK := doWithHeaders(t, client, server.URL+"/admin/audit?limit=5&contains="+acctID, http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer " + jwtToken,
+		"X-Tenant-ID":   tenant,
+	})
+	if auditOK.Code != http.StatusOK {
+		t.Fatalf("expected admin audit ok, got %d", auditOK.Code)
+	}
+
+	// Accessing a tenant-scoped account without tenant should be forbidden.
+	noTenant := doWithHeaders(t, client, server.URL+"/accounts/"+acctID, http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+	})
+	if noTenant.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden without tenant on tenant-scoped account, got %d", noTenant.Code)
+	}
+
+	// List without tenant should not leak tenant-tagged accounts.
+	publicList := doWithHeaders(t, client, server.URL+"/accounts", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+	})
+	if publicList.Code != http.StatusOK {
+		t.Fatalf("public list status: %d", publicList.Code)
+	}
+	var publicAccounts []map[string]any
+	_ = json.Unmarshal(publicList.Body.Bytes(), &publicAccounts)
+	for _, acc := range publicAccounts {
+		meta, _ := acc["Metadata"].(map[string]any)
+		if meta != nil && meta["tenant"] != nil && meta["tenant"] != "" {
+			t.Fatalf("public list should not include tenant-scoped accounts")
+		}
+	}
+
+	// Tenant-scoped resources should reject missing tenant and accept correct tenant.
+	noTenantSecret := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/secrets", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+	})
+	if noTenantSecret.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for tenant-scoped secret list without tenant, got %d", noTenantSecret.Code)
+	}
+	wrongTenantSecret := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/secrets", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   "other-tenant",
+	})
+	if wrongTenantSecret.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for tenant-scoped secret list with wrong tenant, got %d", wrongTenantSecret.Code)
+	}
+	okTenantSecret := doWithHeaders(t, client, server.URL+"/accounts/"+acctID+"/secrets", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer dev-token",
+		"X-Tenant-ID":   tenant,
+	})
+	if okTenantSecret.Code != http.StatusOK {
+		t.Fatalf("expected ok for tenant-scoped secret list with correct tenant, got %d", okTenantSecret.Code)
 	}
 }

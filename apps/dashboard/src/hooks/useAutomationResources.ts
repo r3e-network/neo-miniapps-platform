@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { fetchAutomationJobs, fetchTriggers } from "../api";
 import { AutomationState } from "../components/AutomationPanel";
 
-export function useAutomationResources(config: { baseUrl: string; token: string }) {
+export function useAutomationResources(config: { baseUrl: string; token: string; tenant?: string }) {
   const [automation, setAutomation] = useState<Record<string, AutomationState>>({});
 
   const resetAutomation = useCallback(() => setAutomation({}), []);

@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { fetchSecrets } from "../api";
 import { SecretsState } from "../components/SecretsPanel";
 
-export function useSecretsResources(config: { baseUrl: string; token: string }) {
+export function useSecretsResources(config: { baseUrl: string; token: string; tenant?: string }) {
   const [secrets, setSecrets] = useState<Record<string, SecretsState>>({});
 
   const resetSecrets = useCallback(() => setSecrets({}), []);

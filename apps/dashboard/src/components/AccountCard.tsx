@@ -44,6 +44,7 @@ type Props = {
   failedCursor?: string;
   loadingCursor?: boolean;
   loadingFailed?: boolean;
+  activeTenant?: string;
   filter?: string;
   retrying: Record<string, boolean>;
   onFilterChange: (value: string) => void;
@@ -75,6 +76,7 @@ type Props = {
   formatTimestamp: (value?: string) => string;
   formatDuration: (value?: number) => string;
   formatSnippet: (value: string, limit?: number) => string;
+  linkBase?: string;
 };
 
 export function AccountCard({
@@ -131,13 +133,41 @@ export function AccountCard({
   formatTimestamp,
   formatDuration,
   formatSnippet,
+  activeTenant,
+  linkBase,
 }: Props) {
+  const accountTenant = account.Metadata?.tenant;
+  const tenantMismatch = accountTenant && accountTenant !== activeTenant;
+  const deepLinkBase = linkBase || window.location.origin + window.location.pathname;
+  const qs = new URLSearchParams();
+  if (linkBase?.includes("?")) {
+    const existing = linkBase.split("?")[1];
+    new URLSearchParams(existing).forEach((v, k) => qs.set(k, v));
+  }
+  qs.set("baseUrl", window.localStorage.getItem("sl-ui.baseUrl") || "");
+  qs.set("token", window.localStorage.getItem("sl-ui.token") || "");
+  if (accountTenant) {
+    qs.set("tenant", accountTenant);
+  }
+  const accountLink = `${deepLinkBase}?${qs.toString()}`;
   return (
     <li className="account">
       <div className="row">
         <div>
           <strong>{account.Owner || "Unlabelled"}</strong>
           <div className="muted mono">{account.ID}</div>
+          <div className="row gap">
+            {account.Metadata?.tenant && <span className="tag">Tenant: {account.Metadata.tenant}</span>}
+            {!account.Metadata?.tenant && <span className="tag subdued">Unscoped</span>}
+            <a className="tag subtle" href={accountLink} target="_blank" rel="noreferrer">
+              Deep link
+            </a>
+          </div>
+          {tenantMismatch && (
+            <p className="error">
+              This account requires tenant <code>{accountTenant}</code>. Active tenant: {activeTenant || "none"}.
+            </p>
+          )}
         </div>
         <div className="row gap">
           {walletState.status === "ready" && <span className="tag">{walletState.items.length} wallets</span>}

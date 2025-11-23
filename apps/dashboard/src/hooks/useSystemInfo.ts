@@ -20,7 +20,7 @@ export type SystemState =
     }
   | { status: "error"; message: string };
 
-type ServerConfig = { baseUrl: string; token: string };
+type ServerConfig = { baseUrl: string; token: string; tenant?: string };
 
 export function useSystemInfo(config: ServerConfig, promConfig: MetricsConfig, canQuery: boolean) {
   const [state, setState] = useState<SystemState>({ status: "idle" });

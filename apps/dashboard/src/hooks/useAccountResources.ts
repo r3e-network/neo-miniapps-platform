@@ -4,7 +4,7 @@ import { useGasbankResources } from "./useGasbankResources";
 import { useWalletResources } from "./useWalletResources";
 import { useOpsResources } from "./useOpsResources";
 
-export function useAccountResources(config: { baseUrl: string; token: string }) {
+export function useAccountResources(config: { baseUrl: string; token: string; tenant?: string }) {
   const walletsHook = useWalletResources(config);
   const feeds = useFeedsResources(config);
   const gasbankHook = useGasbankResources(config);

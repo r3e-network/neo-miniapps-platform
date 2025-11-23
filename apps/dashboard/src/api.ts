@@ -420,6 +420,7 @@ export type Trigger = {
 export type ClientConfig = {
   baseUrl: string;
   token: string;
+  tenant?: string;
 };
 
 export function normaliseUrl(url: string) {
@@ -432,6 +433,9 @@ export async function fetchJSON<T>(url: string, config: ClientConfig, init?: Req
     Authorization: `Bearer ${config.token}`,
     ...(init?.headers as Record<string, string> | undefined),
   };
+  if (config.tenant) {
+    headers["X-Tenant-ID"] = config.tenant;
+  }
   const resp = await fetch(url, { ...init, headers });
   if (!resp.ok) {
     const text = await resp.text();
@@ -493,37 +497,51 @@ export async function fetchAudit(config: ClientConfig, query: AuditQuery = {}): 
 }
 
 export async function fetchAccounts(config: ClientConfig, limit = 50): Promise<Account[]> {
-  const url = `${config.baseUrl}/accounts?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts?${params.toString()}`;
   return fetchJSON<Account[]>(url, config);
 }
 
 export async function fetchWorkspaceWallets(config: ClientConfig, accountID: string, limit = 50): Promise<WorkspaceWallet[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/workspace-wallets?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/workspace-wallets?${params.toString()}`;
   return fetchJSON<WorkspaceWallet[]>(url, config);
 }
 
 export async function fetchVRFKeys(config: ClientConfig, accountID: string, limit = 50): Promise<VRFKey[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/vrf/keys?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/vrf/keys?${params.toString()}`;
   return fetchJSON<VRFKey[]>(url, config);
 }
 
 export async function fetchVRFRequests(config: ClientConfig, accountID: string, limit = 50): Promise<VRFRequest[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/vrf/requests?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/vrf/requests?${params.toString()}`;
   return fetchJSON<VRFRequest[]>(url, config);
 }
 
 export async function fetchLanes(config: ClientConfig, accountID: string, limit = 50): Promise<Lane[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/ccip/lanes?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/ccip/lanes?${params.toString()}`;
   return fetchJSON<Lane[]>(url, config);
 }
 
 export async function fetchMessages(config: ClientConfig, accountID: string, limit = 50): Promise<CCIPMessage[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/ccip/messages?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/ccip/messages?${params.toString()}`;
   return fetchJSON<CCIPMessage[]>(url, config);
 }
 
 export async function fetchDatafeeds(config: ClientConfig, accountID: string, limit = 50): Promise<Datafeed[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/datafeeds?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/datafeeds?${params.toString()}`;
   return fetchJSON<Datafeed[]>(url, config);
 }
 
@@ -549,17 +567,23 @@ export async function updateDatafeedAggregation(
 }
 
 export async function fetchDatafeedUpdates(config: ClientConfig, accountID: string, feedID: string, limit = 20): Promise<DatafeedUpdate[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/datafeeds/${feedID}/updates?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/datafeeds/${feedID}/updates?${params.toString()}`;
   return fetchJSON<DatafeedUpdate[]>(url, config);
 }
 
 export async function fetchDatalinkChannels(config: ClientConfig, accountID: string, limit = 50): Promise<DatalinkChannel[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/datalink/channels?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/datalink/channels?${params.toString()}`;
   return fetchJSON<DatalinkChannel[]>(url, config);
 }
 
 export async function fetchDatalinkDeliveries(config: ClientConfig, accountID: string, limit = 50): Promise<DatalinkDelivery[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/datalink/deliveries?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/datalink/deliveries?${params.toString()}`;
   return fetchJSON<DatalinkDelivery[]>(url, config);
 }
 
@@ -594,49 +618,70 @@ export async function createDatalinkDelivery(
 }
 
 export async function fetchDatastreams(config: ClientConfig, accountID: string, limit = 50): Promise<Datastream[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/datastreams?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/datastreams?${params.toString()}`;
   return fetchJSON<Datastream[]>(url, config);
 }
 
 export async function fetchDatastreamFrames(config: ClientConfig, accountID: string, streamID: string, limit = 20): Promise<DatastreamFrame[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/datastreams/${streamID}/frames?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/datastreams/${streamID}/frames?${params.toString()}`;
   return fetchJSON<DatastreamFrame[]>(url, config);
 }
 
 export async function fetchPriceFeeds(config: ClientConfig, accountID: string): Promise<PriceFeed[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/pricefeeds`;
+  const params = new URLSearchParams();
+  if (config.tenant) params.set("tenant", config.tenant);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const url = `${config.baseUrl}/accounts/${accountID}/pricefeeds${suffix}`;
   return fetchJSON<PriceFeed[]>(url, config);
 }
 
 export async function fetchPriceSnapshots(config: ClientConfig, accountID: string, feedID: string, limit = 5): Promise<PriceSnapshot[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/pricefeeds/${feedID}/snapshots`;
+  const params = new URLSearchParams();
+  if (config.tenant) params.set("tenant", config.tenant);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const url = `${config.baseUrl}/accounts/${accountID}/pricefeeds/${feedID}/snapshots${suffix}`;
   const snapshots = await fetchJSON<PriceSnapshot[]>(url, config);
   return snapshots.slice(0, limit);
 }
 
 export async function fetchDTAProducts(config: ClientConfig, accountID: string, limit = 50): Promise<DTAProduct[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/dta/products?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/dta/products?${params.toString()}`;
   return fetchJSON<DTAProduct[]>(url, config);
 }
 
 export async function fetchDTAOrders(config: ClientConfig, accountID: string, limit = 50): Promise<DTAOrder[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/dta/orders?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/dta/orders?${params.toString()}`;
   return fetchJSON<DTAOrder[]>(url, config);
 }
 
 export async function fetchGasAccounts(config: ClientConfig, accountID: string, limit = 50): Promise<GasAccount[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/gasbank?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/gasbank?${params.toString()}`;
   return fetchJSON<GasAccount[]>(url, config);
 }
 
 export async function fetchGasTransactions(config: ClientConfig, accountID: string, gasAccountID?: string, limit = 50): Promise<GasTransaction[]> {
-  const param = gasAccountID ? `?gas_account_id=${encodeURIComponent(gasAccountID)}&limit=${limit}` : `?limit=${limit}`;
-  const url = `${config.baseUrl}/accounts/${accountID}/gasbank/transactions${param}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (gasAccountID) params.set("gas_account_id", gasAccountID);
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/gasbank/transactions?${params.toString()}`;
   return fetchJSON<GasTransaction[]>(url, config);
 }
 
 export async function fetchGasbankSummary(config: ClientConfig, accountID: string): Promise<GasbankSummary> {
-  const url = `${config.baseUrl}/accounts/${accountID}/gasbank/summary`;
+  const params = new URLSearchParams();
+  if (config.tenant) params.set("tenant", config.tenant);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const url = `${config.baseUrl}/accounts/${accountID}/gasbank/summary${suffix}`;
   return fetchJSON<GasbankSummary>(url, config);
 }
 
@@ -651,12 +696,15 @@ export async function fetchGasWithdrawals(
   if (status) {
     params.set("status", status);
   }
+  if (config.tenant) params.set("tenant", config.tenant);
   const url = `${config.baseUrl}/accounts/${accountID}/gasbank/withdrawals?${params.toString()}`;
   return fetchJSON<GasTransaction[]>(url, config);
 }
 
 export async function fetchGasDeadLetters(config: ClientConfig, accountID: string, limit = 25): Promise<GasbankDeadLetter[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/gasbank/deadletters?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/gasbank/deadletters?${params.toString()}`;
   return fetchJSON<GasbankDeadLetter[]>(url, config);
 }
 
@@ -667,57 +715,78 @@ export async function fetchWithdrawalAttempts(
   limit = 10,
 ): Promise<GasbankSettlementAttempt[]> {
   const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
   const url = `${config.baseUrl}/accounts/${accountID}/gasbank/withdrawals/${transactionID}/attempts?${params.toString()}`;
   return fetchJSON<GasbankSettlementAttempt[]>(url, config);
 }
 
 export async function fetchEnclaves(config: ClientConfig, accountID: string, limit = 50): Promise<Enclave[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/confcompute/enclaves?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/confcompute/enclaves?${params.toString()}`;
   return fetchJSON<Enclave[]>(url, config);
 }
 
 export async function fetchCREExecutors(config: ClientConfig, accountID: string, limit = 50): Promise<CREExecutor[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/cre/executors?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/cre/executors?${params.toString()}`;
   return fetchJSON<CREExecutor[]>(url, config);
 }
 
 export async function fetchCREPlaybooks(config: ClientConfig, accountID: string, limit = 50): Promise<CREPlaybook[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/cre/playbooks?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/cre/playbooks?${params.toString()}`;
   return fetchJSON<CREPlaybook[]>(url, config);
 }
 
 export async function fetchCRERuns(config: ClientConfig, accountID: string, limit = 50): Promise<CRERun[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/cre/runs?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/cre/runs?${params.toString()}`;
   return fetchJSON<CRERun[]>(url, config);
 }
 
 export async function fetchAutomationJobs(config: ClientConfig, accountID: string, limit = 50): Promise<AutomationJob[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/automation/jobs?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/automation/jobs?${params.toString()}`;
   return fetchJSON<AutomationJob[]>(url, config);
 }
 
 export async function fetchTriggers(config: ClientConfig, accountID: string, limit = 50): Promise<Trigger[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/triggers?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/triggers?${params.toString()}`;
   return fetchJSON<Trigger[]>(url, config);
 }
 
 export async function fetchSecrets(config: ClientConfig, accountID: string, limit = 50): Promise<Secret[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/secrets?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/secrets?${params.toString()}`;
   return fetchJSON<Secret[]>(url, config);
 }
 
 export async function fetchFunctions(config: ClientConfig, accountID: string, limit = 50): Promise<FunctionSummary[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/functions?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/functions?${params.toString()}`;
   return fetchJSON<FunctionSummary[]>(url, config);
 }
 
 export async function fetchFunctionExecutions(config: ClientConfig, accountID: string, functionID: string, limit = 20): Promise<FunctionExecution[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/functions/${functionID}/executions?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/functions/${functionID}/executions?${params.toString()}`;
   return fetchJSON<FunctionExecution[]>(url, config);
 }
 
 export async function fetchOracleSources(config: ClientConfig, accountID: string, limit = 50): Promise<OracleSource[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/oracle/sources?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/oracle/sources?${params.toString()}`;
   return fetchJSON<OracleSource[]>(url, config);
 }
 
@@ -729,6 +798,7 @@ export async function fetchOracleRequests(config: ClientConfig, accountID: strin
   if (cursor) {
     params.set("cursor", cursor);
   }
+  if (config.tenant) params.set("tenant", config.tenant);
   const url = `${config.baseUrl}/accounts/${accountID}/oracle/requests?${params.toString()}`;
   const resp = await fetch(url, {
     headers: {
@@ -752,6 +822,7 @@ export async function retryOracleRequest(config: ClientConfig, accountID: string
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${config.token}`,
+      ...(config.tenant ? { "X-Tenant-ID": config.tenant } : {}),
     },
     body: JSON.stringify({ status: "retry" }),
   });
@@ -763,7 +834,9 @@ export async function retryOracleRequest(config: ClientConfig, accountID: string
 }
 
 export async function fetchRandomRequests(config: ClientConfig, accountID: string, limit = 50): Promise<RandomRequest[]> {
-  const url = `${config.baseUrl}/accounts/${accountID}/random/requests?limit=${limit}`;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (config.tenant) params.set("tenant", config.tenant);
+  const url = `${config.baseUrl}/accounts/${accountID}/random/requests?${params.toString()}`;
   return fetchJSON<RandomRequest[]>(url, config);
 }
 

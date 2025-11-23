@@ -20,7 +20,7 @@ function mergeRequestLists(...lists: OracleRequest[][]) {
   });
 }
 
-export function useOracleData(config: { baseUrl: string; token: string }) {
+export function useOracleData(config: { baseUrl: string; token: string; tenant?: string }) {
   const [oracle, setOracle] = useState<Record<string, OracleState>>({});
   const [oracleBanner, setOracleBanner] = useState<Record<string, Banner | undefined>>({});
   const [retryingOracle, setRetryingOracle] = useState<Record<string, boolean>>({});

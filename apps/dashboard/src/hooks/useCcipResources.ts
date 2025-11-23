@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { fetchLanes, fetchMessages } from "../api";
 import { CCIPState } from "../components/CCIPPanel";
 
-export function useCcipResources(config: { baseUrl: string; token: string }) {
+export function useCcipResources(config: { baseUrl: string; token: string; tenant?: string }) {
   const [ccip, setCCIP] = useState<Record<string, CCIPState>>({});
 
   const resetCCIP = useCallback(() => setCCIP({}), []);

@@ -5,7 +5,7 @@ This repo ships sensible defaults for local compose (`dev-token`, `admin/changem
 ## Authentication & RBAC
 - Set strong tokens (`API_TOKENS`) **or** rely solely on JWT (`AUTH_USERS` + `AUTH_JWT_SECRET`). Remove `dev-token` and `admin/changeme`.
 - Enforce admin-only workflows with JWTs; token-only auth should not be treated as admin.
-- Prefer per-tenant JWTs (role + tenant claims) and ensure the gateway propagates tenant (via `X-Tenant-ID`) and role consistently.
+- Prefer per-tenant JWTs (role + tenant claims) and ensure the gateway propagates tenant (via `X-Tenant-ID`) and role consistently. Tenant-tagged accounts and resources require the correct tenant header; listings without a tenant only return unscoped accounts, preventing cross-tenant leakage.
 
 ## Transport & Edge
 - Terminate TLS at a trusted reverse proxy (nginx/envoy/ALB) with modern ciphersuites.

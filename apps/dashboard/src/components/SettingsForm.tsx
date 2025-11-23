@@ -3,16 +3,30 @@ import { FormEvent } from "react";
 type Props = {
   baseUrl: string;
   token: string;
+  tenant: string;
   promBase: string;
   canQuery: boolean;
   status: "idle" | "loading" | "ready" | "error";
   onSubmit: (event: FormEvent) => void;
   onBaseUrlChange: (value: string) => void;
   onTokenChange: (value: string) => void;
+  onTenantChange: (value: string) => void;
   onPromChange: (value: string) => void;
 };
 
-export function SettingsForm({ baseUrl, token, promBase, canQuery, status, onSubmit, onBaseUrlChange, onTokenChange, onPromChange }: Props) {
+export function SettingsForm({
+  baseUrl,
+  token,
+  tenant,
+  promBase,
+  canQuery,
+  status,
+  onSubmit,
+  onBaseUrlChange,
+  onTokenChange,
+  onTenantChange,
+  onPromChange,
+}: Props) {
   return (
     <form className="settings" onSubmit={onSubmit}>
       <label>
@@ -24,6 +38,11 @@ export function SettingsForm({ baseUrl, token, promBase, canQuery, status, onSub
         API Token
         <input value={token} onChange={(e) => onTokenChange(e.target.value)} placeholder="Bearer token" />
         <span className="hint">Use the same bearer token you send to the API.</span>
+      </label>
+      <label>
+        Tenant (optional)
+        <input value={tenant} onChange={(e) => onTenantChange(e.target.value)} placeholder="tenant id" />
+        <span className="hint">If your account is tenant-scoped, include the tenant ID for all requests.</span>
       </label>
       <label>
         Prometheus URL

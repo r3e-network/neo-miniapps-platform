@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { fetchEnclaves } from "../api";
 import { ConfState } from "../components/ConfPanel";
 
-export function useConfResources(config: { baseUrl: string; token: string }) {
+export function useConfResources(config: { baseUrl: string; token: string; tenant?: string }) {
   const [conf, setConf] = useState<Record<string, ConfState>>({});
 
   const resetConf = useCallback(() => setConf({}), []);

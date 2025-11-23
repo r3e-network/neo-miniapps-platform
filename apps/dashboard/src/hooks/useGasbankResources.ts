@@ -11,7 +11,7 @@ import {
 } from "../api";
 import { GasbankState } from "../components/GasbankPanel";
 
-export function useGasbankResources(config: { baseUrl: string; token: string }) {
+export function useGasbankResources(config: { baseUrl: string; token: string; tenant?: string }) {
   const [gasbank, setGasbank] = useState<Record<string, GasbankState>>({});
 
   const resetGasbank = useCallback(() => setGasbank({}), []);

@@ -1,7 +1,7 @@
 import { useAccountResources } from "./useAccountResources";
 import { useOracleData } from "./useOracleData";
 
-export function useAccountsData(config: { baseUrl: string; token: string }) {
+export function useAccountsData(config: { baseUrl: string; token: string; tenant?: string }) {
   const resources = useAccountResources(config);
   const oracle = useOracleData(config);
 

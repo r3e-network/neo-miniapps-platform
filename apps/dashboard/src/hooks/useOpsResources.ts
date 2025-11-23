@@ -9,7 +9,7 @@ import { useCallback, useState } from "react";
 import { fetchRandomRequests } from "../api";
 import { RandomState } from "../components/RandomPanel";
 
-export function useOpsResources(config: { baseUrl: string; token: string }) {
+export function useOpsResources(config: { baseUrl: string; token: string; tenant?: string }) {
   const vrfHook = useVrfResources(config);
   const ccipHook = useCcipResources(config);
   const confHook = useConfResources(config);

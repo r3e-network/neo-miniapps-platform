@@ -6,9 +6,10 @@ type Props = {
   systemState: SystemState;
   baseUrl: string;
   token: string;
+  tenant?: string;
 };
 
-export function AdminPanel({ systemState, baseUrl, token }: Props) {
+export function AdminPanel({ systemState, baseUrl, token, tenant }: Props) {
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [auditError, setAuditError] = useState<string>();
   const [limit, setLimit] = useState(50);
@@ -36,11 +37,11 @@ export function AdminPanel({ systemState, baseUrl, token }: Props) {
 
   useEffect(() => {
     if (!baseUrl || !token) return;
-    const config: ClientConfig = { baseUrl, token };
+    const config: ClientConfig = { baseUrl, token, tenant: tenantFilter || tenant };
     void fetchAudit(config, query)
       .then(setAudit)
       .catch((err) => setAuditError(err instanceof Error ? err.message : String(err)));
-  }, [baseUrl, token, query]);
+  }, [baseUrl, token, tenant, query]);
 
   if (systemState.status !== "ready") return null;
   const { descriptors, version, jam, accounts } = systemState;
