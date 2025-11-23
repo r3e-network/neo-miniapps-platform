@@ -21,6 +21,13 @@ export function AdminPanel({ systemState, baseUrl, token, tenant }: Props) {
   const [pathFilter, setPathFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
 
+  // Prefill tenant filter from active tenant when unset.
+  useEffect(() => {
+    if (!tenantFilter && tenant) {
+      setTenantFilter(tenant);
+    }
+  }, [tenant, tenantFilter]);
+
   const query = useMemo(
     () => ({
       limit,
