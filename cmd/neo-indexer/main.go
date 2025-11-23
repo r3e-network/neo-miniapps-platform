@@ -97,7 +97,7 @@ func main() {
 				}
 				log.Printf("indexed height=%d hash=%s txs=%d", height, hash, len(header.Tx))
 				if db != nil {
-					if err := upsertBlock(ctx, db, height, hash); err != nil {
+					if err := upsertBlock(ctx, db, height, hash, header.StateRoot); err != nil {
 						log.Printf("persist block height=%d: %v", height, err)
 						break
 					}
@@ -160,6 +160,7 @@ type blockHeader struct {
 	Time   int64       `json:"time"`
 	Prev   string      `json:"previousblockhash"`
 	Next   string      `json:"nextblockhash"`
+	StateRoot string   `json:"stateroot"`
 	Tx     []txVerbose `json:"tx"`
 }
 
@@ -288,12 +289,12 @@ func ensureSchema(ctx context.Context, db *sql.DB) error {
 	return err
 }
 
-func upsertBlock(ctx context.Context, db *sql.DB, height int64, hash string) error {
+func upsertBlock(ctx context.Context, db *sql.DB, height int64, hash string, stateRoot string) error {
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO neo_blocks (height, hash, state_root)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (height) DO UPDATE SET hash = EXCLUDED.hash, state_root = EXCLUDED.state_root
-	`, height, hash, nil)
+	`, height, hash, sql.NullString{String: stateRoot, Valid: stateRoot != ""})
 	return err
 }
 
