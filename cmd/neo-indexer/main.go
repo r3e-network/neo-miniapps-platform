@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -89,10 +90,19 @@ func main() {
 					log.Printf("get block hash height=%d: %v", height, err)
 					break
 				}
-				log.Printf("indexed height=%d hash=%s", height, hash)
+				header, err := client.getBlock(ctx, hash)
+				if err != nil {
+					log.Printf("get block %s: %v", hash, err)
+					break
+				}
+				log.Printf("indexed height=%d hash=%s txs=%d", height, hash, len(header.Tx))
 				if db != nil {
 					if err := upsertBlock(ctx, db, height, hash); err != nil {
 						log.Printf("persist block height=%d: %v", height, err)
+						break
+					}
+					if err := upsertTransactions(ctx, db, client, height, header.Tx); err != nil {
+						log.Printf("persist txs height=%d: %v", height, err)
 						break
 					}
 				}
@@ -143,6 +153,35 @@ type rpcResponse struct {
 	} `json:"error,omitempty"`
 }
 
+type blockHeader struct {
+	Hash   string      `json:"hash"`
+	Index  int64       `json:"index"`
+	Size   int64       `json:"size"`
+	Time   int64       `json:"time"`
+	Prev   string      `json:"previousblockhash"`
+	Next   string      `json:"nextblockhash"`
+	Tx     []txVerbose `json:"tx"`
+}
+
+type txVerbose struct {
+	Hash   string `json:"hash"`
+	Size   int    `json:"size"`
+	Type   string `json:"type"`
+	Sender string `json:"sender"`
+	NetFee string `json:"netfee"`
+	SysFee string `json:"sysfee"`
+}
+
+type appLog struct {
+	Executions []struct {
+		Notifications []struct {
+			Contract string      `json:"contract"`
+			Event    string      `json:"eventname"`
+			State    interface{} `json:"state"`
+		} `json:"notifications"`
+	} `json:"executions"`
+}
+
 func (c *rpcClient) do(ctx context.Context, method string, params []interface{}, out interface{}) error {
 	body, _ := json.Marshal(rpcRequest{JSONRPC: "2.0", Method: method, Params: params, ID: 1})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url, bytes.NewReader(body))
@@ -183,6 +222,22 @@ func (c *rpcClient) getBlockHash(ctx context.Context, height int64) (string, err
 		return "", err
 	}
 	return hash, nil
+}
+
+func (c *rpcClient) getBlock(ctx context.Context, hash string) (blockHeader, error) {
+	var header blockHeader
+	if err := c.do(ctx, "getblock", []interface{}{hash, 1}, &header); err != nil {
+		return blockHeader{}, err
+	}
+	return header, nil
+}
+
+func (c *rpcClient) getApplicationLog(ctx context.Context, hash string) (appLog, error) {
+	var logResp appLog
+	if err := c.do(ctx, "getapplicationlog", []interface{}{hash}, &logResp); err != nil {
+		return appLog{}, err
+	}
+	return logResp, nil
 }
 
 func ensureSchema(ctx context.Context, db *sql.DB) error {
@@ -233,4 +288,46 @@ func upsertBlock(ctx context.Context, db *sql.DB, height int64, hash string) err
 		ON CONFLICT (height) DO UPDATE SET hash = EXCLUDED.hash
 	`, height, hash)
 	return err
+}
+
+func upsertTransactions(ctx context.Context, db *sql.DB, client *rpcClient, height int64, txs []txVerbose) error {
+	for idx, tx := range txs {
+		netFee, _ := strconv.ParseFloat(tx.NetFee, 64)
+		sysFee, _ := strconv.ParseFloat(tx.SysFee, 64)
+		if _, err := db.ExecContext(ctx, `
+			INSERT INTO neo_transactions (hash, height, ordinal, type, sender, net_fee, sys_fee, size, raw)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			ON CONFLICT (hash) DO UPDATE SET height = EXCLUDED.height, ordinal = EXCLUDED.ordinal
+		`, tx.Hash, height, idx, tx.Type, tx.Sender, netFee, sysFee, tx.Size, toJSONB(tx)); err != nil {
+			return err
+		}
+		appLog, err := client.getApplicationLog(ctx, tx.Hash)
+		if err != nil {
+			log.Printf("warning: application log missing for tx %s: %v", tx.Hash, err)
+			continue
+		}
+		if err := persistNotifications(ctx, db, tx.Hash, appLog); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func toJSONB(v interface{}) []byte {
+	b, _ := json.Marshal(v)
+	return b
+}
+
+func persistNotifications(ctx context.Context, db *sql.DB, txHash string, log appLog) error {
+	for _, exec := range log.Executions {
+		for _, n := range exec.Notifications {
+			if _, err := db.ExecContext(ctx, `
+				INSERT INTO neo_notifications (tx_hash, contract, event, state)
+				VALUES ($1, $2, $3, $4)
+			`, txHash, n.Contract, n.Event, toJSONB(n.State)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
