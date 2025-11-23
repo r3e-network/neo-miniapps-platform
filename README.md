@@ -256,3 +256,6 @@ curl -X POST http://localhost:8080/accounts \
   -d '{"owner":"demo","metadata":{"tenant":"tenant-a"}}'
 curl -H "Authorization: Bearer dev-token" -H "X-Tenant-ID: tenant-a" http://localhost:8080/accounts
 ```
+
+### NEO layering plan
+- See `docs/neo-layering.md` for the roadmap to run full NEO nodes (mainnet/testnet), indexers, and per-block stateless state snapshots with trusted state roots.
