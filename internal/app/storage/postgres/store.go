@@ -277,12 +277,13 @@ func (s *Store) GetFunction(ctx context.Context, id string) (function.Definition
 }
 
 func (s *Store) ListFunctions(ctx context.Context, accountID string) ([]function.Definition, error) {
+	tenant := s.accountTenant(ctx, accountID)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, account_id, name, description, source, secrets, created_at, updated_at
 		FROM app_functions
-		WHERE $1 = '' OR account_id = $1
+		WHERE ($1 = '' OR account_id = $1) AND ($2 = '' OR tenant = $2)
 		ORDER BY created_at
-	`, accountID)
+	`, accountID, tenant)
 	if err != nil {
 		return nil, err
 	}
@@ -456,12 +457,13 @@ func (s *Store) GetTrigger(ctx context.Context, id string) (trigger.Trigger, err
 }
 
 func (s *Store) ListTriggers(ctx context.Context, accountID string) ([]trigger.Trigger, error) {
+	tenant := s.accountTenant(ctx, accountID)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, account_id, function_id, rule, enabled, tenant, created_at, updated_at
 		FROM app_triggers
-		WHERE $1 = '' OR account_id = $1
+		WHERE ($1 = '' OR account_id = $1) AND ($2 = '' OR tenant = $2)
 		ORDER BY created_at
-	`, accountID)
+	`, accountID, tenant)
 	if err != nil {
 		return nil, err
 	}

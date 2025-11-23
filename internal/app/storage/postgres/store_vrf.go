@@ -78,12 +78,13 @@ func (s *Store) GetVRFKey(ctx context.Context, id string) (vrf.Key, error) {
 }
 
 func (s *Store) ListVRFKeys(ctx context.Context, accountID string) ([]vrf.Key, error) {
+	tenant := s.accountTenant(ctx, accountID)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, account_id, public_key, label, status, wallet_address, attestation, metadata, created_at, updated_at
 		FROM app_vrf_keys
-		WHERE account_id = $1
+		WHERE account_id = $1 AND ($2 = '' OR tenant = $2)
 		ORDER BY created_at DESC
-	`, accountID)
+	`, accountID, tenant)
 	if err != nil {
 		return nil, err
 	}
@@ -134,13 +135,14 @@ func (s *Store) GetVRFRequest(ctx context.Context, id string) (vrf.Request, erro
 }
 
 func (s *Store) ListVRFRequests(ctx context.Context, accountID string, limit int) ([]vrf.Request, error) {
+	tenant := s.accountTenant(ctx, accountID)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, account_id, key_id, consumer, seed, status, result, error, metadata, created_at, updated_at
 		FROM app_vrf_requests
-		WHERE account_id = $1
+		WHERE account_id = $1 AND ($2 = '' OR tenant = $2)
 		ORDER BY created_at DESC
-		LIMIT $2
-	`, accountID, limit)
+		LIMIT $3
+	`, accountID, tenant, limit)
 	if err != nil {
 		return nil, err
 	}

@@ -139,14 +139,15 @@ func (s *Store) GetGasAccountByWallet(ctx context.Context, wallet string) (gasba
 }
 
 func (s *Store) ListGasAccounts(ctx context.Context, accountID string) ([]gasbank.Account, error) {
+	tenant := s.accountTenant(ctx, accountID)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, account_id, wallet_address, balance, available, pending, locked,
 		       min_balance, daily_limit, daily_withdrawal, notification_threshold,
 		       required_approvals, flags, metadata, last_withdrawal, created_at, updated_at
 		FROM app_gas_accounts
-		WHERE $1 = '' OR account_id = $1
+		WHERE ($1 = '' OR account_id = $1) AND ($2 = '' OR tenant = $2)
 		ORDER BY created_at
-	`, accountID)
+	`, accountID, tenant)
 	if err != nil {
 		return nil, err
 	}
@@ -297,6 +298,7 @@ func (s *Store) GetGasTransaction(ctx context.Context, id string) (gasbank.Trans
 }
 
 func (s *Store) ListGasTransactions(ctx context.Context, gasAccountID string, limit int) ([]gasbank.Transaction, error) {
+	tenant := s.gasAccountTenant(ctx, gasAccountID)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, account_id, user_account_id, type, amount, net_amount, status,
 		       blockchain_tx_id, from_address, to_address, notes, error,
@@ -304,10 +306,10 @@ func (s *Store) ListGasTransactions(ctx context.Context, gasAccountID string, li
 		       resolver_error, last_attempt_at, next_attempt_at, dead_letter_reason,
 		       metadata, dispatched_at, resolved_at, completed_at, created_at, updated_at
 		FROM app_gas_transactions
-		WHERE account_id = $1
+		WHERE account_id = $1 AND ($2 = '' OR tenant = $2)
 		ORDER BY created_at DESC
-		LIMIT $2
-	`, gasAccountID, limit)
+		LIMIT $3
+	`, gasAccountID, tenant, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -584,13 +586,14 @@ func (s *Store) ListDeadLetters(ctx context.Context, accountID string, limit int
 	if limit <= 0 {
 		limit = 50
 	}
+	tenant := s.accountTenant(ctx, accountID)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT transaction_id, account_id, reason, last_error, last_attempt_at, retries, created_at, updated_at
 		FROM app_gas_dead_letters
-		WHERE $1 = '' OR account_id = $1
+		WHERE ($1 = '' OR account_id = $1) AND ($2 = '' OR tenant = $2)
 		ORDER BY updated_at DESC
-		LIMIT $2
-	`, accountID, limit)
+		LIMIT $3
+	`, accountID, tenant, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -610,6 +613,18 @@ func (s *Store) ListDeadLetters(ctx context.Context, accountID string, limit int
 func (s *Store) RemoveDeadLetter(ctx context.Context, transactionID string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM app_gas_dead_letters WHERE transaction_id = $1`, transactionID)
 	return err
+}
+
+// gasAccountTenant fetches the tenant recorded on a gas account.
+func (s *Store) gasAccountTenant(ctx context.Context, gasAccountID string) string {
+	var tenant sql.NullString
+	_ = s.db.QueryRowContext(ctx, `
+		SELECT tenant FROM app_gas_accounts WHERE id = $1
+	`, gasAccountID).Scan(&tenant)
+	if tenant.Valid {
+		return tenant.String
+	}
+	return ""
 }
 
 // gasTransactionTenant returns the tenant for the account that owns the transaction ID.

@@ -88,12 +88,13 @@ func (s *Store) GetDataSource(ctx context.Context, id string) (oracle.DataSource
 }
 
 func (s *Store) ListDataSources(ctx context.Context, accountID string) ([]oracle.DataSource, error) {
+	tenant := s.accountTenant(ctx, accountID)
 	rows, err := s.db.QueryContext(ctx, `
         SELECT id, account_id, name, description, url, method, headers, body, enabled, created_at, updated_at
         FROM app_oracle_sources
-        WHERE $1 = '' OR account_id = $1
+        WHERE ($1 = '' OR account_id = $1) AND ($2 = '' OR tenant = $2)
         ORDER BY created_at
-    `, accountID)
+    `, accountID, tenant)
 	if err != nil {
 		return nil, err
 	}
@@ -182,6 +183,7 @@ func (s *Store) GetRequest(ctx context.Context, id string) (oracle.Request, erro
 }
 
 func (s *Store) ListRequests(ctx context.Context, accountID string, limit int, status string) ([]oracle.Request, error) {
+	tenant := s.accountTenant(ctx, accountID)
 	max := limit
 	if max <= 0 || max > 500 {
 		max = 100
@@ -189,10 +191,10 @@ func (s *Store) ListRequests(ctx context.Context, accountID string, limit int, s
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, account_id, data_source_id, status, attempts, payload, result, error, created_at, updated_at, completed_at
 		FROM app_oracle_requests
-        WHERE ($1 = '' OR account_id = $1) AND ($3 = '' OR status = $3)
+        WHERE ($1 = '' OR account_id = $1) AND ($2 = '' OR tenant = $2) AND ($4 = '' OR status = $4)
         ORDER BY created_at DESC
-        LIMIT $2
-    `, accountID, max, status)
+        LIMIT $3
+    `, accountID, tenant, max, status)
 	if err != nil {
 		return nil, err
 	}

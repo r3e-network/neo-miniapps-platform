@@ -80,12 +80,13 @@ func (s *Store) GetAutomationJob(ctx context.Context, id string) (automation.Job
 }
 
 func (s *Store) ListAutomationJobs(ctx context.Context, accountID string) ([]automation.Job, error) {
+	tenant := s.accountTenant(ctx, accountID)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, account_id, function_id, name, description, schedule, enabled, last_run, next_run, created_at, updated_at
 		FROM app_automation_jobs
-		WHERE $1 = '' OR account_id = $1
+		WHERE ($1 = '' OR account_id = $1) AND ($2 = '' OR tenant = $2)
 		ORDER BY created_at
-	`, accountID)
+	`, accountID, tenant)
 	if err != nil {
 		return nil, err
 	}

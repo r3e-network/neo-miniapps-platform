@@ -75,12 +75,13 @@ func (s *Store) GetPriceFeed(ctx context.Context, id string) (pricefeed.Feed, er
 }
 
 func (s *Store) ListPriceFeeds(ctx context.Context, accountID string) ([]pricefeed.Feed, error) {
+	tenant := s.accountTenant(ctx, accountID)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, account_id, base_asset, quote_asset, pair, update_interval, deviation_percent, heartbeat_interval, active, created_at, updated_at
 		FROM app_price_feeds
-		WHERE $1 = '' OR account_id = $1
+		WHERE ($1 = '' OR account_id = $1) AND ($2 = '' OR tenant = $2)
 		ORDER BY created_at
-	`, accountID)
+	`, accountID, tenant)
 	if err != nil {
 		return nil, err
 	}

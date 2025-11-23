@@ -109,12 +109,13 @@ func (s *Store) GetLane(ctx context.Context, id string) (ccip.Lane, error) {
 }
 
 func (s *Store) ListLanes(ctx context.Context, accountID string) ([]ccip.Lane, error) {
+	tenant := s.accountTenant(ctx, accountID)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, account_id, name, source_chain, dest_chain, signer_set, allowed_tokens, delivery_policy, metadata, tags, created_at, updated_at
 		FROM app_ccip_lanes
-		WHERE account_id = $1
+		WHERE account_id = $1 AND ($2 = '' OR tenant = $2)
 		ORDER BY created_at DESC
-	`, accountID)
+	`, accountID, tenant)
 	if err != nil {
 		return nil, err
 	}
@@ -227,13 +228,14 @@ func (s *Store) GetMessage(ctx context.Context, id string) (ccip.Message, error)
 }
 
 func (s *Store) ListMessages(ctx context.Context, accountID string, limit int) ([]ccip.Message, error) {
+	tenant := s.accountTenant(ctx, accountID)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, account_id, lane_id, status, payload, token_transfers, trace, error, metadata, tags, created_at, updated_at, delivered_at
 		FROM app_ccip_messages
-		WHERE account_id = $1
+		WHERE account_id = $1 AND ($2 = '' OR tenant = $2)
 		ORDER BY created_at DESC
-		LIMIT $2
-	`, accountID, limit)
+		LIMIT $3
+	`, accountID, tenant, limit)
 	if err != nil {
 		return nil, err
 	}
