@@ -268,7 +268,7 @@ export function AccountCard({
       />
       <DatastreamsPanel datastreamsState={datastreamsState} />
       <DTAPanel dtaState={dtaState} />
-      <GasbankPanel gasbankState={gasbankState} formatAmount={formatAmount} formatTimestamp={formatTimestamp} />
+      <GasbankPanel gasbankState={gasbankState} formatAmount={formatAmount} formatTimestamp={formatTimestamp} onNotify={onNotify} />
       <ConfPanel confState={confState} />
       <CREPanel creState={creState} />
       <AutomationPanel automationState={automationState} />

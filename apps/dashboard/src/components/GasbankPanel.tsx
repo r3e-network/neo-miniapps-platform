@@ -24,9 +24,10 @@ type Props = {
   gasbankState: GasbankState | undefined;
   formatAmount: (value: number | undefined) => string;
   formatTimestamp: (value?: string) => string;
+  onNotify?: (type: "success" | "error", message: string) => void;
 };
 
-export function GasbankPanel({ gasbankState, formatAmount, formatTimestamp }: Props) {
+export function GasbankPanel({ gasbankState, formatAmount, formatTimestamp, onNotify }: Props) {
   if (!gasbankState || gasbankState.status === "idle") return null;
   if (gasbankState.status === "error") return <p className="error">Gasbank: {gasbankState.message}</p>;
   if (gasbankState.status === "loading") return <p className="muted">Loading gasbank...</p>;
