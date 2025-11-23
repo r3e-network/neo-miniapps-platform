@@ -50,7 +50,7 @@ Once up:
 - API: http://localhost:8080 (auth: `Authorization: Bearer dev-token` or JWT via `/auth/login` using admin/changeme)
 - Dashboard: http://localhost:8081 (prefills when opened as `http://localhost:8081/?baseUrl=http://localhost:8080`; configure token in settings)
 - Public site: http://localhost:8082
-- Multi-tenant note: if you include `X-Tenant-ID` (or `?tenant=`/`--tenant` in CLI) when creating an account, all subsequent access to that account and its resources must use the same tenant header. Listing without a tenant shows only unscoped accounts; admin endpoints always require both an admin JWT and a tenant header.
+- Multi-tenant note: include `X-Tenant-ID` (or `--tenant` in CLI) when creating an account; all subsequent access to that account and its resources must use the same tenant header. Tenant is mandatory; admin endpoints always require both an admin JWT and a tenant header.
 - Dashboard settings include an optional Tenant field that will be sent as `X-Tenant-ID` for all API calls when populated.
 - Each account card includes a “Deep link” that pre-fills the dashboard base URL, token, and the account’s tenant for quick sharing (local storage values are reused for base URL/token).
 

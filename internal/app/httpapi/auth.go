@@ -81,11 +81,11 @@ type JWTValidator interface {
 }
 
 func withTenant(ctx context.Context, r *http.Request) context.Context {
-	tenant := auth.ResolveTenant(r.Header.Get("X-Tenant-ID"), r.URL.Query().Get("tenant"))
-	if tenant != "" {
-		return context.WithValue(ctx, ctxTenantKey, tenant)
+	tenant := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
+	if tenant == "" {
+		return ctx
 	}
-	return ctx
+	return context.WithValue(ctx, ctxTenantKey, tenant)
 }
 
 func enforceRole(w http.ResponseWriter, r *http.Request, ctx context.Context) bool {
