@@ -133,6 +133,24 @@ func TestTenantFiltersAcrossStores(t *testing.T) {
 		t.Fatalf("create channel: %v", err)
 	}
 	expectListed(t, "channels present", 1, len(mustListChannels(ctx, store, acct.ID)))
+	// Delivery listing should also obey tenant
+	if _, err := store.CreateDelivery(ctx, domainlink.Delivery{
+		AccountID: acct.ID,
+		ChannelID: ch.ID,
+		Payload:   map[string]any{"data": true},
+		Status:    domainlink.DeliveryStatusPending,
+		Attempts:  0,
+		Metadata:  map[string]string{"note": "dl"},
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("create delivery: %v", err)
+	}
+	expectListed(t, "deliveries present", 1, len(mustListDeliveries(ctx, store, acct.ID)))
+	if _, err := store.db.ExecContext(ctx, `UPDATE chainlink_datalink_deliveries SET tenant = 'tenant-b' WHERE account_id = $1`, acct.ID); err != nil {
+		t.Fatalf("mismatch delivery tenant: %v", err)
+	}
+	expectListed(t, "deliveries filtered", 0, len(mustListDeliveries(ctx, store, acct.ID)))
 	if _, err := store.db.ExecContext(ctx, `UPDATE chainlink_datalink_channels SET tenant = 'tenant-b' WHERE id = $1`, ch.ID); err != nil {
 		t.Fatalf("mismatch channel tenant: %v", err)
 	}
@@ -149,6 +167,20 @@ func TestTenantFiltersAcrossStores(t *testing.T) {
 		t.Fatalf("create lane: %v", err)
 	}
 	expectListed(t, "lanes present", 1, len(mustListLanes(ctx, store, acct.ID)))
+	msg, err := store.CreateMessage(ctx, domainccip.Message{
+		AccountID: acct.ID,
+		LaneID:    lane.ID,
+		Status:    domainccip.MessageStatusPending,
+		Payload:   map[string]any{"foo": "bar"},
+	})
+	if err != nil {
+		t.Fatalf("create ccip message: %v", err)
+	}
+	expectListed(t, "messages present", 1, len(mustListMessages(ctx, store, acct.ID)))
+	if _, err := store.db.ExecContext(ctx, `UPDATE app_ccip_messages SET tenant = 'tenant-b' WHERE id = $1`, msg.ID); err != nil {
+		t.Fatalf("mismatch message tenant: %v", err)
+	}
+	expectListed(t, "messages filtered", 0, len(mustListMessages(ctx, store, acct.ID)))
 	if _, err := store.db.ExecContext(ctx, `UPDATE app_ccip_lanes SET tenant = 'tenant-b' WHERE id = $1`, lane.ID); err != nil {
 		t.Fatalf("mismatch lane tenant: %v", err)
 	}
@@ -166,6 +198,21 @@ func TestTenantFiltersAcrossStores(t *testing.T) {
 		t.Fatalf("create vrf key: %v", err)
 	}
 	expectListed(t, "vrf keys present", 1, len(mustListVRFKeys(ctx, store, acct.ID)))
+	req, err := store.CreateVRFRequest(ctx, domainvrf.Request{
+		AccountID: acct.ID,
+		KeyID:     key.ID,
+		Consumer:  "c",
+		Seed:      "seed",
+		Status:    domainvrf.RequestStatusPending,
+	})
+	if err != nil {
+		t.Fatalf("create vrf request: %v", err)
+	}
+	expectListed(t, "vrf requests present", 1, len(mustListVRFRequests(ctx, store, acct.ID)))
+	if _, err := store.db.ExecContext(ctx, `UPDATE app_vrf_requests SET tenant = 'tenant-b' WHERE id = $1`, req.ID); err != nil {
+		t.Fatalf("mismatch vrf request tenant: %v", err)
+	}
+	expectListed(t, "vrf requests filtered", 0, len(mustListVRFRequests(ctx, store, acct.ID)))
 	if _, err := store.db.ExecContext(ctx, `UPDATE app_vrf_keys SET tenant = 'tenant-b' WHERE id = $1`, key.ID); err != nil {
 		t.Fatalf("mismatch vrf key tenant: %v", err)
 	}
@@ -253,6 +300,14 @@ func TestTenantFiltersAcrossStores(t *testing.T) {
 	expectListed(t, "gas tx filtered", 0, len(mustListGasTx(ctx, store, gasAcct.ID)))
 }
 
+func mustListDeliveries(ctx context.Context, store *Store, accountID string) []domainlink.Delivery {
+	list, err := store.ListDeliveries(ctx, accountID, 10)
+	if err != nil {
+		panic(err)
+	}
+	return list
+}
+
 func mustListFunctions(ctx context.Context, store *Store, accountID string) []function.Definition {
 	list, err := store.ListFunctions(ctx, accountID)
 	if err != nil {
@@ -325,6 +380,14 @@ func mustListGasTx(ctx context.Context, store *Store, gasAccountID string) []gas
 	return list
 }
 
+func mustListVRFRequests(ctx context.Context, store *Store, accountID string) []domainvrf.Request {
+	list, err := store.ListVRFRequests(ctx, accountID, 10)
+	if err != nil {
+		panic(err)
+	}
+	return list
+}
+
 func mustListStreams(ctx context.Context, store *Store, accountID string) []domainds.Stream {
 	list, err := store.ListStreams(ctx, accountID)
 	if err != nil {
@@ -343,6 +406,14 @@ func mustListProducts(ctx context.Context, store *Store, accountID string) []dom
 
 func mustListEnclaves(ctx context.Context, store *Store, accountID string) []domainconf.Enclave {
 	list, err := store.ListEnclaves(ctx, accountID)
+	if err != nil {
+		panic(err)
+	}
+	return list
+}
+
+func mustListMessages(ctx context.Context, store *Store, accountID string) []domainccip.Message {
+	list, err := store.ListMessages(ctx, accountID, 10)
 	if err != nil {
 		panic(err)
 	}
