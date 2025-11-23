@@ -18,6 +18,9 @@ have been consolidated into that specification.
   - `/admin/audit?limit=...&offset=...` (admin JWT) with filters for user/role/tenant/method/path/status. CLI helper: `slctl audit ...`.
 - Security:
   - [Security & Production Hardening](security-hardening.md)
+- Integration tests:
+  - Basic in-memory HTTP smoke: `go test ./internal/app/httpapi -run IntegrationHTTPAPI`
+  - Postgres-backed (requires `DATABASE_URL` and build tag): `go test -tags \"integration postgres\" ./internal/app/httpapi -run IntegrationPostgres`
 - JAM integration notes:
   - [Polkadot JAM-inspired integration](polkadot-jam-integration-design.md)
   - [JAM accumulator & receipt plan](jam-accumulator-plan.md)

@@ -244,6 +244,11 @@ func (a *Application) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+// App exposes the underlying application for integration harnesses.
+func (a *Application) App() *app.Application {
+	return a.app
+}
+
 func buildStores(ctx context.Context, cfg *config.Config, runMigrations bool) (app.Stores, *sql.DB, error) {
 	driver := strings.TrimSpace(cfg.Database.Driver)
 	dsn := strings.TrimSpace(cfg.Database.DSN)
