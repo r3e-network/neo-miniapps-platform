@@ -125,6 +125,13 @@ func TestIntegrationHTTPAPI(t *testing.T) {
 	if len(audits) == 0 {
 		t.Fatalf("expected audit entries")
 	}
+	filtered := doWithHeaders(t, client, server.URL+"/admin/audit?limit=5&contains=/accounts", http.MethodGet, nil, map[string]string{
+		"Authorization": "Bearer " + jwtToken,
+		"X-Tenant-ID":   "tenant-a",
+	})
+	if filtered.Code != http.StatusOK {
+		t.Fatalf("expected 200 for filtered audit, got %d", filtered.Code)
+	}
 
 	// Secret create/list
 	secretResp := do(t, client, server.URL+"/accounts/"+accountID+"/secrets", http.MethodPost, marshalBody(t, map[string]any{
