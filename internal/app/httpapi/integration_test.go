@@ -14,7 +14,7 @@ import (
 	"github.com/R3E-Network/service_layer/internal/app/jam"
 )
 
-// Basic HTTP integration smoke test covering health, auth, accounts, wallets, and datafeeds.
+// Basic HTTP integration smoke test covering health, auth, accounts, wallets, datafeeds, secrets, oracle, audit.
 func TestIntegrationHTTPAPI(t *testing.T) {
 	application, err := app.New(app.Stores{}, nil)
 	if err != nil {
@@ -117,6 +117,60 @@ func TestIntegrationHTTPAPI(t *testing.T) {
 	})
 	if auditOK.Code != http.StatusOK {
 		t.Fatalf("expected 200 with tenant, got %d", auditOK.Code)
+	}
+
+	// Secret create/list
+	secretResp := do(t, client, server.URL+"/accounts/"+accountID+"/secrets", http.MethodPost, marshalBody(t, map[string]any{
+		"name":  "apiKey",
+		"value": "secret-value",
+	}), "dev-token")
+	if secretResp.Code != http.StatusCreated {
+		t.Fatalf("create secret status: %d", secretResp.Code)
+	}
+	secretList := do(t, client, server.URL+"/accounts/"+accountID+"/secrets", http.MethodGet, nil, "dev-token")
+	if secretList.Code != http.StatusOK {
+		t.Fatalf("list secrets status: %d", secretList.Code)
+	}
+
+	// Oracle source + request
+	srcResp := do(t, client, server.URL+"/accounts/"+accountID+"/oracle/sources", http.MethodPost, marshalBody(t, map[string]any{
+		"name":   "prices",
+		"url":    "https://example.com",
+		"method": "GET",
+	}), "dev-token")
+	if srcResp.Code != http.StatusCreated {
+		t.Fatalf("create oracle source status: %d", srcResp.Code)
+	}
+	var src map[string]any
+	_ = json.Unmarshal(srcResp.Body.Bytes(), &src)
+	srcID := src["ID"].(string)
+
+	reqResp := do(t, client, server.URL+"/accounts/"+accountID+"/oracle/requests", http.MethodPost, marshalBody(t, map[string]any{
+		"data_source_id": srcID,
+		"payload":        "{}",
+	}), "dev-token")
+	if reqResp.Code != http.StatusCreated {
+		t.Fatalf("oracle request status: %d", reqResp.Code)
+	}
+
+	// DataLink channel + delivery
+	channelResp := do(t, client, server.URL+"/accounts/"+accountID+"/datalink/channels", http.MethodPost, marshalBody(t, map[string]any{
+		"name":       "provider-1",
+		"endpoint":   "https://api.provider.test",
+		"signer_set": []string{testWalletFeed},
+	}), "dev-token")
+	if channelResp.Code != http.StatusCreated {
+		t.Fatalf("create datalink channel status: %d", channelResp.Code)
+	}
+	var channel map[string]any
+	_ = json.Unmarshal(channelResp.Body.Bytes(), &channel)
+	channelID := channel["id"].(string)
+
+	delResp := do(t, client, server.URL+"/accounts/"+accountID+"/datalink/channels/"+channelID+"/deliveries", http.MethodPost, marshalBody(t, map[string]any{
+		"payload": map[string]any{"hello": "world"},
+	}), "dev-token")
+	if delResp.Code != http.StatusCreated {
+		t.Fatalf("create datalink delivery status: %d", delResp.Code)
 	}
 }
 
