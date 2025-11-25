@@ -102,11 +102,43 @@ curl -s -H "Authorization: Bearer $TOKEN" "http://localhost:8080/accounts/<ACCOU
 ```
 
 ## Pricefeeds
+
+Create a price feed with deviation-based publishing:
 ```bash
-curl -s -X POST http://localhost:8080/accounts/<ACCOUNT_ID>/pricefeeds \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"pair":"NEO/USD","deviation_percent":1.5,"heartbeat":60000000000}'
+# Create feed: NEO/USD with 1% deviation threshold, 5m update interval, 1h heartbeat
+FEED_ID=$(curl -s -X POST http://localhost:8080/accounts/<ACCOUNT_ID>/pricefeeds \
+  -H "Authorization: Bearer $TOKEN" -H "X-Tenant-ID: ${TENANT:-}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "base_asset": "NEO",
+    "quote_asset": "USD",
+    "deviation_percent": 1.0,
+    "update_interval": "@every 5m",
+    "heartbeat_interval": "@every 1h"
+  }' | jq -r .ID)
 ```
+
+Submit price observations:
+```bash
+# Submit observation (creates/finalizes rounds based on deviation)
+curl -s -X POST http://localhost:8080/accounts/<ACCOUNT_ID>/pricefeeds/$FEED_ID/snapshots \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"price": 12.34, "source": "binance", "collected_at": "2025-01-15T10:30:00Z"}'
+
+# List snapshots
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8080/accounts/<ACCOUNT_ID>/pricefeeds/$FEED_ID/snapshots"
+```
+
+Update feed settings:
+```bash
+# Update deviation threshold and disable feed
+curl -s -X PATCH http://localhost:8080/accounts/<ACCOUNT_ID>/pricefeeds/$FEED_ID \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"deviation_percent": 0.5, "active": false}'
+```
+
+See [Price Feeds Quickstart](pricefeeds.md) for the complete guide.
 
 ## Gasbank
 ```bash
@@ -187,3 +219,26 @@ slctl datastreams publish --account <ACCOUNT_ID> --stream <STREAM_ID> --sequence
 slctl datalink channel-create --account <ACCOUNT_ID> --name provider-1 --endpoint https://api.provider.test --signers WALLET1
 slctl datalink deliver --account <ACCOUNT_ID> --channel <CHANNEL_ID> --payload '{"data":"hello"}'
 ```
+
+## Discover services via the system APIs (engine-as-OS)
+- The Service Engine is the “OS”; services are apps. `/system/status` shows how
+  modules plug into the standard surfaces. To see which modules expose which
+  surfaces, fetch `modules_api_summary`:
+  ```bash
+  curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/system/status | jq '.modules_api_summary'
+  ```
+  You will see groups like `compute`, `data`, `event`, `store`, `account`, plus
+  any custom surfaces advertised via `APIDescriber`.
+- Per-module entries under `.modules[]` include `interfaces`, `apis`, and
+  `permissions`, so you can confirm a service is wired through the engine buses
+  instead of bespoke cross-calls.
+- CLI: `slctl status --surface compute --token $TOKEN` filters modules to a
+  specific system API surface (compute/data/event/store/account/etc.).
+- Dashboard: you can pin a surface via `?surface=compute` in the URL or by
+  clicking the surface tags in System Overview; the filter persists in
+  `localStorage` so you can share links for a given surface.
+- Export: `slctl status --export modules.json` (or `.yaml` / `.csv`) writes the
+  current module list, respecting `--surface` when provided. Use `--export -`
+  to print JSON to stdout for piping/automation.
+- Dashboard export: the System Overview “Export JSON/CSV” buttons download the
+  current (filtered) module list directly from the UI.

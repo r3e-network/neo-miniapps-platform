@@ -12,14 +12,27 @@
 - Deprecations and removals should be staged through this document first, with migration notes captured alongside the affected services.
 - Service descriptors expose a single `platform` layer so every capability carries the same priority; update descriptors + docs alongside CLI/dashboard expectations.
 - During reviews, step through the [Service Layer Review Checklist](review-checklist.md) to keep documentation, CLI, and dashboard coverage aligned.
+- Code layout: the service engine lives under `internal/engine` (`internal/engine/runtime` for wiring), while domain services live under `internal/services` (shared helpers in `internal/services/core`). Legacy `internal/app/services` and `internal/core/engine` paths have been removed.
 
 ## System Overview
-- `cmd/appserver` is the single Go binary that wires all services (`internal/app/services/*`), HTTP handlers (`internal/app/httpapi`), and storage adapters (`internal/app/storage/{memory,postgres}`).
+- `cmd/appserver` is the single Go binary that wires all services (`internal/services/*`), HTTP handlers (`internal/app/httpapi`), and storage adapters (`internal/app/storage/{memory,postgres}`).
 - `cmd/slctl` is the CLI wrapper over the HTTP API. It honours `SERVICE_LAYER_ADDR` and `SERVICE_LAYER_TOKEN` for pointing at different environments.
 - `apps/dashboard` hosts the React + Vite front-end surface that consumes the same HTTP API for operator workflows. Additional surfaces must be documented here before landing in the repo.
+- Dashboard must expose an Engine Bus console to publish events/data/compute fan-out via `/system/events|data|compute`, matching `slctl bus` and the bus quickstart in `docs/examples/bus.md`. Payload presets should reflect the expected shapes for pricefeeds, datafeeds, oracle, datalink, datastreams, and functions.
 - `sdk/devpack` plus `examples/functions/devpack` provide the TypeScript toolchain used to author functions locally. Devpack helpers let functions queue automation, oracle, price feed, data feed, data stream, DataLink, gas bank, randomness, and trigger actions that execute after the JavaScript runtime completes. Companion SDKs in Go, Rust, and Python mirror the same action surface for polyglot authoring.
 - Persistence defaults to in-memory stores. Supplying a PostgreSQL DSN (via `-dsn`, `DATABASE_URL`, or config files under `configs/`) switches all services to the Postgres adapters and enables migrations embedded in `internal/platform/migrations` (0001–0017).
 - Optional TEE execution paths use the Goja JavaScript runtime today and can be swapped with Azure Confidential Computing-backed executors when runners are provisioned (see Confidential Compute sections for expectations).
+- Engine-managed infrastructure modules (configurable under `runtime.*`):
+  - `neo`: enable Neo full node/indexer modules (neo-go RPC + indexer health).
+  - `chains`: multi-chain RPC hub (btc/eth/neox/etc.) via configured endpoints.
+  - `data_sources`: shared data source hub for feeds/oracles/triggers.
+  - `contracts`: contract deploy/invoke manager (network selector).
+  - `crypto`: crypto engine exposing ZKP/FHE/MPC helpers (capability list required).
+  - `service_bank`: service-owned GAS controller that gates usage across services.
+  - `rocketmq`: RocketMQ-backed event bus (producer/consumer). Configure name servers, topic prefix, consumer group, optional namespace/credentials, max reconsume attempts, and optional consume batch size.
+- `/system/rpc` proxies JSON-RPC requests to the configured chain RPC hub (first registered RPCEngine); payload shape: `{"chain":"eth","method":"eth_blockNumber","params":[...]}`. Requires the chain endpoint to be configured under `runtime.chains.endpoints`. Tenancy and rate limits can be enforced via `runtime.chains.require_tenant`, `per_tenant_per_minute`, `per_token_per_minute`, `burst`, and method allowlists via `allowed_methods`.
+  - Validation: enabling `chains` requires at least one endpoint; `data_sources` requires at least one source; `service_bank` requires gasbank/neo to be configured; `crypto` requires a non-empty capabilities list; chain limit/allowlist fields must be non-negative and non-empty.
+- Service manifests can declare `requires_apis`; `/system/status` exposes `modules_requires_apis` and `modules_requires_missing`. When `runtime.require_apis_strict=true`, startup fails if any required API surface is missing.
 
 ## Functional Requirements
 ### Service Catalogue
@@ -113,7 +126,7 @@
 ### Tooling & Developer Experience
 - Maintain parity between CLI commands, HTTP endpoints, and SDK helpers so every capability is scriptable.
 - Publish runnable examples (`go test ./...`) for each service to serve as living documentation.
-- Provide dashboard modules for operator visibility, backed by the same API routes.
+- Provide dashboard modules for operator visibility, backed by the same API routes, surfacing lifecycle status/uptime and errors from `/system/status` (modules + health).
 - Ship a docker-compose stack (appserver + Postgres + dashboard) for local bring-up.
   `make docker-compose` or `docker compose up --build` should start the stack with
   sensible defaults (`API_TOKENS`, `SECRET_ENCRYPTION_KEY`, Postgres DSN); the
@@ -186,7 +199,7 @@
 - Enforce pagination and request limits to protect cluster resources. Each service should guard per-account quotas (feeds, streams, wallets, keys, etc.).
 
 ### Maintainability & Developer Experience
-- Keep services isolated (`internal/app/services/<name>`), with interfaces documented in `internal/app/storage/interfaces.go` and examples in `*_test.go`.
+- Keep services isolated (`internal/services/<name>`), with interfaces documented in `internal/app/storage/interfaces.go` and examples in `*_test.go`.
 - Require `go test ./...` to pass before merge, and update this specification whenever surfaces change so it remains the single source of truth.
 
 ### Compliance & Auditability

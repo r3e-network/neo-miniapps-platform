@@ -125,7 +125,7 @@ Transitions are driven by API actions (approve/deny/cancel), scheduler (moves sc
   - `gasbank_settlement_attempts_total{result="success|failure"}`
   - `gasbank_settlement_latency_seconds`
   - `gasbank_dead_letter_total`
-- Adds `ResolverMock` (under `internal/app/services/gasbank/resolvermock`) supporting scripted responses for staging/CI.
+- Adds `ResolverMock` (under `internal/services/gasbank/resolvermock`) supporting scripted responses for staging/CI.
 
 ## 7. HTTP API
 ```

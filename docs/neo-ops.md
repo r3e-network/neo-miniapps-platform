@@ -14,8 +14,10 @@ This doc covers bringing up neo-cli full nodes (mainnet + testnet) using the opt
 
 ## Start/stop
 ```bash
-make neo-up     # docker compose --profile neo up -d neo-mainnet neo-testnet
+make neo-up     # docker compose --profile neo up -d neo-mainnet neo-testnet neo-indexer
 make neo-down   # docker compose --profile neo down --remove-orphans
+# full stack (appserver + dashboard + site + postgres + neo-indexer + nodes)
+make run-neo
 ```
 
 ## Plugins to install
@@ -40,7 +42,29 @@ Add plugin config JSON into the same volume; compose does not ship plugin binari
 - Check height: `curl http://localhost:10332/?jsonrpc=2.0&id=1&method=getblockcount`
 - Check state root: `curl -d '{"jsonrpc":"2.0","method":"getstateroot","params":[<height>],"id":1}' http://localhost:10332`
 - Expect long initial sync; monitor disk/CPU.
+- Expose node health/lag in `/neo/status` by setting `NEO_RPC_STATUS_URL` to your node RPC endpoint (e.g., `http://localhost:10332`).
+- Shortcut: `/neo/checkpoint` returns the same payload as `/neo/status`; use `slctl neo checkpoint` for a concise readout (enabled, latest height/hash, node height/lag).
+- `stable_height/hash/state_root` currently mirror `latest_*` until finality detection lands; plan to set stable values once a finalized block is detected.
+- Stability buffer: set `NEO_STABLE_BUFFER` (default 12) to subtract a safety
+  window from `latest_height` when reporting `stable_height` (uses `neo_blocks`
+  at that height for hash/root). The buffer is also compared against node lag.
+- Storage summary: `/neo/storage-summary/<height>` (and dashboard block detail) gives per-contract KV/diff counts without streaming blobs. Use `slctl neo storage-summary <height>` for the same quick view.
+- Engine bus smoke: use `slctl bus events|data|compute ...` or the dashboard Engine Bus Console (see `docs/examples/bus.md`) to publish feed updates or stream frames against the running stack; helpful for quick ingestion sanity checks.
+- Prometheus alert example for lag:
+  - Record: `neo_indexer_lag = clamp_max((neo_status_node_height - neo_status_latest_height), 1e6)`
+  - Alert:
+    ```
+    alert: NeoIndexerLagHigh
+    expr: neo_indexer_lag > 50
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "NEO indexer is {{ $value }} blocks behind node"
+      description: "Check node RPC and indexer logs."
+    ```
 
 ## Next steps
-- Wire the `neo-indexer` to these RPC endpoints.
+- Wire the `neo-indexer` to these RPC endpoints (compose profile `neo` starts it with `NEO_RPC_URL`/`NEO_NETWORK`/`NEO_INDEXER_DSN` defaults).
 - Wire the `neo-snapshot` job to fetch state roots + storage and publish manifests.
+- Point the appserver at your manifest directory via `NEO_SNAPSHOT_DIR` (defaults to `./snapshots`) so `/neo/status`, `/neo/blocks`, and `/neo/snapshots` surface indexed data to operators.

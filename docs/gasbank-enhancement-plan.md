@@ -67,7 +67,7 @@ React view (apps/dashboard):
 - **Logs**: structured logs for each workflow step with correlation IDs.
 - **Alerts**: trigger when pending queue > threshold, low balance, repeated resolver failures, DLQ growth.
 - **Rate Limiting**: per-account throttle on withdrawals to prevent abuse.
-- **Resolver Mock**: new package under `internal/app/services/gasbank/resolvermock` to simulate responses in staging/tests.
+- **Resolver Mock**: new package under `internal/services/gasbank/resolvermock` to simulate responses in staging/tests.
 
 ### Documentation & Examples
 - **Tutorial**: Markdown guide covering ensure → deposit → withdraw (CLI + API). Include screenshots of CLI output and dashboard cards.
