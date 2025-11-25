@@ -53,3 +53,9 @@ Thumbs.db
 **/.next/**
 **/__pycache__/**
 **/test-results/**
+
+# Development tool cache/config
+.claude-flow/
+.hive-mind/
+.serena/cache/
+test.neo-express
