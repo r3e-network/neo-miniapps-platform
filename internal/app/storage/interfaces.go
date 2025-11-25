@@ -95,6 +95,7 @@ type PriceFeedStore interface {
 	UpdatePriceFeed(ctx context.Context, feed pricefeed.Feed) (pricefeed.Feed, error)
 	GetPriceFeed(ctx context.Context, id string) (pricefeed.Feed, error)
 	ListPriceFeeds(ctx context.Context, accountID string) ([]pricefeed.Feed, error)
+	DeletePriceFeed(ctx context.Context, feedID string) error
 
 	CreatePriceSnapshot(ctx context.Context, snap pricefeed.Snapshot) (pricefeed.Snapshot, error)
 	ListPriceSnapshots(ctx context.Context, feedID string) ([]pricefeed.Snapshot, error)

@@ -12,26 +12,26 @@ import (
 	"strings"
 	"time"
 
-	core "github.com/R3E-Network/service_layer/internal/app/core/service"
+	core "github.com/R3E-Network/service_layer/internal/services/core"
 	"github.com/R3E-Network/service_layer/internal/app/domain/function"
 	"github.com/R3E-Network/service_layer/internal/app/metrics"
-	"github.com/R3E-Network/service_layer/internal/app/services/accounts"
-	automationsvc "github.com/R3E-Network/service_layer/internal/app/services/automation"
-	ccipsvc "github.com/R3E-Network/service_layer/internal/app/services/ccip"
-	confsvc "github.com/R3E-Network/service_layer/internal/app/services/confidential"
-	cresvc "github.com/R3E-Network/service_layer/internal/app/services/cre"
-	datafeedsvc "github.com/R3E-Network/service_layer/internal/app/services/datafeeds"
-	datalinksvc "github.com/R3E-Network/service_layer/internal/app/services/datalink"
-	datastreamsvc "github.com/R3E-Network/service_layer/internal/app/services/datastreams"
-	dtasvc "github.com/R3E-Network/service_layer/internal/app/services/dta"
-	"github.com/R3E-Network/service_layer/internal/app/services/functions"
-	gasbanksvc "github.com/R3E-Network/service_layer/internal/app/services/gasbank"
-	oraclesvc "github.com/R3E-Network/service_layer/internal/app/services/oracle"
-	pricefeedsvc "github.com/R3E-Network/service_layer/internal/app/services/pricefeed"
-	randomsvc "github.com/R3E-Network/service_layer/internal/app/services/random"
-	"github.com/R3E-Network/service_layer/internal/app/services/secrets"
-	"github.com/R3E-Network/service_layer/internal/app/services/triggers"
-	vrfsvc "github.com/R3E-Network/service_layer/internal/app/services/vrf"
+	"github.com/R3E-Network/service_layer/internal/services/accounts"
+	automationsvc "github.com/R3E-Network/service_layer/internal/services/automation"
+	ccipsvc "github.com/R3E-Network/service_layer/internal/services/ccip"
+	confsvc "github.com/R3E-Network/service_layer/internal/services/confidential"
+	cresvc "github.com/R3E-Network/service_layer/internal/services/cre"
+	datafeedsvc "github.com/R3E-Network/service_layer/internal/services/datafeeds"
+	datalinksvc "github.com/R3E-Network/service_layer/internal/services/datalink"
+	datastreamsvc "github.com/R3E-Network/service_layer/internal/services/datastreams"
+	dtasvc "github.com/R3E-Network/service_layer/internal/services/dta"
+	"github.com/R3E-Network/service_layer/internal/services/functions"
+	gasbanksvc "github.com/R3E-Network/service_layer/internal/services/gasbank"
+	oraclesvc "github.com/R3E-Network/service_layer/internal/services/oracle"
+	pricefeedsvc "github.com/R3E-Network/service_layer/internal/services/pricefeed"
+	randomsvc "github.com/R3E-Network/service_layer/internal/services/random"
+	"github.com/R3E-Network/service_layer/internal/services/secrets"
+	"github.com/R3E-Network/service_layer/internal/services/triggers"
+	vrfsvc "github.com/R3E-Network/service_layer/internal/services/vrf"
 	"github.com/R3E-Network/service_layer/internal/app/storage"
 	"github.com/R3E-Network/service_layer/internal/app/storage/memory"
 	"github.com/R3E-Network/service_layer/internal/app/system"
@@ -164,11 +164,13 @@ type builderConfig struct {
 	environment    Environment
 	runtime        RuntimeConfig
 	runtimeDefined bool
+	managerEnabled bool
 }
 
 type resolvedBuilder struct {
 	httpClient *http.Client
 	runtime    runtimeSettings
+	manager    bool
 }
 
 type runtimeSettings struct {
@@ -217,6 +219,14 @@ func WithEnvironment(env Environment) Option {
 	}
 }
 
+// WithManagerEnabled toggles construction of the legacy manager (defaults to true).
+// Disable this when the engine owns lifecycle to avoid double start/stop graphs.
+func WithManagerEnabled(enabled bool) Option {
+	return func(b *builderConfig) {
+		b.managerEnabled = enabled
+	}
+}
+
 // Application ties domain services together and manages their lifecycle.
 type Application struct {
 	manager *system.Manager
@@ -241,6 +251,10 @@ type Application struct {
 	VRF                *vrfsvc.Service
 	OracleRunnerTokens []string
 	WorkspaceWallets   storage.WorkspaceWalletStore
+	AutomationRunner   *automationsvc.Scheduler
+	PriceFeedRunner    *pricefeedsvc.Refresher
+	OracleRunner       *oraclesvc.Dispatcher
+	GasBankSettlement  system.Service
 
 	descriptors []core.Descriptor
 }
@@ -255,7 +269,10 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 	mem := memory.New()
 	stores.applyDefaults(mem)
 
-	manager := system.NewManager()
+	var manager *system.Manager
+	if options.manager {
+		manager = system.NewManager()
+	}
 
 	acctService := accounts.New(stores.Accounts, log)
 	funcService := functions.New(stores.Accounts, stores.Functions, log)
@@ -317,12 +334,6 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 		creService.WithRunner(cresvc.NewHTTPRunner(httpClient, log))
 	}
 
-	for _, name := range []string{"accounts", "functions", "triggers"} {
-		if err := manager.Register(system.NoopService{ServiceName: name}); err != nil {
-			return nil, fmt.Errorf("register %s service: %w", name, err)
-		}
-	}
-
 	autoRunner := automationsvc.NewScheduler(automationService, log)
 	autoRunner.WithDispatcher(automationsvc.NewFunctionDispatcher(automationsvc.FunctionRunnerFunc(func(ctx context.Context, functionID string, payload map[string]any) (function.Execution, error) {
 		return funcService.Execute(ctx, functionID, payload)
@@ -365,13 +376,51 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 		services = append(services, settlement)
 	}
 
-	for _, svc := range services {
-		if err := manager.Register(svc); err != nil {
-			return nil, fmt.Errorf("register %s: %w", svc.Name(), err)
+	// Register services with the legacy manager only when engine is disabled.
+	if manager != nil {
+		for _, svc := range []system.Service{
+			acctService,
+			funcService,
+			trigService,
+			secretsService,
+			gasService,
+			automationService,
+			priceFeedService,
+			dataFeedService,
+			dataStreamService,
+			dataLinkService,
+			dtaService,
+			confService,
+			oracleService,
+			randomService,
+			creService,
+			ccipService,
+			vrfService,
+		} {
+			if err := manager.Register(svc); err != nil {
+				return nil, fmt.Errorf("register %s service: %w", svc.Name(), err)
+			}
+		}
+		for _, svc := range services {
+			if err := manager.Register(svc); err != nil {
+				return nil, fmt.Errorf("register %s: %w", svc.Name(), err)
+			}
 		}
 	}
 
-	descriptors := manager.Descriptors()
+	var descrProviders []system.DescriptorProvider
+	descrProviders = appendDescriptorProviders(descrProviders,
+		acctService, funcService, trigService, gasService, automationService,
+		priceFeedService, dataFeedService, dataStreamService, dataLinkService,
+		dtaService, confService, oracleService, secretsService, randomService,
+		creService, ccipService, vrfService, autoRunner, priceRunner, oracleRunner,
+	)
+	if settlement != nil {
+		if p, ok := settlement.(system.DescriptorProvider); ok {
+			descrProviders = append(descrProviders, p)
+		}
+	}
+	descriptors := system.CollectDescriptors(descrProviders)
 
 	return &Application{
 		manager:            manager,
@@ -395,22 +444,37 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 		Confidential:       confService,
 		OracleRunnerTokens: options.runtime.oracleRunnerTokens,
 		WorkspaceWallets:   stores.WorkspaceWallets,
+		AutomationRunner:   autoRunner,
+		PriceFeedRunner:    priceRunner,
+		OracleRunner:       oracleRunner,
+		GasBankSettlement:  settlement,
 		descriptors:        descriptors,
 	}, nil
 }
 
 // Attach registers an additional lifecycle-managed service. Call before Start.
 func (a *Application) Attach(service system.Service) error {
+	if a.manager == nil {
+		return nil
+	}
 	return a.manager.Register(service)
 }
 
 // Start begins all registered services.
 func (a *Application) Start(ctx context.Context) error {
+	// Only start the legacy manager when the engine is not enabled.
+	if a.manager == nil {
+		return nil
+	}
 	return a.manager.Start(ctx)
 }
 
 // Stop stops all services.
 func (a *Application) Stop(ctx context.Context) error {
+	// Only stop the legacy manager when the engine is not enabled.
+	if a.manager == nil {
+		return nil
+	}
 	return a.manager.Stop(ctx)
 }
 
@@ -423,7 +487,7 @@ func (a *Application) Descriptors() []core.Descriptor {
 }
 
 func resolveBuilderOptions(opts ...Option) resolvedBuilder {
-	cfg := builderConfig{environment: osEnvironment{}}
+	cfg := builderConfig{environment: osEnvironment{}, managerEnabled: true}
 	for _, opt := range opts {
 		if opt != nil {
 			opt(&cfg)
@@ -442,6 +506,7 @@ func resolveBuilderOptions(opts ...Option) resolvedBuilder {
 	return resolvedBuilder{
 		httpClient: cfg.httpClient,
 		runtime:    normalizeRuntimeConfig(runtimeCfg),
+		manager:    cfg.managerEnabled,
 	}
 }
 
@@ -581,6 +646,18 @@ func parseTokens(value string) []string {
 		result = append(result, token)
 	}
 	return result
+}
+
+func appendDescriptorProviders(dst []system.DescriptorProvider, providers ...any) []system.DescriptorProvider {
+	for _, p := range providers {
+		if p == nil {
+			continue
+		}
+		if d, ok := p.(system.DescriptorProvider); ok {
+			dst = append(dst, d)
+		}
+	}
+	return dst
 }
 
 func defaultHTTPClient() *http.Client {

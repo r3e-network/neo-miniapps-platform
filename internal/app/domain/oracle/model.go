@@ -28,16 +28,18 @@ const (
 )
 
 // Request represents a single oracle execution.
+// Aligned with OracleHub.cs contract Request struct.
 type Request struct {
 	ID           string
 	AccountID    string
-	DataSourceID string
+	DataSourceID string // Maps to contract ServiceId
 	Status       RequestStatus
 	Attempts     int
-	Payload      string
-	Result       string
+	Fee          int64  // Maps to contract Fee - request fee in smallest unit
+	Payload      string // Maps to contract PayloadHash (Go stores full payload)
+	Result       string // Maps to contract ResultHash (Go stores full result)
 	Error        string
-	CreatedAt    time.Time
+	CreatedAt    time.Time // Maps to contract RequestedAt
 	UpdatedAt    time.Time
-	CompletedAt  time.Time
+	CompletedAt  time.Time // Maps to contract FulfilledAt
 }

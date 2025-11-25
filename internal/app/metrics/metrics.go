@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	core "github.com/R3E-Network/service_layer/internal/app/core/service"
+	core "github.com/R3E-Network/service_layer/internal/services/core"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -120,8 +120,113 @@ var (
 		[]string{"feed_id", "status"},
 	)
 
+	rpcRequests = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "service_layer",
+			Subsystem: "rpc",
+			Name:      "requests_total",
+			Help:      "Total JSON-RPC proxy calls made via /system/rpc.",
+		},
+		[]string{"chain", "status"},
+	)
+
+	rpcDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "service_layer",
+			Subsystem: "rpc",
+			Name:      "request_duration_seconds",
+			Help:      "Duration of JSON-RPC proxy calls via /system/rpc.",
+			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 10),
+		},
+		[]string{"chain", "status"},
+	)
+
+	moduleReady = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "service_layer",
+			Subsystem: "engine",
+			Name:      "module_ready",
+			Help:      "Current readiness of modules (1 ready, 0 otherwise).",
+		},
+		[]string{"module", "domain"},
+	)
+
+	moduleWaitingDeps = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "service_layer",
+			Subsystem: "engine",
+			Name:      "module_waiting_dependencies",
+			Help:      "Whether a module is waiting for dependencies (1 yes, 0 no).",
+		},
+		[]string{"module", "domain"},
+	)
+
+	moduleStatus = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "service_layer",
+			Subsystem: "engine",
+			Name:      "module_status",
+			Help:      "Lifecycle status of modules (one-hot by status label).",
+		},
+		[]string{"module", "domain", "status"},
+	)
+
+	moduleStartSeconds = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "service_layer",
+			Subsystem: "engine",
+			Name:      "module_start_seconds",
+			Help:      "Start duration for modules (seconds).",
+		},
+		[]string{"module", "domain"},
+	)
+
+	moduleStopSeconds = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "service_layer",
+			Subsystem: "engine",
+			Name:      "module_stop_seconds",
+			Help:      "Stop duration for modules (seconds).",
+		},
+		[]string{"module", "domain"},
+	)
+
+	busFanout = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "service_layer",
+			Subsystem: "engine",
+			Name:      "bus_fanout_total",
+			Help:      "Count of bus fan-out calls grouped by kind and result.",
+		},
+		[]string{"kind", "result"},
+	)
+
+	busFanoutCounts = struct {
+		mu    sync.Mutex
+		count map[string]struct {
+			ok  float64
+			err float64
+		}
+	}{count: make(map[string]struct {
+		ok  float64
+		err float64
+	})}
+
+	busFanoutHistory = struct {
+		mu     sync.Mutex
+		points map[string][]fanoutPoint
+	}{points: make(map[string][]fanoutPoint)}
+
+	fanoutRetention = 10 * time.Minute
+
 	observationCollectors sync.Map
 )
+
+// fanoutPoint captures a timestamped fan-out result for short-term windows.
+type fanoutPoint struct {
+	at    time.Time
+	isErr bool
+}
 
 func init() {
 	Registry.MustRegister(
@@ -135,6 +240,14 @@ func init() {
 		oracleAttempts,
 		oracleStaleness,
 		datafeedStaleness,
+		moduleReady,
+		moduleWaitingDeps,
+		moduleStatus,
+		moduleStartSeconds,
+		moduleStopSeconds,
+		rpcRequests,
+		rpcDuration,
+		busFanout,
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		collectors.NewGoCollector(),
 	)
@@ -204,6 +317,166 @@ func RecordOracleAttempt(accountID, status string) {
 		status = "unknown"
 	}
 	oracleAttempts.WithLabelValues(accountID, status).Inc()
+}
+
+// ModuleMetric captures lifecycle/readiness for engine modules used to populate Prometheus gauges.
+type ModuleMetric struct {
+	Name    string
+	Domain  string
+	Status  string
+	Ready   string
+	Waiting bool
+}
+
+// RecordModuleMetrics publishes module lifecycle/readiness gauges. It resets previous values to keep metrics
+// aligned with the latest state and to avoid stale statuses lingering when a module transitions.
+func RecordModuleMetrics(mods []ModuleMetric) {
+	moduleReady.Reset()
+	moduleWaitingDeps.Reset()
+	moduleStatus.Reset()
+	for _, m := range mods {
+		ready := 0.0
+		if strings.EqualFold(m.Ready, "ready") {
+			ready = 1.0
+		}
+		waiting := 0.0
+		if m.Waiting {
+			waiting = 1.0
+		}
+		moduleReady.WithLabelValues(m.Name, m.Domain).Set(ready)
+		moduleWaitingDeps.WithLabelValues(m.Name, m.Domain).Set(waiting)
+		moduleStatus.WithLabelValues(m.Name, m.Domain, m.Status).Set(1)
+	}
+}
+
+// ModuleTiming captures start/stop durations for engine modules.
+type ModuleTiming struct {
+	Name         string
+	Domain       string
+	StartSeconds float64
+	StopSeconds  float64
+}
+
+// RecordModuleTimings publishes module start/stop durations (seconds).
+func RecordModuleTimings(timings []ModuleTiming) {
+	moduleStartSeconds.Reset()
+	moduleStopSeconds.Reset()
+	for _, t := range timings {
+		if t.Name == "" {
+			continue
+		}
+		moduleStartSeconds.WithLabelValues(t.Name, t.Domain).Set(t.StartSeconds)
+		moduleStopSeconds.WithLabelValues(t.Name, t.Domain).Set(t.StopSeconds)
+	}
+}
+
+// RecordBusFanout increments bus fan-out counters by kind (event|data|compute) and result (ok|error).
+func RecordBusFanout(kind string, err error) {
+	if kind == "" {
+		kind = "unknown"
+	}
+	result := "ok"
+	if err != nil {
+		result = "error"
+	}
+	busFanout.WithLabelValues(kind, result).Inc()
+	busFanoutCounts.mu.Lock()
+	entry := busFanoutCounts.count[kind]
+	if result == "error" {
+		entry.err++
+	} else {
+		entry.ok++
+	}
+	busFanoutCounts.count[kind] = entry
+	busFanoutCounts.mu.Unlock()
+	now := time.Now()
+	busFanoutHistory.mu.Lock()
+	points := append(busFanoutHistory.points[kind], fanoutPoint{at: now, isErr: result == "error"})
+	cutoff := now.Add(-fanoutRetention)
+	pruned := points[:0]
+	for _, p := range points {
+		if p.at.After(cutoff) {
+			pruned = append(pruned, p)
+		}
+	}
+	busFanoutHistory.points[kind] = pruned
+	busFanoutHistory.mu.Unlock()
+}
+
+// RecordRPCCall records the outcome and duration of a proxied RPC call.
+func RecordRPCCall(chain, status string, dur time.Duration) {
+	chain = strings.TrimSpace(strings.ToLower(chain))
+	if chain == "" {
+		chain = "unknown"
+	}
+	status = strings.TrimSpace(strings.ToLower(status))
+	if status == "" {
+		status = "unknown"
+	}
+	rpcRequests.WithLabelValues(chain, status).Inc()
+	rpcDuration.WithLabelValues(chain, status).Observe(dur.Seconds())
+}
+
+// BusFanoutSnapshot returns aggregate fan-out counts grouped by kind.
+func BusFanoutSnapshot() map[string]struct {
+	OK    float64 `json:"ok"`
+	Error float64 `json:"error"`
+} {
+	busFanoutCounts.mu.Lock()
+	defer busFanoutCounts.mu.Unlock()
+	out := make(map[string]struct {
+		OK    float64 `json:"ok"`
+		Error float64 `json:"error"`
+	}, len(busFanoutCounts.count))
+	for kind, val := range busFanoutCounts.count {
+		out[kind] = struct {
+			OK    float64 `json:"ok"`
+			Error float64 `json:"error"`
+		}{OK: val.ok, Error: val.err}
+	}
+	return out
+}
+
+// BusFanoutWindow returns fan-out counts for the provided window (e.g., 5m).
+func BusFanoutWindow(window time.Duration) map[string]struct {
+	OK    float64 `json:"ok"`
+	Error float64 `json:"error"`
+} {
+	if window <= 0 {
+		window = 5 * time.Minute
+	}
+	now := time.Now()
+	cutoff := now.Add(-window)
+	busFanoutHistory.mu.Lock()
+	defer busFanoutHistory.mu.Unlock()
+	out := make(map[string]struct {
+		OK    float64 `json:"ok"`
+		Error float64 `json:"error"`
+	}, len(busFanoutHistory.points))
+	for kind, points := range busFanoutHistory.points {
+		var ok, err float64
+		var pruned []fanoutPoint
+		for _, p := range points {
+			if p.at.Before(now.Add(-fanoutRetention)) {
+				continue
+			}
+			pruned = append(pruned, p)
+			if p.at.Before(cutoff) {
+				continue
+			}
+			if p.isErr {
+				err++
+			} else {
+				ok++
+			}
+		}
+		busFanoutHistory.points[kind] = pruned
+		out[kind] = struct {
+			OK    float64 `json:"ok"`
+			Error float64 `json:"error"`
+		}{OK: ok, Error: err}
+	}
+	return out
 }
 
 // RecordOracleStaleness tracks the age of the oldest pending oracle request per account.

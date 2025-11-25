@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -60,6 +61,45 @@ func TestRecordFunctionAndAutomationMetrics(t *testing.T) {
 	}
 }
 
+func TestRecordModuleMetrics(t *testing.T) {
+	RecordModuleMetrics([]ModuleMetric{
+		{Name: "module-a", Domain: "dom-a", Status: "started", Ready: "ready", Waiting: false},
+		{Name: "module-b", Domain: "dom-b", Status: "failed", Ready: "not-ready", Waiting: true},
+	})
+	if !metricGaugeEquals(t, "service_layer_engine_module_ready", map[string]string{"module": "module-a", "domain": "dom-a"}, 1) {
+		t.Fatalf("expected module-a ready gauge to be 1")
+	}
+	if !metricGaugeEquals(t, "service_layer_engine_module_waiting_dependencies", map[string]string{"module": "module-b", "domain": "dom-b"}, 1) {
+		t.Fatalf("expected module-b waiting deps gauge to be 1")
+	}
+	if !metricGaugeEquals(t, "service_layer_engine_module_status", map[string]string{"module": "module-b", "domain": "dom-b", "status": "failed"}, 1) {
+		t.Fatalf("expected module-b failed status gauge to be 1")
+	}
+}
+
+func TestRecordModuleTimings(t *testing.T) {
+	RecordModuleTimings([]ModuleTiming{
+		{Name: "mod-time", Domain: "dom", StartSeconds: 0.5, StopSeconds: 1.25},
+	})
+	if !metricGaugeEquals(t, "service_layer_engine_module_start_seconds", map[string]string{"module": "mod-time", "domain": "dom"}, 0.5) {
+		t.Fatalf("expected start seconds gauge to be set")
+	}
+	if !metricGaugeEquals(t, "service_layer_engine_module_stop_seconds", map[string]string{"module": "mod-time", "domain": "dom"}, 1.25) {
+		t.Fatalf("expected stop seconds gauge to be set")
+	}
+}
+
+func TestRecordBusFanout(t *testing.T) {
+	RecordBusFanout("unit-kind", nil)
+	if !metricCounterGreaterOrEqual(t, "service_layer_engine_bus_fanout_total", map[string]string{"kind": "unit-kind", "result": "ok"}, 1) {
+		t.Fatalf("expected bus fan-out ok counter to increase")
+	}
+	RecordBusFanout("unit-kind", fmt.Errorf("boom"))
+	if !metricCounterGreaterOrEqual(t, "service_layer_engine_bus_fanout_total", map[string]string{"kind": "unit-kind", "result": "error"}, 1) {
+		t.Fatalf("expected bus fan-out error counter to increase")
+	}
+}
+
 func metricCounterGreaterOrEqual(t *testing.T, name string, labels map[string]string, min float64) bool {
 	t.Helper()
 	families, err := Registry.Gather()
@@ -73,6 +113,25 @@ func metricCounterGreaterOrEqual(t *testing.T, name string, labels map[string]st
 		for _, metric := range mf.GetMetric() {
 			if labelsMatch(metric, labels) && metric.GetCounter() != nil {
 				return metric.GetCounter().GetValue() >= min
+			}
+		}
+	}
+	return false
+}
+
+func metricGaugeEquals(t *testing.T, name string, labels map[string]string, expected float64) bool {
+	t.Helper()
+	families, err := Registry.Gather()
+	if err != nil {
+		t.Fatalf("gather metrics: %v", err)
+	}
+	for _, mf := range families {
+		if mf.GetName() != name {
+			continue
+		}
+		for _, metric := range mf.GetMetric() {
+			if labelsMatch(metric, labels) && metric.GetGauge() != nil {
+				return metric.GetGauge().GetValue() == expected
 			}
 		}
 	}

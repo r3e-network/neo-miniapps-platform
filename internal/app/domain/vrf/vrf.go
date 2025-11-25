@@ -36,16 +36,18 @@ const (
 )
 
 // Request captures a VRF consumer invocation.
+// Aligned with RandomnessHub.cs contract Request struct.
 type Request struct {
-	ID        string            `json:"id"`
-	AccountID string            `json:"account_id"`
-	KeyID     string            `json:"key_id"`
-	Consumer  string            `json:"consumer"`
-	Seed      string            `json:"seed"`
-	Status    RequestStatus     `json:"status"`
-	Result    string            `json:"result"`
-	Error     string            `json:"error"`
-	Metadata  map[string]string `json:"metadata,omitempty"`
-	CreatedAt time.Time         `json:"created_at"`
-	UpdatedAt time.Time         `json:"updated_at"`
+	ID          string            `json:"id"`
+	AccountID   string            `json:"account_id"`
+	KeyID       string            `json:"key_id"`     // Maps to contract ServiceId
+	Consumer    string            `json:"consumer"`
+	Seed        string            `json:"seed"`       // Maps to contract SeedHash
+	Status      RequestStatus     `json:"status"`     // Maps to contract Status byte
+	Result      string            `json:"result"`     // Maps to contract Output
+	Error       string            `json:"error"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+	CreatedAt   time.Time         `json:"created_at"`   // Maps to contract RequestedAt
+	UpdatedAt   time.Time         `json:"updated_at"`
+	FulfilledAt time.Time         `json:"fulfilled_at"` // Maps to contract FulfilledAt
 }

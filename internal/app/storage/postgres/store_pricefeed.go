@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"math"
 	"time"
 
@@ -96,6 +97,47 @@ func (s *Store) ListPriceFeeds(ctx context.Context, accountID string) ([]pricefe
 		result = append(result, feed)
 	}
 	return result, rows.Err()
+}
+
+func (s *Store) DeletePriceFeed(ctx context.Context, feedID string) error {
+	// Delete cascades: observations -> rounds -> snapshots -> feed
+	// Using transactions to ensure atomicity
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Delete observations
+	if _, err := tx.ExecContext(ctx, `DELETE FROM app_price_observations WHERE feed_id = $1`, feedID); err != nil {
+		return err
+	}
+
+	// Delete rounds
+	if _, err := tx.ExecContext(ctx, `DELETE FROM app_price_rounds WHERE feed_id = $1`, feedID); err != nil {
+		return err
+	}
+
+	// Delete snapshots
+	if _, err := tx.ExecContext(ctx, `DELETE FROM app_price_snapshots WHERE feed_id = $1`, feedID); err != nil {
+		return err
+	}
+
+	// Delete feed
+	result, err := tx.ExecContext(ctx, `DELETE FROM app_price_feeds WHERE id = $1`, feedID)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("price feed %s not found", feedID)
+	}
+
+	return tx.Commit()
 }
 
 func (s *Store) CreatePriceSnapshot(ctx context.Context, snap pricefeed.Snapshot) (pricefeed.Snapshot, error) {

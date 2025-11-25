@@ -4,11 +4,22 @@ import (
 	"time"
 )
 
+// AccountStatus represents the lifecycle state of a gas bank account/wallet.
+// Aligned with AccountManager.cs contract Wallet.Status byte.
+type AccountStatus string
+
+const (
+	AccountStatusActive  AccountStatus = "active"  // Contract: 0
+	AccountStatusRevoked AccountStatus = "revoked" // Contract: 1
+)
+
 // Account represents a gas bank wallet owned by an application account.
+// Aligned with AccountManager.cs contract Wallet struct.
 type Account struct {
 	ID                    string
 	AccountID             string
-	WalletAddress         string
+	WalletAddress         string        // Maps to contract Wallet.Address (UInt160)
+	Status                AccountStatus // Maps to contract Wallet.Status byte
 	Balance               float64
 	Available             float64
 	Pending               float64

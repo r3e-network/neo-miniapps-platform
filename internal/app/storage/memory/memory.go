@@ -1061,6 +1061,21 @@ func (s *Store) ListPriceFeeds(_ context.Context, accountID string) ([]pricefeed
 	return result, nil
 }
 
+func (s *Store) DeletePriceFeed(_ context.Context, feedID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.priceFeeds[feedID]; !exists {
+		return fmt.Errorf("price feed %s not found", feedID)
+	}
+
+	delete(s.priceFeeds, feedID)
+	delete(s.priceSnapshots, feedID)
+	delete(s.priceRounds, feedID)
+	delete(s.priceObservations, feedID)
+	return nil
+}
+
 func (s *Store) CreatePriceSnapshot(_ context.Context, snap pricefeed.Snapshot) (pricefeed.Snapshot, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	core "github.com/R3E-Network/service_layer/internal/app/core/service"
+	core "github.com/R3E-Network/service_layer/internal/services/core"
 )
 
 // Manager owns the lifecycle of registered services. It guarantees
