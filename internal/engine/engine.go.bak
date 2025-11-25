@@ -1,0 +1,1543 @@
+package engine
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+)
+
+// ServiceModule is the common contract every service must implement to plug into the Engine.
+// Each module advertises a name and domain, and exposes lifecycle hooks for Start/Stop.
+type ServiceModule interface {
+	Name() string
+	Domain() string
+	Start(ctx context.Context) error
+	Stop(ctx context.Context) error
+}
+
+// AccountEngine covers account lifecycle and tenancy.
+type AccountEngine interface {
+	ServiceModule
+	CreateAccount(ctx context.Context, owner string, metadata map[string]string) (string, error)
+	ListAccounts(ctx context.Context) ([]any, error)
+}
+
+// StoreEngine abstracts persistence (e.g., Postgres, in-memory).
+type StoreEngine interface {
+	ServiceModule
+	Ping(ctx context.Context) error
+}
+
+// ComputeEngine abstracts execution of user functions or jobs.
+type ComputeEngine interface {
+	ServiceModule
+	Invoke(ctx context.Context, payload any) (any, error)
+}
+
+// DataEngine abstracts data-plane services like feeds/streams/datalink.
+type DataEngine interface {
+	ServiceModule
+	Push(ctx context.Context, topic string, payload any) error
+}
+
+// EventEngine abstracts event dispatch/subscribe.
+type EventEngine interface {
+	ServiceModule
+	Publish(ctx context.Context, event string, payload any) error
+	Subscribe(ctx context.Context, event string, handler func(context.Context, any) error) error
+}
+
+// LedgerEngine abstracts a full node for a specific network (e.g., Neo).
+type LedgerEngine interface {
+	ServiceModule
+	LedgerInfo() string
+}
+
+// IndexerEngine abstracts a chain indexer.
+type IndexerEngine interface {
+	ServiceModule
+	IndexerInfo() string
+}
+
+// RPCEngine exposes generic chain RPC fan-out (btc/eth/neox/etc.).
+type RPCEngine interface {
+	ServiceModule
+	RPCInfo() string
+	RPCEndpoints() map[string]string
+}
+
+// DataSourceEngine exposes upstream data sources usable by feeds/triggers.
+type DataSourceEngine interface {
+	ServiceModule
+	DataSourcesInfo() string
+}
+
+// ContractsEngine manages deployment/invocation of service-layer contracts.
+type ContractsEngine interface {
+	ServiceModule
+	ContractsNetwork() string
+}
+
+// ServiceBankEngine controls GAS usage owned by the service layer.
+type ServiceBankEngine interface {
+	ServiceModule
+	ServiceBankInfo() string
+}
+
+// CryptoEngine exposes advanced cryptography helpers (ZKP/FHE/MPC).
+type CryptoEngine interface {
+	ServiceModule
+	CryptoInfo() string
+}
+
+// Capability markers allow adapters to avoid advertising interfaces they cannot serve.
+type AccountCapable interface {
+	HasAccount() bool
+}
+
+type ComputeCapable interface {
+	HasCompute() bool
+}
+
+type DataCapable interface {
+	HasData() bool
+}
+
+type EventCapable interface {
+	HasEvent() bool
+}
+
+// BusPermissions restrict which bus fan-outs a module participates in.
+type BusPermissions struct {
+	AllowEvents  bool
+	AllowData    bool
+	AllowCompute bool
+}
+
+// Engine is the lightweight core orchestrator. It holds a registry of modules and drives lifecycle.
+type Engine struct {
+	mu            sync.RWMutex
+	registry      map[string]ServiceModule
+	order         []string
+	log           *log.Logger
+	ordering      []string
+	health        map[string]ModuleHealth
+	subs          map[string][]EventHandler
+	moduleNotes   map[string][]string
+	moduleCaps    map[string][]string
+	moduleQuota   map[string]map[string]string
+	moduleReqAPIs map[string][]APISurface
+	moduleLayer   map[string]string
+	busPerms      map[string]BusPermissions
+	deps          map[string][]string
+}
+
+// Option configures an Engine.
+type Option func(*Engine)
+
+// WithLogger overrides the default logger.
+func WithLogger(l *log.Logger) Option {
+	return func(e *Engine) {
+		if l != nil {
+			e.log = l
+		}
+	}
+}
+
+// WithOrder sets an explicit startup order (by module name). Unlisted modules start after, in registration order.
+func WithOrder(modules ...string) Option {
+	return func(e *Engine) {
+		e.ordering = append([]string{}, modules...)
+	}
+}
+
+// New returns an empty Engine ready to accept modules.
+func New(opts ...Option) *Engine {
+	e := &Engine{
+		registry:      make(map[string]ServiceModule),
+		health:        make(map[string]ModuleHealth),
+		subs:          make(map[string][]EventHandler),
+		moduleNotes:   make(map[string][]string),
+		moduleCaps:    make(map[string][]string),
+		moduleQuota:   make(map[string]map[string]string),
+		moduleReqAPIs: make(map[string][]APISurface),
+		moduleLayer:   make(map[string]string),
+		busPerms:      make(map[string]BusPermissions),
+		deps:          make(map[string][]string),
+		log:           log.Default(),
+	}
+	for _, opt := range opts {
+		opt(e)
+	}
+	return e
+}
+
+// Register adds a service module to the engine. Names must be unique.
+func (e *Engine) Register(module ServiceModule) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if module == nil {
+		return fmt.Errorf("module is nil")
+	}
+	name := module.Name()
+	if name == "" {
+		return fmt.Errorf("module name required")
+	}
+	if _, exists := e.registry[name]; exists {
+		return fmt.Errorf("module %q already registered", name)
+	}
+	e.registry[name] = module
+	e.order = append(e.order, name)
+	now := time.Now().UTC()
+	e.health[name] = ModuleHealth{Name: name, Domain: module.Domain(), Status: "registered", UpdatedAt: now}
+	return nil
+}
+
+// Modules returns the registered module names (sorted).
+func (e *Engine) Modules() []string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.orderedModules()
+}
+
+// Logger returns the engine logger (may be nil).
+func (e *Engine) Logger() *log.Logger {
+	if e == nil {
+		return nil
+	}
+	return e.log
+}
+
+// AddModuleNote attaches a note to a module for observability (surfaced in ModulesInfo).
+func (e *Engine) AddModuleNote(name, note string) {
+	if e == nil {
+		return
+	}
+	name = strings.TrimSpace(name)
+	note = strings.TrimSpace(note)
+	if name == "" || note == "" {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.moduleNotes[name] = append(e.moduleNotes[name], note)
+}
+
+// SetModuleCapabilities records declared capabilities for a module.
+func (e *Engine) SetModuleCapabilities(name string, caps ...string) {
+	if e == nil {
+		return
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
+	var cleaned []string
+	seen := make(map[string]bool)
+	for _, c := range caps {
+		c = strings.TrimSpace(c)
+		if c == "" || seen[strings.ToLower(c)] {
+			continue
+		}
+		seen[strings.ToLower(c)] = true
+		cleaned = append(cleaned, c)
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.moduleCaps[name] = cleaned
+}
+
+// SetModuleQuotas records declared quotas for a module.
+func (e *Engine) SetModuleQuotas(name string, quotas map[string]string) {
+	if e == nil {
+		return
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
+	clean := make(map[string]string)
+	for k, v := range quotas {
+		k = strings.TrimSpace(k)
+		v = strings.TrimSpace(v)
+		if k == "" || v == "" {
+			continue
+		}
+		clean[k] = v
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if len(clean) == 0 {
+		delete(e.moduleQuota, name)
+		return
+	}
+	e.moduleQuota[name] = clean
+}
+
+// SetModuleRequiredAPIs records declared required API surfaces for a module.
+func (e *Engine) SetModuleRequiredAPIs(name string, surfaces ...APISurface) {
+	if e == nil {
+		return
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
+	seen := make(map[string]bool)
+	var cleaned []APISurface
+	for _, s := range surfaces {
+		key := strings.TrimSpace(strings.ToLower(string(s)))
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		cleaned = append(cleaned, s)
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if len(cleaned) == 0 {
+		delete(e.moduleReqAPIs, name)
+		return
+	}
+	e.moduleReqAPIs[name] = cleaned
+}
+
+// SetModuleLayer records an optional layer hint for a module.
+func (e *Engine) SetModuleLayer(name, layer string) {
+	if e == nil {
+		return
+	}
+	name = strings.TrimSpace(name)
+	layer = strings.TrimSpace(layer)
+	if name == "" {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if layer == "" {
+		delete(e.moduleLayer, name)
+		return
+	}
+	e.moduleLayer[name] = layer
+}
+
+// SetModuleDeps records dependencies for a module (used for ordering/readiness checks).
+func (e *Engine) SetModuleDeps(name string, deps ...string) {
+	if e == nil {
+		return
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
+	filtered := make([]string, 0, len(deps))
+	for _, d := range deps {
+		if d = strings.TrimSpace(d); d != "" {
+			filtered = append(filtered, d)
+		}
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.deps[name] = filtered
+}
+
+// SetBusPermissions overrides bus permissions for a module.
+func (e *Engine) SetBusPermissions(name string, perms BusPermissions) {
+	if e == nil {
+		return
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.busPerms[name] = perms
+}
+
+func (e *Engine) busPermissions(name string) BusPermissions {
+	if e == nil {
+		return BusPermissions{}
+	}
+	perms, ok := e.busPerms[name]
+	if !ok {
+		return BusPermissions{AllowEvents: true, AllowData: true, AllowCompute: true}
+	}
+	return perms
+}
+
+// ModuleInfo describes a registered module with its domain and inferred category.
+type ModuleInfo struct {
+	Name         string            `json:"name"`
+	Domain       string            `json:"domain,omitempty"`
+	Category     string            `json:"category,omitempty"`
+	Layer        string            `json:"layer,omitempty"`
+	Interfaces   []string          `json:"interfaces,omitempty"`
+	APIs         []APIDescriptor   `json:"apis,omitempty"`
+	Notes        []string          `json:"notes,omitempty"`
+	Permissions  []string          `json:"permissions,omitempty"`
+	DependsOn    []string          `json:"depends_on,omitempty"`
+	Capabilities []string          `json:"capabilities,omitempty"`
+	Quotas       map[string]string `json:"quotas,omitempty"`
+	RequiresAPIs []APISurface      `json:"requires_apis,omitempty"`
+}
+
+// ModuleHealth captures the latest lifecycle status for a module.
+type ModuleHealth struct {
+	Name        string     `json:"name"`
+	Domain      string     `json:"domain,omitempty"`
+	Status      string     `json:"status"` // registered|starting|started|stopped|failed|stop-error|unknown
+	Error       string     `json:"error,omitempty"`
+	ReadyStatus string     `json:"ready_status,omitempty"` // ready|not-ready|unknown
+	ReadyError  string     `json:"ready_error,omitempty"`
+	StartedAt   *time.Time `json:"started_at,omitempty"`
+	StoppedAt   *time.Time `json:"stopped_at,omitempty"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	StartNanos  int64      `json:"start_nanos,omitempty"` // duration nanoseconds between start invocation and completion
+	StopNanos   int64      `json:"stop_nanos,omitempty"`  // duration nanoseconds between stop invocation and completion
+}
+
+// ReadyChecker reports whether a module is currently ready to serve traffic.
+type ReadyChecker interface {
+	Ready(ctx context.Context) error
+}
+
+// ReadySetter can be implemented by modules to allow the engine to mark readiness explicitly.
+type ReadySetter interface {
+	SetReady(status string, errMsg string)
+}
+
+// MarkReady updates readiness for the provided modules (or all modules when
+// names are empty). Status defaults to "ready" when blank.
+func (e *Engine) MarkReady(status, errMsg string, names ...string) {
+	if status == "" {
+		status = "ready"
+	}
+	if len(names) == 0 {
+		names = e.Modules()
+	}
+	e.mu.RLock()
+	var mods []ServiceModule
+	for _, name := range names {
+		if name == "" {
+			continue
+		}
+		if mod := e.registry[name]; mod != nil {
+			mods = append(mods, mod)
+		}
+	}
+	e.mu.RUnlock()
+	for _, mod := range mods {
+		e.setHealth(mod.Name(), ModuleHealth{
+			Name:        mod.Name(),
+			Domain:      mod.Domain(),
+			Status:      e.currentStatus(mod.Name()),
+			Error:       e.currentError(mod.Name()),
+			ReadyStatus: status,
+			ReadyError:  errMsg,
+			StartedAt:   e.currentStartedAt(mod.Name()),
+			StoppedAt:   e.currentStoppedAt(mod.Name()),
+		})
+		if setter, ok := mod.(ReadySetter); ok {
+			setter.SetReady(status, errMsg)
+		}
+	}
+}
+
+// ModulesInfo returns rich module metadata honouring the explicit ordering.
+func (e *Engine) ModulesInfo() []ModuleInfo {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	names := e.orderedModules()
+	available := make(map[string]bool)
+	moduleAPIs := make(map[string][]APIDescriptor)
+	for _, name := range names {
+		mod := e.registry[name]
+		if mod == nil {
+			continue
+		}
+		perms := e.busPermissions(name)
+		apis := standardAPIs(mod, perms)
+		if described, ok := mod.(APIDescriber); ok {
+			apis = mergeAPIs(apis, described.APIs())
+		}
+		moduleAPIs[name] = apis
+		for _, api := range apis {
+			surf := strings.TrimSpace(string(api.Surface))
+			if surf == "" {
+				continue
+			}
+			available[strings.ToLower(surf)] = true
+		}
+	}
+
+	out := make([]ModuleInfo, 0, len(names))
+	for _, name := range names {
+		mod := e.registry[name]
+		if mod == nil {
+			continue
+		}
+		ifaces := enumerateInterfaces(mod)
+		perms := e.busPermissions(name)
+		var permStrings []string
+		if perms.AllowEvents {
+			if _, ok := mod.(EventEngine); ok {
+				permStrings = append(permStrings, "events")
+			}
+		}
+		if perms.AllowData {
+			if _, ok := mod.(DataEngine); ok {
+				permStrings = append(permStrings, "data")
+			}
+		}
+		if perms.AllowCompute {
+			if _, ok := mod.(ComputeEngine); ok {
+				permStrings = append(permStrings, "compute")
+			}
+		}
+		apis := moduleAPIs[name]
+		notes := append([]string{}, e.moduleNotes[name]...)
+		// Derive infra notes for visibility.
+		if rpcer, ok := mod.(interface{ RPCEndpoints() map[string]string }); ok {
+			var chains []string
+			for k := range rpcer.RPCEndpoints() {
+				if k = strings.TrimSpace(strings.ToLower(k)); k != "" {
+					chains = append(chains, k)
+				}
+			}
+			if len(chains) > 0 {
+				sort.Strings(chains)
+				notes = append(notes, "rpc endpoints: "+strings.Join(chains, ","))
+			}
+		}
+		if le, ok := mod.(LedgerEngine); ok {
+			if info := strings.TrimSpace(le.LedgerInfo()); info != "" {
+				notes = append(notes, "ledger: "+info)
+			}
+		}
+		if ie, ok := mod.(IndexerEngine); ok {
+			if info := strings.TrimSpace(ie.IndexerInfo()); info != "" {
+				notes = append(notes, "indexer: "+info)
+			}
+		}
+		if ds, ok := mod.(DataSourceEngine); ok {
+			if info := strings.TrimSpace(ds.DataSourcesInfo()); info != "" {
+				notes = append(notes, "data sources: "+info)
+			}
+		}
+		if ce, ok := mod.(ContractsEngine); ok {
+			if info := strings.TrimSpace(ce.ContractsNetwork()); info != "" {
+				notes = append(notes, "contracts: "+info)
+			}
+		}
+		if sb, ok := mod.(ServiceBankEngine); ok {
+			if info := strings.TrimSpace(sb.ServiceBankInfo()); info != "" {
+				notes = append(notes, "service bank: "+info)
+			}
+		}
+		if ce, ok := mod.(CryptoEngine); ok {
+			if info := strings.TrimSpace(ce.CryptoInfo()); info != "" {
+				notes = append(notes, "crypto: "+info)
+			}
+		}
+		deps := e.deps[name]
+		caps := append([]string{}, e.moduleCaps[name]...)
+		quotas := make(map[string]string, len(e.moduleQuota[name]))
+		for k, v := range e.moduleQuota[name] {
+			quotas[k] = v
+		}
+		reqAPIs := append([]APISurface{}, e.moduleReqAPIs[name]...)
+		for _, req := range reqAPIs {
+			surf := strings.TrimSpace(strings.ToLower(string(req)))
+			if surf == "" {
+				continue
+			}
+			if !available[surf] {
+				notes = append(notes, "requires api "+surf+" (missing)")
+			}
+		}
+		layer := strings.TrimSpace(e.moduleLayer[name])
+		if layer == "" {
+			layer = "service"
+		}
+		out = append(out, ModuleInfo{
+			Name:         name,
+			Domain:       mod.Domain(),
+			Category:     classify(mod),
+			Layer:        layer,
+			Interfaces:   ifaces,
+			APIs:         apis,
+			Notes:        append([]string{}, notes...),
+			Permissions:  permStrings,
+			DependsOn:    append([]string{}, deps...),
+			Capabilities: caps,
+			Quotas:       quotas,
+			RequiresAPIs: reqAPIs,
+		})
+	}
+	return out
+}
+
+// MissingRequiredAPIs reports modules and the API surfaces they require that
+// are not currently provided by any module.
+func (e *Engine) MissingRequiredAPIs() map[string][]string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	names := e.orderedModules()
+	available := make(map[string]bool)
+	for _, name := range names {
+		mod := e.registry[name]
+		if mod == nil {
+			continue
+		}
+		perms := e.busPermissions(name)
+		apis := standardAPIs(mod, perms)
+		if described, ok := mod.(APIDescriber); ok {
+			apis = mergeAPIs(apis, described.APIs())
+		}
+		for _, api := range apis {
+			surf := strings.TrimSpace(string(api.Surface))
+			if surf == "" {
+				continue
+			}
+			available[strings.ToLower(surf)] = true
+		}
+	}
+	missing := make(map[string][]string)
+	for _, name := range names {
+		reqs := e.moduleReqAPIs[name]
+		if len(reqs) == 0 {
+			continue
+		}
+		for _, req := range reqs {
+			surf := strings.TrimSpace(strings.ToLower(string(req)))
+			if surf == "" {
+				continue
+			}
+			if !available[surf] {
+				missing[name] = append(missing[name], surf)
+			}
+		}
+	}
+	return missing
+}
+
+// ModulesHealth returns the latest known lifecycle state per module (ordered).
+func (e *Engine) ModulesHealth() []ModuleHealth {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	names := e.orderedModules()
+	out := make([]ModuleHealth, 0, len(names))
+	for _, name := range names {
+		if h, ok := e.health[name]; ok {
+			out = append(out, h)
+		} else {
+			out = append(out, ModuleHealth{Name: name, Status: "unknown"})
+		}
+	}
+	return out
+}
+
+// ProbeReadiness runs lightweight readiness checks for modules that implement ReadyChecker
+// and updates their health records accordingly. Errors do not stop other probes.
+func (e *Engine) ProbeReadiness(ctx context.Context) {
+	e.mu.RLock()
+	names := e.orderedModules()
+	modules := make([]ServiceModule, 0, len(names))
+	for _, name := range names {
+		if m := e.registry[name]; m != nil {
+			modules = append(modules, m)
+		}
+	}
+	e.mu.RUnlock()
+
+	for _, mod := range modules {
+		rc, ok := mod.(ReadyChecker)
+		if !ok {
+			continue
+		}
+		err := rc.Ready(ctx)
+		readyStatus := "ready"
+		readyErr := ""
+		if err != nil {
+			readyStatus = "not-ready"
+			readyErr = err.Error()
+		}
+		prevReady := e.currentReadyStatus(mod.Name())
+		prevReadyErr := e.currentReadyError(mod.Name())
+		if ok, reasons := e.depsReadyWithReasons(mod.Name()); !ok {
+			readyStatus = "not-ready"
+			if readyErr == "" && len(reasons) > 0 {
+				readyErr = "waiting for dependencies: " + strings.Join(reasons, "; ")
+			} else if len(reasons) > 0 {
+				readyErr = readyErr + " (deps: " + strings.Join(reasons, "; ") + ")"
+			}
+			if readyStatus != prevReady || readyErr != prevReadyErr {
+				if l := e.Logger(); l != nil {
+					l.Printf("module %s waiting for dependencies: %s", mod.Name(), strings.Join(reasons, "; "))
+				}
+			}
+		}
+		e.setHealth(mod.Name(), ModuleHealth{
+			Name:        mod.Name(),
+			Domain:      mod.Domain(),
+			Status:      e.currentStatus(mod.Name()),
+			Error:       e.currentError(mod.Name()),
+			ReadyStatus: readyStatus,
+			ReadyError:  readyErr,
+			StartedAt:   e.currentStartedAt(mod.Name()),
+			StoppedAt:   e.currentStoppedAt(mod.Name()),
+		})
+		if setter, ok := mod.(ReadySetter); ok {
+			setter.SetReady(readyStatus, readyErr)
+		}
+	}
+}
+
+// Start walks registered modules in registration order.
+func (e *Engine) Start(ctx context.Context) error {
+	e.mu.RLock()
+	names := e.orderedModules()
+	e.mu.RUnlock()
+	if err := e.verifyDependencies(); err != nil {
+		return err
+	}
+	if reordered, err := e.resolveDependencyOrder(names); err == nil {
+		names = reordered
+	} else {
+		return err
+	}
+
+	modules := e.modulesByNames(names)
+
+	started := make([]ServiceModule, 0, len(modules))
+	for _, mod := range modules {
+		if ctx.Err() != nil {
+			e.stopReverse(ctx, started)
+			return ctx.Err()
+		}
+		name := mod.Name()
+		e.setHealth(name, ModuleHealth{Name: name, Domain: mod.Domain(), Status: "starting"})
+		startNow := time.Now()
+		if err := mod.Start(ctx); err != nil {
+			e.setHealth(name, ModuleHealth{Name: name, Domain: mod.Domain(), Status: "failed", Error: err.Error(), StartNanos: time.Since(startNow).Nanoseconds()})
+			e.stopReverse(ctx, started)
+			return fmt.Errorf("start %s: %w", name, err)
+		}
+		started = append(started, mod)
+		now := time.Now().UTC()
+		e.setHealth(name, ModuleHealth{Name: name, Domain: mod.Domain(), Status: "started", StartedAt: &now, StartNanos: time.Since(startNow).Nanoseconds()})
+	}
+	return nil
+}
+
+// Stop walks registered modules in reverse registration order.
+func (e *Engine) Stop(ctx context.Context) error {
+	e.mu.RLock()
+	names := e.orderedModules()
+	modules := make([]ServiceModule, 0, len(names))
+	for _, name := range names {
+		if mod := e.registry[name]; mod != nil {
+			modules = append(modules, mod)
+		}
+	}
+	e.mu.RUnlock()
+	for i := len(modules) - 1; i >= 0; i-- {
+		mod := modules[i]
+		stopNow := time.Now()
+		if err := mod.Stop(ctx); err != nil {
+			// Log and continue shutdown to avoid leaking other resources.
+			e.log.Printf("stop %s: %v", mod.Name(), err)
+			now := time.Now().UTC()
+			e.setHealth(mod.Name(), ModuleHealth{Name: mod.Name(), Domain: mod.Domain(), Status: "stop-error", Error: err.Error(), ReadyStatus: "not-ready", StoppedAt: &now, StopNanos: time.Since(stopNow).Nanoseconds()})
+		} else {
+			now := time.Now().UTC()
+			e.setHealth(mod.Name(), ModuleHealth{Name: mod.Name(), Domain: mod.Domain(), Status: "stopped", ReadyStatus: "not-ready", StoppedAt: &now, StopNanos: time.Since(stopNow).Nanoseconds()})
+			if setter, ok := mod.(ReadySetter); ok {
+				setter.SetReady("not-ready", "")
+			}
+		}
+	}
+	return nil
+}
+
+func (e *Engine) stopReverse(ctx context.Context, mods []ServiceModule) {
+	for i := len(mods) - 1; i >= 0; i-- {
+		mod := mods[i]
+		status := "stopped"
+		errStr := ""
+		if err := mod.Stop(ctx); err != nil {
+			status = "stop-error"
+			errStr = err.Error()
+			e.log.Printf("stop %s: %v", mod.Name(), err)
+		}
+		now := time.Now().UTC()
+		e.setHealth(mod.Name(), ModuleHealth{
+			Name:        mod.Name(),
+			Domain:      mod.Domain(),
+			Status:      status,
+			Error:       errStr,
+			ReadyStatus: "not-ready",
+			StoppedAt:   &now,
+		})
+		if setter, ok := mod.(ReadySetter); ok {
+			setter.SetReady("not-ready", errStr)
+		}
+	}
+}
+
+// verifyDependencies ensures declared dependencies are registered.
+func (e *Engine) verifyDependencies() error {
+	if e == nil {
+		return nil
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	for mod, deps := range e.deps {
+		for _, dep := range deps {
+			if dep == "" {
+				continue
+			}
+			if _, ok := e.registry[dep]; !ok {
+				return fmt.Errorf("module %q missing dependency %q", mod, dep)
+			}
+		}
+	}
+	return nil
+}
+
+// depsReady checks if all declared deps for a module are currently ready.
+func (e *Engine) depsReady(name string) bool {
+	ok, _ := e.depsReadyWithReasons(name)
+	return ok
+}
+
+// depsReadyWithReasons returns readiness along with human-readable reasons for missing deps.
+func (e *Engine) depsReadyWithReasons(name string) (bool, []string) {
+	if e == nil {
+		return true, nil
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	deps := e.deps[name]
+	if len(deps) == 0 {
+		return true, nil
+	}
+	var reasons []string
+	for _, dep := range deps {
+		h, ok := e.health[dep]
+		if !ok {
+			reasons = append(reasons, fmt.Sprintf("%s: not started", dep))
+			continue
+		}
+		status := strings.ToLower(strings.TrimSpace(h.Status))
+		if status != "" && status != "started" {
+			reasons = append(reasons, fmt.Sprintf("%s: status=%s", dep, status))
+			continue
+		}
+		ready := strings.ToLower(strings.TrimSpace(h.ReadyStatus))
+		if ready != "" && ready != "ready" {
+			reasons = append(reasons, fmt.Sprintf("%s: ready=%s", dep, ready))
+			continue
+		}
+		if status == "failed" || status == "stop-error" {
+			reasons = append(reasons, fmt.Sprintf("%s: status=%s", dep, status))
+			continue
+		}
+	}
+	return len(reasons) == 0, reasons
+}
+
+func (e *Engine) modulesByNames(names []string) []ServiceModule {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	modules := make([]ServiceModule, 0, len(names))
+	for _, name := range names {
+		if mod := e.registry[name]; mod != nil {
+			modules = append(modules, mod)
+		}
+	}
+	return modules
+}
+
+// resolveDependencyOrder returns a startup ordering that satisfies declared dependencies while
+// preserving the provided ordering as much as possible. Errors indicate cycles or unresolved deps.
+func (e *Engine) resolveDependencyOrder(names []string) ([]string, error) {
+	if e == nil || len(names) == 0 {
+		return names, nil
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	set := make(map[string]bool, len(names))
+	for _, n := range names {
+		set[n] = true
+	}
+	resolved := make([]string, 0, len(names))
+	done := make(map[string]bool, len(names))
+	for len(resolved) < len(names) {
+		progressed := false
+		for _, name := range names {
+			if done[name] {
+				continue
+			}
+			deps := e.deps[name]
+			waiting := false
+			for _, dep := range deps {
+				if dep = strings.TrimSpace(dep); dep == "" {
+					continue
+				}
+				if !set[dep] {
+					// Missing deps are caught by verifyDependencies before this.
+					continue
+				}
+				if !done[dep] {
+					waiting = true
+					break
+				}
+			}
+			if waiting {
+				continue
+			}
+			resolved = append(resolved, name)
+			done[name] = true
+			progressed = true
+		}
+		if !progressed {
+			var unresolved []string
+			for _, name := range names {
+				if !done[name] {
+					unresolved = append(unresolved, name)
+				}
+			}
+			sort.Strings(unresolved)
+			return nil, fmt.Errorf("dependency cycle or unresolved dependencies for: %v", unresolved)
+		}
+	}
+	return resolved, nil
+}
+
+// Lookup returns a module by name, if registered.
+func (e *Engine) Lookup(name string) ServiceModule {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.registry[name]
+}
+
+// ModulesByDomain returns modules matching the provided domain.
+func (e *Engine) ModulesByDomain(domain string) []ServiceModule {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	out := []ServiceModule{}
+	for _, name := range e.orderedModules() {
+		if mod := e.registry[name]; mod != nil && mod.Domain() == domain {
+			out = append(out, mod)
+		}
+	}
+	return out
+}
+
+// AccountEngines returns registered account engines.
+func (e *Engine) AccountEngines() []AccountEngine {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	var out []AccountEngine
+	for _, name := range e.orderedModules() {
+		if mod, ok := e.registry[name]; ok {
+			if v, ok := mod.(AccountEngine); ok {
+				if cap, ok := mod.(AccountCapable); ok && !cap.HasAccount() {
+					continue
+				}
+				out = append(out, v)
+			}
+		}
+	}
+	return out
+}
+
+// orderedModules returns module names honoring explicit ordering first, then remaining registration order.
+func (e *Engine) orderedModules() []string {
+	seen := make(map[string]bool, len(e.registry))
+	var out []string
+	// honor explicit ordering list
+	for _, name := range e.ordering {
+		if mod, ok := e.registry[name]; ok && mod != nil {
+			out = append(out, name)
+			seen[name] = true
+		}
+	}
+	// then fall back to registration order
+	for _, name := range e.order {
+		if !seen[name] {
+			out = append(out, name)
+		}
+	}
+	// deterministic sort of leftovers not in registration/order arrays (if any were added directly)
+	var extras []string
+	for name := range e.registry {
+		if !seen[name] && !contains(out, name) {
+			extras = append(extras, name)
+		}
+	}
+	if len(extras) > 0 {
+		sort.Strings(extras)
+		out = append(out, extras...)
+	}
+	return out
+}
+
+func contains(slice []string, val string) bool {
+	for _, v := range slice {
+		if v == val {
+			return true
+		}
+	}
+	return false
+}
+
+// MarkStarted records a started status for the given module names. When names
+// is empty, all registered modules are marked as started. This is useful when
+// lifecycle is owned outside the engine but status needs to be reflected.
+func (e *Engine) MarkStarted(names ...string) {
+	if len(names) == 0 {
+		names = e.Modules()
+	}
+	e.mu.RLock()
+	var mods []ServiceModule
+	for _, name := range names {
+		if name == "" {
+			continue
+		}
+		if mod := e.registry[name]; mod != nil {
+			mods = append(mods, mod)
+		}
+	}
+	e.mu.RUnlock()
+	for _, mod := range mods {
+		startedAt := firstTime(e.currentStartedAt(mod.Name()))
+		e.setHealth(mod.Name(), ModuleHealth{
+			Name:      mod.Name(),
+			Domain:    mod.Domain(),
+			Status:    "started",
+			StartedAt: startedAt,
+		})
+	}
+}
+
+// MarkStopped records a stopped status for the given module names. When names
+// is empty, all registered modules are marked as stopped.
+func (e *Engine) MarkStopped(names ...string) {
+	if len(names) == 0 {
+		names = e.Modules()
+	}
+	e.mu.RLock()
+	var mods []ServiceModule
+	for _, name := range names {
+		if name == "" {
+			continue
+		}
+		if mod := e.registry[name]; mod != nil {
+			mods = append(mods, mod)
+		}
+	}
+	e.mu.RUnlock()
+	for _, mod := range mods {
+		stoppedAt := firstTime(e.currentStoppedAt(mod.Name()))
+		e.setHealth(mod.Name(), ModuleHealth{
+			Name:        mod.Name(),
+			Domain:      mod.Domain(),
+			Status:      "stopped",
+			ReadyStatus: "not-ready",
+			ReadyError:  "",
+			StoppedAt:   stoppedAt,
+			StartedAt:   e.currentStartedAt(mod.Name()),
+			StartNanos:  e.currentStartNanos(mod.Name()),
+			StopNanos:   e.currentStopNanos(mod.Name()),
+		})
+		if setter, ok := mod.(ReadySetter); ok {
+			setter.SetReady("not-ready", "")
+		}
+	}
+}
+
+func firstTime(t *time.Time) *time.Time {
+	if t != nil {
+		return t
+	}
+	now := time.Now().UTC()
+	return &now
+}
+
+// StoreEngines returns registered store engines.
+func (e *Engine) StoreEngines() []StoreEngine {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	var out []StoreEngine
+	for _, name := range e.orderedModules() {
+		if mod, ok := e.registry[name]; ok {
+			if v, ok := mod.(StoreEngine); ok {
+				out = append(out, v)
+			}
+		}
+	}
+	return out
+}
+
+// ComputeEngines returns registered compute engines.
+func (e *Engine) ComputeEngines() []ComputeEngine {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.computeEnginesLocked()
+}
+
+// DataEngines returns registered data engines.
+func (e *Engine) DataEngines() []DataEngine {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.dataEnginesLocked()
+}
+
+// EventEngines returns registered event engines.
+func (e *Engine) EventEngines() []EventEngine {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.eventEnginesLocked()
+}
+
+// LedgerEngines returns registered ledger engines.
+func (e *Engine) LedgerEngines() []LedgerEngine {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	var out []LedgerEngine
+	for _, mod := range e.registry {
+		if lm, ok := mod.(LedgerEngine); ok {
+			out = append(out, lm)
+		}
+	}
+	return out
+}
+
+// IndexerEngines returns registered indexer engines.
+func (e *Engine) IndexerEngines() []IndexerEngine {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	var out []IndexerEngine
+	for _, mod := range e.registry {
+		if im, ok := mod.(IndexerEngine); ok {
+			out = append(out, im)
+		}
+	}
+	return out
+}
+
+// RPCEngines returns registered chain RPC hubs.
+func (e *Engine) RPCEngines() []RPCEngine {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	var out []RPCEngine
+	for _, mod := range e.registry {
+		if rm, ok := mod.(RPCEngine); ok {
+			out = append(out, rm)
+		}
+	}
+	return out
+}
+
+// DataSourceEngines returns registered data source hubs.
+func (e *Engine) DataSourceEngines() []DataSourceEngine {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	var out []DataSourceEngine
+	for _, mod := range e.registry {
+		if dm, ok := mod.(DataSourceEngine); ok {
+			out = append(out, dm)
+		}
+	}
+	return out
+}
+
+// ContractsEngines returns registered contract managers.
+func (e *Engine) ContractsEngines() []ContractsEngine {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	var out []ContractsEngine
+	for _, mod := range e.registry {
+		if cm, ok := mod.(ContractsEngine); ok {
+			out = append(out, cm)
+		}
+	}
+	return out
+}
+
+// ServiceBankEngines returns registered service-owned GAS controllers.
+func (e *Engine) ServiceBankEngines() []ServiceBankEngine {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	var out []ServiceBankEngine
+	for _, mod := range e.registry {
+		if sm, ok := mod.(ServiceBankEngine); ok {
+			out = append(out, sm)
+		}
+	}
+	return out
+}
+
+// CryptoEngines returns registered crypto helpers.
+func (e *Engine) CryptoEngines() []CryptoEngine {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	var out []CryptoEngine
+	for _, mod := range e.registry {
+		if cm, ok := mod.(CryptoEngine); ok {
+			out = append(out, cm)
+		}
+	}
+	return out
+}
+
+func classify(mod ServiceModule) string {
+	switch mod.(type) {
+	case StoreEngine:
+		return "store"
+	case AccountEngine:
+		if cap, ok := mod.(AccountCapable); ok && !cap.HasAccount() {
+			return ""
+		}
+		return "account"
+	case ComputeEngine:
+		if cap, ok := mod.(ComputeCapable); ok && !cap.HasCompute() {
+			return ""
+		}
+		return "compute"
+	case DataEngine:
+		if cap, ok := mod.(DataCapable); ok && !cap.HasData() {
+			return ""
+		}
+		return "data"
+	case EventEngine:
+		if cap, ok := mod.(EventCapable); ok && !cap.HasEvent() {
+			return ""
+		}
+		return "event"
+	case LedgerEngine:
+		return "ledger"
+	case IndexerEngine:
+		return "indexer"
+	case RPCEngine:
+		return "rpc"
+	case DataSourceEngine:
+		return "data-source"
+	case ContractsEngine:
+		return "contracts"
+	case ServiceBankEngine:
+		return "gasbank"
+	case CryptoEngine:
+		return "crypto"
+	default:
+		return ""
+	}
+}
+
+func enumerateInterfaces(mod ServiceModule) []string {
+	var ifaces []string
+	if _, ok := mod.(StoreEngine); ok {
+		ifaces = append(ifaces, "store")
+	}
+	if _, ok := mod.(AccountEngine); ok {
+		if cap, ok := mod.(AccountCapable); ok && !cap.HasAccount() {
+			// skip
+		} else {
+			ifaces = append(ifaces, "account")
+		}
+	}
+	if _, ok := mod.(ComputeEngine); ok {
+		if cap, ok := mod.(ComputeCapable); ok && !cap.HasCompute() {
+			// skip
+		} else {
+			ifaces = append(ifaces, "compute")
+		}
+	}
+	if _, ok := mod.(DataEngine); ok {
+		if cap, ok := mod.(DataCapable); ok && !cap.HasData() {
+			// skip
+		} else {
+			ifaces = append(ifaces, "data")
+		}
+	}
+	if _, ok := mod.(EventEngine); ok {
+		if cap, ok := mod.(EventCapable); ok && !cap.HasEvent() {
+			// skip
+		} else {
+			ifaces = append(ifaces, "event")
+		}
+	}
+	if _, ok := mod.(LedgerEngine); ok {
+		ifaces = append(ifaces, "ledger")
+	}
+	if _, ok := mod.(IndexerEngine); ok {
+		ifaces = append(ifaces, "indexer")
+	}
+	if _, ok := mod.(RPCEngine); ok {
+		ifaces = append(ifaces, "rpc")
+	}
+	if _, ok := mod.(DataSourceEngine); ok {
+		ifaces = append(ifaces, "data-source")
+	}
+	if _, ok := mod.(ContractsEngine); ok {
+		ifaces = append(ifaces, "contracts")
+	}
+	if _, ok := mod.(ServiceBankEngine); ok {
+		ifaces = append(ifaces, "gasbank")
+	}
+	if _, ok := mod.(CryptoEngine); ok {
+		ifaces = append(ifaces, "crypto")
+	}
+	return ifaces
+}
+
+func (e *Engine) setHealth(name string, health ModuleHealth) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.health == nil {
+		e.health = make(map[string]ModuleHealth)
+	}
+	if existing, ok := e.health[name]; ok {
+		if health.StartedAt == nil {
+			health.StartedAt = existing.StartedAt
+		}
+		if health.StoppedAt == nil {
+			health.StoppedAt = existing.StoppedAt
+		}
+		if health.ReadyStatus == "" {
+			health.ReadyStatus = existing.ReadyStatus
+			health.ReadyError = existing.ReadyError
+		}
+		if health.Status == "" {
+			health.Status = existing.Status
+			health.Error = existing.Error
+		}
+		if health.StartNanos == 0 {
+			health.StartNanos = existing.StartNanos
+		}
+		if health.StopNanos == 0 {
+			health.StopNanos = existing.StopNanos
+		}
+	}
+	if health.UpdatedAt.IsZero() {
+		health.UpdatedAt = time.Now().UTC()
+	}
+	e.health[name] = health
+}
+
+func (e *Engine) currentStatus(name string) string {
+	if h, ok := e.health[name]; ok {
+		return h.Status
+	}
+	return ""
+}
+
+func (e *Engine) currentError(name string) string {
+	if h, ok := e.health[name]; ok {
+		return h.Error
+	}
+	return ""
+}
+
+func (e *Engine) currentStartedAt(name string) *time.Time {
+	if h, ok := e.health[name]; ok {
+		return h.StartedAt
+	}
+	return nil
+}
+
+func (e *Engine) currentStoppedAt(name string) *time.Time {
+	if h, ok := e.health[name]; ok {
+		return h.StoppedAt
+	}
+	return nil
+}
+
+func (e *Engine) currentStartNanos(name string) int64 {
+	if h, ok := e.health[name]; ok {
+		return h.StartNanos
+	}
+	return 0
+}
+
+func (e *Engine) currentStopNanos(name string) int64 {
+	if h, ok := e.health[name]; ok {
+		return h.StopNanos
+	}
+	return 0
+}
+
+func (e *Engine) currentReadyStatus(name string) string {
+	if h, ok := e.health[name]; ok {
+		return h.ReadyStatus
+	}
+	return ""
+}
+
+func (e *Engine) currentReadyError(name string) string {
+	if h, ok := e.health[name]; ok {
+		return h.ReadyError
+	}
+	return ""
+}
+
+// EventHandler is a callback used by SubscribeEvent for in-process consumers.
+type EventHandler func(context.Context, any) error
+
+// SubscribeEvent registers a handler for an event across all event engines and the in-process bus.
+// It returns a joined error if any underlying subscriber rejects the registration.
+func (e *Engine) SubscribeEvent(ctx context.Context, event string, handler EventHandler) error {
+	if event == "" {
+		return fmt.Errorf("event required")
+	}
+	if handler == nil {
+		return fmt.Errorf("event handler is nil")
+	}
+
+	e.mu.Lock()
+	e.subs[event] = append(e.subs[event], handler)
+	engines := e.eventEnginesLocked()
+	e.mu.Unlock()
+
+	var errs []error
+	for _, eng := range engines {
+		if err := eng.Subscribe(ctx, event, handler); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", eng.Name(), err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// PublishEvent fan-outs an event to all registered EventEngines plus local subscribers.
+func (e *Engine) PublishEvent(ctx context.Context, event string, payload any) error {
+	e.mu.RLock()
+	engines := e.eventEnginesLocked()
+	localSubs := append([]EventHandler{}, e.subs[event]...)
+	e.mu.RUnlock()
+
+	var errs []error
+	for _, eng := range engines {
+		if err := eng.Publish(ctx, event, payload); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", eng.Name(), err))
+		}
+	}
+	for _, handler := range localSubs {
+		if handler == nil {
+			continue
+		}
+		if err := handler(ctx, payload); err != nil {
+			errs = append(errs, fmt.Errorf("subscriber: %w", err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// PushData dispatches a payload to every registered DataEngine.
+func (e *Engine) PushData(ctx context.Context, topic string, payload any) error {
+	e.mu.RLock()
+	engines := e.dataEnginesLocked()
+	e.mu.RUnlock()
+
+	var errs []error
+	for _, eng := range engines {
+		if err := eng.Push(ctx, topic, payload); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", eng.Name(), err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// InvokeResult captures the outcome of a ComputeEngine invocation.
+type InvokeResult struct {
+	Module string
+	Result any
+	Err    error
+}
+
+// InvokeComputeAll invokes every registered ComputeEngine with the provided payload.
+// It returns per-module results and a joined error if any invocation fails.
+func (e *Engine) InvokeComputeAll(ctx context.Context, payload any) ([]InvokeResult, error) {
+	e.mu.RLock()
+	engines := e.computeEnginesLocked()
+	e.mu.RUnlock()
+
+	results := make([]InvokeResult, 0, len(engines))
+	var errs []error
+	for _, eng := range engines {
+		res, err := eng.Invoke(ctx, payload)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", eng.Name(), err))
+		}
+		results = append(results, InvokeResult{Module: eng.Name(), Result: res, Err: err})
+	}
+	return results, errors.Join(errs...)
+}
+
+func (e *Engine) dataEnginesLocked() []DataEngine {
+	names := e.orderedModules()
+	out := make([]DataEngine, 0, len(names))
+	for _, name := range names {
+		if mod, ok := e.registry[name]; ok {
+			if v, ok := mod.(DataEngine); ok {
+				perms := e.busPermissions(name)
+				if !perms.AllowData {
+					continue
+				}
+				if cap, ok := mod.(DataCapable); ok && !cap.HasData() {
+					continue
+				}
+				out = append(out, v)
+			}
+		}
+	}
+	return out
+}
+
+func (e *Engine) computeEnginesLocked() []ComputeEngine {
+	names := e.orderedModules()
+	out := make([]ComputeEngine, 0, len(names))
+	for _, name := range names {
+		if mod, ok := e.registry[name]; ok {
+			if v, ok := mod.(ComputeEngine); ok {
+				perms := e.busPermissions(name)
+				if !perms.AllowCompute {
+					continue
+				}
+				if cap, ok := mod.(ComputeCapable); ok && !cap.HasCompute() {
+					continue
+				}
+				out = append(out, v)
+			}
+		}
+	}
+	return out
+}
+
+func (e *Engine) eventEnginesLocked() []EventEngine {
+	names := e.orderedModules()
+	out := make([]EventEngine, 0, len(names))
+	for _, name := range names {
+		if mod, ok := e.registry[name]; ok {
+			if v, ok := mod.(EventEngine); ok {
+				perms := e.busPermissions(name)
+				if !perms.AllowEvents {
+					continue
+				}
+				if cap, ok := mod.(EventCapable); ok && !cap.HasEvent() {
+					continue
+				}
+				out = append(out, v)
+			}
+		}
+	}
+	return out
+}

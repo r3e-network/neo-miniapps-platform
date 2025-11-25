@@ -174,6 +174,87 @@ func TestService_Refresher(t *testing.T) {
 	}
 }
 
+func TestService_DeleteFeed(t *testing.T) {
+	store := memory.New()
+	acct, err := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+
+	svc := New(store, store, nil)
+	feed, err := svc.CreateFeed(context.Background(), acct.ID, "neo", "usd", "@every 5m", "@every 1h", 0.5)
+	if err != nil {
+		t.Fatalf("create feed: %v", err)
+	}
+
+	// Record some data first
+	if _, err := svc.RecordSnapshot(context.Background(), feed.ID, 12.34, "oracle", time.Now()); err != nil {
+		t.Fatalf("record snapshot: %v", err)
+	}
+
+	// Delete should fail for wrong account
+	otherAcct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "other"})
+	if err := svc.DeleteFeed(context.Background(), otherAcct.ID, feed.ID); err == nil {
+		t.Fatalf("expected delete to fail for wrong account")
+	}
+
+	// Delete should succeed for correct account
+	if err := svc.DeleteFeed(context.Background(), acct.ID, feed.ID); err != nil {
+		t.Fatalf("delete feed: %v", err)
+	}
+
+	// Feed should no longer exist
+	if _, err := svc.GetFeed(context.Background(), feed.ID); err == nil {
+		t.Fatalf("expected feed to be deleted")
+	}
+}
+
+func TestService_AccountOwnershipValidation(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	otherAcct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "other"})
+
+	svc := New(store, store, nil)
+	feed, err := svc.CreateFeed(context.Background(), acct.ID, "btc", "usd", "@every 1m", "@every 5m", 0.5)
+	if err != nil {
+		t.Fatalf("create feed: %v", err)
+	}
+
+	// GetFeedForAccount should fail for wrong account
+	if _, err := svc.GetFeedForAccount(context.Background(), otherAcct.ID, feed.ID); err == nil {
+		t.Fatalf("expected GetFeedForAccount to fail for wrong account")
+	}
+
+	// GetFeedForAccount should succeed for correct account
+	if _, err := svc.GetFeedForAccount(context.Background(), acct.ID, feed.ID); err != nil {
+		t.Fatalf("GetFeedForAccount failed: %v", err)
+	}
+
+	// UpdateFeedForAccount should fail for wrong account
+	newInterval := "@every 10m"
+	if _, err := svc.UpdateFeedForAccount(context.Background(), otherAcct.ID, feed.ID, &newInterval, nil, nil); err == nil {
+		t.Fatalf("expected UpdateFeedForAccount to fail for wrong account")
+	}
+
+	// SetActiveForAccount should fail for wrong account
+	if _, err := svc.SetActiveForAccount(context.Background(), otherAcct.ID, feed.ID, false); err == nil {
+		t.Fatalf("expected SetActiveForAccount to fail for wrong account")
+	}
+}
+
+func TestService_HealthCheck(t *testing.T) {
+	store := memory.New()
+	svc := New(store, store, nil)
+
+	hc := svc.HealthCheck(context.Background())
+	if hc.Service != "pricefeed" {
+		t.Errorf("expected service name 'pricefeed', got %s", hc.Service)
+	}
+	if !hc.IsHealthy() {
+		t.Errorf("expected healthy status, got %s", hc.Status)
+	}
+}
+
 func ExampleService_CreateFeed() {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "desk"})

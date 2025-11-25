@@ -168,9 +168,19 @@ func (s *Service) CreateFeed(ctx context.Context, accountID, baseAsset, quoteAss
 
 // UpdateFeed updates mutable fields on a feed.
 func (s *Service) UpdateFeed(ctx context.Context, feedID string, interval, heartbeat *string, deviation *float64) (pricefeed.Feed, error) {
+	return s.UpdateFeedForAccount(ctx, "", feedID, interval, heartbeat, deviation)
+}
+
+// UpdateFeedForAccount updates mutable fields on a feed with account ownership check.
+func (s *Service) UpdateFeedForAccount(ctx context.Context, accountID, feedID string, interval, heartbeat *string, deviation *float64) (pricefeed.Feed, error) {
 	feed, err := s.store.GetPriceFeed(ctx, feedID)
 	if err != nil {
 		return pricefeed.Feed{}, err
+	}
+
+	// Validate ownership if accountID provided
+	if accountID != "" && feed.AccountID != accountID {
+		return pricefeed.Feed{}, fmt.Errorf("feed %s does not belong to account %s", feedID, accountID)
 	}
 
 	if interval != nil {
@@ -206,10 +216,21 @@ func (s *Service) UpdateFeed(ctx context.Context, feedID string, interval, heart
 
 // SetActive toggles the active flag.
 func (s *Service) SetActive(ctx context.Context, feedID string, active bool) (pricefeed.Feed, error) {
+	return s.SetActiveForAccount(ctx, "", feedID, active)
+}
+
+// SetActiveForAccount toggles the active flag with account ownership check.
+func (s *Service) SetActiveForAccount(ctx context.Context, accountID, feedID string, active bool) (pricefeed.Feed, error) {
 	feed, err := s.store.GetPriceFeed(ctx, feedID)
 	if err != nil {
 		return pricefeed.Feed{}, err
 	}
+
+	// Validate ownership if accountID provided
+	if accountID != "" && feed.AccountID != accountID {
+		return pricefeed.Feed{}, fmt.Errorf("feed %s does not belong to account %s", feedID, accountID)
+	}
+
 	if feed.Active == active {
 		return feed, nil
 	}
@@ -503,4 +524,52 @@ func (s *Service) ListSnapshots(ctx context.Context, feedID string) ([]pricefeed
 // GetFeed retrieves a single feed by identifier.
 func (s *Service) GetFeed(ctx context.Context, feedID string) (pricefeed.Feed, error) {
 	return s.store.GetPriceFeed(ctx, feedID)
+}
+
+// GetFeedForAccount retrieves a feed ensuring account ownership.
+func (s *Service) GetFeedForAccount(ctx context.Context, accountID, feedID string) (pricefeed.Feed, error) {
+	feed, err := s.store.GetPriceFeed(ctx, feedID)
+	if err != nil {
+		return pricefeed.Feed{}, err
+	}
+	if feed.AccountID != accountID {
+		return pricefeed.Feed{}, fmt.Errorf("feed %s does not belong to account %s", feedID, accountID)
+	}
+	return feed, nil
+}
+
+// DeleteFeed removes a price feed and its associated data.
+func (s *Service) DeleteFeed(ctx context.Context, accountID, feedID string) error {
+	feed, err := s.store.GetPriceFeed(ctx, feedID)
+	if err != nil {
+		return err
+	}
+	if feed.AccountID != accountID {
+		return fmt.Errorf("feed %s does not belong to account %s", feedID, accountID)
+	}
+
+	// Check if feed has active data - optionally prevent deletion
+	// For now, we allow deletion and let the storage layer handle cascading
+	if err := s.store.DeletePriceFeed(ctx, feedID); err != nil {
+		return fmt.Errorf("delete feed: %w", err)
+	}
+
+	s.log.WithField("feed_id", feedID).
+		WithField("account_id", accountID).
+		Info("price feed deleted")
+	return nil
+}
+
+// HealthCheck returns health status for the pricefeed service.
+func (s *Service) HealthCheck(ctx context.Context) core.HealthCheck {
+	hc := core.NewHealthCheck(s.Name())
+
+	// Check store connectivity
+	storeCheck := core.CheckStore(ctx, "pricefeed-store", func(ctx context.Context) error {
+		_, err := s.store.ListPriceFeeds(ctx, "")
+		return err
+	})
+	hc = hc.WithComponent(storeCheck)
+
+	return hc
 }
