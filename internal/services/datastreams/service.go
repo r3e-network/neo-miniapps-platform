@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	domainds "github.com/R3E-Network/service_layer/internal/app/domain/datastreams"
 	"github.com/R3E-Network/service_layer/internal/app/storage"
+	domainds "github.com/R3E-Network/service_layer/internal/domain/datastreams"
 	engine "github.com/R3E-Network/service_layer/internal/engine"
 	"github.com/R3E-Network/service_layer/internal/framework"
 	core "github.com/R3E-Network/service_layer/internal/services/core"

@@ -7,9 +7,9 @@ import (
 
 	datafeeddomain "github.com/R3E-Network/service_layer/internal/app/domain/datafeeds"
 	datalinkdomain "github.com/R3E-Network/service_layer/internal/app/domain/datalink"
-	datastreamsdomain "github.com/R3E-Network/service_layer/internal/app/domain/datastreams"
 	"github.com/R3E-Network/service_layer/internal/app/storage/memory"
 	"github.com/R3E-Network/service_layer/internal/domain/account"
+	datastreamsdomain "github.com/R3E-Network/service_layer/internal/domain/datastreams"
 	"github.com/R3E-Network/service_layer/internal/domain/function"
 	automationsvc "github.com/R3E-Network/service_layer/internal/services/automation"
 	datafeedsvc "github.com/R3E-Network/service_layer/internal/services/datafeeds"
