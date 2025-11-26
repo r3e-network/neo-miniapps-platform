@@ -92,3 +92,105 @@ func TestService_ListAccountAttestations(t *testing.T) {
 		t.Fatalf("expected attestations from both enclaves, got %+v", seen)
 	}
 }
+
+func TestService_Lifecycle(t *testing.T) {
+	svc := New(nil, nil, nil)
+	if err := svc.Start(context.Background()); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if err := svc.Ready(context.Background()); err != nil {
+		t.Fatalf("ready: %v", err)
+	}
+	if err := svc.Stop(context.Background()); err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+	if svc.Ready(context.Background()) == nil {
+		t.Fatalf("expected not ready after stop")
+	}
+}
+
+func TestService_Manifest(t *testing.T) {
+	svc := New(nil, nil, nil)
+	m := svc.Manifest()
+	if m.Name != "confidential" {
+		t.Fatalf("expected name confidential")
+	}
+}
+
+func TestService_Descriptor(t *testing.T) {
+	svc := New(nil, nil, nil)
+	d := svc.Descriptor()
+	if d.Name != "confidential" {
+		t.Fatalf("expected name confidential")
+	}
+}
+
+func TestService_GetEnclave(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
+	svc := New(store, store, nil)
+	enclave, _ := svc.CreateEnclave(context.Background(), domainconf.Enclave{AccountID: acct.ID, Name: "TEE", Endpoint: "https://tee"})
+
+	got, err := svc.GetEnclave(context.Background(), acct.ID, enclave.ID)
+	if err != nil {
+		t.Fatalf("get enclave: %v", err)
+	}
+	if got.ID != enclave.ID {
+		t.Fatalf("enclave mismatch")
+	}
+}
+
+func TestService_GetEnclaveOwnership(t *testing.T) {
+	store := memory.New()
+	acct1, _ := store.CreateAccount(context.Background(), account.Account{Owner: "one"})
+	acct2, _ := store.CreateAccount(context.Background(), account.Account{Owner: "two"})
+	svc := New(store, store, nil)
+	enclave, _ := svc.CreateEnclave(context.Background(), domainconf.Enclave{AccountID: acct1.ID, Name: "TEE", Endpoint: "https://tee"})
+
+	if _, err := svc.GetEnclave(context.Background(), acct2.ID, enclave.ID); err == nil {
+		t.Fatalf("expected ownership error")
+	}
+}
+
+func TestService_EnclaveValidation(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
+	svc := New(store, store, nil)
+
+	// Missing name
+	if _, err := svc.CreateEnclave(context.Background(), domainconf.Enclave{AccountID: acct.ID, Endpoint: "https://tee"}); err == nil {
+		t.Fatalf("expected name required error")
+	}
+	// Missing endpoint
+	if _, err := svc.CreateEnclave(context.Background(), domainconf.Enclave{AccountID: acct.ID, Name: "TEE"}); err == nil {
+		t.Fatalf("expected endpoint required error")
+	}
+	// Invalid status
+	if _, err := svc.CreateEnclave(context.Background(), domainconf.Enclave{AccountID: acct.ID, Name: "TEE", Endpoint: "https://tee", Status: "invalid"}); err == nil {
+		t.Fatalf("expected invalid status error")
+	}
+}
+
+func TestService_SealedKeyValidation(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
+	svc := New(store, store, nil)
+	enclave, _ := svc.CreateEnclave(context.Background(), domainconf.Enclave{AccountID: acct.ID, Name: "TEE", Endpoint: "https://tee"})
+
+	// Missing name
+	if _, err := svc.CreateSealedKey(context.Background(), domainconf.SealedKey{AccountID: acct.ID, EnclaveID: enclave.ID, Blob: []byte("blob")}); err == nil {
+		t.Fatalf("expected name required error")
+	}
+}
+
+func TestService_AttestationValidation(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
+	svc := New(store, store, nil)
+	enclave, _ := svc.CreateEnclave(context.Background(), domainconf.Enclave{AccountID: acct.ID, Name: "TEE", Endpoint: "https://tee"})
+
+	// Missing report
+	if _, err := svc.CreateAttestation(context.Background(), domainconf.Attestation{AccountID: acct.ID, EnclaveID: enclave.ID}); err == nil {
+		t.Fatalf("expected report required error")
+	}
+}

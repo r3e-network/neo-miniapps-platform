@@ -294,3 +294,62 @@ func TestService_SubmitUpdateHeartbeatDeviation(t *testing.T) {
 		t.Fatalf("expected heartbeat to allow next round, got %v", err)
 	}
 }
+
+func TestService_Lifecycle(t *testing.T) {
+	svc := New(nil, nil, nil)
+	if err := svc.Start(context.Background()); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if err := svc.Ready(context.Background()); err != nil {
+		t.Fatalf("ready: %v", err)
+	}
+	if err := svc.Stop(context.Background()); err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+	if svc.Ready(context.Background()) == nil {
+		t.Fatalf("expected not ready after stop")
+	}
+}
+
+func TestService_Manifest(t *testing.T) {
+	svc := New(nil, nil, nil)
+	m := svc.Manifest()
+	if m.Name != "datafeeds" {
+		t.Fatalf("expected name datafeeds")
+	}
+}
+
+func TestService_Descriptor(t *testing.T) {
+	svc := New(nil, nil, nil)
+	d := svc.Descriptor()
+	if d.Name != "datafeeds" {
+		t.Fatalf("expected name datafeeds")
+	}
+}
+
+func TestService_GetFeed(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
+	svc := New(store, store, nil)
+	feed, _ := svc.CreateFeed(context.Background(), domaindf.Feed{AccountID: acct.ID, Pair: "ETH/USD", Decimals: 8})
+
+	got, err := svc.GetFeed(context.Background(), acct.ID, feed.ID)
+	if err != nil {
+		t.Fatalf("get feed: %v", err)
+	}
+	if got.ID != feed.ID {
+		t.Fatalf("feed mismatch")
+	}
+}
+
+func TestService_GetFeedOwnership(t *testing.T) {
+	store := memory.New()
+	acct1, _ := store.CreateAccount(context.Background(), account.Account{Owner: "one"})
+	acct2, _ := store.CreateAccount(context.Background(), account.Account{Owner: "two"})
+	svc := New(store, store, nil)
+	feed, _ := svc.CreateFeed(context.Background(), domaindf.Feed{AccountID: acct1.ID, Pair: "ETH/USD", Decimals: 8})
+
+	if _, err := svc.GetFeed(context.Background(), acct2.ID, feed.ID); err == nil {
+		t.Fatalf("expected ownership error")
+	}
+}

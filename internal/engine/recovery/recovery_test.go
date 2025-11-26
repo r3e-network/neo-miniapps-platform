@@ -244,16 +244,33 @@ func TestManager_MaxRetries(t *testing.T) {
 	cfg.RecoveryTimeout = 100 * time.Millisecond
 	m.SetModuleConfig("test", cfg)
 
+	// Helper to wait for recovery completion
+	waitForCompletion := func() {
+		for i := 0; i < 50; i++ {
+			time.Sleep(20 * time.Millisecond)
+			st, _ := m.GetState("test")
+			if !st.InProgress {
+				return
+			}
+		}
+	}
+
 	// First attempt
-	_ = m.TriggerRecovery(context.Background(), "test")
-	time.Sleep(150 * time.Millisecond)
+	err := m.TriggerRecovery(context.Background(), "test")
+	if err != nil {
+		t.Fatalf("first attempt failed: %v", err)
+	}
+	waitForCompletion()
 
 	// Second attempt
-	_ = m.TriggerRecovery(context.Background(), "test")
-	time.Sleep(150 * time.Millisecond)
+	err = m.TriggerRecovery(context.Background(), "test")
+	if err != nil {
+		t.Fatalf("second attempt failed: %v", err)
+	}
+	waitForCompletion()
 
 	// Third attempt should fail with max retries exceeded
-	err := m.TriggerRecovery(context.Background(), "test")
+	err = m.TriggerRecovery(context.Background(), "test")
 	if !errors.Is(err, ErrMaxRetriesExceeded) {
 		t.Errorf("err = %v, want ErrMaxRetriesExceeded", err)
 	}

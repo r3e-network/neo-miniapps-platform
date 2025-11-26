@@ -3,10 +3,12 @@ package datastreams
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/R3E-Network/service_layer/internal/app/domain/account"
 	domainds "github.com/R3E-Network/service_layer/internal/app/domain/datastreams"
 	"github.com/R3E-Network/service_layer/internal/app/storage/memory"
+	core "github.com/R3E-Network/service_layer/internal/services/core"
 )
 
 func TestService_CreateStreamAndList(t *testing.T) {
@@ -63,4 +65,165 @@ func TestService_FrameLifecycle(t *testing.T) {
 	if latest.ID != frame.ID {
 		t.Fatalf("latest mismatch")
 	}
+}
+
+func TestService_UpdateStream(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
+	svc := New(store, store, nil)
+	stream, _ := svc.CreateStream(context.Background(), domainds.Stream{AccountID: acct.ID, Name: "Market", Symbol: "BTC"})
+
+	updated, err := svc.UpdateStream(context.Background(), domainds.Stream{ID: stream.ID, AccountID: acct.ID, Name: "Updated", Symbol: "ETH", Status: domainds.StreamStatusActive})
+	if err != nil {
+		t.Fatalf("update stream: %v", err)
+	}
+	if updated.Name != "Updated" {
+		t.Fatalf("expected updated name")
+	}
+	if updated.Symbol != "ETH" {
+		t.Fatalf("expected ETH symbol")
+	}
+}
+
+func TestService_UpdateStreamOwnership(t *testing.T) {
+	store := memory.New()
+	acct1, _ := store.CreateAccount(context.Background(), account.Account{Owner: "one"})
+	acct2, _ := store.CreateAccount(context.Background(), account.Account{Owner: "two"})
+	svc := New(store, store, nil)
+	stream, _ := svc.CreateStream(context.Background(), domainds.Stream{AccountID: acct1.ID, Name: "Market", Symbol: "BTC"})
+
+	if _, err := svc.UpdateStream(context.Background(), domainds.Stream{ID: stream.ID, AccountID: acct2.ID, Name: "Hacked", Symbol: "HACKED"}); err == nil {
+		t.Fatalf("expected ownership error")
+	}
+}
+
+func TestService_GetStream(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
+	svc := New(store, store, nil)
+	stream, _ := svc.CreateStream(context.Background(), domainds.Stream{AccountID: acct.ID, Name: "Market", Symbol: "BTC"})
+
+	got, err := svc.GetStream(context.Background(), acct.ID, stream.ID)
+	if err != nil {
+		t.Fatalf("get stream: %v", err)
+	}
+	if got.ID != stream.ID {
+		t.Fatalf("stream mismatch")
+	}
+}
+
+func TestService_GetStreamOwnership(t *testing.T) {
+	store := memory.New()
+	acct1, _ := store.CreateAccount(context.Background(), account.Account{Owner: "one"})
+	acct2, _ := store.CreateAccount(context.Background(), account.Account{Owner: "two"})
+	svc := New(store, store, nil)
+	stream, _ := svc.CreateStream(context.Background(), domainds.Stream{AccountID: acct1.ID, Name: "Market", Symbol: "BTC"})
+
+	if _, err := svc.GetStream(context.Background(), acct2.ID, stream.ID); err == nil {
+		t.Fatalf("expected ownership error")
+	}
+}
+
+func TestService_StreamValidation(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
+	svc := New(store, store, nil)
+
+	// Missing name
+	if _, err := svc.CreateStream(context.Background(), domainds.Stream{AccountID: acct.ID, Symbol: "BTC"}); err == nil {
+		t.Fatalf("expected name required error")
+	}
+	// Missing symbol
+	if _, err := svc.CreateStream(context.Background(), domainds.Stream{AccountID: acct.ID, Name: "Market"}); err == nil {
+		t.Fatalf("expected symbol required error")
+	}
+	// Invalid status
+	if _, err := svc.CreateStream(context.Background(), domainds.Stream{AccountID: acct.ID, Name: "Market", Symbol: "BTC", Status: "invalid"}); err == nil {
+		t.Fatalf("expected invalid status error")
+	}
+}
+
+func TestService_FrameValidation(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
+	svc := New(store, store, nil)
+	stream, _ := svc.CreateStream(context.Background(), domainds.Stream{AccountID: acct.ID, Name: "Market", Symbol: "BTC"})
+
+	// Invalid sequence
+	if _, err := svc.CreateFrame(context.Background(), acct.ID, stream.ID, 0, map[string]any{"price": 100}, 50, domainds.FrameStatusOK, nil); err == nil {
+		t.Fatalf("expected sequence positive error")
+	}
+
+	// Negative latency gets corrected
+	frame, err := svc.CreateFrame(context.Background(), acct.ID, stream.ID, 1, map[string]any{"price": 100}, -10, "", nil)
+	if err != nil {
+		t.Fatalf("create frame: %v", err)
+	}
+	if frame.LatencyMS != 0 {
+		t.Fatalf("expected latency to be corrected to 0")
+	}
+}
+
+func TestService_Push(t *testing.T) {
+	svc := New(nil, nil, nil)
+	svc.Start(context.Background())
+
+	// Empty topic
+	if err := svc.Push(context.Background(), "", map[string]any{"price": 100}); err == nil {
+		t.Fatalf("expected stream ID required error")
+	}
+
+	// Invalid payload
+	if err := svc.Push(context.Background(), "some-stream", "invalid"); err == nil {
+		t.Fatalf("expected payload must be map error")
+	}
+
+	// Test Push with not ready service
+	svc.Stop(context.Background())
+	if err := svc.Push(context.Background(), "stream", map[string]any{"price": 100}); err == nil {
+		t.Fatalf("expected not ready error")
+	}
+}
+
+func TestService_Lifecycle(t *testing.T) {
+	svc := New(nil, nil, nil)
+	if err := svc.Start(context.Background()); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if err := svc.Ready(context.Background()); err != nil {
+		t.Fatalf("ready: %v", err)
+	}
+	if err := svc.Stop(context.Background()); err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+	if svc.Ready(context.Background()) == nil {
+		t.Fatalf("expected not ready after stop")
+	}
+}
+
+func TestService_Manifest(t *testing.T) {
+	svc := New(nil, nil, nil)
+	m := svc.Manifest()
+	if m.Name != "datastreams" {
+		t.Fatalf("expected name datastreams")
+	}
+}
+
+func TestService_Descriptor(t *testing.T) {
+	svc := New(nil, nil, nil)
+	d := svc.Descriptor()
+	if d.Name != "datastreams" {
+		t.Fatalf("expected name datastreams")
+	}
+}
+
+func TestService_WithObservationHooks(t *testing.T) {
+	svc := New(nil, nil, nil)
+	// With nil hooks
+	svc.WithObservationHooks(core.ObservationHooks{})
+	// With real hooks
+	svc.WithObservationHooks(core.ObservationHooks{
+		OnStart:    func(ctx context.Context, attrs map[string]string) {},
+		OnComplete: func(ctx context.Context, attrs map[string]string, err error, dur time.Duration) {},
+	})
 }

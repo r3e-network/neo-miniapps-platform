@@ -11,6 +11,7 @@ import (
 	"github.com/R3E-Network/service_layer/internal/app/domain/account"
 	datalinkdomain "github.com/R3E-Network/service_layer/internal/app/domain/datalink"
 	"github.com/R3E-Network/service_layer/internal/app/domain/function"
+	"github.com/R3E-Network/service_layer/internal/app/domain/trigger"
 	automationsvc "github.com/R3E-Network/service_layer/internal/services/automation"
 	datalinksvc "github.com/R3E-Network/service_layer/internal/services/datalink"
 	gasbanksvc "github.com/R3E-Network/service_layer/internal/services/gasbank"
@@ -754,4 +755,114 @@ type staticExecutor struct {
 
 func (s *staticExecutor) Execute(ctx context.Context, def function.Definition, payload map[string]any) (function.ExecutionResult, error) {
 	return s.result, nil
+}
+
+func TestService_Lifecycle(t *testing.T) {
+	svc := New(nil, nil, nil)
+	if err := svc.Start(context.Background()); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if err := svc.Ready(context.Background()); err != nil {
+		t.Fatalf("ready: %v", err)
+	}
+	if err := svc.Stop(context.Background()); err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+	if svc.Ready(context.Background()) == nil {
+		t.Fatalf("expected not ready after stop")
+	}
+}
+
+func TestService_Manifest(t *testing.T) {
+	svc := New(nil, nil, nil)
+	m := svc.Manifest()
+	if m.Name != "functions" {
+		t.Fatalf("expected name functions")
+	}
+}
+
+func TestService_Descriptor(t *testing.T) {
+	svc := New(nil, nil, nil)
+	d := svc.Descriptor()
+	if d.Name != "functions" {
+		t.Fatalf("expected name functions")
+	}
+}
+
+func TestService_CreateValidation(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	svc := New(store, store, nil)
+
+	// Missing account_id
+	if _, err := svc.Create(context.Background(), function.Definition{Name: "test", Source: "() => 1"}); err == nil {
+		t.Fatalf("expected account_id required error")
+	}
+	// Missing name
+	if _, err := svc.Create(context.Background(), function.Definition{AccountID: acct.ID, Source: "() => 1"}); err == nil {
+		t.Fatalf("expected name required error")
+	}
+	// Missing source
+	if _, err := svc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "test"}); err == nil {
+		t.Fatalf("expected source required error")
+	}
+}
+
+func TestService_Get(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	svc := New(store, store, nil)
+	fn, _ := svc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "hello", Source: "() => 1"})
+
+	got, err := svc.Get(context.Background(), fn.ID)
+	if err != nil {
+		t.Fatalf("get function: %v", err)
+	}
+	if got.ID != fn.ID {
+		t.Fatalf("function mismatch")
+	}
+}
+
+func TestService_RegisterTrigger(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	triggerSvc := triggers.New(store, store, store, nil)
+
+	svc := New(store, store, nil)
+	svc.AttachDependencies(triggerSvc, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	fn, _ := svc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "triggered", Source: "() => 1"})
+
+	trg := trigger.Trigger{
+		AccountID:  acct.ID,
+		FunctionID: fn.ID,
+		Type:       "cron",
+		Rule:       "0 * * * *",
+	}
+	created, err := svc.RegisterTrigger(context.Background(), trg)
+	if err != nil {
+		t.Fatalf("register trigger: %v", err)
+	}
+	if created.FunctionID != fn.ID {
+		t.Fatalf("expected trigger linked to function")
+	}
+}
+
+func TestService_ScheduleAutomationJob(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	automationSvc := automationsvc.New(store, store, store, nil)
+
+	svc := New(store, store, nil)
+	svc.AttachDependencies(nil, automationSvc, nil, nil, nil, nil, nil, nil, nil)
+
+	fn, _ := svc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "scheduled", Source: "() => 1"})
+
+	job, err := svc.ScheduleAutomationJob(context.Background(), acct.ID, fn.ID, "hourly", "0 * * * *", "hourly run")
+	if err != nil {
+		t.Fatalf("schedule job: %v", err)
+	}
+	if job.FunctionID != fn.ID {
+		t.Fatalf("expected job linked to function")
+	}
 }

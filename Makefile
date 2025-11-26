@@ -1,4 +1,4 @@
-.PHONY: build run run-local test clean docker docker-run docker-compose docker-compose-run help build-dashboard
+.PHONY: build run run-local test test-unit test-coverage test-integration test-smoke test-neo test-postgres test-all clean docker docker-run docker-compose docker-compose-run help build-dashboard
 
 BIN_DIR?=./bin
 APP_BIN?=$(BIN_DIR)/appserver
@@ -40,7 +40,39 @@ run-neo:
 
 test:
 	@echo "Running tests..."
-	@go test ./...
+	@go test -race -short ./...
+
+test-unit:
+	@echo "Running unit tests..."
+	@go test -v -race -short ./...
+
+test-coverage:
+	@echo "Running tests with coverage..."
+	@go test -v -race -short -coverprofile=coverage.out ./...
+	@go tool cover -func=coverage.out | tail -1
+	@go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report: coverage.html"
+
+test-integration:
+	@echo "Running integration tests (requires running server at TEST_API_URL)..."
+	@go test -v -tags=integration ./test/integration/...
+
+test-smoke:
+	@echo "Running smoke tests (requires running server)..."
+	@go test -v -tags=smoke ./test/smoke/...
+
+test-neo:
+	@echo "Running Neo Express contract tests..."
+	@go test -v -tags=neoexpress ./test/neo-express/...
+
+test-postgres:
+	@echo "Running Postgres integration tests (requires TEST_POSTGRES_DSN or DATABASE_URL)..."
+	@go test -v -tags=integration,postgres ./internal/app/storage/postgres/...
+	@go test -v -tags=integration,postgres ./internal/app/httpapi/...
+
+test-all:
+	@echo "Running all tests..."
+	@./test/run_tests.sh all
 
 clean:
 	@echo "Cleaning build artifacts..."
@@ -79,24 +111,40 @@ logs:
 	@docker compose logs -f service-layer
 
 help:
-	@echo "make build             - Build appserver and CLI binaries into $(BIN_DIR)"
-	@echo "make run               - Start the stack with docker compose (detached; uses .env)"
-	@echo "make run-neo           - Start the stack plus NEO nodes + indexer (compose profile 'neo')"
-	@echo "make run-local         - Run appserver locally (requires Postgres available)"
-	@echo "make test              - Run Go tests"
-	@echo "make typecheck         - Run dashboard typecheck (npm required)"
-	@echo "make smoke             - Run Go tests + dashboard typecheck"
-	@echo "make clean             - Remove build artifacts"
-	@echo "make build-dashboard   - Build the React dashboard (needs npm)"
-	@echo "make docker            - Build appserver and dashboard Docker images"
-	@echo "make docker-run        - Run appserver image (reads .env)"
-	@echo "make docker-compose    - Bring up appserver+postgres+dashboard"
-	@echo "make docker-compose-run - Bring up stack in foreground"
-	@echo "make down              - Stop the compose stack and remove orphans"
-	@echo "make ps                - Show docker compose service status"
-	@echo "make logs              - Tail appserver logs from the compose stack"
-	@echo "make neo-up            - Start NEO mainnet/testnet nodes (compose profile 'neo')"
-	@echo "make neo-down          - Stop NEO nodes (compose profile 'neo')"
+	@echo "Build & Run:"
+	@echo "  make build             - Build appserver and CLI binaries into $(BIN_DIR)"
+	@echo "  make run               - Start the stack with docker compose (detached; uses .env)"
+	@echo "  make run-neo           - Start the stack plus NEO nodes + indexer (compose profile 'neo')"
+	@echo "  make run-local         - Run appserver locally (requires Postgres available)"
+	@echo ""
+	@echo "Testing:"
+	@echo "  make test              - Run all unit tests (short mode)"
+	@echo "  make test-unit         - Run unit tests with verbose output"
+	@echo "  make test-coverage     - Run unit tests with coverage report"
+	@echo "  make test-integration  - Run integration tests (requires running server)"
+	@echo "  make test-smoke        - Run smoke tests (requires running server)"
+	@echo "  make test-neo          - Run Neo Express contract tests"
+	@echo "  make test-postgres     - Run Postgres integration tests"
+	@echo "  make test-all          - Run all test suites"
+	@echo ""
+	@echo "Docker:"
+	@echo "  make docker            - Build appserver and dashboard Docker images"
+	@echo "  make docker-run        - Run appserver image (reads .env)"
+	@echo "  make docker-compose    - Bring up appserver+postgres+dashboard"
+	@echo "  make docker-compose-run - Bring up stack in foreground"
+	@echo "  make down              - Stop the compose stack and remove orphans"
+	@echo "  make ps                - Show docker compose service status"
+	@echo "  make logs              - Tail appserver logs from the compose stack"
+	@echo ""
+	@echo "NEO:"
+	@echo "  make neo-up            - Start NEO mainnet/testnet nodes (compose profile 'neo')"
+	@echo "  make neo-down          - Stop NEO nodes (compose profile 'neo')"
+	@echo ""
+	@echo "Other:"
+	@echo "  make typecheck         - Run dashboard typecheck (npm required)"
+	@echo "  make smoke             - Run Go tests + dashboard typecheck"
+	@echo "  make clean             - Remove build artifacts"
+	@echo "  make build-dashboard   - Build the React dashboard (needs npm)"
 
 typecheck:
 	@echo "Running dashboard typecheck..."

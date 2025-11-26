@@ -342,6 +342,8 @@ func (m *Manager) completeRecovery(
 			st.CircuitOpened = time.Now()
 		}
 
+		// Copy nextRetry before unlocking to avoid race condition
+		nextRetryStr := st.NextRetry.Format(time.RFC3339)
 		m.mu.Unlock()
 
 		m.events.Log(events.Event{
@@ -353,7 +355,7 @@ func (m *Manager) completeRecovery(
 			Duration: duration,
 			Metadata: map[string]string{
 				"attempt":    fmt.Sprintf("%d", attempt),
-				"next_retry": st.NextRetry.Format(time.RFC3339),
+				"next_retry": nextRetryStr,
 			},
 		})
 	} else {

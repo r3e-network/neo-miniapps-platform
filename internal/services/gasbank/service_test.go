@@ -501,3 +501,81 @@ func ExampleService_Deposit() {
 	// Output:
 	// balance:10 status:completed
 }
+
+func TestService_Lifecycle(t *testing.T) {
+	svc := New(nil, nil, nil)
+	if err := svc.Start(context.Background()); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if err := svc.Ready(context.Background()); err != nil {
+		t.Fatalf("ready: %v", err)
+	}
+	if err := svc.Stop(context.Background()); err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+	if svc.Ready(context.Background()) == nil {
+		t.Fatalf("expected not ready after stop")
+	}
+}
+
+func TestService_Manifest(t *testing.T) {
+	svc := New(nil, nil, nil)
+	m := svc.Manifest()
+	if m.Name != "gasbank" {
+		t.Fatalf("expected name gasbank")
+	}
+}
+
+func TestService_Descriptor(t *testing.T) {
+	svc := New(nil, nil, nil)
+	d := svc.Descriptor()
+	if d.Name != "gasbank" {
+		t.Fatalf("expected name gasbank")
+	}
+}
+
+func TestService_GetAccount(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	svc := New(store, store, nil)
+	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-get")
+
+	got, err := svc.GetAccount(context.Background(), gasAcct.ID)
+	if err != nil {
+		t.Fatalf("get account: %v", err)
+	}
+	if got.ID != gasAcct.ID {
+		t.Fatalf("account mismatch")
+	}
+}
+
+func TestService_ListAccounts(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	svc := New(store, store, nil)
+	svc.EnsureAccount(context.Background(), acct.ID, "wallet1")
+
+	accounts, err := svc.ListAccounts(context.Background(), acct.ID)
+	if err != nil {
+		t.Fatalf("list accounts: %v", err)
+	}
+	if len(accounts) != 1 {
+		t.Fatalf("expected 1 account, got %d", len(accounts))
+	}
+}
+
+func TestService_ListTransactions(t *testing.T) {
+	store := memory.New()
+	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	svc := New(store, store, nil)
+	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-tx")
+	svc.Deposit(context.Background(), gasAcct.ID, 10, "tx1", "from", "to")
+
+	txs, err := svc.ListTransactions(context.Background(), gasAcct.ID, 10)
+	if err != nil {
+		t.Fatalf("list transactions: %v", err)
+	}
+	if len(txs) != 1 {
+		t.Fatalf("expected 1 transaction, got %d", len(txs))
+	}
+}
