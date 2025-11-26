@@ -11,7 +11,7 @@ The system is organized into **four primary layers** (bottom to top):
 3. **Engine Layer** (OS Kernel) - Service orchestration and lifecycle management
 4. **Services Layer** (Applications) - Business logic and domain services
 
-Additionally, an **Application Composition Layer** (`internal/app/`) sits above the Services Layer to wire everything together into a runnable application.
+Additionally, an **Application Composition Layer** (`internal/app/`) sits above the Services Layer to wire everything together into a runnable application. Domain contracts are defined in `internal/app/domain/` and re-exported through `internal/domain/` so services and adapters can depend on a stable surface without importing application wiring.
 
 ### Android OS Analogy
 
