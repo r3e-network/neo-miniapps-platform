@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/app/domain/gasbank"
+	"github.com/R3E-Network/service_layer/internal/domain/gasbank"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 )
 

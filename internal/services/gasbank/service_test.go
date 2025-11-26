@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	domain "github.com/R3E-Network/service_layer/internal/app/domain/gasbank"
 	"github.com/R3E-Network/service_layer/internal/app/storage/memory"
 	"github.com/R3E-Network/service_layer/internal/domain/account"
+	domain "github.com/R3E-Network/service_layer/internal/domain/gasbank"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 )
 

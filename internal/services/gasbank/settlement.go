@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/app/domain/gasbank"
 	"github.com/R3E-Network/service_layer/internal/app/storage"
+	"github.com/R3E-Network/service_layer/internal/domain/gasbank"
 	"github.com/R3E-Network/service_layer/internal/framework"
 	core "github.com/R3E-Network/service_layer/internal/services/core"
 	"github.com/R3E-Network/service_layer/pkg/logger"
