@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	domainvrf "github.com/R3E-Network/service_layer/internal/app/domain/vrf"
 	"github.com/R3E-Network/service_layer/internal/app/storage"
+	domainvrf "github.com/R3E-Network/service_layer/internal/domain/vrf"
 	engine "github.com/R3E-Network/service_layer/internal/engine"
 	"github.com/R3E-Network/service_layer/internal/framework"
 	core "github.com/R3E-Network/service_layer/internal/services/core"

@@ -9,11 +9,11 @@ import (
 	"time"
 
 	datalinkdomain "github.com/R3E-Network/service_layer/internal/app/domain/datalink"
-	"github.com/R3E-Network/service_layer/internal/app/domain/trigger"
 	"github.com/R3E-Network/service_layer/internal/app/storage"
 	"github.com/R3E-Network/service_layer/internal/app/storage/memory"
 	"github.com/R3E-Network/service_layer/internal/domain/account"
 	"github.com/R3E-Network/service_layer/internal/domain/function"
+	"github.com/R3E-Network/service_layer/internal/domain/trigger"
 	automationsvc "github.com/R3E-Network/service_layer/internal/services/automation"
 	datalinksvc "github.com/R3E-Network/service_layer/internal/services/datalink"
 	gasbanksvc "github.com/R3E-Network/service_layer/internal/services/gasbank"

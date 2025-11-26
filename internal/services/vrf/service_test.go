@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	domainvrf "github.com/R3E-Network/service_layer/internal/app/domain/vrf"
 	"github.com/R3E-Network/service_layer/internal/app/storage/memory"
 	"github.com/R3E-Network/service_layer/internal/domain/account"
+	domainvrf "github.com/R3E-Network/service_layer/internal/domain/vrf"
 	core "github.com/R3E-Network/service_layer/internal/services/core"
 )
 
