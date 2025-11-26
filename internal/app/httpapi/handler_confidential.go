@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	domainconf "github.com/R3E-Network/service_layer/internal/app/domain/confidential"
+	domainconf "github.com/R3E-Network/service_layer/internal/domain/confidential"
 )
 
 func (h *handler) accountConfCompute(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {

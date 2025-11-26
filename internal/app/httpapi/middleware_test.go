@@ -34,9 +34,9 @@ func TestWithMethod(t *testing.T) {
 
 func TestWithMethodDifferentMethods(t *testing.T) {
 	tests := []struct {
-		allowed   string
-		request   string
-		expectOK  bool
+		allowed  string
+		request  string
+		expectOK bool
 	}{
 		{http.MethodGet, http.MethodGet, true},
 		{http.MethodPost, http.MethodPost, true},

@@ -243,11 +243,11 @@ func TestNormalizeAllowed(t *testing.T) {
 
 	// Normal input
 	input := map[string][]string{
-		"Neo":  {"GetBlock", "getBlockCount"},
-		"ETH":  {"eth_call"},
-		"":     {"ignored"},
-		"bsc":  {"", "  ", "eth_call"},
-		"  ":   {"also ignored"},
+		"Neo": {"GetBlock", "getBlockCount"},
+		"ETH": {"eth_call"},
+		"":    {"ignored"},
+		"bsc": {"", "  ", "eth_call"},
+		"  ":  {"also ignored"},
 	}
 	result := normalizeAllowed(input)
 	if result == nil {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	domaindta "github.com/R3E-Network/service_layer/internal/app/domain/dta"
+	domaindta "github.com/R3E-Network/service_layer/internal/domain/dta"
 )
 
 func (h *handler) accountDTA(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {

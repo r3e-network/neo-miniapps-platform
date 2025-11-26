@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	domaincre "github.com/R3E-Network/service_layer/internal/app/domain/cre"
+	domaincre "github.com/R3E-Network/service_layer/internal/domain/cre"
 )
 
 func (h *handler) accountCRE(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {
@@ -31,43 +31,43 @@ func (h *handler) accountCRE(w http.ResponseWriter, r *http.Request, accountID s
 func (h *handler) accountCREPlaybooks(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {
 	switch len(rest) {
 	case 0:
-	switch r.Method {
-	case http.MethodPost:
-		var payload struct {
-			Name        string            `json:"name"`
-			Description string            `json:"description"`
-			Tags        []string          `json:"tags"`
-			Metadata    map[string]string `json:"metadata"`
-			Steps       []domaincre.Step  `json:"steps"`
+		switch r.Method {
+		case http.MethodPost:
+			var payload struct {
+				Name        string            `json:"name"`
+				Description string            `json:"description"`
+				Tags        []string          `json:"tags"`
+				Metadata    map[string]string `json:"metadata"`
+				Steps       []domaincre.Step  `json:"steps"`
+			}
+			if err := decodeJSON(r.Body, &payload); err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			pb := domaincre.Playbook{
+				AccountID:   accountID,
+				Name:        payload.Name,
+				Description: payload.Description,
+				Tags:        payload.Tags,
+				Metadata:    payload.Metadata,
+				Steps:       payload.Steps,
+			}
+			created, err := h.app.CRE.CreatePlaybook(r.Context(), pb)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			writeJSON(w, http.StatusCreated, created)
+		case http.MethodGet:
+			playbooks, err := h.app.CRE.ListPlaybooks(r.Context(), accountID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, playbooks)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
-		if err := decodeJSON(r.Body, &payload); err != nil {
-			writeError(w, http.StatusBadRequest, err)
-			return
-		}
-		pb := domaincre.Playbook{
-			AccountID:   accountID,
-			Name:        payload.Name,
-			Description: payload.Description,
-			Tags:        payload.Tags,
-			Metadata:    payload.Metadata,
-			Steps:       payload.Steps,
-		}
-		created, err := h.app.CRE.CreatePlaybook(r.Context(), pb)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
-			return
-		}
-		writeJSON(w, http.StatusCreated, created)
-	case http.MethodGet:
-		playbooks, err := h.app.CRE.ListPlaybooks(r.Context(), accountID)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, playbooks)
-	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
 	default:
 		playbookID := rest[0]
 		if len(rest) > 1 && rest[1] == "runs" {

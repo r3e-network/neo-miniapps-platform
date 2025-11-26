@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/app/domain/gasbank"
+	"github.com/R3E-Network/service_layer/internal/domain/gasbank"
 	gasbanksvc "github.com/R3E-Network/service_layer/internal/services/gasbank"
 )
 

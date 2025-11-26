@@ -12,3 +12,13 @@ type WorkspaceWallet = appaccount.WorkspaceWallet
 func NormalizeWalletAddress(addr string) string {
 	return appaccount.NormalizeWalletAddress(addr)
 }
+
+// ValidateWalletAddress enforces address format constraints.
+func ValidateWalletAddress(addr string) error {
+	return appaccount.ValidateWalletAddress(addr)
+}
+
+// IsValidWalletAddress reports whether an address passes validation.
+func IsValidWalletAddress(addr string) bool {
+	return appaccount.IsValidWalletAddress(addr)
+}

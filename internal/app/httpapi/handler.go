@@ -18,10 +18,10 @@ import (
 
 	app "github.com/R3E-Network/service_layer/internal/app"
 	"github.com/R3E-Network/service_layer/internal/app/auth"
-	domainaccount "github.com/R3E-Network/service_layer/internal/app/domain/account"
-	"github.com/R3E-Network/service_layer/internal/app/domain/oracle"
 	"github.com/R3E-Network/service_layer/internal/app/jam"
 	"github.com/R3E-Network/service_layer/internal/app/metrics"
+	domainaccount "github.com/R3E-Network/service_layer/internal/domain/account"
+	"github.com/R3E-Network/service_layer/internal/domain/oracle"
 	engine "github.com/R3E-Network/service_layer/internal/engine"
 	"github.com/R3E-Network/service_layer/internal/platform/database"
 	"github.com/R3E-Network/service_layer/internal/platform/migrations"

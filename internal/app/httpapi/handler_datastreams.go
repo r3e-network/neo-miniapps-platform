@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	domainds "github.com/R3E-Network/service_layer/internal/app/domain/datastreams"
+	domainds "github.com/R3E-Network/service_layer/internal/domain/datastreams"
 )
 
 func (h *handler) accountDataStreams(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {

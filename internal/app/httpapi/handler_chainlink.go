@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/R3E-Network/service_layer/internal/app/domain/account"
-	domainccip "github.com/R3E-Network/service_layer/internal/app/domain/ccip"
-	domainlink "github.com/R3E-Network/service_layer/internal/app/domain/datalink"
+	"github.com/R3E-Network/service_layer/internal/domain/account"
+	domainccip "github.com/R3E-Network/service_layer/internal/domain/ccip"
+	domainlink "github.com/R3E-Network/service_layer/internal/domain/datalink"
 )
 
 func (h *handler) accountCCIP(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {

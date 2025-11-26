@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	domainvrf "github.com/R3E-Network/service_layer/internal/app/domain/vrf"
+	domainvrf "github.com/R3E-Network/service_layer/internal/domain/vrf"
 )
 
 func (h *handler) accountVRF(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {

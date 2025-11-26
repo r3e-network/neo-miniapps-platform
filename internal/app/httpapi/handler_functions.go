@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/app/domain/function"
-	randomdomain "github.com/R3E-Network/service_layer/internal/app/domain/random"
-	"github.com/R3E-Network/service_layer/internal/app/domain/secret"
-	"github.com/R3E-Network/service_layer/internal/app/domain/trigger"
+	"github.com/R3E-Network/service_layer/internal/domain/function"
+	randomdomain "github.com/R3E-Network/service_layer/internal/domain/random"
+	"github.com/R3E-Network/service_layer/internal/domain/secret"
+	"github.com/R3E-Network/service_layer/internal/domain/trigger"
 	"github.com/R3E-Network/service_layer/internal/services/random"
 	"github.com/R3E-Network/service_layer/internal/services/secrets"
 )

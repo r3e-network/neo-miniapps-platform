@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/R3E-Network/service_layer/internal/app/domain/admin"
 	"github.com/R3E-Network/service_layer/internal/app/storage"
+	"github.com/R3E-Network/service_layer/internal/domain/admin"
 )
 
 // adminConfigStore provides access to admin config storage.
