@@ -136,8 +136,8 @@ func (s *Service) UpdateLane(ctx context.Context, lane domainccip.Lane) (domainc
 	if err != nil {
 		return domainccip.Lane{}, err
 	}
-	if stored.AccountID != lane.AccountID {
-		return domainccip.Lane{}, fmt.Errorf("lane %s does not belong to account %s", lane.ID, lane.AccountID)
+	if err := core.EnsureOwnership(stored.AccountID, lane.AccountID, "lane", lane.ID); err != nil {
+		return domainccip.Lane{}, err
 	}
 	lane.AccountID = stored.AccountID
 	if err := s.normalizeLane(&lane); err != nil {
@@ -160,8 +160,8 @@ func (s *Service) GetLane(ctx context.Context, accountID, laneID string) (domain
 	if err != nil {
 		return domainccip.Lane{}, err
 	}
-	if lane.AccountID != accountID {
-		return domainccip.Lane{}, fmt.Errorf("lane %s does not belong to account %s", laneID, accountID)
+	if err := core.EnsureOwnership(lane.AccountID, accountID, "lane", laneID); err != nil {
+		return domainccip.Lane{}, err
 	}
 	return lane, nil
 }
@@ -183,8 +183,8 @@ func (s *Service) SendMessage(ctx context.Context, accountID, laneID string, pay
 	if err != nil {
 		return domainccip.Message{}, err
 	}
-	if lane.AccountID != accountID {
-		return domainccip.Message{}, fmt.Errorf("lane %s does not belong to account %s", laneID, accountID)
+	if err := core.EnsureOwnership(lane.AccountID, accountID, "lane", laneID); err != nil {
+		return domainccip.Message{}, err
 	}
 
 	msg := domainccip.Message{
@@ -220,8 +220,8 @@ func (s *Service) GetMessage(ctx context.Context, accountID, messageID string) (
 	if err != nil {
 		return domainccip.Message{}, err
 	}
-	if msg.AccountID != accountID {
-		return domainccip.Message{}, fmt.Errorf("message %s does not belong to account %s", messageID, accountID)
+	if err := core.EnsureOwnership(msg.AccountID, accountID, "message", messageID); err != nil {
+		return domainccip.Message{}, err
 	}
 	return msg, nil
 }

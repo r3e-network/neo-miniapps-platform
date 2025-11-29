@@ -121,8 +121,8 @@ func (s *Service) UpdateEnclave(ctx context.Context, enclave domainconf.Enclave)
 	if err != nil {
 		return domainconf.Enclave{}, err
 	}
-	if stored.AccountID != enclave.AccountID {
-		return domainconf.Enclave{}, fmt.Errorf("enclave %s does not belong to account %s", enclave.ID, enclave.AccountID)
+	if err := core.EnsureOwnership(stored.AccountID, enclave.AccountID, "enclave", enclave.ID); err != nil {
+		return domainconf.Enclave{}, err
 	}
 	enclave.AccountID = stored.AccountID
 	if err := s.normalizeEnclave(&enclave); err != nil {
@@ -150,8 +150,8 @@ func (s *Service) GetEnclave(ctx context.Context, accountID, enclaveID string) (
 	if err != nil {
 		return domainconf.Enclave{}, err
 	}
-	if enclave.AccountID != accountID {
-		return domainconf.Enclave{}, fmt.Errorf("enclave %s does not belong to account %s", enclaveID, accountID)
+	if err := core.EnsureOwnership(enclave.AccountID, accountID, "enclave", enclaveID); err != nil {
+		return domainconf.Enclave{}, err
 	}
 	return enclave, nil
 }

@@ -170,3 +170,38 @@ func IsForbidden(err error) bool {
 func IsConflict(err error) bool {
 	return errors.Is(err, ErrAlreadyExists) || errors.Is(err, ErrConflict)
 }
+
+// OwnershipError indicates a resource does not belong to the requesting account.
+// This is a common pattern across services for multi-tenant resource access control.
+type OwnershipError struct {
+	Resource  string // resource type (e.g., "feed", "key", "source")
+	ID        string // resource identifier
+	AccountID string // requesting account that doesn't own the resource
+}
+
+func (e *OwnershipError) Error() string {
+	return fmt.Sprintf("%s %s does not belong to account %s", e.Resource, e.ID, e.AccountID)
+}
+
+func (e *OwnershipError) Unwrap() error { return ErrForbidden }
+
+// NewOwnershipError creates an ownership error for a resource.
+func NewOwnershipError(resource, id, accountID string) error {
+	return &OwnershipError{Resource: resource, ID: id, AccountID: accountID}
+}
+
+// EnsureOwnership checks if a resource belongs to the specified account.
+// Returns an OwnershipError if the resource's account doesn't match.
+// This is a convenience function to reduce boilerplate in services.
+func EnsureOwnership(resourceAccountID, requestAccountID, resourceType, resourceID string) error {
+	if resourceAccountID != requestAccountID {
+		return NewOwnershipError(resourceType, resourceID, requestAccountID)
+	}
+	return nil
+}
+
+// IsOwnershipError checks if an error is an ownership error.
+func IsOwnershipError(err error) bool {
+	var oe *OwnershipError
+	return errors.As(err, &oe)
+}

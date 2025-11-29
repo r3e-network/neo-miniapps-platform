@@ -147,8 +147,8 @@ func (s *Service) handleGasBankWithdraw(ctx context.Context, def function.Defini
 		if err != nil {
 			return nil, err
 		}
-		if existing.AccountID != def.AccountID {
-			return nil, fmt.Errorf("gas account %s does not belong to account %s", gasAccountID, def.AccountID)
+		if err := core.EnsureOwnership(existing.AccountID, def.AccountID, "gas account", gasAccountID); err != nil {
+			return nil, err
 		}
 	}
 
@@ -187,8 +187,8 @@ func (s *Service) handleGasBankBalance(ctx context.Context, def function.Definit
 		if err != nil {
 			return nil, err
 		}
-		if acct.AccountID != def.AccountID {
-			return nil, fmt.Errorf("gas account %s does not belong to account %s", gasAccountID, def.AccountID)
+		if err := core.EnsureOwnership(acct.AccountID, def.AccountID, "gas account", gasAccountID); err != nil {
+			return nil, err
 		}
 	} else {
 		acct, err = s.gasBank.EnsureAccount(ctx, def.AccountID, wallet)
@@ -217,8 +217,8 @@ func (s *Service) handleGasBankListTransactions(ctx context.Context, def functio
 		if err != nil {
 			return nil, err
 		}
-		if acct.AccountID != def.AccountID {
-			return nil, fmt.Errorf("gas account %s does not belong to account %s", gasAccountID, def.AccountID)
+		if err := core.EnsureOwnership(acct.AccountID, def.AccountID, "gas account", gasAccountID); err != nil {
+			return nil, err
 		}
 	} else {
 		acct, err = s.gasBank.EnsureAccount(ctx, def.AccountID, wallet)

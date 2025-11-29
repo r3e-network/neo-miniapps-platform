@@ -178,8 +178,8 @@ func (s *Service) UpdateContract(ctx context.Context, c domaincontract.Contract)
 	if err != nil {
 		return domaincontract.Contract{}, err
 	}
-	if stored.AccountID != c.AccountID {
-		return domaincontract.Contract{}, fmt.Errorf("contract %s does not belong to account %s", c.ID, c.AccountID)
+	if err := core.EnsureOwnership(stored.AccountID, c.AccountID, "contract", c.ID); err != nil {
+		return domaincontract.Contract{}, err
 	}
 	c.AccountID = stored.AccountID
 	if err := s.normalizeContract(&c); err != nil {
@@ -203,8 +203,8 @@ func (s *Service) GetContract(ctx context.Context, accountID, contractID string)
 	if c.Type == domaincontract.ContractTypeEngine {
 		return c, nil
 	}
-	if c.AccountID != accountID {
-		return domaincontract.Contract{}, fmt.Errorf("contract %s does not belong to account %s", contractID, accountID)
+	if err := core.EnsureOwnership(c.AccountID, accountID, "contract", contractID); err != nil {
+		return domaincontract.Contract{}, err
 	}
 	return c, nil
 }
@@ -341,8 +341,8 @@ func (s *Service) GetInvocation(ctx context.Context, accountID, invocationID str
 	if err != nil {
 		return domaincontract.Invocation{}, err
 	}
-	if inv.AccountID != accountID {
-		return domaincontract.Invocation{}, fmt.Errorf("invocation %s does not belong to account %s", invocationID, accountID)
+	if err := core.EnsureOwnership(inv.AccountID, accountID, "invocation", invocationID); err != nil {
+		return domaincontract.Invocation{}, err
 	}
 	return inv, nil
 }
@@ -371,8 +371,8 @@ func (s *Service) GetDeployment(ctx context.Context, accountID, deploymentID str
 	if err != nil {
 		return domaincontract.Deployment{}, err
 	}
-	if d.AccountID != accountID {
-		return domaincontract.Deployment{}, fmt.Errorf("deployment %s does not belong to account %s", deploymentID, accountID)
+	if err := core.EnsureOwnership(d.AccountID, accountID, "deployment", deploymentID); err != nil {
+		return domaincontract.Deployment{}, err
 	}
 	return d, nil
 }

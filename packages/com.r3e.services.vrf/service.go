@@ -142,8 +142,8 @@ func (s *Service) UpdateKey(ctx context.Context, accountID string, key domainvrf
 	if err != nil {
 		return domainvrf.Key{}, err
 	}
-	if stored.AccountID != accountID {
-		return domainvrf.Key{}, fmt.Errorf("key %s does not belong to account %s", key.ID, accountID)
+	if err := core.EnsureOwnership(stored.AccountID, accountID, "key", key.ID); err != nil {
+		return domainvrf.Key{}, err
 	}
 	key.AccountID = stored.AccountID
 	if err := s.normalizeKey(&key); err != nil {
@@ -166,8 +166,8 @@ func (s *Service) GetKey(ctx context.Context, accountID, keyID string) (domainvr
 	if err != nil {
 		return domainvrf.Key{}, err
 	}
-	if key.AccountID != accountID {
-		return domainvrf.Key{}, fmt.Errorf("key %s does not belong to account %s", keyID, accountID)
+	if err := core.EnsureOwnership(key.AccountID, accountID, "key", keyID); err != nil {
+		return domainvrf.Key{}, err
 	}
 	return key, nil
 }
@@ -189,8 +189,8 @@ func (s *Service) CreateRequest(ctx context.Context, accountID, keyID, consumer,
 	if err != nil {
 		return domainvrf.Request{}, err
 	}
-	if key.AccountID != accountID {
-		return domainvrf.Request{}, fmt.Errorf("key %s does not belong to account %s", keyID, accountID)
+	if err := core.EnsureOwnership(key.AccountID, accountID, "key", keyID); err != nil {
+		return domainvrf.Request{}, err
 	}
 	consumer = strings.TrimSpace(consumer)
 	seed = strings.TrimSpace(seed)
@@ -231,8 +231,8 @@ func (s *Service) GetRequest(ctx context.Context, accountID, requestID string) (
 	if err != nil {
 		return domainvrf.Request{}, err
 	}
-	if req.AccountID != accountID {
-		return domainvrf.Request{}, fmt.Errorf("request %s does not belong to account %s", requestID, accountID)
+	if err := core.EnsureOwnership(req.AccountID, accountID, "request", requestID); err != nil {
+		return domainvrf.Request{}, err
 	}
 	return req, nil
 }

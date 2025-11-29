@@ -174,8 +174,8 @@ func (s *Service) UpdateChannel(ctx context.Context, ch domainlink.Channel) (dom
 	if err != nil {
 		return domainlink.Channel{}, err
 	}
-	if stored.AccountID != ch.AccountID {
-		return domainlink.Channel{}, fmt.Errorf("channel %s does not belong to account %s", ch.ID, ch.AccountID)
+	if err := core.EnsureOwnership(stored.AccountID, ch.AccountID, "channel", ch.ID); err != nil {
+		return domainlink.Channel{}, err
 	}
 	ch.AccountID = stored.AccountID
 	if err := s.normalizeChannel(&ch); err != nil {
@@ -198,8 +198,8 @@ func (s *Service) GetChannel(ctx context.Context, accountID, channelID string) (
 	if err != nil {
 		return domainlink.Channel{}, err
 	}
-	if ch.AccountID != accountID {
-		return domainlink.Channel{}, fmt.Errorf("channel %s does not belong to account %s", channelID, accountID)
+	if err := core.EnsureOwnership(ch.AccountID, accountID, "channel", channelID); err != nil {
+		return domainlink.Channel{}, err
 	}
 	return ch, nil
 }
@@ -248,8 +248,8 @@ func (s *Service) GetDelivery(ctx context.Context, accountID, deliveryID string)
 	if err != nil {
 		return domainlink.Delivery{}, err
 	}
-	if del.AccountID != accountID {
-		return domainlink.Delivery{}, fmt.Errorf("delivery %s does not belong to account %s", deliveryID, accountID)
+	if err := core.EnsureOwnership(del.AccountID, accountID, "delivery", deliveryID); err != nil {
+		return domainlink.Delivery{}, err
 	}
 	return del, nil
 }

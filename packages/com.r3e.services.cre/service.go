@@ -114,8 +114,8 @@ func (s *Service) UpdatePlaybook(ctx context.Context, pb cre.Playbook) (cre.Play
 	if err != nil {
 		return cre.Playbook{}, err
 	}
-	if stored.AccountID != pb.AccountID {
-		return cre.Playbook{}, fmt.Errorf("playbook %s does not belong to account %s", pb.ID, pb.AccountID)
+	if err := core.EnsureOwnership(stored.AccountID, pb.AccountID, "playbook", pb.ID); err != nil {
+		return cre.Playbook{}, err
 	}
 	pb.AccountID = stored.AccountID
 	if err := s.normalizePlaybook(&pb); err != nil {
@@ -135,8 +135,8 @@ func (s *Service) GetPlaybook(ctx context.Context, accountID, playbookID string)
 	if err != nil {
 		return cre.Playbook{}, err
 	}
-	if pb.AccountID != accountID {
-		return cre.Playbook{}, fmt.Errorf("playbook %s does not belong to account %s", playbookID, accountID)
+	if err := core.EnsureOwnership(pb.AccountID, accountID, "playbook", playbookID); err != nil {
+		return cre.Playbook{}, err
 	}
 	return pb, nil
 }
@@ -158,8 +158,8 @@ func (s *Service) CreateRun(ctx context.Context, accountID, playbookID string, p
 	if err != nil {
 		return cre.Run{}, err
 	}
-	if pb.AccountID != accountID {
-		return cre.Run{}, fmt.Errorf("playbook %s does not belong to account %s", playbookID, accountID)
+	if err := core.EnsureOwnership(pb.AccountID, accountID, "playbook", playbookID); err != nil {
+		return cre.Run{}, err
 	}
 
 	var exec *cre.Executor
@@ -168,8 +168,8 @@ func (s *Service) CreateRun(ctx context.Context, accountID, playbookID string, p
 		if err != nil {
 			return cre.Run{}, err
 		}
-		if found.AccountID != accountID {
-			return cre.Run{}, fmt.Errorf("executor %s does not belong to account %s", executorID, accountID)
+		if err := core.EnsureOwnership(found.AccountID, accountID, "executor", executorID); err != nil {
+			return cre.Run{}, err
 		}
 		exec = &found
 	}
@@ -201,8 +201,8 @@ func (s *Service) GetRun(ctx context.Context, accountID, runID string) (cre.Run,
 	if err != nil {
 		return cre.Run{}, err
 	}
-	if run.AccountID != accountID {
-		return cre.Run{}, fmt.Errorf("run %s does not belong to account %s", runID, accountID)
+	if err := core.EnsureOwnership(run.AccountID, accountID, "run", runID); err != nil {
+		return cre.Run{}, err
 	}
 	return run, nil
 }
@@ -238,8 +238,8 @@ func (s *Service) UpdateExecutor(ctx context.Context, exec cre.Executor) (cre.Ex
 	if err != nil {
 		return cre.Executor{}, err
 	}
-	if stored.AccountID != exec.AccountID {
-		return cre.Executor{}, fmt.Errorf("executor %s does not belong to account %s", exec.ID, exec.AccountID)
+	if err := core.EnsureOwnership(stored.AccountID, exec.AccountID, "executor", exec.ID); err != nil {
+		return cre.Executor{}, err
 	}
 	exec.AccountID = stored.AccountID
 	if err := s.normalizeExecutor(&exec); err != nil {
@@ -267,8 +267,8 @@ func (s *Service) GetExecutor(ctx context.Context, accountID, executorID string)
 	if err != nil {
 		return cre.Executor{}, err
 	}
-	if exec.AccountID != accountID {
-		return cre.Executor{}, fmt.Errorf("executor %s does not belong to account %s", executorID, accountID)
+	if err := core.EnsureOwnership(exec.AccountID, accountID, "executor", executorID); err != nil {
+		return cre.Executor{}, err
 	}
 	return exec, nil
 }

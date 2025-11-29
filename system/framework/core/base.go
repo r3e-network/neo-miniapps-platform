@@ -37,13 +37,31 @@ func (b *Base) SetTracer(tracer Tracer) {
 // EnsureAccount validates presence and optional existence of an account ID.
 func (b *Base) EnsureAccount(ctx context.Context, accountID string) error {
 	if strings.TrimSpace(accountID) == "" {
-		return fmt.Errorf("account_id is required")
+		return RequiredError("account_id")
 	}
 	if b.accounts == nil {
 		return nil
 	}
 	_, err := b.accounts.GetAccount(ctx, accountID)
 	return err
+}
+
+// ValidateAccount validates an account ID and wraps errors with context.
+// This is a convenience method that provides consistent error wrapping.
+func (b *Base) ValidateAccount(ctx context.Context, accountID string) error {
+	if err := b.EnsureAccount(ctx, accountID); err != nil {
+		return fmt.Errorf("account validation failed: %w", err)
+	}
+	return nil
+}
+
+// EnsureResourceOwnership validates that a resource belongs to the specified account.
+// This is a convenience method combining account validation and ownership check.
+func (b *Base) EnsureResourceOwnership(ctx context.Context, resourceAccountID, requestAccountID, resourceType, resourceID string) error {
+	if err := b.EnsureAccount(ctx, requestAccountID); err != nil {
+		return err
+	}
+	return EnsureOwnership(resourceAccountID, requestAccountID, resourceType, resourceID)
 }
 
 // NormalizeAccount trims and validates an account identifier. It returns the

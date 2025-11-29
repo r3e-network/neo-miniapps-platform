@@ -98,8 +98,8 @@ func (s *Service) CreateJob(ctx context.Context, accountID, functionID, name, sc
 		if err != nil {
 			return automation.Job{}, fmt.Errorf("function validation failed: %w", err)
 		}
-		if fn.AccountID != accountID {
-			return automation.Job{}, fmt.Errorf("function %s does not belong to account %s", functionID, accountID)
+		if err := core.EnsureOwnership(fn.AccountID, accountID, "function", functionID); err != nil {
+			return automation.Job{}, err
 		}
 	}
 

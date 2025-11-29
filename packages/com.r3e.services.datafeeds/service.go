@@ -156,8 +156,8 @@ func (s *Service) UpdateFeed(ctx context.Context, feed domaindf.Feed) (domaindf.
 	if err != nil {
 		return domaindf.Feed{}, err
 	}
-	if stored.AccountID != feed.AccountID {
-		return domaindf.Feed{}, fmt.Errorf("feed %s does not belong to account %s", feed.ID, feed.AccountID)
+	if err := core.EnsureOwnership(stored.AccountID, feed.AccountID, "feed", feed.ID); err != nil {
+		return domaindf.Feed{}, err
 	}
 	feed.AccountID = stored.AccountID
 	if err := s.normalizeFeed(&feed); err != nil {
@@ -185,8 +185,8 @@ func (s *Service) GetFeed(ctx context.Context, accountID, feedID string) (domain
 	if err != nil {
 		return domaindf.Feed{}, err
 	}
-	if feed.AccountID != accountID {
-		return domaindf.Feed{}, fmt.Errorf("feed %s does not belong to account %s", feedID, accountID)
+	if err := core.EnsureOwnership(feed.AccountID, accountID, "feed", feedID); err != nil {
+		return domaindf.Feed{}, err
 	}
 	return feed, nil
 }
@@ -209,8 +209,8 @@ func (s *Service) SubmitUpdate(ctx context.Context, accountID, feedID string, ro
 	if err != nil {
 		return domaindf.Update{}, err
 	}
-	if feed.AccountID != accountID {
-		return domaindf.Update{}, fmt.Errorf("feed %s does not belong to account %s", feedID, accountID)
+	if err := core.EnsureOwnership(feed.AccountID, accountID, "feed", feedID); err != nil {
+		return domaindf.Update{}, err
 	}
 	if roundID <= 0 {
 		return domaindf.Update{}, fmt.Errorf("round_id must be positive")

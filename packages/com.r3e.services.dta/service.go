@@ -101,8 +101,8 @@ func (s *Service) UpdateProduct(ctx context.Context, product domaindta.Product) 
 	if err != nil {
 		return domaindta.Product{}, err
 	}
-	if stored.AccountID != product.AccountID {
-		return domaindta.Product{}, fmt.Errorf("product %s does not belong to account %s", product.ID, product.AccountID)
+	if err := core.EnsureOwnership(stored.AccountID, product.AccountID, "product", product.ID); err != nil {
+		return domaindta.Product{}, err
 	}
 	product.AccountID = stored.AccountID
 	if err := s.normalizeProduct(&product); err != nil {
@@ -122,8 +122,8 @@ func (s *Service) GetProduct(ctx context.Context, accountID, productID string) (
 	if err != nil {
 		return domaindta.Product{}, err
 	}
-	if product.AccountID != accountID {
-		return domaindta.Product{}, fmt.Errorf("product %s does not belong to account %s", productID, accountID)
+	if err := core.EnsureOwnership(product.AccountID, accountID, "product", productID); err != nil {
+		return domaindta.Product{}, err
 	}
 	return product, nil
 }
@@ -189,8 +189,8 @@ func (s *Service) GetOrder(ctx context.Context, accountID, orderID string) (doma
 	if err != nil {
 		return domaindta.Order{}, err
 	}
-	if order.AccountID != accountID {
-		return domaindta.Order{}, fmt.Errorf("order %s does not belong to account %s", orderID, accountID)
+	if err := core.EnsureOwnership(order.AccountID, accountID, "order", orderID); err != nil {
+		return domaindta.Order{}, err
 	}
 	return order, nil
 }

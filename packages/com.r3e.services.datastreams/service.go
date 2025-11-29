@@ -136,8 +136,8 @@ func (s *Service) UpdateStream(ctx context.Context, stream domainds.Stream) (dom
 	if err != nil {
 		return domainds.Stream{}, err
 	}
-	if stored.AccountID != stream.AccountID {
-		return domainds.Stream{}, fmt.Errorf("stream %s does not belong to account %s", stream.ID, stream.AccountID)
+	if err := core.EnsureOwnership(stored.AccountID, stream.AccountID, "stream", stream.ID); err != nil {
+		return domainds.Stream{}, err
 	}
 	stream.AccountID = stored.AccountID
 	if err := s.normalizeStream(&stream); err != nil {
@@ -165,8 +165,8 @@ func (s *Service) GetStream(ctx context.Context, accountID, streamID string) (do
 	if err != nil {
 		return domainds.Stream{}, err
 	}
-	if stream.AccountID != accountID {
-		return domainds.Stream{}, fmt.Errorf("stream %s does not belong to account %s", streamID, accountID)
+	if err := core.EnsureOwnership(stream.AccountID, accountID, "stream", streamID); err != nil {
+		return domainds.Stream{}, err
 	}
 	return stream, nil
 }

@@ -52,6 +52,59 @@ the specification as the canonical contract before touching code:
 * Ensure all tests pass with `make test`
 * Maintain backward compatibility unless explicitly breaking changes
 
+### Service Layer Patterns
+
+When writing service code, follow these established patterns:
+
+#### Resource Ownership Checks
+
+Use `core.EnsureOwnership()` for multi-tenant resource access control instead of manual checks:
+
+```go
+// GOOD: Use the helper function
+if err := core.EnsureOwnership(resource.AccountID, requestAccountID, "feed", feedID); err != nil {
+    return Feed{}, err
+}
+
+// BAD: Manual ownership check (avoid this pattern)
+if resource.AccountID != requestAccountID {
+    return Feed{}, fmt.Errorf("feed %s does not belong to account %s", feedID, requestAccountID)
+}
+```
+
+Benefits:
+- Consistent error messages across all services
+- Returns structured `OwnershipError` that can be type-checked with `core.IsOwnershipError(err)`
+- Automatically wraps `ErrForbidden` for proper HTTP status code mapping
+
+#### Account Validation
+
+Use `base.EnsureAccount()` or `base.ValidateAccount()` for account validation:
+
+```go
+// Basic validation
+if err := s.base.EnsureAccount(ctx, accountID); err != nil {
+    return Result{}, err
+}
+
+// With error wrapping
+if err := s.base.ValidateAccount(ctx, accountID); err != nil {
+    return Result{}, err  // Error message: "account validation failed: ..."
+}
+```
+
+#### Error Types
+
+Use structured error types from `system/framework/core/errors.go`:
+
+| Error Type | Use Case | Helper |
+|------------|----------|--------|
+| `NewNotFoundError` | Resource not found | `IsNotFound(err)` |
+| `NewOwnershipError` | Resource belongs to different account | `IsOwnershipError(err)` |
+| `NewValidationError` | Input validation failure | `IsValidationError(err)` |
+| `NewAccessDeniedError` | ACL/permission denied | `IsForbidden(err)` |
+| `NewConflictError` | Duplicate/conflict | `IsConflict(err)` |
+
 ## Reporting Bugs
 
 We use GitHub issues to track public bugs. Report a bug by [opening a new issue](https://github.com/R3E-Network/service_layer/issues/new); it's that easy!

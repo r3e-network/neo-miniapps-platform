@@ -303,8 +303,8 @@ func (s *Service) CreateRequestWithOptions(ctx context.Context, accountID, sourc
 	if err != nil {
 		return oracle.Request{}, err
 	}
-	if src.AccountID != accountID {
-		return oracle.Request{}, fmt.Errorf("data source %s does not belong to account %s", sourceID, accountID)
+	if err := core.EnsureOwnership(src.AccountID, accountID, "data source", sourceID); err != nil {
+		return oracle.Request{}, err
 	}
 	if !src.Enabled {
 		return oracle.Request{}, fmt.Errorf("data source %s is disabled", sourceID)

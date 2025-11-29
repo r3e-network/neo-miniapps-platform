@@ -274,8 +274,8 @@ func (s *Service) WithdrawWithOptions(ctx context.Context, accountID, gasAccount
 	}
 	original := acct
 
-	if acct.AccountID != accountID {
-		return gasbank.Account{}, gasbank.Transaction{}, fmt.Errorf("gas account %s does not belong to account %s", gasAccountID, accountID)
+	if err := core.EnsureOwnership(acct.AccountID, accountID, "gas account", gasAccountID); err != nil {
+		return gasbank.Account{}, gasbank.Transaction{}, err
 	}
 
 	if acct.Available < amount-Epsilon {
@@ -541,8 +541,8 @@ func (s *Service) GetWithdrawal(ctx context.Context, accountID, transactionID st
 	if err != nil {
 		return gasbank.Transaction{}, err
 	}
-	if tx.UserAccountID != accountID {
-		return gasbank.Transaction{}, fmt.Errorf("withdrawal %s not owned by %s", transactionID, accountID)
+	if err := core.EnsureOwnership(tx.UserAccountID, accountID, "withdrawal", transactionID); err != nil {
+		return gasbank.Transaction{}, err
 	}
 	if tx.Type != gasbank.TransactionWithdrawal {
 		return gasbank.Transaction{}, fmt.Errorf("transaction %s is not a withdrawal", transactionID)
@@ -573,8 +573,8 @@ func (s *Service) ListSettlementAttempts(ctx context.Context, accountID, transac
 	if err != nil {
 		return nil, err
 	}
-	if tx.UserAccountID != accountID {
-		return nil, fmt.Errorf("transaction %s not owned by %s", transactionID, accountID)
+	if err := core.EnsureOwnership(tx.UserAccountID, accountID, "transaction", transactionID); err != nil {
+		return nil, err
 	}
 	clamped := core.ClampLimit(limit, core.DefaultListLimit, core.MaxListLimit)
 	return s.store.ListSettlementAttempts(ctx, transactionID, clamped)
@@ -607,8 +607,8 @@ func (s *Service) RetryDeadLetter(ctx context.Context, accountID, transactionID 
 	if err != nil {
 		return gasbank.Transaction{}, err
 	}
-	if entry.AccountID != accountID {
-		return gasbank.Transaction{}, fmt.Errorf("dead letter %s not owned by %s", transactionID, accountID)
+	if err := core.EnsureOwnership(entry.AccountID, accountID, "dead letter", transactionID); err != nil {
+		return gasbank.Transaction{}, err
 	}
 	tx, err := s.store.GetGasTransaction(ctx, transactionID)
 	if err != nil {
@@ -658,8 +658,8 @@ func (s *Service) DeleteDeadLetter(ctx context.Context, accountID, transactionID
 	if err != nil {
 		return err
 	}
-	if entry.AccountID != accountID {
-		return fmt.Errorf("dead letter %s not owned by %s", transactionID, accountID)
+	if err := core.EnsureOwnership(entry.AccountID, accountID, "dead letter", transactionID); err != nil {
+		return err
 	}
 	tx, err := s.store.GetGasTransaction(ctx, transactionID)
 	if err != nil {
