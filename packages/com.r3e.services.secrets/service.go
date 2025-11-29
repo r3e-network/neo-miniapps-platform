@@ -131,7 +131,7 @@ func (s *Service) CreateWithOptions(ctx context.Context, accountID, name, value 
 		return secret.Metadata{}, err
 	}
 	if value == "" {
-		return secret.Metadata{}, fmt.Errorf("value is required")
+		return secret.Metadata{}, core.RequiredError("value")
 	}
 
 	ciphertext, err := s.encrypt(value)
@@ -194,7 +194,7 @@ func (s *Service) UpdateWithOptions(ctx context.Context, accountID, name string,
 	// Update value if provided
 	if opts.Value != nil {
 		if *opts.Value == "" {
-			return secret.Metadata{}, fmt.Errorf("value is required")
+			return secret.Metadata{}, core.RequiredError("value")
 		}
 		ciphertext, err := s.encrypt(*opts.Value)
 		if err != nil {
@@ -375,7 +375,7 @@ func (s *Service) decrypt(value string) (string, error) {
 func validateName(name string) error {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
-		return fmt.Errorf("name is required")
+		return core.RequiredError("name")
 	}
 	if strings.Contains(trimmed, "|") {
 		return fmt.Errorf("name cannot contain '|'")

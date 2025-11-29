@@ -249,7 +249,7 @@ func (s *Service) normalizeLane(lane *domainccip.Lane) error {
 	lane.DeliveryPolicy = cloneAnyMap(lane.DeliveryPolicy)
 
 	if lane.Name == "" {
-		return fmt.Errorf("name is required")
+		return core.RequiredError("name")
 	}
 	if lane.SourceChain == "" || lane.DestChain == "" {
 		return fmt.Errorf("source_chain and dest_chain are required")

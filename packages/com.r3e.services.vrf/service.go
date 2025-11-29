@@ -195,10 +195,10 @@ func (s *Service) CreateRequest(ctx context.Context, accountID, keyID, consumer,
 	consumer = strings.TrimSpace(consumer)
 	seed = strings.TrimSpace(seed)
 	if consumer == "" {
-		return domainvrf.Request{}, fmt.Errorf("consumer is required")
+		return domainvrf.Request{}, core.RequiredError("consumer")
 	}
 	if seed == "" {
-		return domainvrf.Request{}, fmt.Errorf("seed is required")
+		return domainvrf.Request{}, core.RequiredError("seed")
 	}
 	req := domainvrf.Request{
 		AccountID: accountID,
@@ -253,10 +253,10 @@ func (s *Service) normalizeKey(key *domainvrf.Key) error {
 	key.Attestation = strings.TrimSpace(key.Attestation)
 	key.Metadata = core.NormalizeMetadata(key.Metadata)
 	if key.PublicKey == "" {
-		return fmt.Errorf("public_key is required")
+		return core.RequiredError("public_key")
 	}
 	if key.WalletAddress == "" {
-		return fmt.Errorf("wallet_address is required")
+		return core.RequiredError("wallet_address")
 	}
 	status := domainvrf.KeyStatus(strings.ToLower(strings.TrimSpace(string(key.Status))))
 	if status == "" {
@@ -273,7 +273,7 @@ func (s *Service) normalizeKey(key *domainvrf.Key) error {
 
 func (s *Service) ensureWalletOwned(ctx context.Context, accountID, wallet string) error {
 	if strings.TrimSpace(wallet) == "" {
-		return fmt.Errorf("wallet_address is required")
+		return core.RequiredError("wallet_address")
 	}
 	return s.base.EnsureSignersOwned(ctx, accountID, []string{wallet})
 }

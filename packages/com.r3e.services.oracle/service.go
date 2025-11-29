@@ -143,13 +143,13 @@ func (s *Service) CreateSource(ctx context.Context, accountID, name, url, method
 	description = strings.TrimSpace(description)
 
 	if accountID == "" {
-		return oracle.DataSource{}, fmt.Errorf("account_id is required")
+		return oracle.DataSource{}, core.RequiredError("account_id")
 	}
 	if name == "" {
-		return oracle.DataSource{}, fmt.Errorf("name is required")
+		return oracle.DataSource{}, core.RequiredError("name")
 	}
 	if url == "" {
-		return oracle.DataSource{}, fmt.Errorf("url is required")
+		return oracle.DataSource{}, core.RequiredError("url")
 	}
 	if method == "" {
 		method = "GET"
@@ -290,10 +290,10 @@ func (s *Service) CreateRequestWithOptions(ctx context.Context, accountID, sourc
 	sourceID = strings.TrimSpace(sourceID)
 
 	if accountID == "" {
-		return oracle.Request{}, fmt.Errorf("account_id is required")
+		return oracle.Request{}, core.RequiredError("account_id")
 	}
 	if sourceID == "" {
-		return oracle.Request{}, fmt.Errorf("data_source_id is required")
+		return oracle.Request{}, core.RequiredError("data_source_id")
 	}
 	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
 		return oracle.Request{}, fmt.Errorf("account validation failed: %w", err)

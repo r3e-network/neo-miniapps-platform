@@ -142,7 +142,7 @@ func (s *Service) CreateServiceBinding(ctx context.Context, binding domaincontra
 
 	binding.ServiceID = strings.TrimSpace(binding.ServiceID)
 	if binding.ServiceID == "" {
-		return domaincontract.ServiceContractBinding{}, fmt.Errorf("service_id is required")
+		return domaincontract.ServiceContractBinding{}, core.RequiredError("service_id")
 	}
 	binding.Role = strings.ToLower(strings.TrimSpace(binding.Role))
 	if binding.Role == "" {
@@ -191,13 +191,13 @@ func (s *Service) normalizeTemplate(t *domaincontract.Template) error {
 	t.Tags = core.NormalizeTags(t.Tags)
 
 	if t.Name == "" {
-		return fmt.Errorf("name is required")
+		return core.RequiredError("name")
 	}
 	if t.ABI == "" {
-		return fmt.Errorf("abi is required")
+		return core.RequiredError("abi")
 	}
 	if t.Bytecode == "" {
-		return fmt.Errorf("bytecode is required")
+		return core.RequiredError("bytecode")
 	}
 	if t.Version == "" {
 		t.Version = "1.0.0"

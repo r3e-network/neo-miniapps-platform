@@ -2,7 +2,6 @@ package accounts
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/R3E-Network/service_layer/applications/storage"
@@ -75,7 +74,7 @@ func New(store storage.AccountStore, log *logger.Logger) *Service {
 // Create provisions a new account with optional metadata.
 func (s *Service) Create(ctx context.Context, owner string, metadata map[string]string) (account.Account, error) {
 	if owner == "" {
-		return account.Account{}, fmt.Errorf("owner is required")
+		return account.Account{}, core.RequiredError("owner")
 	}
 
 	acct := account.Account{Owner: owner, Metadata: metadata}

@@ -299,7 +299,7 @@ func (s *Service) Invoke(ctx context.Context, accountID, contractID, methodName 
 		return domaincontract.Invocation{}, fmt.Errorf("contract %s is not active (status: %s)", contractID, c.Status)
 	}
 	if methodName = strings.TrimSpace(methodName); methodName == "" {
-		return domaincontract.Invocation{}, fmt.Errorf("method_name is required")
+		return domaincontract.Invocation{}, core.RequiredError("method_name")
 	}
 
 	invocation := domaincontract.Invocation{
@@ -406,10 +406,10 @@ func (s *Service) normalizeContract(c *domaincontract.Contract) error {
 	c.Tags = core.NormalizeTags(c.Tags)
 
 	if c.Name == "" {
-		return fmt.Errorf("name is required")
+		return core.RequiredError("name")
 	}
 	if c.Network == "" {
-		return fmt.Errorf("network is required")
+		return core.RequiredError("network")
 	}
 	if c.Version == "" {
 		c.Version = "1.0.0"

@@ -239,10 +239,10 @@ func (s *Service) normalizeStream(stream *domainds.Stream) error {
 	stream.Frequency = strings.TrimSpace(stream.Frequency)
 	stream.Metadata = core.NormalizeMetadata(stream.Metadata)
 	if stream.Name == "" {
-		return fmt.Errorf("name is required")
+		return core.RequiredError("name")
 	}
 	if stream.Symbol == "" {
-		return fmt.Errorf("symbol is required")
+		return core.RequiredError("symbol")
 	}
 	if stream.SLAms < 0 {
 		stream.SLAms = 0

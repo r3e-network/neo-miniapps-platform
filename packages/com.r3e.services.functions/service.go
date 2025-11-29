@@ -176,13 +176,13 @@ func (s *Service) Invoke(ctx context.Context, payload any) (any, error) {
 // Create registers a new function definition.
 func (s *Service) Create(ctx context.Context, def function.Definition) (function.Definition, error) {
 	if def.AccountID == "" {
-		return function.Definition{}, fmt.Errorf("account_id is required")
+		return function.Definition{}, core.RequiredError("account_id")
 	}
 	if def.Name == "" {
-		return function.Definition{}, fmt.Errorf("name is required")
+		return function.Definition{}, core.RequiredError("name")
 	}
 	if def.Source == "" {
-		return function.Definition{}, fmt.Errorf("source is required")
+		return function.Definition{}, core.RequiredError("source")
 	}
 
 	if err := s.base.EnsureAccount(ctx, def.AccountID); err != nil {

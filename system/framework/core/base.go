@@ -69,7 +69,7 @@ func (b *Base) EnsureResourceOwnership(ctx context.Context, resourceAccountID, r
 func (b *Base) NormalizeAccount(ctx context.Context, accountID string) (string, error) {
 	trimmed := strings.TrimSpace(accountID)
 	if trimmed == "" {
-		return "", fmt.Errorf("account_id is required")
+		return "", RequiredError("account_id")
 	}
 	if b.accounts == nil {
 		return trimmed, nil

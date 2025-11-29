@@ -223,7 +223,7 @@ func (s *Service) SubmitUpdate(ctx context.Context, accountID, feedID string, ro
 	signer = strings.TrimSpace(signer)
 	if len(feed.SignerSet) > 0 {
 		if signer == "" {
-			return domaindf.Update{}, fmt.Errorf("signer is required")
+			return domaindf.Update{}, core.RequiredError("signer")
 		}
 		if !containsCaseInsensitive(feed.SignerSet, signer) {
 			return domaindf.Update{}, fmt.Errorf("signer %s is not authorized for feed %s", signer, feedID)
@@ -394,7 +394,7 @@ func shouldPublishDatafeed(prevPrice *big.Int, newPrice *big.Int, prevTs, newTs 
 func normalizePrice(value string, decimals int) (*big.Int, string, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return nil, "", fmt.Errorf("price is required")
+		return nil, "", core.RequiredError("price")
 	}
 	scaled, err := normalizePriceInt(value, decimals)
 	if err != nil {
@@ -565,7 +565,7 @@ func (s *Service) normalizeFeed(feed *domaindf.Feed) error {
 		return fmt.Errorf("signer_set must include at least %d signers", s.minSigners)
 	}
 	if feed.Pair == "" {
-		return fmt.Errorf("pair is required")
+		return core.RequiredError("pair")
 	}
 	if feed.Decimals <= 0 {
 		return fmt.Errorf("decimals must be positive")

@@ -166,7 +166,7 @@ func (s *Service) CreateSealedKey(ctx context.Context, key domainconf.SealedKey)
 	}
 	key.Name = strings.TrimSpace(key.Name)
 	if key.Name == "" {
-		return domainconf.SealedKey{}, fmt.Errorf("name is required")
+		return domainconf.SealedKey{}, core.RequiredError("name")
 	}
 	key.Metadata = core.NormalizeMetadata(key.Metadata)
 	attrs := map[string]string{"account_id": key.AccountID, "enclave_id": key.EnclaveID, "resource": "sealed_key"}
@@ -201,7 +201,7 @@ func (s *Service) CreateAttestation(ctx context.Context, att domainconf.Attestat
 	}
 	att.Report = strings.TrimSpace(att.Report)
 	if att.Report == "" {
-		return domainconf.Attestation{}, fmt.Errorf("report is required")
+		return domainconf.Attestation{}, core.RequiredError("report")
 	}
 	att.Status = strings.TrimSpace(att.Status)
 	if att.Status == "" {
@@ -244,10 +244,10 @@ func (s *Service) normalizeEnclave(enclave *domainconf.Enclave) error {
 	enclave.Attestation = strings.TrimSpace(enclave.Attestation)
 	enclave.Metadata = core.NormalizeMetadata(enclave.Metadata)
 	if enclave.Name == "" {
-		return fmt.Errorf("name is required")
+		return core.RequiredError("name")
 	}
 	if enclave.Endpoint == "" {
-		return fmt.Errorf("endpoint is required")
+		return core.RequiredError("endpoint")
 	}
 	status := domainconf.EnclaveStatus(strings.ToLower(strings.TrimSpace(string(enclave.Status))))
 	if status == "" {

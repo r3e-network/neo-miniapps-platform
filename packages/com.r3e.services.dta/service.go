@@ -153,11 +153,11 @@ func (s *Service) CreateOrder(ctx context.Context, accountID, productID string, 
 	}
 	amount = strings.TrimSpace(amount)
 	if amount == "" {
-		return domaindta.Order{}, fmt.Errorf("amount is required")
+		return domaindta.Order{}, core.RequiredError("amount")
 	}
 	wallet := strings.ToLower(strings.TrimSpace(walletAddr))
 	if wallet == "" {
-		return domaindta.Order{}, fmt.Errorf("wallet_address is required")
+		return domaindta.Order{}, core.RequiredError("wallet_address")
 	}
 	if err := s.ensureWalletOwned(ctx, accountID, wallet); err != nil {
 		return domaindta.Order{}, err
@@ -211,10 +211,10 @@ func (s *Service) normalizeProduct(product *domaindta.Product) error {
 	product.SettlementTerms = strings.TrimSpace(product.SettlementTerms)
 	product.Metadata = core.NormalizeMetadata(product.Metadata)
 	if product.Name == "" {
-		return fmt.Errorf("name is required")
+		return core.RequiredError("name")
 	}
 	if product.Symbol == "" {
-		return fmt.Errorf("symbol is required")
+		return core.RequiredError("symbol")
 	}
 	status := domaindta.ProductStatus(strings.ToLower(strings.TrimSpace(string(product.Status))))
 	if status == "" {

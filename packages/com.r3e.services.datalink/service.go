@@ -117,7 +117,7 @@ func (s *Service) Subscribe(ctx context.Context, event string, handler func(cont
 		return fmt.Errorf("unsupported event: %s", event)
 	}
 	if handler == nil {
-		return fmt.Errorf("handler is required")
+		return core.RequiredError("handler")
 	}
 	return fmt.Errorf("subscribe not supported for datalink; publish delivery events instead")
 }
@@ -270,13 +270,13 @@ func (s *Service) normalizeChannel(ch *domainlink.Channel) error {
 	ch.Metadata = core.NormalizeMetadata(ch.Metadata)
 	ch.SignerSet = core.NormalizeTags(ch.SignerSet)
 	if ch.Name == "" {
-		return fmt.Errorf("name is required")
+		return core.RequiredError("name")
 	}
 	if ch.Endpoint == "" {
-		return fmt.Errorf("endpoint is required")
+		return core.RequiredError("endpoint")
 	}
 	if len(ch.SignerSet) == 0 {
-		return fmt.Errorf("signer_set is required")
+		return core.RequiredError("signer_set")
 	}
 	status := domainlink.ChannelStatus(strings.ToLower(strings.TrimSpace(string(ch.Status))))
 	if status == "" {

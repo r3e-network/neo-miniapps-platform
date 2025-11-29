@@ -280,7 +280,7 @@ func (s *Service) normalizePlaybook(pb *cre.Playbook) error {
 	pb.Tags = core.NormalizeTags(pb.Tags)
 
 	if pb.Name == "" {
-		return fmt.Errorf("name is required")
+		return core.RequiredError("name")
 	}
 	if len(pb.Steps) == 0 {
 		return fmt.Errorf("playbook must contain at least one step")
@@ -342,13 +342,13 @@ func (s *Service) normalizeExecutor(exec *cre.Executor) error {
 	exec.Metadata = core.NormalizeMetadata(exec.Metadata)
 	exec.Tags = core.NormalizeTags(exec.Tags)
 	if exec.Name == "" {
-		return fmt.Errorf("name is required")
+		return core.RequiredError("name")
 	}
 	if exec.Type == "" {
 		exec.Type = "generic"
 	}
 	if exec.Endpoint == "" {
-		return fmt.Errorf("endpoint is required")
+		return core.RequiredError("endpoint")
 	}
 	return nil
 }

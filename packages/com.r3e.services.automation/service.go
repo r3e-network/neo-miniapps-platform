@@ -78,16 +78,16 @@ func (s *Service) CreateJob(ctx context.Context, accountID, functionID, name, sc
 	schedule = strings.TrimSpace(schedule)
 
 	if accountID == "" {
-		return automation.Job{}, fmt.Errorf("account_id is required")
+		return automation.Job{}, core.RequiredError("account_id")
 	}
 	if functionID == "" {
-		return automation.Job{}, fmt.Errorf("function_id is required")
+		return automation.Job{}, core.RequiredError("function_id")
 	}
 	if name == "" {
-		return automation.Job{}, fmt.Errorf("name is required")
+		return automation.Job{}, core.RequiredError("name")
 	}
 	if schedule == "" {
-		return automation.Job{}, fmt.Errorf("schedule is required")
+		return automation.Job{}, core.RequiredError("schedule")
 	}
 
 	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
@@ -237,7 +237,7 @@ func (s *Service) ListJobs(ctx context.Context, accountID string) ([]automation.
 		if accountID == "" {
 			return s.store.ListAutomationJobs(ctx, "")
 		}
-		return nil, fmt.Errorf("account_id is required")
+		return nil, core.RequiredError("account_id")
 	}
 	if err := s.base.EnsureAccount(ctx, trimmed); err != nil {
 		return nil, err
