@@ -82,14 +82,14 @@ affinity: {}
 
 livenessProbe:
   httpGet:
-    path: /health/liveness
+    path: /livez
     port: 8080
   initialDelaySeconds: 15
   periodSeconds: 20
 
 readinessProbe:
   httpGet:
-    path: /health/readiness
+    path: /readyz
     port: 8080
   initialDelaySeconds: 5
   periodSeconds: 10
