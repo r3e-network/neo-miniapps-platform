@@ -319,20 +319,9 @@ func normalizeStep(step *cre.Step, idx int) error {
 	if step.Config == nil {
 		step.Config = map[string]any{}
 	} else {
-		step.Config = cloneAnyMap(step.Config)
+		step.Config = core.CloneAnyMap(step.Config)
 	}
 	return nil
-}
-
-func cloneAnyMap(src map[string]any) map[string]any {
-	if len(src) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(src))
-	for k, v := range src {
-		out[k] = v
-	}
-	return out
 }
 
 func (s *Service) normalizeExecutor(exec *cre.Executor) error {

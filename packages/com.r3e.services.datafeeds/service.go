@@ -225,7 +225,7 @@ func (s *Service) SubmitUpdate(ctx context.Context, accountID, feedID string, ro
 		if signer == "" {
 			return domaindf.Update{}, core.RequiredError("signer")
 		}
-		if !containsCaseInsensitive(feed.SignerSet, signer) {
+		if !core.ContainsCaseInsensitive(feed.SignerSet, signer) {
 			return domaindf.Update{}, fmt.Errorf("signer %s is not authorized for feed %s", signer, feedID)
 		}
 	}
@@ -536,15 +536,6 @@ func extremumPrice(prices []*big.Int, wantMax bool) *big.Int {
 		}
 	}
 	return choice
-}
-
-func containsCaseInsensitive(list []string, target string) bool {
-	for _, item := range list {
-		if strings.EqualFold(item, target) {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *Service) normalizeFeed(feed *domaindf.Feed) error {

@@ -38,3 +38,25 @@ func NormalizeTags(tags []string) []string {
 	}
 	return out
 }
+
+// CloneAnyMap performs a shallow copy of a map[string]any.
+func CloneAnyMap(src map[string]any) map[string]any {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(src))
+	for k, v := range src {
+		out[k] = v
+	}
+	return out
+}
+
+// ContainsCaseInsensitive checks if a string slice contains a target (case-insensitive).
+func ContainsCaseInsensitive(list []string, target string) bool {
+	for _, item := range list {
+		if strings.EqualFold(item, target) {
+			return true
+		}
+	}
+	return false
+}

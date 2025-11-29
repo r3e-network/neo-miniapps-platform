@@ -191,7 +191,7 @@ func (s *Service) SendMessage(ctx context.Context, accountID, laneID string, pay
 		AccountID:      accountID,
 		LaneID:         laneID,
 		Status:         domainccip.MessageStatusPending,
-		Payload:        cloneAnyMap(payload),
+		Payload:        core.CloneAnyMap(payload),
 		TokenTransfers: normalizeTransfers(tokens),
 		Metadata:       core.NormalizeMetadata(metadata),
 		Tags:           core.NormalizeTags(tags),
@@ -245,8 +245,8 @@ func (s *Service) normalizeLane(lane *domainccip.Lane) error {
 	lane.SignerSet = core.NormalizeTags(lane.SignerSet)
 	lane.Metadata = core.NormalizeMetadata(lane.Metadata)
 	lane.Tags = core.NormalizeTags(lane.Tags)
-	lane.AllowedTokens = normalizeStringList(lane.AllowedTokens)
-	lane.DeliveryPolicy = cloneAnyMap(lane.DeliveryPolicy)
+	lane.AllowedTokens = core.NormalizeTags(lane.AllowedTokens)
+	lane.DeliveryPolicy = core.CloneAnyMap(lane.DeliveryPolicy)
 
 	if lane.Name == "" {
 		return core.RequiredError("name")
@@ -255,26 +255,6 @@ func (s *Service) normalizeLane(lane *domainccip.Lane) error {
 		return fmt.Errorf("source_chain and dest_chain are required")
 	}
 	return nil
-}
-
-func normalizeStringList(values []string) []string {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(values))
-	seen := make(map[string]struct{}, len(values))
-	for _, val := range values {
-		trimmed := strings.ToLower(strings.TrimSpace(val))
-		if trimmed == "" {
-			continue
-		}
-		if _, exists := seen[trimmed]; exists {
-			continue
-		}
-		seen[trimmed] = struct{}{}
-		out = append(out, trimmed)
-	}
-	return out
 }
 
 func normalizeTransfers(transfers []domainccip.TokenTransfer) []domainccip.TokenTransfer {
@@ -297,13 +277,3 @@ func normalizeTransfers(transfers []domainccip.TokenTransfer) []domainccip.Token
 	return result
 }
 
-func cloneAnyMap(src map[string]any) map[string]any {
-	if len(src) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(src))
-	for k, v := range src {
-		out[k] = v
-	}
-	return out
-}
