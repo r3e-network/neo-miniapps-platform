@@ -2,9 +2,9 @@ name: Neo N3 Service Layer CI/CD
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, master, develop ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, master, develop ]
   workflow_dispatch:
     inputs:
       deploy:
@@ -260,7 +260,7 @@ jobs:
           key: ${{ needs.setup.outputs.cache-key }}
 
       - name: Run integration tests
-        run: go test -v ./internal/...
+        run: go test -v -tags integration ./applications/httpapi/...
         env:
           DATABASE_HOST: localhost
           DATABASE_PORT: 5432
