@@ -16,9 +16,7 @@ import (
 	"github.com/R3E-Network/service_layer/domain/function"
 	"github.com/R3E-Network/service_layer/domain/gasbank"
 	"github.com/R3E-Network/service_layer/domain/oracle"
-	"github.com/R3E-Network/service_layer/domain/pricefeed"
 	"github.com/R3E-Network/service_layer/domain/secret"
-	"github.com/R3E-Network/service_layer/domain/trigger"
 	domainvrf "github.com/R3E-Network/service_layer/domain/vrf"
 )
 
@@ -70,22 +68,6 @@ func TestTenantFiltersAcrossStores(t *testing.T) {
 	expectListed(t, "functions filtered", 0, len(mustListFunctions(ctx, store, acct.ID)))
 	expectListed(t, "automation filtered", 0, len(mustListAutomation(ctx, store, acct.ID)))
 
-	// Triggers
-	trg, err := store.CreateTrigger(ctx, trigger.Trigger{
-		AccountID:  acct.ID,
-		FunctionID: fn.ID,
-		Rule:       "cron:* * * * *",
-		Enabled:    true,
-	})
-	if err != nil {
-		t.Fatalf("create trigger: %v", err)
-	}
-	expectListed(t, "triggers present", 1, len(mustListTriggers(ctx, store, acct.ID)))
-	if _, err := store.db.ExecContext(ctx, `UPDATE app_triggers SET tenant = 'tenant-b' WHERE id = $1`, trg.ID); err != nil {
-		t.Fatalf("mismatch trigger tenant: %v", err)
-	}
-	expectListed(t, "triggers filtered", 0, len(mustListTriggers(ctx, store, acct.ID)))
-
 	// Data feeds
 	feed, err := store.CreateDataFeed(ctx, domaindf.Feed{
 		AccountID:    acct.ID,
@@ -119,26 +101,6 @@ func TestTenantFiltersAcrossStores(t *testing.T) {
 		t.Fatalf("mismatch datafeed update tenant: %v", err)
 	}
 	expectListed(t, "datafeed updates filtered", 0, len(mustListDataFeedUpdates(ctx, store, feed.ID)))
-
-	// Price feeds
-	pf, err := store.CreatePriceFeed(ctx, pricefeed.Feed{
-		AccountID:        acct.ID,
-		BaseAsset:        "ETH",
-		QuoteAsset:       "USD",
-		Pair:             "eth/usd",
-		UpdateInterval:   "1m",
-		DeviationPercent: 1,
-		Heartbeat:        "1m",
-		Active:           true,
-	})
-	if err != nil {
-		t.Fatalf("create price feed: %v", err)
-	}
-	expectListed(t, "pricefeeds present", 1, len(mustListPriceFeeds(ctx, store, acct.ID)))
-	if _, err := store.db.ExecContext(ctx, `UPDATE app_price_feeds SET tenant = 'tenant-b' WHERE id = $1`, pf.ID); err != nil {
-		t.Fatalf("mismatch pricefeed tenant: %v", err)
-	}
-	expectListed(t, "pricefeeds filtered", 0, len(mustListPriceFeeds(ctx, store, acct.ID)))
 
 	// Oracle sources
 	src, err := store.CreateDataSource(ctx, oracle.DataSource{
@@ -431,14 +393,6 @@ func mustListAutomation(ctx context.Context, store *Store, accountID string) []a
 	return list
 }
 
-func mustListTriggers(ctx context.Context, store *Store, accountID string) []trigger.Trigger {
-	list, err := store.ListTriggers(ctx, accountID)
-	if err != nil {
-		panic(err)
-	}
-	return list
-}
-
 func mustListDataFeeds(ctx context.Context, store *Store, accountID string) []domaindf.Feed {
 	list, err := store.ListDataFeeds(ctx, accountID)
 	if err != nil {
@@ -449,14 +403,6 @@ func mustListDataFeeds(ctx context.Context, store *Store, accountID string) []do
 
 func mustListDataFeedUpdates(ctx context.Context, store *Store, feedID string) []domaindf.Update {
 	list, err := store.ListDataFeedUpdates(ctx, feedID, 10)
-	if err != nil {
-		panic(err)
-	}
-	return list
-}
-
-func mustListPriceFeeds(ctx context.Context, store *Store, accountID string) []pricefeed.Feed {
-	list, err := store.ListPriceFeeds(ctx, accountID)
 	if err != nil {
 		panic(err)
 	}

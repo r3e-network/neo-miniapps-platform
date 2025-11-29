@@ -28,10 +28,7 @@ import (
 	"github.com/R3E-Network/service_layer/packages/com.r3e.services.functions"
 	gasbanksvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.gasbank"
 	oraclesvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.oracle"
-	pricefeedsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.pricefeed"
-	randomsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.random"
 	"github.com/R3E-Network/service_layer/packages/com.r3e.services.secrets"
-	"github.com/R3E-Network/service_layer/packages/com.r3e.services.triggers"
 	vrfsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.vrf"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
@@ -41,10 +38,8 @@ import (
 type Stores struct {
 	Accounts         storage.AccountStore
 	Functions        storage.FunctionStore
-	Triggers         storage.TriggerStore
 	GasBank          storage.GasBankStore
 	Automation       storage.AutomationStore
-	PriceFeeds       storage.PriceFeedStore
 	DataFeeds        storage.DataFeedStore
 	DataStreams      storage.DataStreamStore
 	DataLink         storage.DataLinkStore
@@ -63,10 +58,7 @@ type Stores struct {
 // configuration when embedding the application or running tests.
 type RuntimeConfig struct {
 	TEEMode                string
-	RandomSigningKey       string
 	CREHTTPRunner          bool
-	PriceFeedFetchURL      string
-	PriceFeedFetchKey      string
 	GasBankResolverURL     string
 	GasBankResolverKey     string
 	GasBankPollInterval    string
@@ -117,10 +109,7 @@ type resolvedBuilder struct {
 
 type runtimeSettings struct {
 	teeMode             string
-	randomSigningKey    string
 	creHTTPRunner       bool
-	priceFeedFetchURL   string
-	priceFeedFetchKey   string
 	gasBankResolverURL  string
 	gasBankResolverKey  string
 	gasBankPollInterval time.Duration
@@ -143,17 +132,11 @@ func validateStores(stores Stores) error {
 	if stores.Functions == nil {
 		missing["functions"] = true
 	}
-	if stores.Triggers == nil {
-		missing["triggers"] = true
-	}
 	if stores.GasBank == nil {
 		missing["gasbank"] = true
 	}
 	if stores.Automation == nil {
 		missing["automation"] = true
-	}
-	if stores.PriceFeeds == nil {
-		missing["pricefeeds"] = true
 	}
 	if stores.DataFeeds == nil {
 		missing["datafeeds"] = true
@@ -240,10 +223,8 @@ type Application struct {
 
 	Accounts           *accounts.Service
 	Functions          *functions.Service
-	Triggers           *triggers.Service
 	GasBank            *gasbanksvc.Service
 	Automation         *automationsvc.Service
-	PriceFeeds         *pricefeedsvc.Service
 	DataFeeds          *datafeedsvc.Service
 	DataStreams        *datastreamsvc.Service
 	DataLink           *datalinksvc.Service
@@ -251,14 +232,12 @@ type Application struct {
 	Confidential       *confsvc.Service
 	Oracle             *oraclesvc.Service
 	Secrets            *secrets.Service
-	Random             *randomsvc.Service
 	CRE                *cresvc.Service
 	CCIP               *ccipsvc.Service
 	VRF                *vrfsvc.Service
 	OracleRunnerTokens []string
 	WorkspaceWallets   storage.WorkspaceWalletStore
 	AutomationRunner   *automationsvc.Scheduler
-	PriceFeedRunner    *pricefeedsvc.Refresher
 	OracleRunner       *oraclesvc.Dispatcher
 	GasBankSettlement  system.Service
 
@@ -294,11 +273,8 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 	}
 	funcService.AttachExecutor(executor)
 	funcService.AttachSecretResolver(secretsService)
-	trigService := triggers.New(stores.Accounts, stores.Functions, stores.Triggers, log)
 	gasService := gasbanksvc.New(stores.Accounts, stores.GasBank, log)
 	automationService := automationsvc.New(stores.Accounts, stores.Functions, stores.Automation, log)
-	priceFeedService := pricefeedsvc.New(stores.Accounts, stores.PriceFeeds, log)
-	priceFeedService.WithObservationHooks(metrics.PriceFeedSubmissionHooks())
 	dataFeedService := datafeedsvc.New(stores.Accounts, stores.DataFeeds, log)
 	dataFeedService.WithAggregationConfig(options.runtime.dataFeedMinSigners, options.runtime.dataFeedAggregation)
 	dataFeedService.WithObservationHooks(metrics.DataFeedUpdateHooks())
@@ -323,21 +299,9 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 	vrfService.WithWorkspaceWallets(stores.WorkspaceWallets)
 	vrfService.WithDispatcherHooks(metrics.VRFDispatchHooks())
 
-	var randomOpts []randomsvc.Option
-	if key := options.runtime.randomSigningKey; key != "" {
-		if decoded, err := decodeSigningKey(key); err != nil {
-			log.WithError(err).Warn("configure random signing key")
-		} else {
-			randomOpts = append(randomOpts, randomsvc.WithSigningKey(decoded))
-		}
-	} else {
-		log.Info("random signing key not configured; randomness signatures rotate on restart")
-	}
-	randomService := randomsvc.New(stores.Accounts, log, randomOpts...)
-
 	httpClient := options.httpClient
 
-	funcService.AttachDependencies(trigService, automationService, priceFeedService, dataFeedService, dataStreamService, dataLinkService, oracleService, gasService, randomService)
+	funcService.AttachDependencies(automationService, dataFeedService, dataStreamService, dataLinkService, oracleService, gasService, vrfService)
 
 	if options.runtime.creHTTPRunner {
 		creService.WithRunner(cresvc.NewHTTPRunner(httpClient, log))
@@ -347,18 +311,6 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 	autoRunner.WithDispatcher(automationsvc.NewFunctionDispatcher(automationsvc.FunctionRunnerFunc(func(ctx context.Context, functionID string, payload map[string]any) (function.Execution, error) {
 		return funcService.Execute(ctx, functionID, payload)
 	}), automationService, log))
-	priceRunner := pricefeedsvc.NewRefresher(priceFeedService, log)
-	priceRunner.WithObservationHooks(metrics.PriceFeedRefreshHooks())
-	if endpoint := options.runtime.priceFeedFetchURL; endpoint != "" {
-		fetcher, err := pricefeedsvc.NewHTTPFetcher(httpClient, endpoint, options.runtime.priceFeedFetchKey, log)
-		if err != nil {
-			log.WithError(err).Warn("configure price feed fetcher")
-		} else {
-			priceRunner.WithFetcher(fetcher)
-		}
-	} else {
-		log.Warn("price feed fetch URL not configured; price feed refresher disabled")
-	}
 
 	oracleRunner := oraclesvc.NewDispatcher(oracleService, log)
 	oracleRunner.WithResolver(oraclesvc.NewHTTPResolver(oracleService, httpClient, log))
@@ -380,7 +332,7 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 		log.Warn("gas bank resolver URL not configured; gas bank settlement disabled")
 	}
 
-	services := []system.Service{autoRunner, priceRunner, oracleRunner}
+	services := []system.Service{autoRunner, oracleRunner}
 	if settlement != nil {
 		services = append(services, settlement)
 	}
@@ -390,18 +342,15 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 		for _, svc := range []system.Service{
 			acctService,
 			funcService,
-			trigService,
 			secretsService,
 			gasService,
 			automationService,
-			priceFeedService,
 			dataFeedService,
 			dataStreamService,
 			dataLinkService,
 			dtaService,
 			confService,
 			oracleService,
-			randomService,
 			creService,
 			ccipService,
 			vrfService,
@@ -419,10 +368,10 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 
 	var descrProviders []system.DescriptorProvider
 	descrProviders = appendDescriptorProviders(descrProviders,
-		acctService, funcService, trigService, gasService, automationService,
-		priceFeedService, dataFeedService, dataStreamService, dataLinkService,
-		dtaService, confService, oracleService, secretsService, randomService,
-		creService, ccipService, vrfService, autoRunner, priceRunner, oracleRunner,
+		acctService, funcService, gasService, automationService,
+		dataFeedService, dataStreamService, dataLinkService,
+		dtaService, confService, oracleService, secretsService,
+		creService, ccipService, vrfService, autoRunner, oracleRunner,
 	)
 	if settlement != nil {
 		if p, ok := settlement.(system.DescriptorProvider); ok {
@@ -436,16 +385,13 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 		log:                log,
 		Accounts:           acctService,
 		Functions:          funcService,
-		Triggers:           trigService,
 		GasBank:            gasService,
 		Automation:         automationService,
-		PriceFeeds:         priceFeedService,
 		DataFeeds:          dataFeedService,
 		DataStreams:        dataStreamService,
 		DataLink:           dataLinkService,
 		Oracle:             oracleService,
 		Secrets:            secretsService,
-		Random:             randomService,
 		CRE:                creService,
 		CCIP:               ccipService,
 		VRF:                vrfService,
@@ -454,7 +400,6 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 		OracleRunnerTokens: options.runtime.oracleRunnerTokens,
 		WorkspaceWallets:   stores.WorkspaceWallets,
 		AutomationRunner:   autoRunner,
-		PriceFeedRunner:    priceRunner,
 		OracleRunner:       oracleRunner,
 		GasBankSettlement:  settlement,
 		descriptors:        descriptors,
@@ -537,9 +482,6 @@ func runtimeConfigFromEnv(env Environment) RuntimeConfig {
 	}
 	return RuntimeConfig{
 		TEEMode:             env.Lookup("TEE_MODE"),
-		RandomSigningKey:    env.Lookup("RANDOM_SIGNING_KEY"),
-		PriceFeedFetchURL:   env.Lookup("PRICEFEED_FETCH_URL"),
-		PriceFeedFetchKey:   env.Lookup("PRICEFEED_FETCH_KEY"),
 		GasBankResolverURL:  env.Lookup("GASBANK_RESOLVER_URL"),
 		GasBankResolverKey:  env.Lookup("GASBANK_RESOLVER_KEY"),
 		GasBankPollInterval: env.Lookup("GASBANK_POLL_INTERVAL"),
@@ -596,9 +538,6 @@ func normalizeRuntimeConfig(cfg RuntimeConfig) runtimeSettings {
 	}
 	return runtimeSettings{
 		teeMode:             strings.ToLower(strings.TrimSpace(cfg.TEEMode)),
-		randomSigningKey:    strings.TrimSpace(cfg.RandomSigningKey),
-		priceFeedFetchURL:   strings.TrimSpace(cfg.PriceFeedFetchURL),
-		priceFeedFetchKey:   strings.TrimSpace(cfg.PriceFeedFetchKey),
 		gasBankResolverURL:  strings.TrimSpace(cfg.GasBankResolverURL),
 		gasBankResolverKey:  strings.TrimSpace(cfg.GasBankResolverKey),
 		creHTTPRunner:       cfg.CREHTTPRunner,

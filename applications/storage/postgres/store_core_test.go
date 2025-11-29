@@ -10,7 +10,6 @@ import (
 	"github.com/R3E-Network/service_layer/domain/gasbank"
 	"github.com/R3E-Network/service_layer/domain/oracle"
 	"github.com/R3E-Network/service_layer/domain/secret"
-	"github.com/R3E-Network/service_layer/domain/trigger"
 )
 
 func TestStoreCoreIntegration(t *testing.T) {
@@ -25,11 +24,7 @@ func TestStoreCoreIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create function: %v", err)
 	}
-
-	trg := trigger.Trigger{AccountID: acct.ID, FunctionID: fn.ID, Rule: "cron:@hourly", Enabled: true}
-	if _, err := store.CreateTrigger(ctx, trg); err != nil {
-		t.Fatalf("create trigger: %v", err)
-	}
+	_ = fn
 
 	gasAcct, err := store.CreateGasAccount(ctx, gasbank.Account{
 		AccountID:     acct.ID,

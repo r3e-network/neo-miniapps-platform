@@ -13,9 +13,7 @@ import (
 	"github.com/R3E-Network/service_layer/domain/function"
 	"github.com/R3E-Network/service_layer/domain/gasbank"
 	"github.com/R3E-Network/service_layer/domain/oracle"
-	"github.com/R3E-Network/service_layer/domain/pricefeed"
 	"github.com/R3E-Network/service_layer/domain/secret"
-	"github.com/R3E-Network/service_layer/domain/trigger"
 	"github.com/R3E-Network/service_layer/domain/vrf"
 )
 
@@ -219,54 +217,6 @@ func TestFunctionStore_Executions(t *testing.T) {
 	}
 	if exec.FunctionID != fn.ID {
 		t.Fatalf("expected function ID %q, got %q", fn.ID, exec.FunctionID)
-	}
-}
-
-// TriggerStore tests
-
-func TestTriggerStore_CRUD(t *testing.T) {
-	ctx := context.Background()
-	store := New()
-
-	acct, _ := store.CreateAccount(ctx, account.Account{Owner: "owner"})
-
-	trg, err := store.CreateTrigger(ctx, trigger.Trigger{
-		AccountID: acct.ID,
-		Type:      trigger.TypeCron,
-		Rule:      "* * * * *",
-		Config:    map[string]string{"schedule": "* * * * *"},
-		Enabled:   true,
-	})
-	if err != nil {
-		t.Fatalf("create trigger: %v", err)
-	}
-	if trg.ID == "" {
-		t.Fatal("expected trigger ID")
-	}
-
-	retrieved, err := store.GetTrigger(ctx, trg.ID)
-	if err != nil {
-		t.Fatalf("get trigger: %v", err)
-	}
-	if retrieved.Type != trigger.TypeCron {
-		t.Fatalf("expected type 'cron', got %q", retrieved.Type)
-	}
-
-	trg.Rule = "0 * * * *"
-	updated, err := store.UpdateTrigger(ctx, trg)
-	if err != nil {
-		t.Fatalf("update trigger: %v", err)
-	}
-	if updated.Rule != "0 * * * *" {
-		t.Fatalf("expected updated rule, got %q", updated.Rule)
-	}
-
-	triggers, err := store.ListTriggers(ctx, acct.ID)
-	if err != nil {
-		t.Fatalf("list triggers: %v", err)
-	}
-	if len(triggers) != 1 {
-		t.Fatalf("expected 1 trigger, got %d", len(triggers))
 	}
 }
 
@@ -554,106 +504,6 @@ func TestAutomationStore_CRUD(t *testing.T) {
 	}
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
-	}
-}
-
-// PriceFeedStore tests
-
-func TestPriceFeedStore_Feeds(t *testing.T) {
-	ctx := context.Background()
-	store := New()
-
-	acct, _ := store.CreateAccount(ctx, account.Account{Owner: "owner"})
-
-	feed, err := store.CreatePriceFeed(ctx, pricefeed.Feed{
-		AccountID:  acct.ID,
-		BaseAsset:  "BTC",
-		QuoteAsset: "USD",
-		Pair:       "BTC/USD",
-	})
-	if err != nil {
-		t.Fatalf("create price feed: %v", err)
-	}
-
-	retrieved, err := store.GetPriceFeed(ctx, feed.ID)
-	if err != nil {
-		t.Fatalf("get price feed: %v", err)
-	}
-	if retrieved.Pair != "BTC/USD" {
-		t.Fatalf("expected pair 'BTC/USD', got %q", retrieved.Pair)
-	}
-
-	feed.DeviationPercent = 0.5
-	updated, err := store.UpdatePriceFeed(ctx, feed)
-	if err != nil {
-		t.Fatalf("update price feed: %v", err)
-	}
-	if updated.DeviationPercent != 0.5 {
-		t.Fatalf("expected updated deviation percent, got %v", updated.DeviationPercent)
-	}
-
-	feeds, err := store.ListPriceFeeds(ctx, acct.ID)
-	if err != nil {
-		t.Fatalf("list price feeds: %v", err)
-	}
-	if len(feeds) != 1 {
-		t.Fatalf("expected 1 feed, got %d", len(feeds))
-	}
-
-	if err := store.DeletePriceFeed(ctx, feed.ID); err != nil {
-		t.Fatalf("delete price feed: %v", err)
-	}
-}
-
-func TestPriceFeedStore_RoundsAndObservations(t *testing.T) {
-	ctx := context.Background()
-	store := New()
-
-	acct, _ := store.CreateAccount(ctx, account.Account{Owner: "owner"})
-	feed, _ := store.CreatePriceFeed(ctx, pricefeed.Feed{AccountID: acct.ID, Pair: "ETH/USD"})
-
-	round, err := store.CreatePriceRound(ctx, pricefeed.Round{
-		FeedID:  feed.ID,
-		RoundID: 1,
-	})
-	if err != nil {
-		t.Fatalf("create price round: %v", err)
-	}
-
-	latest, err := store.GetLatestPriceRound(ctx, feed.ID)
-	if err != nil {
-		t.Fatalf("get latest price round: %v", err)
-	}
-	if latest.RoundID != 1 {
-		t.Fatalf("expected round ID 1, got %d", latest.RoundID)
-	}
-
-	round.Finalized = true
-	round.AggregatedPrice = 2000.0
-	_, err = store.UpdatePriceRound(ctx, round)
-	if err != nil {
-		t.Fatalf("update price round: %v", err)
-	}
-
-	obs, err := store.CreatePriceObservation(ctx, pricefeed.Observation{
-		FeedID:  feed.ID,
-		RoundID: 1,
-		Price:   2000.50,
-		Source:  "oracle-1",
-	})
-	if err != nil {
-		t.Fatalf("create price observation: %v", err)
-	}
-	if obs.ID == "" {
-		t.Fatal("expected observation ID")
-	}
-
-	observations, err := store.ListPriceObservations(ctx, feed.ID, 1, 10)
-	if err != nil {
-		t.Fatalf("list price observations: %v", err)
-	}
-	if len(observations) != 1 {
-		t.Fatalf("expected 1 observation, got %d", len(observations))
 	}
 }
 

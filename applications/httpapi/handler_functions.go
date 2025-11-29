@@ -1,16 +1,11 @@
 package httpapi
 
 import (
-	"encoding/base64"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/R3E-Network/service_layer/domain/function"
-	randomdomain "github.com/R3E-Network/service_layer/domain/random"
 	"github.com/R3E-Network/service_layer/domain/secret"
-	"github.com/R3E-Network/service_layer/domain/trigger"
-	"github.com/R3E-Network/service_layer/packages/com.r3e.services.random"
 	"github.com/R3E-Network/service_layer/packages/com.r3e.services.secrets"
 )
 
@@ -173,54 +168,6 @@ func (h *handler) accountFunctionExecutionLookup(w http.ResponseWriter, r *http.
 	writeJSON(w, http.StatusOK, exec)
 }
 
-func (h *handler) accountTriggers(w http.ResponseWriter, r *http.Request, accountID string) {
-	switch r.Method {
-	case http.MethodPost:
-		var payload struct {
-			FunctionID string            `json:"function_id"`
-			Type       string            `json:"type"`
-			Rule       string            `json:"rule"`
-			Config     map[string]string `json:"config"`
-			Enabled    *bool             `json:"enabled"`
-		}
-		if err := decodeJSON(r.Body, &payload); err != nil {
-			writeError(w, http.StatusBadRequest, err)
-			return
-		}
-
-		enabled := true
-		if payload.Enabled != nil {
-			enabled = *payload.Enabled
-		}
-
-		trg := trigger.Trigger{
-			AccountID:  accountID,
-			FunctionID: payload.FunctionID,
-			Type:       trigger.Type(payload.Type),
-			Rule:       payload.Rule,
-			Config:     payload.Config,
-			Enabled:    enabled,
-		}
-		created, err := h.app.Triggers.Register(r.Context(), trg)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
-			return
-		}
-		writeJSON(w, http.StatusCreated, created)
-
-	case http.MethodGet:
-		triggers, err := h.app.Triggers.List(r.Context(), accountID)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, triggers)
-
-	default:
-		methodNotAllowed(w, http.MethodPost, http.MethodGet)
-	}
-}
-
 func (h *handler) accountSecrets(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {
 	if h.app.Secrets == nil {
 		writeError(w, http.StatusNotImplemented, fmt.Errorf("secrets service not configured"))
@@ -317,86 +264,5 @@ func (h *handler) accountSecrets(w http.ResponseWriter, r *http.Request, account
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		methodNotAllowed(w, http.MethodGet, http.MethodPut, http.MethodDelete)
-	}
-}
-
-type randomResponse struct {
-	AccountID string    `json:"AccountID"`
-	Length    int       `json:"Length"`
-	Value     string    `json:"Value"`
-	CreatedAt time.Time `json:"CreatedAt"`
-	RequestID string    `json:"RequestID"`
-	Counter   uint64    `json:"Counter"`
-	Signature string    `json:"Signature"`
-	PublicKey string    `json:"PublicKey"`
-}
-
-func (h *handler) accountRandom(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {
-	if h.app.Random == nil {
-		writeError(w, http.StatusNotImplemented, fmt.Errorf("random service not configured"))
-		return
-	}
-	if len(rest) == 0 {
-		if r.Method != http.MethodPost {
-			methodNotAllowed(w, http.MethodPost)
-			return
-		}
-		var payload struct {
-			Length    int    `json:"length"`
-			RequestID string `json:"request_id"`
-		}
-		if err := decodeJSON(r.Body, &payload); err != nil {
-			writeError(w, http.StatusBadRequest, err)
-			return
-		}
-		if payload.Length == 0 {
-			payload.Length = 32
-		}
-
-		res, err := h.app.Random.Generate(r.Context(), accountID, payload.Length, payload.RequestID)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, newRandomResponse(accountID, res))
-		return
-	}
-
-	switch rest[0] {
-	case "requests":
-		if r.Method != http.MethodGet {
-			methodNotAllowed(w, http.MethodGet)
-			return
-		}
-		limit, err := parseLimitParam(r.URL.Query().Get("limit"), 25)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
-			return
-		}
-		results, err := h.app.Random.List(r.Context(), accountID, limit)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
-			return
-		}
-		out := make([]randomResponse, len(results))
-		for i, res := range results {
-			out[i] = newRandomResponse(accountID, res)
-		}
-		writeJSON(w, http.StatusOK, out)
-	default:
-		w.WriteHeader(http.StatusNotFound)
-	}
-}
-
-func newRandomResponse(accountID string, res randomdomain.Result) randomResponse {
-	return randomResponse{
-		AccountID: accountID,
-		Length:    res.Length,
-		Value:     random.EncodeResult(res),
-		CreatedAt: res.CreatedAt,
-		RequestID: res.RequestID,
-		Counter:   res.Counter,
-		Signature: base64.StdEncoding.EncodeToString(res.Signature),
-		PublicKey: base64.StdEncoding.EncodeToString(res.PublicKey),
 	}
 }

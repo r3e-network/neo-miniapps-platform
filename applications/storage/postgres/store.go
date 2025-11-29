@@ -10,7 +10,6 @@ import (
 	"github.com/R3E-Network/service_layer/applications/storage"
 	"github.com/R3E-Network/service_layer/domain/account"
 	"github.com/R3E-Network/service_layer/domain/function"
-	"github.com/R3E-Network/service_layer/domain/trigger"
 	"github.com/google/uuid"
 )
 
@@ -21,10 +20,8 @@ type Store struct {
 
 var _ storage.AccountStore = (*Store)(nil)
 var _ storage.FunctionStore = (*Store)(nil)
-var _ storage.TriggerStore = (*Store)(nil)
 var _ storage.GasBankStore = (*Store)(nil)
 var _ storage.AutomationStore = (*Store)(nil)
-var _ storage.PriceFeedStore = (*Store)(nil)
 var _ storage.DataFeedStore = (*Store)(nil)
 var _ storage.DataLinkStore = (*Store)(nil)
 var _ storage.DataStreamStore = (*Store)(nil)
@@ -391,94 +388,4 @@ func (s *Store) DeleteFunction(ctx context.Context, id string) error {
 		return sql.ErrNoRows
 	}
 	return nil
-}
-
-// --- TriggerStore -----------------------------------------------------------
-
-func (s *Store) CreateTrigger(ctx context.Context, trg trigger.Trigger) (trigger.Trigger, error) {
-	if trg.ID == "" {
-		trg.ID = uuid.NewString()
-	}
-	now := time.Now().UTC()
-	trg.CreatedAt = now
-	trg.UpdatedAt = now
-	tenant := s.accountTenant(ctx, trg.AccountID)
-
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO app_triggers (id, account_id, function_id, rule, enabled, tenant, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	`, trg.ID, trg.AccountID, trg.FunctionID, trg.Rule, trg.Enabled, tenant, trg.CreatedAt, trg.UpdatedAt)
-	if err != nil {
-		return trigger.Trigger{}, err
-	}
-	return trg, nil
-}
-
-func (s *Store) UpdateTrigger(ctx context.Context, trg trigger.Trigger) (trigger.Trigger, error) {
-	existing, err := s.GetTrigger(ctx, trg.ID)
-	if err != nil {
-		return trigger.Trigger{}, err
-	}
-	trg.AccountID = existing.AccountID
-	trg.FunctionID = existing.FunctionID
-	trg.CreatedAt = existing.CreatedAt
-	trg.UpdatedAt = time.Now().UTC()
-	tenant := s.accountTenant(ctx, trg.AccountID)
-
-	result, err := s.db.ExecContext(ctx, `
-		UPDATE app_triggers
-		SET rule = $2, enabled = $3, tenant = $4, updated_at = $5
-		WHERE id = $1
-	`, trg.ID, trg.Rule, trg.Enabled, tenant, trg.UpdatedAt)
-	if err != nil {
-		return trigger.Trigger{}, err
-	}
-	if rows, _ := result.RowsAffected(); rows == 0 {
-		return trigger.Trigger{}, sql.ErrNoRows
-	}
-	return trg, nil
-}
-
-func (s *Store) GetTrigger(ctx context.Context, id string) (trigger.Trigger, error) {
-	row := s.db.QueryRowContext(ctx, `
-		SELECT id, account_id, function_id, rule, enabled, tenant, created_at, updated_at
-		FROM app_triggers
-		WHERE id = $1
-	`, id)
-
-	var (
-		trg    trigger.Trigger
-		tenant sql.NullString
-	)
-	if err := row.Scan(&trg.ID, &trg.AccountID, &trg.FunctionID, &trg.Rule, &trg.Enabled, &tenant, &trg.CreatedAt, &trg.UpdatedAt); err != nil {
-		return trigger.Trigger{}, err
-	}
-	return trg, nil
-}
-
-func (s *Store) ListTriggers(ctx context.Context, accountID string) ([]trigger.Trigger, error) {
-	tenant := s.accountTenant(ctx, accountID)
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, account_id, function_id, rule, enabled, tenant, created_at, updated_at
-		FROM app_triggers
-		WHERE ($1 = '' OR account_id = $1) AND ($2 = '' OR tenant = $2)
-		ORDER BY created_at
-	`, accountID, tenant)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []trigger.Trigger
-	for rows.Next() {
-		var (
-			trg    trigger.Trigger
-			tenant sql.NullString
-		)
-		if err := rows.Scan(&trg.ID, &trg.AccountID, &trg.FunctionID, &trg.Rule, &trg.Enabled, &tenant, &trg.CreatedAt, &trg.UpdatedAt); err != nil {
-			return nil, err
-		}
-		result = append(result, trg)
-	}
-	return result, rows.Err()
 }

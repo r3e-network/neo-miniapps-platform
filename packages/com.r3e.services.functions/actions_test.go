@@ -17,7 +17,6 @@ import (
 	datastreamsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.datastreams"
 	gasbanksvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.gasbank"
 	oraclesvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.oracle"
-	"github.com/R3E-Network/service_layer/packages/com.r3e.services.triggers"
 )
 
 func TestAction_GasBankWithdraw(t *testing.T) {
@@ -26,7 +25,7 @@ func TestAction_GasBankWithdraw(t *testing.T) {
 	gasSvc := gasbanksvc.New(store, store, nil)
 
 	fnSvc := New(store, store, nil)
-	fnSvc.AttachDependencies(nil, nil, nil, nil, nil, nil, nil, gasSvc, nil)
+	fnSvc.AttachDependencies(nil, nil, nil, nil, nil, gasSvc, nil)
 
 	fn, _ := fnSvc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "withdraw", Source: "() => 1"})
 
@@ -75,7 +74,7 @@ func TestAction_GasBankWithdraw_ByGasAccountID(t *testing.T) {
 	gasSvc := gasbanksvc.New(store, store, nil)
 
 	fnSvc := New(store, store, nil)
-	fnSvc.AttachDependencies(nil, nil, nil, nil, nil, nil, nil, gasSvc, nil)
+	fnSvc.AttachDependencies(nil, nil, nil, nil, nil, gasSvc, nil)
 
 	fn, _ := fnSvc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "withdraw-by-id", Source: "() => 1"})
 
@@ -121,7 +120,7 @@ func TestAction_GasBankWithdraw_MissingParams(t *testing.T) {
 	gasSvc := gasbanksvc.New(store, store, nil)
 
 	fnSvc := New(store, store, nil)
-	fnSvc.AttachDependencies(nil, nil, nil, nil, nil, nil, nil, gasSvc, nil)
+	fnSvc.AttachDependencies(nil, nil, nil, nil, nil, gasSvc, nil)
 
 	fn, _ := fnSvc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "withdraw-missing", Source: "() => 1"})
 
@@ -156,7 +155,7 @@ func TestAction_GasBankBalance(t *testing.T) {
 	gasSvc := gasbanksvc.New(store, store, nil)
 
 	fnSvc := New(store, store, nil)
-	fnSvc.AttachDependencies(nil, nil, nil, nil, nil, nil, nil, gasSvc, nil)
+	fnSvc.AttachDependencies(nil, nil, nil, nil, nil, gasSvc, nil)
 
 	fn, _ := fnSvc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "balance", Source: "() => 1"})
 
@@ -199,7 +198,7 @@ func TestAction_GasBankBalance_ByGasAccountID(t *testing.T) {
 	gasSvc := gasbanksvc.New(store, store, nil)
 
 	fnSvc := New(store, store, nil)
-	fnSvc.AttachDependencies(nil, nil, nil, nil, nil, nil, nil, gasSvc, nil)
+	fnSvc.AttachDependencies(nil, nil, nil, nil, nil, gasSvc, nil)
 
 	fn, _ := fnSvc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "balance-id", Source: "() => 1"})
 	gasAcct, _ := gasSvc.EnsureAccount(context.Background(), acct.ID, "NWALLET")
@@ -240,7 +239,7 @@ func TestAction_GasBankListTransactions(t *testing.T) {
 	gasSvc := gasbanksvc.New(store, store, nil)
 
 	fnSvc := New(store, store, nil)
-	fnSvc.AttachDependencies(nil, nil, nil, nil, nil, nil, nil, gasSvc, nil)
+	fnSvc.AttachDependencies(nil, nil, nil, nil, nil, gasSvc, nil)
 
 	fn, _ := fnSvc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "list-tx", Source: "() => 1"})
 	gasAcct, _ := gasSvc.EnsureAccount(context.Background(), acct.ID, "NWALLET")
@@ -283,7 +282,7 @@ func TestAction_DataFeedSubmit(t *testing.T) {
 	dfSvc := datafeedsvc.New(store, store, nil)
 
 	fnSvc := New(store, store, nil)
-	fnSvc.AttachDependencies(nil, nil, nil, dfSvc, nil, nil, nil, nil, nil)
+	fnSvc.AttachDependencies(nil, dfSvc, nil, nil, nil, nil, nil)
 
 	fn, _ := fnSvc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "datafeed", Source: "() => 1"})
 
@@ -337,7 +336,7 @@ func TestAction_DatastreamPublish(t *testing.T) {
 	dsSvc := datastreamsvc.New(store, store, nil)
 
 	fnSvc := New(store, store, nil)
-	fnSvc.AttachDependencies(nil, nil, nil, nil, dsSvc, nil, nil, nil, nil)
+	fnSvc.AttachDependencies(nil, nil, dsSvc, nil, nil, nil, nil)
 
 	fn, _ := fnSvc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "datastream", Source: "() => 1"})
 
@@ -387,7 +386,7 @@ func TestAction_OracleCreateRequest_WithAlternateSources(t *testing.T) {
 	oracleSvc := oraclesvc.New(store, store, nil)
 
 	fnSvc := New(store, store, nil)
-	fnSvc.AttachDependencies(nil, nil, nil, nil, nil, nil, oracleSvc, nil, nil)
+	fnSvc.AttachDependencies(nil, nil, nil, nil, oracleSvc, nil, nil)
 
 	fn, _ := fnSvc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "oracle", Source: "() => 1"})
 
@@ -432,7 +431,7 @@ func TestAction_AutomationSchedule_WithEnabled(t *testing.T) {
 	autoSvc := automationsvc.New(store, store, store, nil)
 
 	fnSvc := New(store, store, nil)
-	fnSvc.AttachDependencies(nil, autoSvc, nil, nil, nil, nil, nil, nil, nil)
+	fnSvc.AttachDependencies(autoSvc, nil, nil, nil, nil, nil, nil)
 
 	fn, _ := fnSvc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "automation", Source: "() => 1"})
 
@@ -469,56 +468,13 @@ func TestAction_AutomationSchedule_WithEnabled(t *testing.T) {
 	}
 }
 
-func TestAction_TriggerRegister_WithConfig(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	triggerSvc := triggers.New(store, store, store, nil)
-
-	fnSvc := New(store, store, nil)
-	fnSvc.AttachDependencies(triggerSvc, nil, nil, nil, nil, nil, nil, nil, nil)
-
-	fn, _ := fnSvc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "trigger", Source: "() => 1"})
-
-	now := time.Now().UTC()
-	exec := &staticExecutor{
-		result: function.ExecutionResult{
-			FunctionID:  fn.ID,
-			Output:      map[string]any{},
-			Status:      function.ExecutionStatusSucceeded,
-			StartedAt:   now,
-			CompletedAt: now,
-			Actions: []function.Action{
-				{
-					ID:   "trigger",
-					Type: function.ActionTypeTriggerRegister,
-					Params: map[string]any{
-						"type":    "cron",
-						"rule":    "0 * * * *",
-						"config":  map[string]any{"timezone": "UTC"},
-						"enabled": false,
-					},
-				},
-			},
-		},
-	}
-	fnSvc.AttachExecutor(exec)
-
-	result, err := fnSvc.Execute(context.Background(), fn.ID, nil)
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	if result.Actions[0].Status != function.ActionStatusSucceeded {
-		t.Fatalf("expected action success, got %s: %s", result.Actions[0].Status, result.Actions[0].Error)
-	}
-}
-
 func TestAction_DatalinkDelivery_MissingChannel(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
 	dlSvc := datalinksvc.New(store, store, nil)
 
 	fnSvc := New(store, store, nil)
-	fnSvc.AttachDependencies(nil, nil, nil, nil, nil, dlSvc, nil, nil, nil)
+	fnSvc.AttachDependencies(nil, nil, nil, dlSvc, nil, nil, nil)
 
 	fn, _ := fnSvc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "datalink", Source: "() => 1"})
 
@@ -864,7 +820,7 @@ func TestAction_DatalinkDelivery_ValidChannel(t *testing.T) {
 	dlSvc := datalinksvc.New(store, store, nil)
 
 	fnSvc := New(store, store, nil)
-	fnSvc.AttachDependencies(nil, nil, nil, nil, nil, dlSvc, nil, nil, nil)
+	fnSvc.AttachDependencies(nil, nil, nil, dlSvc, nil, nil, nil)
 
 	channel, _ := dlSvc.CreateChannel(context.Background(), datalinkdomain.Channel{
 		AccountID: acct.ID,

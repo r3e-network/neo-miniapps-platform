@@ -23,10 +23,7 @@ import (
 	_ "github.com/R3E-Network/service_layer/packages/com.r3e.services.functions"
 	_ "github.com/R3E-Network/service_layer/packages/com.r3e.services.gasbank"
 	_ "github.com/R3E-Network/service_layer/packages/com.r3e.services.oracle"
-	_ "github.com/R3E-Network/service_layer/packages/com.r3e.services.pricefeed"
-	_ "github.com/R3E-Network/service_layer/packages/com.r3e.services.random"
 	_ "github.com/R3E-Network/service_layer/packages/com.r3e.services.secrets"
-	_ "github.com/R3E-Network/service_layer/packages/com.r3e.services.triggers"
 	_ "github.com/R3E-Network/service_layer/packages/com.r3e.services.vrf"
 )
 
@@ -51,18 +48,15 @@ func DefaultPackageIDs() []string {
 	return []string{
 		"com.r3e.services.accounts",
 		"com.r3e.services.functions",
-		"com.r3e.services.triggers",
 		"com.r3e.services.secrets",
 		"com.r3e.services.gasbank",
 		"com.r3e.services.automation",
-		"com.r3e.services.pricefeed",
 		"com.r3e.services.datafeeds",
 		"com.r3e.services.datastreams",
 		"com.r3e.services.datalink",
 		"com.r3e.services.dta",
 		"com.r3e.services.confidential",
 		"com.r3e.services.oracle",
-		"com.r3e.services.random",
 		"com.r3e.services.cre",
 		"com.r3e.services.ccip",
 		"com.r3e.services.vrf",

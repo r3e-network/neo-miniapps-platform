@@ -6,10 +6,8 @@ package pkg
 type storeProvider struct {
 	accounts         AccountStoreAPI
 	functions        FunctionStoreAPI
-	triggers         TriggerStoreAPI
 	gasBank          GasBankStoreAPI
 	automation       AutomationStoreAPI
-	priceFeeds       PriceFeedStoreAPI
 	dataFeeds        DataFeedStoreAPI
 	dataStreams      DataStreamStoreAPI
 	dataLink         DataLinkStoreAPI
@@ -27,10 +25,8 @@ type storeProvider struct {
 type StoreProviderConfig struct {
 	Accounts         AccountStoreAPI
 	Functions        FunctionStoreAPI
-	Triggers         TriggerStoreAPI
 	GasBank          GasBankStoreAPI
 	Automation       AutomationStoreAPI
-	PriceFeeds       PriceFeedStoreAPI
 	DataFeeds        DataFeedStoreAPI
 	DataStreams      DataStreamStoreAPI
 	DataLink         DataLinkStoreAPI
@@ -49,10 +45,8 @@ func NewStoreProvider(cfg StoreProviderConfig) StoreProvider {
 	return &storeProvider{
 		accounts:         cfg.Accounts,
 		functions:        cfg.Functions,
-		triggers:         cfg.Triggers,
 		gasBank:          cfg.GasBank,
 		automation:       cfg.Automation,
-		priceFeeds:       cfg.PriceFeeds,
 		dataFeeds:        cfg.DataFeeds,
 		dataStreams:      cfg.DataStreams,
 		dataLink:         cfg.DataLink,
@@ -77,20 +71,12 @@ func (s *storeProvider) FunctionStore() FunctionStoreAPI {
 	return s.functions
 }
 
-func (s *storeProvider) TriggerStore() TriggerStoreAPI {
-	return s.triggers
-}
-
 func (s *storeProvider) GasBankStore() GasBankStoreAPI {
 	return s.gasBank
 }
 
 func (s *storeProvider) AutomationStore() AutomationStoreAPI {
 	return s.automation
-}
-
-func (s *storeProvider) PriceFeedStore() PriceFeedStoreAPI {
-	return s.priceFeeds
 }
 
 func (s *storeProvider) DataFeedStore() DataFeedStoreAPI {

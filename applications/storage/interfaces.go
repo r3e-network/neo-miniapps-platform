@@ -16,9 +16,7 @@ import (
 	"github.com/R3E-Network/service_layer/domain/function"
 	"github.com/R3E-Network/service_layer/domain/gasbank"
 	"github.com/R3E-Network/service_layer/domain/oracle"
-	"github.com/R3E-Network/service_layer/domain/pricefeed"
 	"github.com/R3E-Network/service_layer/domain/secret"
-	"github.com/R3E-Network/service_layer/domain/trigger"
 	"github.com/R3E-Network/service_layer/domain/vrf"
 )
 
@@ -40,14 +38,6 @@ type FunctionStore interface {
 	CreateExecution(ctx context.Context, exec function.Execution) (function.Execution, error)
 	GetExecution(ctx context.Context, id string) (function.Execution, error)
 	ListFunctionExecutions(ctx context.Context, functionID string, limit int) ([]function.Execution, error)
-}
-
-// TriggerStore persists trigger records.
-type TriggerStore interface {
-	CreateTrigger(ctx context.Context, trg trigger.Trigger) (trigger.Trigger, error)
-	UpdateTrigger(ctx context.Context, trg trigger.Trigger) (trigger.Trigger, error)
-	GetTrigger(ctx context.Context, id string) (trigger.Trigger, error)
-	ListTriggers(ctx context.Context, accountID string) ([]trigger.Trigger, error)
 }
 
 // GasBankStore persists gas bank accounts and transactions.
@@ -87,25 +77,6 @@ type AutomationStore interface {
 	UpdateAutomationJob(ctx context.Context, job automation.Job) (automation.Job, error)
 	GetAutomationJob(ctx context.Context, id string) (automation.Job, error)
 	ListAutomationJobs(ctx context.Context, accountID string) ([]automation.Job, error)
-}
-
-// PriceFeedStore persists price feed definitions and snapshots.
-type PriceFeedStore interface {
-	CreatePriceFeed(ctx context.Context, feed pricefeed.Feed) (pricefeed.Feed, error)
-	UpdatePriceFeed(ctx context.Context, feed pricefeed.Feed) (pricefeed.Feed, error)
-	GetPriceFeed(ctx context.Context, id string) (pricefeed.Feed, error)
-	ListPriceFeeds(ctx context.Context, accountID string) ([]pricefeed.Feed, error)
-	DeletePriceFeed(ctx context.Context, feedID string) error
-
-	CreatePriceSnapshot(ctx context.Context, snap pricefeed.Snapshot) (pricefeed.Snapshot, error)
-	ListPriceSnapshots(ctx context.Context, feedID string) ([]pricefeed.Snapshot, error)
-
-	CreatePriceRound(ctx context.Context, round pricefeed.Round) (pricefeed.Round, error)
-	GetLatestPriceRound(ctx context.Context, feedID string) (pricefeed.Round, error)
-	ListPriceRounds(ctx context.Context, feedID string, limit int) ([]pricefeed.Round, error)
-	UpdatePriceRound(ctx context.Context, round pricefeed.Round) (pricefeed.Round, error)
-	CreatePriceObservation(ctx context.Context, obs pricefeed.Observation) (pricefeed.Observation, error)
-	ListPriceObservations(ctx context.Context, feedID string, roundID int64, limit int) ([]pricefeed.Observation, error)
 }
 
 // DataFeedStore persists centralized Chainlink data feed configs and updates.

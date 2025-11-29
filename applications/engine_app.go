@@ -22,10 +22,7 @@ import (
 	"github.com/R3E-Network/service_layer/packages/com.r3e.services.functions"
 	gasbanksvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.gasbank"
 	oraclesvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.oracle"
-	pricefeedsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.pricefeed"
-	randomsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.random"
 	"github.com/R3E-Network/service_layer/packages/com.r3e.services.secrets"
-	"github.com/R3E-Network/service_layer/packages/com.r3e.services.triggers"
 	vrfsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.vrf"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	"github.com/R3E-Network/service_layer/system/bootstrap"
@@ -46,10 +43,8 @@ type EngineApplication struct {
 	// These provide typed access to services for the HTTP handlers.
 	Accounts     *accounts.Service
 	Functions    *functions.Service
-	Triggers     *triggers.Service
 	GasBank      *gasbanksvc.Service
 	Automation   *automationsvc.Service
-	PriceFeeds   *pricefeedsvc.Service
 	DataFeeds    *datafeedsvc.Service
 	DataStreams  *datastreamsvc.Service
 	DataLink     *datalinksvc.Service
@@ -57,7 +52,6 @@ type EngineApplication struct {
 	Confidential *confsvc.Service
 	Oracle       *oraclesvc.Service
 	Secrets      *secrets.Service
-	Random       *randomsvc.Service
 	CRE          *cresvc.Service
 	CCIP         *ccipsvc.Service
 	VRF          *vrfsvc.Service
@@ -68,7 +62,6 @@ type EngineApplication struct {
 
 	// Background runners
 	AutomationRunner  *automationsvc.Scheduler
-	PriceFeedRunner   *pricefeedsvc.Refresher
 	OracleRunner      *oraclesvc.Dispatcher
 	GasBankSettlement system.Service
 }
@@ -156,11 +149,6 @@ func (a *EngineApplication) wireServices(eng *engine.Engine) error {
 			a.Functions = svc
 		}
 	}
-	if mod := eng.Lookup("triggers"); mod != nil {
-		if svc, ok := mod.(*triggers.Service); ok {
-			a.Triggers = svc
-		}
-	}
 	if mod := eng.Lookup("gasbank"); mod != nil {
 		if svc, ok := mod.(*gasbanksvc.Service); ok {
 			a.GasBank = svc
@@ -169,11 +157,6 @@ func (a *EngineApplication) wireServices(eng *engine.Engine) error {
 	if mod := eng.Lookup("automation"); mod != nil {
 		if svc, ok := mod.(*automationsvc.Service); ok {
 			a.Automation = svc
-		}
-	}
-	if mod := eng.Lookup("pricefeed"); mod != nil {
-		if svc, ok := mod.(*pricefeedsvc.Service); ok {
-			a.PriceFeeds = svc
 		}
 	}
 	if mod := eng.Lookup("datafeeds"); mod != nil {
@@ -209,11 +192,6 @@ func (a *EngineApplication) wireServices(eng *engine.Engine) error {
 	if mod := eng.Lookup("secrets"); mod != nil {
 		if svc, ok := mod.(*secrets.Service); ok {
 			a.Secrets = svc
-		}
-	}
-	if mod := eng.Lookup("random"); mod != nil {
-		if svc, ok := mod.(*randomsvc.Service); ok {
-			a.Random = svc
 		}
 	}
 	if mod := eng.Lookup("cre"); mod != nil {
@@ -294,10 +272,8 @@ func storesToStoreProvider(stores Stores) pkg.StoreProvider {
 	return pkg.NewStoreProvider(pkg.StoreProviderConfig{
 		Accounts:         stores.Accounts,
 		Functions:        stores.Functions,
-		Triggers:         stores.Triggers,
 		GasBank:          stores.GasBank,
 		Automation:       stores.Automation,
-		PriceFeeds:       stores.PriceFeeds,
 		DataFeeds:        stores.DataFeeds,
 		DataStreams:      stores.DataStreams,
 		DataLink:         stores.DataLink,

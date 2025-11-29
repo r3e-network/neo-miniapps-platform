@@ -14,17 +14,13 @@ import (
 	"github.com/R3E-Network/service_layer/domain/function"
 	"github.com/R3E-Network/service_layer/domain/gasbank"
 	"github.com/R3E-Network/service_layer/domain/oracle"
-	"github.com/R3E-Network/service_layer/domain/pricefeed"
-	"github.com/R3E-Network/service_layer/domain/trigger"
 	automationsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.automation"
 	datafeedsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.datafeeds"
 	datalinksvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.datalink"
 	datastreamsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.datastreams"
 	gasbanksvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.gasbank"
 	oraclesvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.oracle"
-	pricefeedsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.pricefeed"
-	randomsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.random"
-	"github.com/R3E-Network/service_layer/packages/com.r3e.services.triggers"
+	vrfsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.vrf"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	engine "github.com/R3E-Network/service_layer/system/core"
 	"github.com/R3E-Network/service_layer/system/framework"
@@ -44,15 +40,13 @@ type Service struct {
 	base        *core.Base
 	store       storage.FunctionStore
 	log         *logger.Logger
-	triggers    *triggers.Service
 	automation  *automationsvc.Service
-	priceFeeds  *pricefeedsvc.Service
 	dataFeeds   *datafeedsvc.Service
 	dataStreams *datastreamsvc.Service
 	dataLink    *datalinksvc.Service
 	oracle      *oraclesvc.Service
 	gasBank     *gasbanksvc.Service
-	random      *randomsvc.Service
+	vrf         *vrfsvc.Service
 	executor    FunctionExecutor
 	secrets     SecretResolver
 }
@@ -106,28 +100,23 @@ func (s *Service) Start(ctx context.Context) error { _ = ctx; s.MarkReady(true);
 func (s *Service) Stop(ctx context.Context) error { _ = ctx; s.MarkReady(false); return nil }
 
 // AttachDependencies wires auxiliary services so function workflows can drive
-// cross-domain actions (triggers, automation, feeds, data streams, datalink,
-// oracle, gas bank, randomness).
+// cross-domain actions (automation, feeds, data streams, datalink, oracle, gas bank, vrf).
 func (s *Service) AttachDependencies(
-	triggers *triggers.Service,
 	automation *automationsvc.Service,
-	priceFeeds *pricefeedsvc.Service,
 	dataFeeds *datafeedsvc.Service,
 	dataStreams *datastreamsvc.Service,
 	dataLink *datalinksvc.Service,
 	oracle *oraclesvc.Service,
 	gasBank *gasbanksvc.Service,
-	random *randomsvc.Service,
+	vrf *vrfsvc.Service,
 ) {
-	s.triggers = triggers
 	s.automation = automation
-	s.priceFeeds = priceFeeds
 	s.dataFeeds = dataFeeds
 	s.dataStreams = dataStreams
 	s.dataLink = dataLink
 	s.oracle = oracle
 	s.gasBank = gasBank
-	s.random = random
+	s.vrf = vrf
 }
 
 // AttachExecutor injects a function executor implementation.
@@ -278,15 +267,6 @@ func (s *Service) List(ctx context.Context, accountID string) ([]function.Defini
 
 var errDependencyUnavailable = errors.New("dependent service not configured")
 
-// RegisterTrigger delegates trigger creation to the trigger service while
-// preserving the function-centric surface area.
-func (s *Service) RegisterTrigger(ctx context.Context, trg trigger.Trigger) (trigger.Trigger, error) {
-	if s.triggers == nil {
-		return trigger.Trigger{}, fmt.Errorf("register trigger: %w", errDependencyUnavailable)
-	}
-	return s.triggers.Register(ctx, trg)
-}
-
 // ScheduleAutomationJob creates a job through the automation service.
 func (s *Service) ScheduleAutomationJob(ctx context.Context, accountID, functionID, name, schedule, description string) (automation.Job, error) {
 	if s.automation == nil {
@@ -309,22 +289,6 @@ func (s *Service) SetAutomationEnabled(ctx context.Context, jobID string, enable
 		return automation.Job{}, fmt.Errorf("set automation enabled: %w", errDependencyUnavailable)
 	}
 	return s.automation.SetEnabled(ctx, jobID, enabled)
-}
-
-// CreatePriceFeed provisions a feed via the price feed service.
-func (s *Service) CreatePriceFeed(ctx context.Context, accountID, baseAsset, quoteAsset, updateInterval, heartbeat string, deviation float64) (pricefeed.Feed, error) {
-	if s.priceFeeds == nil {
-		return pricefeed.Feed{}, fmt.Errorf("create price feed: %w", errDependencyUnavailable)
-	}
-	return s.priceFeeds.CreateFeed(ctx, accountID, baseAsset, quoteAsset, updateInterval, heartbeat, deviation)
-}
-
-// RecordPriceSnapshot records a snapshot via the price feed service.
-func (s *Service) RecordPriceSnapshot(ctx context.Context, feedID string, price float64, source string, collectedAt time.Time) (pricefeed.Snapshot, error) {
-	if s.priceFeeds == nil {
-		return pricefeed.Snapshot{}, fmt.Errorf("record price snapshot: %w", errDependencyUnavailable)
-	}
-	return s.priceFeeds.RecordSnapshot(ctx, feedID, price, source, collectedAt)
 }
 
 // CreateOracleRequest creates a request via the oracle service.

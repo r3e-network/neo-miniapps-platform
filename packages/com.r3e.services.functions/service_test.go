@@ -13,14 +13,10 @@ import (
 	"github.com/R3E-Network/service_layer/domain/account"
 	datalinkdomain "github.com/R3E-Network/service_layer/domain/datalink"
 	"github.com/R3E-Network/service_layer/domain/function"
-	"github.com/R3E-Network/service_layer/domain/trigger"
 	automationsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.automation"
 	datalinksvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.datalink"
 	gasbanksvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.gasbank"
 	oraclesvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.oracle"
-	pricefeedsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.pricefeed"
-	randomsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.random"
-	"github.com/R3E-Network/service_layer/packages/com.r3e.services.triggers"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 )
 
@@ -252,7 +248,7 @@ func TestService_ExecuteProcessesActions(t *testing.T) {
 	svc := New(store, store, nil)
 	svc.AttachExecutor(&actionExecutor{})
 	gasService := gasbanksvc.New(store, store, nil)
-	svc.AttachDependencies(nil, nil, nil, nil, nil, nil, nil, gasService, nil)
+	svc.AttachDependencies(nil, nil, nil, nil, nil, gasService, nil)
 
 	created, err := svc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "action", Source: "() => 1"})
 	if err != nil {
@@ -290,11 +286,10 @@ func TestService_ExecuteProcessesMultipleActions(t *testing.T) {
 	svc.AttachExecutor(multiExec)
 
 	gasService := gasbanksvc.New(store, store, nil)
-	triggerService := triggers.New(store, store, store, nil)
 	automationService := automationsvc.New(store, store, store, nil)
 	oracleService := oraclesvc.New(store, store, nil)
 
-	svc.AttachDependencies(triggerService, automationService, nil, nil, nil, nil, oracleService, gasService, nil)
+	svc.AttachDependencies(automationService, nil, nil, nil, oracleService, gasService, nil)
 
 	fn, err := svc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "multi", Source: "() => 1"})
 	if err != nil {
@@ -315,8 +310,8 @@ func TestService_ExecuteProcessesMultipleActions(t *testing.T) {
 	if result.Status != function.ExecutionStatusSucceeded {
 		t.Fatalf("expected success status, got %s", result.Status)
 	}
-	if len(result.Actions) != 4 {
-		t.Fatalf("expected 4 action results, got %d", len(result.Actions))
+	if len(result.Actions) != 3 {
+		t.Fatalf("expected 3 action results, got %d", len(result.Actions))
 	}
 	for _, action := range result.Actions {
 		if action.Status != function.ActionStatusSucceeded {
@@ -332,11 +327,6 @@ func TestService_ExecuteProcessesMultipleActions(t *testing.T) {
 	jobs, _ := store.ListAutomationJobs(context.Background(), acct.ID)
 	if len(jobs) != 1 || !jobs[0].Enabled {
 		t.Fatalf("expected automation job stored and enabled, got %#v", jobs)
-	}
-
-	triggersList, _ := store.ListTriggers(context.Background(), acct.ID)
-	if len(triggersList) != 1 {
-		t.Fatalf("expected trigger stored, got %d", len(triggersList))
 	}
 
 	requests, _ := store.ListRequests(context.Background(), acct.ID, 10, "")
@@ -455,122 +445,13 @@ func ExampleService_Execute() {
 	// execution completed
 }
 
-func TestService_ProcessPriceFeedSnapshotAction(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-
-	priceSvc := pricefeedsvc.New(store, store, nil)
-	fnSvc := New(store, store, nil)
-	fnSvc.AttachDependencies(nil, nil, priceSvc, nil, nil, nil, nil, nil, nil)
-
-	randomSvc := randomsvc.New(store, nil)
-	fnSvc.AttachDependencies(nil, nil, priceSvc, nil, nil, nil, nil, nil, randomSvc)
-
-	fn, err := fnSvc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "price", Source: "() => 1"})
-	if err != nil {
-		t.Fatalf("create function: %v", err)
-	}
-
-	feed, err := priceSvc.CreateFeed(context.Background(), acct.ID, "NEO", "USD", "@every 1m", "@every 1h", 0.5)
-	if err != nil {
-		t.Fatalf("create feed: %v", err)
-	}
-
-	now := time.Now().UTC()
-	exec := &staticExecutor{
-		result: function.ExecutionResult{
-			FunctionID:  fn.ID,
-			Output:      map[string]any{},
-			Status:      function.ExecutionStatusSucceeded,
-			StartedAt:   now,
-			CompletedAt: now,
-			Actions: []function.Action{
-				{
-					ID:   "1",
-					Type: function.ActionTypePriceFeedSnapshot,
-					Params: map[string]any{
-						"feedId":      feed.ID,
-						"price":       12.34,
-						"source":      "oracle",
-						"collectedAt": now.Format(time.RFC3339),
-					},
-				},
-			},
-		},
-	}
-	fnSvc.AttachExecutor(exec)
-
-	result, err := fnSvc.Execute(context.Background(), fn.ID, nil)
-	if err != nil {
-		t.Fatalf("execute function: %v", err)
-	}
-	if len(result.Actions) != 1 {
-		t.Fatalf("expected single action result, got %d", len(result.Actions))
-	}
-	action := result.Actions[0]
-	if action.Status != function.ActionStatusSucceeded {
-		t.Fatalf("expected action success, got %s", action.Status)
-	}
-	if action.Result == nil || action.Result["snapshot"] == nil {
-		t.Fatalf("expected snapshot result, got %v", action.Result)
-	}
-}
-
-func TestService_ProcessRandomGenerateAction(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	randomSvc := randomsvc.New(store, nil)
-
-	fnSvc := New(store, store, nil)
-	fnSvc.AttachDependencies(nil, nil, nil, nil, nil, nil, nil, nil, randomSvc)
-
-	fn, err := fnSvc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "random", Source: "() => 1"})
-	if err != nil {
-		t.Fatalf("create function: %v", err)
-	}
-
-	now := time.Now().UTC()
-	exec := &staticExecutor{
-		result: function.ExecutionResult{
-			FunctionID:  fn.ID,
-			Output:      map[string]any{},
-			Status:      function.ExecutionStatusSucceeded,
-			StartedAt:   now,
-			CompletedAt: now,
-			Actions: []function.Action{
-				{
-					ID:     "rand",
-					Type:   function.ActionTypeRandomGenerate,
-					Params: map[string]any{"length": 8, "requestId": "req-123"},
-				},
-			},
-		},
-	}
-	fnSvc.AttachExecutor(exec)
-
-	result, err := fnSvc.Execute(context.Background(), fn.ID, nil)
-	if err != nil {
-		t.Fatalf("execute function: %v", err)
-	}
-	if len(result.Actions) != 1 {
-		t.Fatalf("expected single action result, got %d", len(result.Actions))
-	}
-	action := result.Actions[0]
-	if action.Status != function.ActionStatusSucceeded {
-		t.Fatalf("expected action success, got %s", action.Status)
-	}
-	if action.Result == nil || action.Result["value"] == nil {
-		t.Fatalf("expected random result, got %v", action.Result)
-	}
-}
-
 func TestService_ProcessDataLinkDeliveryAction(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
 	dlSvc := datalinksvc.New(store, store, nil)
 
 	fnSvc := New(store, store, nil)
-	fnSvc.AttachDependencies(nil, nil, nil, nil, nil, dlSvc, nil, nil, nil)
+	fnSvc.AttachDependencies(nil, nil, nil, dlSvc, nil, nil, nil)
 
 	channel, err := dlSvc.CreateChannel(context.Background(), datalinkdomain.Channel{
 		AccountID: acct.ID,
@@ -713,15 +594,6 @@ func (m *multiActionExecutor) Execute(ctx context.Context, def function.Definiti
 				},
 			},
 			{
-				ID:   "trigger",
-				Type: function.ActionTypeTriggerRegister,
-				Params: map[string]any{
-					"type":   "cron",
-					"rule":   "0 * * * *",
-					"config": map[string]any{"timezone": "UTC"},
-				},
-			},
-			{
 				ID:   "oracle",
 				Type: function.ActionTypeOracleCreateRequest,
 				Params: map[string]any{
@@ -823,38 +695,13 @@ func TestService_Get(t *testing.T) {
 	}
 }
 
-func TestService_RegisterTrigger(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	triggerSvc := triggers.New(store, store, store, nil)
-
-	svc := New(store, store, nil)
-	svc.AttachDependencies(triggerSvc, nil, nil, nil, nil, nil, nil, nil, nil)
-
-	fn, _ := svc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "triggered", Source: "() => 1"})
-
-	trg := trigger.Trigger{
-		AccountID:  acct.ID,
-		FunctionID: fn.ID,
-		Type:       "cron",
-		Rule:       "0 * * * *",
-	}
-	created, err := svc.RegisterTrigger(context.Background(), trg)
-	if err != nil {
-		t.Fatalf("register trigger: %v", err)
-	}
-	if created.FunctionID != fn.ID {
-		t.Fatalf("expected trigger linked to function")
-	}
-}
-
 func TestService_ScheduleAutomationJob(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
 	automationSvc := automationsvc.New(store, store, store, nil)
 
 	svc := New(store, store, nil)
-	svc.AttachDependencies(nil, automationSvc, nil, nil, nil, nil, nil, nil, nil)
+	svc.AttachDependencies(automationSvc, nil, nil, nil, nil, nil, nil)
 
 	fn, _ := svc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "scheduled", Source: "() => 1"})
 
@@ -873,7 +720,7 @@ func TestService_UpdateAutomationJob(t *testing.T) {
 	automationSvc := automationsvc.New(store, store, store, nil)
 
 	svc := New(store, store, nil)
-	svc.AttachDependencies(nil, automationSvc, nil, nil, nil, nil, nil, nil, nil)
+	svc.AttachDependencies(automationSvc, nil, nil, nil, nil, nil, nil)
 
 	fn, _ := svc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "update-job", Source: "() => 1"})
 	job, _ := svc.ScheduleAutomationJob(context.Background(), acct.ID, fn.ID, "hourly", "0 * * * *", "hourly run")
@@ -903,7 +750,7 @@ func TestService_SetAutomationEnabled(t *testing.T) {
 	automationSvc := automationsvc.New(store, store, store, nil)
 
 	svc := New(store, store, nil)
-	svc.AttachDependencies(nil, automationSvc, nil, nil, nil, nil, nil, nil, nil)
+	svc.AttachDependencies(automationSvc, nil, nil, nil, nil, nil, nil)
 
 	fn, _ := svc.Create(context.Background(), function.Definition{AccountID: acct.ID, Name: "toggle-job", Source: "() => 1"})
 	job, _ := svc.ScheduleAutomationJob(context.Background(), acct.ID, fn.ID, "test", "0 * * * *", "")
@@ -925,65 +772,13 @@ func TestService_SetAutomationEnabled_NoDependency(t *testing.T) {
 	}
 }
 
-func TestService_CreatePriceFeed(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	priceSvc := pricefeedsvc.New(store, store, nil)
-
-	svc := New(store, store, nil)
-	svc.AttachDependencies(nil, nil, priceSvc, nil, nil, nil, nil, nil, nil)
-
-	feed, err := svc.CreatePriceFeed(context.Background(), acct.ID, "NEO", "USD", "@every 1m", "@every 1h", 0.5)
-	if err != nil {
-		t.Fatalf("create feed: %v", err)
-	}
-	if feed.BaseAsset != "NEO" {
-		t.Fatalf("expected base asset NEO")
-	}
-}
-
-func TestService_CreatePriceFeed_NoDependency(t *testing.T) {
-	svc := New(nil, nil, nil)
-	_, err := svc.CreatePriceFeed(context.Background(), "acc-1", "NEO", "USD", "@every 1m", "@every 1h", 0.5)
-	if err == nil {
-		t.Fatalf("expected dependency unavailable error")
-	}
-}
-
-func TestService_RecordPriceSnapshot(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	priceSvc := pricefeedsvc.New(store, store, nil)
-
-	svc := New(store, store, nil)
-	svc.AttachDependencies(nil, nil, priceSvc, nil, nil, nil, nil, nil, nil)
-
-	feed, _ := priceSvc.CreateFeed(context.Background(), acct.ID, "NEO", "USD", "@every 1m", "@every 1h", 0.5)
-
-	snap, err := svc.RecordPriceSnapshot(context.Background(), feed.ID, 15.5, "oracle", time.Now().UTC())
-	if err != nil {
-		t.Fatalf("record snapshot: %v", err)
-	}
-	if snap.Price != 15.5 {
-		t.Fatalf("expected price 15.5")
-	}
-}
-
-func TestService_RecordPriceSnapshot_NoDependency(t *testing.T) {
-	svc := New(nil, nil, nil)
-	_, err := svc.RecordPriceSnapshot(context.Background(), "feed-1", 10.0, "test", time.Now())
-	if err == nil {
-		t.Fatalf("expected dependency unavailable error")
-	}
-}
-
 func TestService_CreateOracleRequest(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
 	oracleSvc := oraclesvc.New(store, store, nil)
 
 	svc := New(store, store, nil)
-	svc.AttachDependencies(nil, nil, nil, nil, nil, nil, oracleSvc, nil, nil)
+	svc.AttachDependencies(nil, nil, nil, nil, oracleSvc, nil, nil)
 
 	src, _ := oracleSvc.CreateSource(context.Background(), acct.ID, "test", "https://example.com", "GET", "", nil, "")
 
@@ -1010,7 +805,7 @@ func TestService_CompleteOracleRequest(t *testing.T) {
 	oracleSvc := oraclesvc.New(store, store, nil)
 
 	svc := New(store, store, nil)
-	svc.AttachDependencies(nil, nil, nil, nil, nil, nil, oracleSvc, nil, nil)
+	svc.AttachDependencies(nil, nil, nil, nil, oracleSvc, nil, nil)
 
 	src, _ := oracleSvc.CreateSource(context.Background(), acct.ID, "test", "https://example.com", "GET", "", nil, "")
 	req, _ := oracleSvc.CreateRequest(context.Background(), acct.ID, src.ID, "")
@@ -1039,7 +834,7 @@ func TestService_EnsureGasAccount(t *testing.T) {
 	gasSvc := gasbanksvc.New(store, store, nil)
 
 	svc := New(store, store, nil)
-	svc.AttachDependencies(nil, nil, nil, nil, nil, nil, nil, gasSvc, nil)
+	svc.AttachDependencies(nil, nil, nil, nil, nil, gasSvc, nil)
 
 	gasAcct, err := svc.EnsureGasAccount(context.Background(), acct.ID, "NWALLET")
 	if err != nil {
@@ -1053,14 +848,6 @@ func TestService_EnsureGasAccount(t *testing.T) {
 func TestService_EnsureGasAccount_NoDependency(t *testing.T) {
 	svc := New(nil, nil, nil)
 	_, err := svc.EnsureGasAccount(context.Background(), "acc-1", "wallet")
-	if err == nil {
-		t.Fatalf("expected dependency unavailable error")
-	}
-}
-
-func TestService_RegisterTrigger_NoDependency(t *testing.T) {
-	svc := New(nil, nil, nil)
-	_, err := svc.RegisterTrigger(context.Background(), trigger.Trigger{})
 	if err == nil {
 		t.Fatalf("expected dependency unavailable error")
 	}

@@ -2,7 +2,6 @@ package functions
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,8 +11,6 @@ import (
 	domaindatastreams "github.com/R3E-Network/service_layer/domain/datastreams"
 	"github.com/R3E-Network/service_layer/domain/function"
 	"github.com/R3E-Network/service_layer/domain/gasbank"
-	"github.com/R3E-Network/service_layer/domain/trigger"
-	randomsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.random"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 )
 
@@ -68,14 +65,6 @@ func (s *Service) processActions(ctx context.Context, def function.Definition, a
 			} else {
 				res.Result = oracleResult
 			}
-		case function.ActionTypePriceFeedSnapshot:
-			priceResult, err := s.handlePriceFeedSnapshot(ctx, def, action.Params)
-			if err != nil {
-				res.Status = function.ActionStatusFailed
-				res.Error = err.Error()
-			} else {
-				res.Result = priceResult
-			}
 		case function.ActionTypeDataFeedSubmit:
 			dfResult, err := s.handleDataFeedSubmit(ctx, def, action.Params)
 			if err != nil {
@@ -99,22 +88,6 @@ func (s *Service) processActions(ctx context.Context, def function.Definition, a
 				res.Error = err.Error()
 			} else {
 				res.Result = dlResult
-			}
-		case function.ActionTypeRandomGenerate:
-			randomResult, err := s.handleRandomGenerate(ctx, def, action.Params)
-			if err != nil {
-				res.Status = function.ActionStatusFailed
-				res.Error = err.Error()
-			} else {
-				res.Result = randomResult
-			}
-		case function.ActionTypeTriggerRegister:
-			triggerResult, err := s.handleTriggerRegister(ctx, def, action.Params)
-			if err != nil {
-				res.Status = function.ActionStatusFailed
-				res.Error = err.Error()
-			} else {
-				res.Result = triggerResult
 			}
 		case function.ActionTypeAutomationSchedule:
 			autoResult, err := s.handleAutomationSchedule(ctx, def, action.Params)
@@ -307,43 +280,6 @@ func (s *Service) handleOracleCreateRequest(ctx context.Context, def function.De
 	}, nil
 }
 
-func (s *Service) handlePriceFeedSnapshot(ctx context.Context, def function.Definition, params map[string]any) (map[string]any, error) {
-	if s.priceFeeds == nil {
-		return nil, fmt.Errorf("pricefeed: %w", errDependencyUnavailable)
-	}
-	feedID := stringParam(params, "feedId", "")
-	if feedID == "" {
-		feedID = stringParam(params, "feed_id", "")
-	}
-	if feedID == "" {
-		return nil, errors.New("pricefeed.recordSnapshot requires feedId")
-	}
-	price, err := floatParam(params, "price")
-	if err != nil {
-		return nil, fmt.Errorf("price: %w", err)
-	}
-	if price <= 0 {
-		return nil, errors.New("price must be positive")
-	}
-	source := stringParam(params, "source", "")
-	collectedAt := time.Now().UTC()
-	if ts := stringParam(params, "collectedAt", stringParam(params, "collected_at", "")); ts != "" {
-		parsed, err := time.Parse(time.RFC3339, ts)
-		if err != nil {
-			return nil, fmt.Errorf("collected_at: %w", err)
-		}
-		collectedAt = parsed
-	}
-
-	snap, err := s.priceFeeds.RecordSnapshot(ctx, feedID, price, source, collectedAt)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{
-		"snapshot": structToMap(snap),
-	}, nil
-}
-
 func (s *Service) handleDataFeedSubmit(ctx context.Context, def function.Definition, params map[string]any) (map[string]any, error) {
 	if s.dataFeeds == nil {
 		return nil, fmt.Errorf("datafeeds: %w", errDependencyUnavailable)
@@ -378,31 +314,6 @@ func (s *Service) handleDataFeedSubmit(ctx context.Context, def function.Definit
 	}
 	return map[string]any{
 		"update": structToMap(update),
-	}, nil
-}
-
-func (s *Service) handleRandomGenerate(ctx context.Context, def function.Definition, params map[string]any) (map[string]any, error) {
-	if s.random == nil {
-		return nil, fmt.Errorf("random: %w", errDependencyUnavailable)
-	}
-	length := intParam(params, "length", 32)
-	if length <= 0 {
-		length = 32
-	}
-	requestID := stringParam(params, "requestId", stringParam(params, "request_id", ""))
-
-	res, err := s.random.Generate(ctx, def.AccountID, length, requestID)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{
-		"length":     res.Length,
-		"value":      randomsvc.EncodeResult(res),
-		"created_at": res.CreatedAt,
-		"request_id": res.RequestID,
-		"counter":    res.Counter,
-		"signature":  base64.StdEncoding.EncodeToString(res.Signature),
-		"public_key": base64.StdEncoding.EncodeToString(res.PublicKey),
 	}, nil
 }
 
@@ -449,39 +360,6 @@ func (s *Service) handleDatalinkDelivery(ctx context.Context, def function.Defin
 	}
 	return map[string]any{
 		"delivery": structToMap(delivery),
-	}, nil
-}
-
-func (s *Service) handleTriggerRegister(ctx context.Context, def function.Definition, params map[string]any) (map[string]any, error) {
-	if s.triggers == nil {
-		return nil, fmt.Errorf("triggers: %w", errDependencyUnavailable)
-	}
-
-	triggerType := stringParam(params, "type", "")
-	if triggerType == "" {
-		return nil, errors.New("triggers.register requires type")
-	}
-	rule := stringParam(params, "rule", "")
-	configMap, err := mapStringStringParam(params, "config")
-	if err != nil {
-		return nil, fmt.Errorf("config: %w", err)
-	}
-	enabled := boolParam(params, "enabled", true)
-
-	trg := trigger.Trigger{
-		AccountID:  def.AccountID,
-		FunctionID: def.ID,
-		Type:       trigger.Type(triggerType),
-		Rule:       rule,
-		Config:     configMap,
-		Enabled:    enabled,
-	}
-	created, err := s.RegisterTrigger(ctx, trg)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{
-		"trigger": structToMap(created),
 	}, nil
 }
 

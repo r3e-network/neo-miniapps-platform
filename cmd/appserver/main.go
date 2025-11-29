@@ -90,10 +90,8 @@ func main() {
 	stores := app.Stores{
 		Accounts:         pgStore,
 		Functions:        pgStore,
-		Triggers:         pgStore,
 		GasBank:          pgStore,
 		Automation:       pgStore,
-		PriceFeeds:       pgStore,
 		DataFeeds:        pgStore,
 		DataStreams:      pgStore,
 		DataLink:         pgStore,

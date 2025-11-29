@@ -361,31 +361,6 @@ func TestIntegrationHTTPAPI(t *testing.T) {
 		t.Fatalf("expected forbidden for deliveries without tenant, got %d", noTenantDeliveries.Code)
 	}
 
-	// Random generation
-	randResp := do(t, client, server.URL+"/accounts/"+accountID+"/random", http.MethodPost, marshalBody(t, map[string]any{
-		"length": 8,
-	}), "dev-token")
-	if randResp.Code != http.StatusOK {
-		t.Fatalf("random generate status: %d", randResp.Code)
-	}
-	randList := do(t, client, server.URL+"/accounts/"+accountID+"/random/requests?limit=5", http.MethodGet, nil, "dev-token")
-	if randList.Code != http.StatusOK {
-		t.Fatalf("random list status: %d", randList.Code)
-	}
-	wrongTenantRandom := doWithHeaders(t, client, server.URL+"/accounts/"+accountID+"/random/requests", http.MethodGet, nil, map[string]string{
-		"Authorization": "Bearer dev-token",
-		"X-Tenant-ID":   "tenant-b",
-	})
-	if wrongTenantRandom.Code != http.StatusForbidden {
-		t.Fatalf("expected forbidden for random list with wrong tenant, got %d", wrongTenantRandom.Code)
-	}
-	noTenantRandom := doWithHeaders(t, client, server.URL+"/accounts/"+accountID+"/random/requests", http.MethodGet, nil, map[string]string{
-		"Authorization": "Bearer dev-token",
-	})
-	if noTenantRandom.Code != http.StatusForbidden {
-		t.Fatalf("expected forbidden for random list without tenant, got %d", noTenantRandom.Code)
-	}
-
 	// Function + automation job
 	fnResp := do(t, client, server.URL+"/accounts/"+accountID+"/functions", http.MethodPost, marshalBody(t, map[string]any{
 		"name":   "hello",
@@ -502,22 +477,6 @@ func TestIntegrationHTTPAPI(t *testing.T) {
 	})
 	if noTenantCRE.Code != http.StatusForbidden {
 		t.Fatalf("expected forbidden for CRE without tenant, got %d", noTenantCRE.Code)
-	}
-
-	// Pricefeed create/list
-	pfResp := do(t, client, server.URL+"/accounts/"+accountID+"/pricefeeds", http.MethodPost, marshalBody(t, map[string]any{
-		"base_asset":         "NEO",
-		"quote_asset":        "USD",
-		"update_interval":    "1m",
-		"heartbeat_interval": "2m",
-		"deviation_percent":  1.0,
-	}), "dev-token")
-	if pfResp.Code != http.StatusCreated {
-		t.Fatalf("create pricefeed status: %d", pfResp.Code)
-	}
-	pfList := do(t, client, server.URL+"/accounts/"+accountID+"/pricefeeds", http.MethodGet, nil, "dev-token")
-	if pfList.Code != http.StatusOK {
-		t.Fatalf("list pricefeeds status: %d", pfList.Code)
 	}
 
 	// System status/descriptors

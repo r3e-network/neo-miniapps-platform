@@ -379,43 +379,6 @@ func TestHandlerLifecycle(t *testing.T) {
 		}
 	}
 
-	randomBody := marshal(map[string]any{"length": 16, "request_id": "req-http"})
-	resp = httptest.NewRecorder()
-	handler.ServeHTTP(resp, authedRequest(http.MethodPost, "/accounts/"+id+"/random", randomBody))
-	if resp.Code != http.StatusOK {
-		t.Fatalf("expected 200 random, got %d", resp.Code)
-	}
-	var randomResp map[string]any
-	if err := json.Unmarshal(resp.Body.Bytes(), &randomResp); err != nil {
-		t.Fatalf("unmarshal random: %v", err)
-	}
-	if randomResp["RequestID"] != "req-http" {
-		t.Fatalf("expected request id echoed, got %v", randomResp["RequestID"])
-	}
-
-	listResp := httptest.NewRecorder()
-	handler.ServeHTTP(listResp, authedRequest(http.MethodGet, "/accounts/"+id+"/random/requests?limit=5", nil))
-	if listResp.Code != http.StatusOK {
-		t.Fatalf("expected 200 random list, got %d", listResp.Code)
-	}
-	var listPayload []map[string]any
-	if err := json.Unmarshal(listResp.Body.Bytes(), &listPayload); err != nil {
-		t.Fatalf("unmarshal random list: %v", err)
-	}
-	if len(listPayload) != 1 {
-		t.Fatalf("expected single random record, got %d", len(listPayload))
-	}
-	if listPayload[0]["RequestID"] != "req-http" {
-		t.Fatalf("expected list to include request, got %v", listPayload[0]["RequestID"])
-	}
-
-	trigBody := marshal(map[string]any{"function_id": fnID, "rule": "cron:@hourly"})
-	resp = httptest.NewRecorder()
-	handler.ServeHTTP(resp, authedRequest(http.MethodPost, "/accounts/"+id+"/triggers", trigBody))
-	if resp.Code != http.StatusCreated {
-		t.Fatalf("expected 201 create trigger, got %d", resp.Code)
-	}
-
 	ensureBody := marshal(map[string]any{"wallet_address": "WALLET-1"})
 	resp = httptest.NewRecorder()
 	handler.ServeHTTP(resp, authedRequest(http.MethodPost, "/accounts/"+id+"/gasbank", ensureBody))
@@ -572,54 +535,6 @@ func TestHandlerLifecycle(t *testing.T) {
 	firstAction, _ := actions[0].(map[string]any)
 	if firstAction["type"] != "gasbank.ensureAccount" || firstAction["status"] != "succeeded" {
 		t.Fatalf("unexpected action payload: %#v", firstAction)
-	}
-
-	feedBody := marshal(map[string]any{
-		"base_asset":         "NEO",
-		"quote_asset":        "USD",
-		"update_interval":    "@every 1m",
-		"heartbeat_interval": "@every 1h",
-		"deviation_percent":  0.5,
-	})
-	resp = httptest.NewRecorder()
-	handler.ServeHTTP(resp, authedRequest(http.MethodPost, "/accounts/"+id+"/pricefeeds", feedBody))
-	if resp.Code != http.StatusCreated {
-		t.Fatalf("expected 201 create feed, got %d", resp.Code)
-	}
-	var feed map[string]any
-	if err := json.Unmarshal(resp.Body.Bytes(), &feed); err != nil {
-		t.Fatalf("unmarshal feed: %v", err)
-	}
-	feedID := feed["ID"].(string)
-
-	resp = httptest.NewRecorder()
-	handler.ServeHTTP(resp, authedRequest(http.MethodGet, "/accounts/"+id+"/pricefeeds/"+feedID, nil))
-	if resp.Code != http.StatusOK {
-		t.Fatalf("expected 200 get feed, got %d", resp.Code)
-	}
-
-	snapshotBody := marshal(map[string]any{
-		"price":        10.5,
-		"source":       "oracle",
-		"collected_at": time.Now().UTC().Format(time.RFC3339),
-	})
-	resp = httptest.NewRecorder()
-	handler.ServeHTTP(resp, authedRequest(http.MethodPost, "/accounts/"+id+"/pricefeeds/"+feedID+"/snapshots", snapshotBody))
-	if resp.Code != http.StatusCreated {
-		t.Fatalf("expected 201 snapshot, got %d", resp.Code)
-	}
-
-	resp = httptest.NewRecorder()
-	handler.ServeHTTP(resp, authedRequest(http.MethodGet, "/accounts/"+id+"/pricefeeds/"+feedID+"/snapshots", nil))
-	if resp.Code != http.StatusOK {
-		t.Fatalf("expected 200 snapshots, got %d", resp.Code)
-	}
-
-	feedPatch := marshal(map[string]any{"active": false})
-	resp = httptest.NewRecorder()
-	handler.ServeHTTP(resp, authedRequest(http.MethodPatch, "/accounts/"+id+"/pricefeeds/"+feedID, feedPatch))
-	if resp.Code != http.StatusOK {
-		t.Fatalf("expected 200 patch feed, got %d", resp.Code)
 	}
 
 	sourceBody := marshal(map[string]any{

@@ -9,10 +9,8 @@ func NewMemoryStoresForTest() Stores {
 	return Stores{
 		Accounts:         store,
 		Functions:        store,
-		Triggers:         store,
 		GasBank:          store,
 		Automation:       store,
-		PriceFeeds:       store,
 		DataFeeds:        store,
 		DataStreams:      store,
 		DataLink:         store,

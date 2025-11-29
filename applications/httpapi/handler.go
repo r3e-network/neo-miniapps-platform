@@ -374,22 +374,16 @@ func (h *handler) accountResources(w http.ResponseWriter, r *http.Request) {
 	switch resource {
 	case "functions":
 		h.accountFunctions(w, r, accountID, parts[2:])
-	case "triggers":
-		h.accountTriggers(w, r, accountID)
 	case "gasbank":
 		h.accountGasBank(w, r, accountID, parts[2:])
 	case "automation":
 		h.accountAutomation(w, r, accountID, parts[2:])
-	case "pricefeeds":
-		h.accountPriceFeeds(w, r, accountID, parts[2:])
 	case "datafeeds":
 		h.accountDataFeeds(w, r, accountID, parts[2:])
 	case "oracle":
 		h.accountOracle(w, r, accountID, parts[2:])
 	case "secrets":
 		h.accountSecrets(w, r, accountID, parts[2:])
-	case "random":
-		h.accountRandom(w, r, accountID, parts[2:])
 	case "cre":
 		h.accountCRE(w, r, accountID, parts[2:])
 	case "ccip":

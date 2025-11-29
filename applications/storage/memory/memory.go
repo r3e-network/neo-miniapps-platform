@@ -21,9 +21,7 @@ import (
 	"github.com/R3E-Network/service_layer/domain/function"
 	"github.com/R3E-Network/service_layer/domain/gasbank"
 	"github.com/R3E-Network/service_layer/domain/oracle"
-	"github.com/R3E-Network/service_layer/domain/pricefeed"
 	"github.com/R3E-Network/service_layer/domain/secret"
-	"github.com/R3E-Network/service_layer/domain/trigger"
 	"github.com/R3E-Network/service_layer/domain/vrf"
 )
 
@@ -35,7 +33,6 @@ type Store struct {
 	accounts              map[string]account.Account
 	functions             map[string]function.Definition
 	functionExecutions    map[string]function.Execution
-	triggers              map[string]trigger.Trigger
 	gasAccounts           map[string]gasbank.Account
 	gasAccountsByWallet   map[string]string
 	gasTransactions       map[string][]gasbank.Transaction
@@ -45,10 +42,6 @@ type Store struct {
 	gasSettlementAttempts map[string][]gasbank.SettlementAttempt
 	gasDeadLetters        map[string]gasbank.DeadLetter
 	automationJobs        map[string]automation.Job
-	priceFeeds            map[string]pricefeed.Feed
-	priceSnapshots        map[string][]pricefeed.Snapshot
-	priceRounds           map[string][]pricefeed.Round
-	priceObservations     map[string][]pricefeed.Observation
 	oracleSources         map[string]oracle.DataSource
 	oracleRequests        map[string]oracle.Request
 	secrets               map[string]secret.Secret
@@ -76,10 +69,8 @@ type Store struct {
 
 var _ storage.AccountStore = (*Store)(nil)
 var _ storage.FunctionStore = (*Store)(nil)
-var _ storage.TriggerStore = (*Store)(nil)
 var _ storage.GasBankStore = (*Store)(nil)
 var _ storage.AutomationStore = (*Store)(nil)
-var _ storage.PriceFeedStore = (*Store)(nil)
 var _ storage.OracleStore = (*Store)(nil)
 var _ storage.SecretStore = (*Store)(nil)
 var _ storage.CREStore = (*Store)(nil)
@@ -100,7 +91,6 @@ func New() *Store {
 		accounts:              make(map[string]account.Account),
 		functions:             make(map[string]function.Definition),
 		functionExecutions:    make(map[string]function.Execution),
-		triggers:              make(map[string]trigger.Trigger),
 		gasAccounts:           make(map[string]gasbank.Account),
 		gasAccountsByWallet:   make(map[string]string),
 		gasTransactions:       make(map[string][]gasbank.Transaction),
@@ -110,10 +100,6 @@ func New() *Store {
 		gasSettlementAttempts: make(map[string][]gasbank.SettlementAttempt),
 		gasDeadLetters:        make(map[string]gasbank.DeadLetter),
 		automationJobs:        make(map[string]automation.Job),
-		priceFeeds:            make(map[string]pricefeed.Feed),
-		priceSnapshots:        make(map[string][]pricefeed.Snapshot),
-		priceRounds:           make(map[string][]pricefeed.Round),
-		priceObservations:     make(map[string][]pricefeed.Observation),
 		oracleSources:         make(map[string]oracle.DataSource),
 		oracleRequests:        make(map[string]oracle.Request),
 		secrets:               make(map[string]secret.Secret),
@@ -338,68 +324,6 @@ func (s *Store) ListFunctionExecutions(_ context.Context, functionID string, lim
 	return result, nil
 }
 
-// TriggerStore implementation -------------------------------------------------
-
-func (s *Store) CreateTrigger(_ context.Context, trg trigger.Trigger) (trigger.Trigger, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if trg.ID == "" {
-		trg.ID = s.nextIDLocked()
-	} else if _, exists := s.triggers[trg.ID]; exists {
-		return trigger.Trigger{}, fmt.Errorf("trigger %s already exists", trg.ID)
-	}
-
-	now := time.Now().UTC()
-	trg.CreatedAt = now
-	trg.UpdatedAt = now
-
-	trg.Config = cloneMap(trg.Config)
-	s.triggers[trg.ID] = trg
-	return cloneTrigger(trg), nil
-}
-
-func (s *Store) UpdateTrigger(_ context.Context, trg trigger.Trigger) (trigger.Trigger, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	original, ok := s.triggers[trg.ID]
-	if !ok {
-		return trigger.Trigger{}, fmt.Errorf("trigger %s not found", trg.ID)
-	}
-
-	trg.CreatedAt = original.CreatedAt
-	trg.UpdatedAt = time.Now().UTC()
-	trg.Config = cloneMap(trg.Config)
-
-	s.triggers[trg.ID] = trg
-	return cloneTrigger(trg), nil
-}
-
-func (s *Store) GetTrigger(_ context.Context, id string) (trigger.Trigger, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	trg, ok := s.triggers[id]
-	if !ok {
-		return trigger.Trigger{}, fmt.Errorf("trigger %s not found", id)
-	}
-	return cloneTrigger(trg), nil
-}
-
-func (s *Store) ListTriggers(_ context.Context, accountID string) ([]trigger.Trigger, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	result := make([]trigger.Trigger, 0)
-	for _, trg := range s.triggers {
-		if accountID == "" || trg.AccountID == accountID {
-			result = append(result, cloneTrigger(trg))
-		}
-	}
-	return result, nil
-}
-
 // Helpers --------------------------------------------------------------------
 
 func cloneMap(src map[string]string) map[string]string {
@@ -533,17 +457,6 @@ func cloneActionResult(action function.ActionResult) function.ActionResult {
 	action.Result = cloneAnyMap(action.Result)
 	action.Meta = cloneAnyMap(action.Meta)
 	return action
-}
-
-func cloneTrigger(trg trigger.Trigger) trigger.Trigger {
-	if trg.Config != nil {
-		copyCfg := make(map[string]string, len(trg.Config))
-		for k, v := range trg.Config {
-			copyCfg[k] = v
-		}
-		trg.Config = copyCfg
-	}
-	return trg
 }
 
 func cloneDataSource(src oracle.DataSource) oracle.DataSource {
@@ -999,229 +912,6 @@ func (s *Store) ListAutomationJobs(_ context.Context, accountID string) ([]autom
 		}
 	}
 	return result, nil
-}
-
-// PriceFeedStore implementation ---------------------------------------------
-
-func (s *Store) CreatePriceFeed(_ context.Context, feed pricefeed.Feed) (pricefeed.Feed, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if feed.ID == "" {
-		feed.ID = s.nextIDLocked()
-	} else if _, exists := s.priceFeeds[feed.ID]; exists {
-		return pricefeed.Feed{}, fmt.Errorf("price feed %s already exists", feed.ID)
-	}
-
-	now := time.Now().UTC()
-	feed.CreatedAt = now
-	feed.UpdatedAt = now
-
-	s.priceFeeds[feed.ID] = feed
-	return feed, nil
-}
-
-func (s *Store) UpdatePriceFeed(_ context.Context, feed pricefeed.Feed) (pricefeed.Feed, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	original, ok := s.priceFeeds[feed.ID]
-	if !ok {
-		return pricefeed.Feed{}, fmt.Errorf("price feed %s not found", feed.ID)
-	}
-
-	feed.CreatedAt = original.CreatedAt
-	feed.UpdatedAt = time.Now().UTC()
-
-	s.priceFeeds[feed.ID] = feed
-	return feed, nil
-}
-
-func (s *Store) GetPriceFeed(_ context.Context, id string) (pricefeed.Feed, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	feed, ok := s.priceFeeds[id]
-	if !ok {
-		return pricefeed.Feed{}, fmt.Errorf("price feed %s not found", id)
-	}
-	return feed, nil
-}
-
-func (s *Store) ListPriceFeeds(_ context.Context, accountID string) ([]pricefeed.Feed, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	result := make([]pricefeed.Feed, 0)
-	for _, feed := range s.priceFeeds {
-		if accountID == "" || feed.AccountID == accountID {
-			result = append(result, feed)
-		}
-	}
-	return result, nil
-}
-
-func (s *Store) DeletePriceFeed(_ context.Context, feedID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if _, exists := s.priceFeeds[feedID]; !exists {
-		return fmt.Errorf("price feed %s not found", feedID)
-	}
-
-	delete(s.priceFeeds, feedID)
-	delete(s.priceSnapshots, feedID)
-	delete(s.priceRounds, feedID)
-	delete(s.priceObservations, feedID)
-	return nil
-}
-
-func (s *Store) CreatePriceSnapshot(_ context.Context, snap pricefeed.Snapshot) (pricefeed.Snapshot, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if snap.ID == "" {
-		snap.ID = s.nextIDLocked()
-	} else {
-		for _, existing := range s.priceSnapshots[snap.FeedID] {
-			if existing.ID == snap.ID {
-				return pricefeed.Snapshot{}, fmt.Errorf("snapshot %s already exists for feed %s", snap.ID, snap.FeedID)
-			}
-		}
-	}
-
-	now := time.Now().UTC()
-	snap.CreatedAt = now
-	if snap.CollectedAt.IsZero() {
-		snap.CollectedAt = now
-	}
-
-	s.priceSnapshots[snap.FeedID] = append(s.priceSnapshots[snap.FeedID], snap)
-	return snap, nil
-}
-
-func (s *Store) ListPriceSnapshots(_ context.Context, feedID string) ([]pricefeed.Snapshot, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	return append([]pricefeed.Snapshot(nil), s.priceSnapshots[feedID]...), nil
-}
-
-func (s *Store) CreatePriceRound(_ context.Context, round pricefeed.Round) (pricefeed.Round, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if round.FeedID == "" {
-		return pricefeed.Round{}, fmt.Errorf("feed id is required")
-	}
-	if round.ID == "" {
-		round.ID = s.nextIDLocked()
-	}
-	now := time.Now().UTC()
-	round.CreatedAt = now
-	if round.StartedAt.IsZero() {
-		round.StartedAt = now
-	}
-	if round.Finalized && round.ClosedAt.IsZero() {
-		round.ClosedAt = now
-	}
-
-	feedRounds := s.priceRounds[round.FeedID]
-	for _, existing := range feedRounds {
-		if existing.RoundID == round.RoundID {
-			return pricefeed.Round{}, fmt.Errorf("round %d already exists for feed %s", round.RoundID, round.FeedID)
-		}
-	}
-	s.priceRounds[round.FeedID] = append(feedRounds, round)
-	sort.Slice(s.priceRounds[round.FeedID], func(i, j int) bool {
-		return s.priceRounds[round.FeedID][i].RoundID < s.priceRounds[round.FeedID][j].RoundID
-	})
-	return round, nil
-}
-
-func (s *Store) UpdatePriceRound(_ context.Context, round pricefeed.Round) (pricefeed.Round, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	feedRounds := s.priceRounds[round.FeedID]
-	for idx, existing := range feedRounds {
-		if existing.RoundID == round.RoundID {
-			round.CreatedAt = existing.CreatedAt
-			if !round.Finalized {
-				round.ClosedAt = time.Time{}
-			} else if round.ClosedAt.IsZero() {
-				round.ClosedAt = time.Now().UTC()
-			}
-			feedRounds[idx] = round
-			s.priceRounds[round.FeedID] = feedRounds
-			return round, nil
-		}
-	}
-	return pricefeed.Round{}, fmt.Errorf("round %d not found for feed %s", round.RoundID, round.FeedID)
-}
-
-func (s *Store) GetLatestPriceRound(_ context.Context, feedID string) (pricefeed.Round, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	rounds := s.priceRounds[feedID]
-	if len(rounds) == 0 {
-		return pricefeed.Round{}, fmt.Errorf("no rounds for feed %s", feedID)
-	}
-	return rounds[len(rounds)-1], nil
-}
-
-func (s *Store) ListPriceRounds(_ context.Context, feedID string, limit int) ([]pricefeed.Round, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	rounds := append([]pricefeed.Round(nil), s.priceRounds[feedID]...)
-	sort.Slice(rounds, func(i, j int) bool {
-		return rounds[i].RoundID > rounds[j].RoundID
-	})
-	if limit > 0 && limit < len(rounds) {
-		rounds = rounds[:limit]
-	}
-	return rounds, nil
-}
-
-func (s *Store) CreatePriceObservation(_ context.Context, obs pricefeed.Observation) (pricefeed.Observation, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if obs.FeedID == "" {
-		return pricefeed.Observation{}, fmt.Errorf("feed id is required")
-	}
-	if obs.RoundID == 0 {
-		return pricefeed.Observation{}, fmt.Errorf("round id is required")
-	}
-	if obs.ID == "" {
-		obs.ID = s.nextIDLocked()
-	}
-	now := time.Now().UTC()
-	obs.CreatedAt = now
-	if obs.CollectedAt.IsZero() {
-		obs.CollectedAt = now
-	}
-	key := observationKey(obs.FeedID, obs.RoundID)
-	s.priceObservations[key] = append(s.priceObservations[key], obs)
-	return obs, nil
-}
-
-func (s *Store) ListPriceObservations(_ context.Context, feedID string, roundID int64, limit int) ([]pricefeed.Observation, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	key := observationKey(feedID, roundID)
-	items := append([]pricefeed.Observation(nil), s.priceObservations[key]...)
-	if limit > 0 && len(items) > limit {
-		items = items[:limit]
-	}
-	return items, nil
-}
-
-func observationKey(feedID string, roundID int64) string {
-	return fmt.Sprintf("%s:%d", feedID, roundID)
 }
 
 // OracleStore implementation -------------------------------------------------

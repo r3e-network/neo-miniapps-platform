@@ -225,17 +225,11 @@ type StoreProvider interface {
 	// Function domain
 	FunctionStore() FunctionStoreAPI
 
-	// Trigger domain
-	TriggerStore() TriggerStoreAPI
-
 	// GasBank domain
 	GasBankStore() GasBankStoreAPI
 
 	// Automation domain
 	AutomationStore() AutomationStoreAPI
-
-	// PriceFeed domain
-	PriceFeedStore() PriceFeedStoreAPI
 
 	// DataFeed domain
 	DataFeedStore() DataFeedStoreAPI
@@ -281,17 +275,11 @@ type AccountStoreAPI interface{}
 // FunctionStoreAPI is the interface for function persistence.
 type FunctionStoreAPI interface{}
 
-// TriggerStoreAPI is the interface for trigger persistence.
-type TriggerStoreAPI interface{}
-
 // GasBankStoreAPI is the interface for gas bank persistence.
 type GasBankStoreAPI interface{}
 
 // AutomationStoreAPI is the interface for automation persistence.
 type AutomationStoreAPI interface{}
-
-// PriceFeedStoreAPI is the interface for price feed persistence.
-type PriceFeedStoreAPI interface{}
 
 // DataFeedStoreAPI is the interface for data feed persistence.
 type DataFeedStoreAPI interface{}
