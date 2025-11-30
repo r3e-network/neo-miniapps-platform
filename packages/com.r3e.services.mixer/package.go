@@ -1,8 +1,15 @@
 // Package mixer provides the Privacy Mixer Service as a ServicePackage.
+// This package is self-contained with its own:
+// - Domain types (domain.go)
+// - Store interface and implementation (store.go, store_postgres.go)
+// - Service logic (service.go)
+// - HTTP handlers (http.go)
+// - Documentation (doc.go)
 package mixer
 
 import (
 	"context"
+	"net/http"
 
 	engine "github.com/R3E-Network/service_layer/system/core"
 	pkg "github.com/R3E-Network/service_layer/system/runtime"
@@ -11,6 +18,7 @@ import (
 // Package implements the ServicePackage interface using PackageTemplate.
 type Package struct {
 	pkg.PackageTemplate
+	httpHandler *HTTPHandler
 }
 
 func init() {
@@ -45,5 +53,23 @@ func (p *Package) CreateServices(ctx context.Context, runtime pkg.PackageRuntime
 	var chain ChainClient
 
 	svc := New(accounts, store, tee, chain, log)
+
+	// Create HTTP handler for this service
+	p.httpHandler = NewHTTPHandler(svc)
+
 	return []engine.ServiceModule{svc}, nil
+}
+
+// RegisterRoutes implements the RouteRegistrar interface.
+// This allows the service to register its own HTTP routes.
+func (p *Package) RegisterRoutes(mux *http.ServeMux, basePath string) {
+	if p.httpHandler != nil {
+		p.httpHandler.RegisterRoutes(mux, basePath)
+	}
+}
+
+// HTTPHandler returns the HTTP handler for external registration.
+// This is used when the application layer needs to integrate routes.
+func (p *Package) HTTPHandler() *HTTPHandler {
+	return p.httpHandler
 }

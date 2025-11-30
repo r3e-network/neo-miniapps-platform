@@ -1,8 +1,14 @@
 // Package vrf provides the VRF Service as a ServicePackage.
+// This package is self-contained with its own:
+// - Domain types (model.go)
+// - Store interface and implementation (store.go, store_postgres.go)
+// - Service logic (service.go)
+// - HTTP handlers (http.go)
 package vrf
 
 import (
 	"context"
+	"net/http"
 
 	engine "github.com/R3E-Network/service_layer/system/core"
 	pkg "github.com/R3E-Network/service_layer/system/runtime"
@@ -11,6 +17,7 @@ import (
 // Package implements the ServicePackage interface using PackageTemplate.
 type Package struct {
 	pkg.PackageTemplate
+	httpHandler *HTTPHandler
 }
 
 func init() {
@@ -40,5 +47,22 @@ func (p *Package) CreateServices(ctx context.Context, runtime pkg.PackageRuntime
 	log := pkg.GetLogger(runtime, "vrf")
 
 	svc := New(accounts, store, log)
+
+	// Create HTTP handler for this service
+	p.httpHandler = NewHTTPHandler(svc)
+
 	return []engine.ServiceModule{svc}, nil
+}
+
+// RegisterRoutes implements the RouteRegistrar interface.
+// This allows the service to register its own HTTP routes.
+func (p *Package) RegisterRoutes(mux *http.ServeMux, basePath string) {
+	if p.httpHandler != nil {
+		p.httpHandler.RegisterRoutes(mux, basePath)
+	}
+}
+
+// HTTPHandler returns the HTTP handler for external registration.
+func (p *Package) HTTPHandler() *HTTPHandler {
+	return p.httpHandler
 }
