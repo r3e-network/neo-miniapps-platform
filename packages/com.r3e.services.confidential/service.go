@@ -75,20 +75,12 @@ func New(accounts storage.AccountStore, store storage.ConfidentialStore, log *lo
 
 // WithSealedKeyHooks configures observability hooks for sealed key storage.
 func (s *Service) WithSealedKeyHooks(h core.ObservationHooks) {
-	if h.OnStart == nil && h.OnComplete == nil {
-		s.sealedKeyHooks = core.NoopObservationHooks
-		return
-	}
-	s.sealedKeyHooks = h
+	s.sealedKeyHooks = core.NormalizeHooks(h)
 }
 
 // WithAttestationHooks configures observability hooks for attestation storage.
 func (s *Service) WithAttestationHooks(h core.ObservationHooks) {
-	if h.OnStart == nil && h.OnComplete == nil {
-		s.attestHooks = core.NoopObservationHooks
-		return
-	}
-	s.attestHooks = h
+	s.attestHooks = core.NormalizeHooks(h)
 }
 
 // CreateEnclave registers a new enclave for an account.

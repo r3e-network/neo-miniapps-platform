@@ -64,11 +64,7 @@ func (s *Service) WithWorkspaceWallets(store storage.WorkspaceWalletStore) {
 
 // WithObservationHooks configures callbacks for order creation observability.
 func (s *Service) WithObservationHooks(h core.ObservationHooks) {
-	if h.OnStart == nil && h.OnComplete == nil {
-		s.hooks = core.NoopObservationHooks
-		return
-	}
-	s.hooks = h
+	s.hooks = core.NormalizeHooks(h)
 }
 
 // CreateProduct registers a product for an account.

@@ -37,3 +37,13 @@ var NoopDispatchHooks = NoopObservationHooks
 func StartDispatch(ctx context.Context, hooks DispatchHooks, meta map[string]string) func(error) {
 	return StartObservation(ctx, hooks, meta)
 }
+
+// NormalizeHooks returns NoopObservationHooks if both callbacks are nil,
+// otherwise returns the provided hooks. This eliminates boilerplate in
+// WithObservationHooks implementations.
+func NormalizeHooks(h ObservationHooks) ObservationHooks {
+	if h.OnStart == nil && h.OnComplete == nil {
+		return NoopObservationHooks
+	}
+	return h
+}

@@ -92,11 +92,7 @@ func (s *Service) Push(ctx context.Context, topic string, payload any) error {
 
 // WithObservationHooks configures callbacks for frame ingestion observability.
 func (s *Service) WithObservationHooks(h core.ObservationHooks) {
-	if h.OnStart == nil && h.OnComplete == nil {
-		s.hooks = core.NoopObservationHooks
-		return
-	}
-	s.hooks = h
+	s.hooks = core.NormalizeHooks(h)
 }
 
 // CreateStream registers a stream for an account.

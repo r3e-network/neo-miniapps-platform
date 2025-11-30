@@ -89,11 +89,7 @@ func (s *Service) WithAggregationConfig(minSigners int, aggregation string) {
 
 // WithObservationHooks configures observability callbacks for updates.
 func (s *Service) WithObservationHooks(h core.ObservationHooks) {
-	if h.OnStart == nil && h.OnComplete == nil {
-		s.hooks = core.NoopObservationHooks
-		return
-	}
-	s.hooks = h
+	s.hooks = core.NormalizeHooks(h)
 }
 
 // Start/Stop/Ready are inherited from framework.ServiceBase.

@@ -141,11 +141,7 @@ func (s *Service) WithTracer(t core.Tracer) {
 
 // WithObservationHooks configures callbacks for observability.
 func (s *Service) WithObservationHooks(h core.ObservationHooks) {
-	if h.OnStart == nil && h.OnComplete == nil {
-		s.hooks = core.NoopObservationHooks
-		return
-	}
-	s.hooks = h
+	s.hooks = core.NormalizeHooks(h)
 }
 
 // CreateContract registers a new contract.
