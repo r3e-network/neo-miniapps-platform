@@ -4,19 +4,17 @@ import (
 	"context"
 	"sync"
 	"time"
-
-	domain "github.com/R3E-Network/service_layer/domain/oracle"
 )
 
 // RequestResolver inspects a pending oracle request and determines whether it has finished.
 type RequestResolver interface {
-	Resolve(ctx context.Context, req domain.Request) (done bool, success bool, result string, errMsg string, retryAfter time.Duration, err error)
+	Resolve(ctx context.Context, req Request) (done bool, success bool, result string, errMsg string, retryAfter time.Duration, err error)
 }
 
 // RequestResolverFunc adapts a function into a RequestResolver.
-type RequestResolverFunc func(ctx context.Context, req domain.Request) (bool, bool, string, string, time.Duration, error)
+type RequestResolverFunc func(ctx context.Context, req Request) (bool, bool, string, string, time.Duration, error)
 
-func (f RequestResolverFunc) Resolve(ctx context.Context, req domain.Request) (bool, bool, string, string, time.Duration, error) {
+func (f RequestResolverFunc) Resolve(ctx context.Context, req Request) (bool, bool, string, string, time.Duration, error) {
 	if f == nil {
 		return false, false, "", "", 0, nil
 	}
@@ -36,9 +34,9 @@ func NewTimeoutResolver(timeout time.Duration) *TimeoutResolver {
 	return &TimeoutResolver{timeout: timeout}
 }
 
-func (r *TimeoutResolver) Resolve(ctx context.Context, req domain.Request) (bool, bool, string, string, time.Duration, error) {
-	if req.Status == domain.StatusSucceeded || req.Status == domain.StatusFailed {
-		return true, req.Status == domain.StatusSucceeded, req.Result, req.Error, 0, nil
+func (r *TimeoutResolver) Resolve(ctx context.Context, req Request) (bool, bool, string, string, time.Duration, error) {
+	if req.Status == StatusSucceeded || req.Status == StatusFailed {
+		return true, req.Status == StatusSucceeded, req.Result, req.Error, 0, nil
 	}
 	if value, ok := r.seen.Load(req.ID); ok {
 		if time.Since(value.(time.Time)) >= r.timeout {

@@ -83,7 +83,7 @@ func (p *Package) CreateServices(ctx context.Context, runtime pkg.PackageRuntime
 		}
 	}
 
-	svc := New(accounts, store, log)
+	svc := New(accounts, NewStoreAdapter(store), log)
 	return []engine.ServiceModule{svc}, nil
 }
 

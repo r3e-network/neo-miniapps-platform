@@ -5,9 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/R3E-Network/service_layer/pkg/storage/memory"
 	"github.com/R3E-Network/service_layer/domain/account"
-	"github.com/R3E-Network/service_layer/domain/oracle"
+	"github.com/R3E-Network/service_layer/pkg/storage/memory"
 )
 
 type stubResolver struct {
@@ -18,7 +17,7 @@ type stubResolver struct {
 	retry   time.Duration
 }
 
-func (s stubResolver) Resolve(ctx context.Context, req oracle.Request) (bool, bool, string, string, time.Duration, error) {
+func (s stubResolver) Resolve(ctx context.Context, req Request) (bool, bool, string, string, time.Duration, error) {
 	return s.done, s.success, s.result, s.errMsg, s.retry, nil
 }
 
@@ -28,7 +27,7 @@ func TestDispatcher_ResolveSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create account: %v", err)
 	}
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, err := svc.CreateSource(context.Background(), acct.ID, "prices", "https://api.example.com", "GET", "", nil, "")
 	if err != nil {
 		t.Fatalf("create source: %v", err)
@@ -46,7 +45,7 @@ func TestDispatcher_ResolveSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get request: %v", err)
 	}
-	if updated.Status != oracle.StatusSucceeded {
+	if updated.Status != StatusSucceeded {
 		t.Fatalf("expected succeeded status, got %s", updated.Status)
 	}
 	if updated.Attempts != 1 {
@@ -57,7 +56,7 @@ func TestDispatcher_ResolveSuccess(t *testing.T) {
 func TestDispatcher_ResolveFailure(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "prices", "https://api.example.com", "GET", "", nil, "")
 	req, _ := svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
 
@@ -69,7 +68,7 @@ func TestDispatcher_ResolveFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get request: %v", err)
 	}
-	if updated.Status != oracle.StatusFailed {
+	if updated.Status != StatusFailed {
 		t.Fatalf("expected failed status, got %s", updated.Status)
 	}
 	if updated.Error == "" {
@@ -83,7 +82,7 @@ func TestDispatcher_ResolveFailure(t *testing.T) {
 func TestDispatcher_ExpiresTTL(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "prices", "https://api.example.com", "GET", "", nil, "")
 	req, _ := svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
 
@@ -93,7 +92,7 @@ func TestDispatcher_ExpiresTTL(t *testing.T) {
 	dispatcher.tick(context.Background())
 
 	updated, _ := svc.GetRequest(context.Background(), req.ID)
-	if updated.Status != oracle.StatusFailed {
+	if updated.Status != StatusFailed {
 		t.Fatalf("expected failed due to ttl, got %s", updated.Status)
 	}
 	if updated.Error == "" {
@@ -104,7 +103,7 @@ func TestDispatcher_ExpiresTTL(t *testing.T) {
 func TestDispatcher_MaxAttempts(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "prices", "https://api.example.com", "GET", "", nil, "")
 	req, _ := svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
 
@@ -117,7 +116,7 @@ func TestDispatcher_MaxAttempts(t *testing.T) {
 	dispatcher.tick(context.Background())
 
 	updated, _ := svc.GetRequest(context.Background(), req.ID)
-	if updated.Status != oracle.StatusFailed {
+	if updated.Status != StatusFailed {
 		t.Fatalf("expected failed after max attempts, got %s", updated.Status)
 	}
 	if updated.Attempts < 1 {
@@ -128,7 +127,7 @@ func TestDispatcher_MaxAttempts(t *testing.T) {
 func TestDispatcher_Lifecycle(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	svc.CreateSource(context.Background(), acct.ID, "src", "https://example.com", "GET", "", nil, "")
 
 	dispatcher := NewDispatcher(svc, nil)
@@ -179,7 +178,7 @@ func TestDispatcher_StartWithoutResolver(t *testing.T) {
 
 func TestDispatcher_DoubleStart(t *testing.T) {
 	store := memory.New()
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 
 	dispatcher := NewDispatcher(svc, nil)
 	dispatcher.WithResolver(stubResolver{done: true, success: true, result: "{}"})
@@ -240,7 +239,7 @@ func TestDispatcher_TickWithNilService(t *testing.T) {
 func TestDispatcher_RetryWithDelay(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "retry-src", "https://example.com", "GET", "", nil, "")
 	req, _ := svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
 
@@ -253,7 +252,7 @@ func TestDispatcher_RetryWithDelay(t *testing.T) {
 
 	// Request should now be running
 	updated, _ := svc.GetRequest(context.Background(), req.ID)
-	if updated.Status != oracle.StatusRunning {
+	if updated.Status != StatusRunning {
 		t.Fatalf("expected running status after first tick, got %s", updated.Status)
 	}
 
@@ -267,7 +266,7 @@ func TestDispatcher_RetryWithDelay(t *testing.T) {
 func TestDispatcher_DeadLetterDisabled(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "dl-src", "https://example.com", "GET", "", nil, "")
 	svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
 
@@ -285,11 +284,11 @@ func TestDispatcher_DeadLetterDisabled(t *testing.T) {
 
 func TestDispatcher_RequestResolverFunc(t *testing.T) {
 	// Test RequestResolverFunc adapter
-	fn := RequestResolverFunc(func(ctx context.Context, req oracle.Request) (bool, bool, string, string, time.Duration, error) {
+	fn := RequestResolverFunc(func(ctx context.Context, req Request) (bool, bool, string, string, time.Duration, error) {
 		return true, true, "result", "", 0, nil
 	})
 
-	done, success, result, errMsg, retry, err := fn.Resolve(context.Background(), oracle.Request{})
+	done, success, result, errMsg, retry, err := fn.Resolve(context.Background(), Request{})
 	if !done || !success || result != "result" || errMsg != "" || retry != 0 || err != nil {
 		t.Fatalf("unexpected values from resolver func")
 	}

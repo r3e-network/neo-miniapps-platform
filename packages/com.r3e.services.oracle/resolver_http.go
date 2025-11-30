@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	domain "github.com/R3E-Network/service_layer/domain/oracle"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 )
@@ -61,7 +60,7 @@ func (r *HTTPResolver) WithTracer(tracer core.Tracer) {
 
 // Resolve satisfies the RequestResolver interface. It resolves pending oracle
 // requests by issuing an HTTP request based on the configured data source.
-func (r *HTTPResolver) Resolve(ctx context.Context, req domain.Request) (bool, bool, string, string, time.Duration, error) {
+func (r *HTTPResolver) Resolve(ctx context.Context, req Request) (bool, bool, string, string, time.Duration, error) {
 	attrs := map[string]string{"request_id": req.ID}
 	if req.DataSourceID != "" {
 		attrs["data_source_id"] = req.DataSourceID
@@ -73,8 +72,8 @@ func (r *HTTPResolver) Resolve(ctx context.Context, req domain.Request) (bool, b
 	}()
 	ctx = spanCtx
 
-	if req.Status == domain.StatusSucceeded || req.Status == domain.StatusFailed {
-		return true, req.Status == domain.StatusSucceeded, req.Result, req.Error, 0, nil
+	if req.Status == StatusSucceeded || req.Status == StatusFailed {
+		return true, req.Status == StatusSucceeded, req.Result, req.Error, 0, nil
 	}
 	if r.service == nil {
 		err := fmt.Errorf("oracle service not configured")
@@ -189,7 +188,7 @@ func addPayloadToQuery(u *url.URL, payload string) error {
 	return nil
 }
 
-func (r *HTTPResolver) executeSource(ctx context.Context, requestID string, source domain.DataSource, payload string) (bool, bool, string, string, time.Duration, error) {
+func (r *HTTPResolver) executeSource(ctx context.Context, requestID string, source DataSource, payload string) (bool, bool, string, string, time.Duration, error) {
 	method := strings.ToUpper(strings.TrimSpace(source.Method))
 	if method == "" {
 		method = http.MethodGet

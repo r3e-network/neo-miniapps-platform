@@ -383,7 +383,7 @@ func TestAction_DatastreamPublish(t *testing.T) {
 func TestAction_OracleCreateRequest_WithAlternateSources(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	oracleSvc := oraclesvc.New(store, store, nil)
+	oracleSvc := oraclesvc.New(store, oraclesvc.NewStoreAdapter(store), nil)
 
 	fnSvc := New(store, store, nil)
 	fnSvc.AttachDependencies(nil, nil, nil, nil, oracleSvc, nil, nil)

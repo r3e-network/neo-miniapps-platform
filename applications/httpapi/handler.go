@@ -21,7 +21,7 @@ import (
 	"github.com/R3E-Network/service_layer/applications/jam"
 	"github.com/R3E-Network/service_layer/pkg/metrics"
 	domainaccount "github.com/R3E-Network/service_layer/domain/account"
-	"github.com/R3E-Network/service_layer/domain/oracle"
+	oraclesvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.oracle"
 	engine "github.com/R3E-Network/service_layer/system/core"
 	"github.com/R3E-Network/service_layer/system/platform/database"
 	"github.com/R3E-Network/service_layer/system/platform/migrations"
@@ -595,7 +595,7 @@ func (h *handler) accountOracleRequests(w http.ResponseWriter, r *http.Request, 
 				if start < len(reqs) {
 					reqs = reqs[start:]
 				} else {
-					reqs = []oracle.Request{}
+					reqs = []oraclesvc.Request{}
 				}
 			}
 			if len(reqs) > limit {
@@ -660,7 +660,7 @@ func (h *handler) accountOracleRequests(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 		status := strings.ToLower(strings.TrimSpace(*payload.Status))
-		var updated oracle.Request
+		var updated oraclesvc.Request
 		switch status {
 		case "running":
 			if !h.requireOracleRunner(r) {

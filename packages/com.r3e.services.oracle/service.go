@@ -1,16 +1,15 @@
 package oracle
 
 import (
-	"github.com/R3E-Network/service_layer/domain/account"
 	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/R3E-Network/service_layer/pkg/storage"
-	"github.com/R3E-Network/service_layer/domain/oracle"
+	"github.com/R3E-Network/service_layer/domain/account"
 	"github.com/R3E-Network/service_layer/pkg/logger"
+	"github.com/R3E-Network/service_layer/pkg/storage"
 	engine "github.com/R3E-Network/service_layer/system/core"
 	"github.com/R3E-Network/service_layer/system/framework"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
@@ -37,7 +36,7 @@ type FeeCollector interface {
 type Service struct {
 	framework.ServiceBase
 	base         *core.Base
-	store        storage.OracleStore
+	store        Store
 	log          *logger.Logger
 	feeCollector FeeCollector
 	defaultFee   int64 // default fee per request in smallest unit
@@ -81,7 +80,7 @@ func WithDefaultFee(fee int64) Option {
 }
 
 // New constructs a new oracle service.
-func New(accounts storage.AccountStore, store storage.OracleStore, log *logger.Logger, opts ...Option) *Service {
+func New(accounts storage.AccountStore, store Store, log *logger.Logger, opts ...Option) *Service {
 	if log == nil {
 		log = logger.NewDefault("oracle")
 	}
@@ -127,7 +126,7 @@ func (s *Service) Publish(ctx context.Context, event string, payload any) error 
 }
 
 // CreateSource registers a new data source.
-func (s *Service) CreateSource(ctx context.Context, accountID, name, url, method, description string, headers map[string]string, body string) (oracle.DataSource, error) {
+func (s *Service) CreateSource(ctx context.Context, accountID, name, url, method, description string, headers map[string]string, body string) (DataSource, error) {
 	accountID = strings.TrimSpace(accountID)
 	name = strings.TrimSpace(name)
 	url = strings.TrimSpace(url)
@@ -135,33 +134,33 @@ func (s *Service) CreateSource(ctx context.Context, accountID, name, url, method
 	description = strings.TrimSpace(description)
 
 	if accountID == "" {
-		return oracle.DataSource{}, core.RequiredError("account_id")
+		return DataSource{}, core.RequiredError("account_id")
 	}
 	if name == "" {
-		return oracle.DataSource{}, core.RequiredError("name")
+		return DataSource{}, core.RequiredError("name")
 	}
 	if url == "" {
-		return oracle.DataSource{}, core.RequiredError("url")
+		return DataSource{}, core.RequiredError("url")
 	}
 	if method == "" {
 		method = "GET"
 	}
 
 	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
-		return oracle.DataSource{}, fmt.Errorf("account validation failed: %w", err)
+		return DataSource{}, fmt.Errorf("account validation failed: %w", err)
 	}
 
 	existing, err := s.store.ListDataSources(ctx, accountID)
 	if err != nil {
-		return oracle.DataSource{}, err
+		return DataSource{}, err
 	}
 	for _, src := range existing {
 		if strings.EqualFold(src.Name, name) {
-			return oracle.DataSource{}, fmt.Errorf("data source with name %q already exists", name)
+			return DataSource{}, fmt.Errorf("data source with name %q already exists", name)
 		}
 	}
 
-	src := oracle.DataSource{
+	src := DataSource{
 		AccountID:   accountID,
 		Name:        name,
 		Description: description,
@@ -173,7 +172,7 @@ func (s *Service) CreateSource(ctx context.Context, accountID, name, url, method
 	}
 	src, err = s.store.CreateDataSource(ctx, src)
 	if err != nil {
-		return oracle.DataSource{}, err
+		return DataSource{}, err
 	}
 	s.log.WithField("source_id", src.ID).
 		WithField("account_id", accountID).
@@ -183,24 +182,24 @@ func (s *Service) CreateSource(ctx context.Context, accountID, name, url, method
 }
 
 // UpdateSource modifies mutable fields of a data source.
-func (s *Service) UpdateSource(ctx context.Context, sourceID string, name, url, method, description *string, headers map[string]string, body *string) (oracle.DataSource, error) {
+func (s *Service) UpdateSource(ctx context.Context, sourceID string, name, url, method, description *string, headers map[string]string, body *string) (DataSource, error) {
 	src, err := s.store.GetDataSource(ctx, sourceID)
 	if err != nil {
-		return oracle.DataSource{}, err
+		return DataSource{}, err
 	}
 
 	if name != nil {
 		trimmed := strings.TrimSpace(*name)
 		if trimmed == "" {
-			return oracle.DataSource{}, fmt.Errorf("name cannot be empty")
+			return DataSource{}, fmt.Errorf("name cannot be empty")
 		}
 		existing, err := s.store.ListDataSources(ctx, src.AccountID)
 		if err != nil {
-			return oracle.DataSource{}, err
+			return DataSource{}, err
 		}
 		for _, other := range existing {
 			if other.ID != src.ID && strings.EqualFold(other.Name, trimmed) {
-				return oracle.DataSource{}, fmt.Errorf("data source with name %q already exists", trimmed)
+				return DataSource{}, fmt.Errorf("data source with name %q already exists", trimmed)
 			}
 		}
 		src.Name = trimmed
@@ -208,14 +207,14 @@ func (s *Service) UpdateSource(ctx context.Context, sourceID string, name, url, 
 	if url != nil {
 		trimmed := strings.TrimSpace(*url)
 		if trimmed == "" {
-			return oracle.DataSource{}, fmt.Errorf("url cannot be empty")
+			return DataSource{}, fmt.Errorf("url cannot be empty")
 		}
 		src.URL = trimmed
 	}
 	if method != nil {
 		trimmed := strings.ToUpper(strings.TrimSpace(*method))
 		if trimmed == "" {
-			return oracle.DataSource{}, fmt.Errorf("method cannot be empty")
+			return DataSource{}, fmt.Errorf("method cannot be empty")
 		}
 		src.Method = trimmed
 	}
@@ -231,7 +230,7 @@ func (s *Service) UpdateSource(ctx context.Context, sourceID string, name, url, 
 
 	src, err = s.store.UpdateDataSource(ctx, src)
 	if err != nil {
-		return oracle.DataSource{}, err
+		return DataSource{}, err
 	}
 	s.log.WithField("source_id", src.ID).
 		WithField("account_id", src.AccountID).
@@ -240,10 +239,10 @@ func (s *Service) UpdateSource(ctx context.Context, sourceID string, name, url, 
 }
 
 // SetSourceEnabled toggles a data source.
-func (s *Service) SetSourceEnabled(ctx context.Context, sourceID string, enabled bool) (oracle.DataSource, error) {
+func (s *Service) SetSourceEnabled(ctx context.Context, sourceID string, enabled bool) (DataSource, error) {
 	src, err := s.store.GetDataSource(ctx, sourceID)
 	if err != nil {
-		return oracle.DataSource{}, err
+		return DataSource{}, err
 	}
 	if src.Enabled == enabled {
 		return src, nil
@@ -253,7 +252,7 @@ func (s *Service) SetSourceEnabled(ctx context.Context, sourceID string, enabled
 }
 
 // ListSources returns sources for an account.
-func (s *Service) ListSources(ctx context.Context, accountID string) ([]oracle.DataSource, error) {
+func (s *Service) ListSources(ctx context.Context, accountID string) ([]DataSource, error) {
 	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
 		return nil, err
 	}
@@ -261,7 +260,7 @@ func (s *Service) ListSources(ctx context.Context, accountID string) ([]oracle.D
 }
 
 // GetSource fetches a source by identifier.
-func (s *Service) GetSource(ctx context.Context, sourceID string) (oracle.DataSource, error) {
+func (s *Service) GetSource(ctx context.Context, sourceID string) (DataSource, error) {
 	return s.store.GetDataSource(ctx, sourceID)
 }
 
@@ -271,35 +270,35 @@ type CreateRequestOptions struct {
 }
 
 // CreateRequest enqueues a new oracle request with default fee.
-func (s *Service) CreateRequest(ctx context.Context, accountID, sourceID, payload string) (oracle.Request, error) {
+func (s *Service) CreateRequest(ctx context.Context, accountID, sourceID, payload string) (Request, error) {
 	return s.CreateRequestWithOptions(ctx, accountID, sourceID, payload, CreateRequestOptions{})
 }
 
 // CreateRequestWithOptions enqueues a new oracle request with custom options.
 // Aligned with OracleHub.cs contract fee model.
-func (s *Service) CreateRequestWithOptions(ctx context.Context, accountID, sourceID, payload string, opts CreateRequestOptions) (oracle.Request, error) {
+func (s *Service) CreateRequestWithOptions(ctx context.Context, accountID, sourceID, payload string, opts CreateRequestOptions) (Request, error) {
 	accountID = strings.TrimSpace(accountID)
 	sourceID = strings.TrimSpace(sourceID)
 
 	if accountID == "" {
-		return oracle.Request{}, core.RequiredError("account_id")
+		return Request{}, core.RequiredError("account_id")
 	}
 	if sourceID == "" {
-		return oracle.Request{}, core.RequiredError("data_source_id")
+		return Request{}, core.RequiredError("data_source_id")
 	}
 	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
-		return oracle.Request{}, fmt.Errorf("account validation failed: %w", err)
+		return Request{}, fmt.Errorf("account validation failed: %w", err)
 	}
 
 	src, err := s.store.GetDataSource(ctx, sourceID)
 	if err != nil {
-		return oracle.Request{}, err
+		return Request{}, err
 	}
 	if err := core.EnsureOwnership(src.AccountID, accountID, "data source", sourceID); err != nil {
-		return oracle.Request{}, err
+		return Request{}, err
 	}
 	if !src.Enabled {
-		return oracle.Request{}, fmt.Errorf("data source %s is disabled", sourceID)
+		return Request{}, fmt.Errorf("data source %s is disabled", sourceID)
 	}
 
 	// Determine fee amount
@@ -308,10 +307,10 @@ func (s *Service) CreateRequestWithOptions(ctx context.Context, accountID, sourc
 		fee = *opts.Fee
 	}
 
-	req := oracle.Request{
+	req := Request{
 		AccountID:    accountID,
 		DataSourceID: sourceID,
-		Status:       oracle.StatusPending,
+		Status:       StatusPending,
 		Payload:      payload,
 		Fee:          fee,
 	}
@@ -320,13 +319,13 @@ func (s *Service) CreateRequestWithOptions(ctx context.Context, accountID, sourc
 	if s.feeCollector != nil && fee > 0 {
 		// Use a temporary reference; will update with actual request ID after creation
 		if err := s.feeCollector.CollectFee(ctx, accountID, fee, "oracle-request-pending"); err != nil {
-			return oracle.Request{}, fmt.Errorf("fee collection failed: %w", err)
+			return Request{}, fmt.Errorf("fee collection failed: %w", err)
 		}
 	}
 
 	req, err = s.store.CreateRequest(ctx, req)
 	if err != nil {
-		return oracle.Request{}, err
+		return Request{}, err
 	}
 	s.log.WithField("request_id", req.ID).
 		WithField("account_id", accountID).
@@ -336,46 +335,46 @@ func (s *Service) CreateRequestWithOptions(ctx context.Context, accountID, sourc
 }
 
 // MarkRunning updates a request to running.
-func (s *Service) MarkRunning(ctx context.Context, requestID string) (oracle.Request, error) {
+func (s *Service) MarkRunning(ctx context.Context, requestID string) (Request, error) {
 	req, err := s.store.GetRequest(ctx, requestID)
 	if err != nil {
-		return oracle.Request{}, err
+		return Request{}, err
 	}
-	if req.Status != oracle.StatusPending {
-		return oracle.Request{}, fmt.Errorf("cannot mark request in status %s as running", req.Status)
+	if req.Status != StatusPending {
+		return Request{}, fmt.Errorf("cannot mark request in status %s as running", req.Status)
 	}
-	req.Status = oracle.StatusRunning
+	req.Status = StatusRunning
 	req.Attempts++
 	return s.store.UpdateRequest(ctx, req)
 }
 
 // IncrementAttempts increments the attempt counter without changing status.
-func (s *Service) IncrementAttempts(ctx context.Context, requestID string) (oracle.Request, error) {
+func (s *Service) IncrementAttempts(ctx context.Context, requestID string) (Request, error) {
 	req, err := s.store.GetRequest(ctx, requestID)
 	if err != nil {
-		return oracle.Request{}, err
+		return Request{}, err
 	}
 	req.Attempts++
 	return s.store.UpdateRequest(ctx, req)
 }
 
 // CompleteRequest records a successful result.
-func (s *Service) CompleteRequest(ctx context.Context, requestID string, result string) (oracle.Request, error) {
+func (s *Service) CompleteRequest(ctx context.Context, requestID string, result string) (Request, error) {
 	req, err := s.store.GetRequest(ctx, requestID)
 	if err != nil {
-		return oracle.Request{}, err
+		return Request{}, err
 	}
 	switch req.Status {
-	case oracle.StatusRunning:
+	case StatusRunning:
 		// allowed transition
-	case oracle.StatusPending:
-		return oracle.Request{}, fmt.Errorf("cannot complete request in status %s", req.Status)
-	case oracle.StatusSucceeded, oracle.StatusFailed:
-		return oracle.Request{}, fmt.Errorf("request already %s", req.Status)
+	case StatusPending:
+		return Request{}, fmt.Errorf("cannot complete request in status %s", req.Status)
+	case StatusSucceeded, StatusFailed:
+		return Request{}, fmt.Errorf("request already %s", req.Status)
 	default:
-		return oracle.Request{}, fmt.Errorf("cannot complete request in status %s", req.Status)
+		return Request{}, fmt.Errorf("cannot complete request in status %s", req.Status)
 	}
-	req.Status = oracle.StatusSucceeded
+	req.Status = StatusSucceeded
 	req.Result = result
 	req.Error = ""
 	req.CompletedAt = time.Now().UTC()
@@ -388,24 +387,24 @@ type FailRequestOptions struct {
 }
 
 // FailRequest records a failure without fee refund.
-func (s *Service) FailRequest(ctx context.Context, requestID string, errMsg string) (oracle.Request, error) {
+func (s *Service) FailRequest(ctx context.Context, requestID string, errMsg string) (Request, error) {
 	return s.FailRequestWithOptions(ctx, requestID, errMsg, FailRequestOptions{})
 }
 
 // FailRequestWithOptions records a failure with optional fee refund.
 // Aligned with OracleHub.cs contract fee model.
-func (s *Service) FailRequestWithOptions(ctx context.Context, requestID string, errMsg string, opts FailRequestOptions) (oracle.Request, error) {
+func (s *Service) FailRequestWithOptions(ctx context.Context, requestID string, errMsg string, opts FailRequestOptions) (Request, error) {
 	req, err := s.store.GetRequest(ctx, requestID)
 	if err != nil {
-		return oracle.Request{}, err
+		return Request{}, err
 	}
 	switch req.Status {
-	case oracle.StatusRunning, oracle.StatusPending:
+	case StatusRunning, StatusPending:
 		// allowed transition
-	case oracle.StatusSucceeded, oracle.StatusFailed:
-		return oracle.Request{}, fmt.Errorf("request already %s", req.Status)
+	case StatusSucceeded, StatusFailed:
+		return Request{}, fmt.Errorf("request already %s", req.Status)
 	default:
-		return oracle.Request{}, fmt.Errorf("cannot fail request in status %s", req.Status)
+		return Request{}, fmt.Errorf("cannot fail request in status %s", req.Status)
 	}
 
 	// Refund fee if requested and fee was collected
@@ -419,22 +418,22 @@ func (s *Service) FailRequestWithOptions(ctx context.Context, requestID string, 
 		}
 	}
 
-	req.Status = oracle.StatusFailed
+	req.Status = StatusFailed
 	req.Error = strings.TrimSpace(errMsg)
 	req.CompletedAt = time.Now().UTC()
 	return s.store.UpdateRequest(ctx, req)
 }
 
 // RetryRequest resets a failed request back to pending and clears error/result.
-func (s *Service) RetryRequest(ctx context.Context, requestID string) (oracle.Request, error) {
+func (s *Service) RetryRequest(ctx context.Context, requestID string) (Request, error) {
 	req, err := s.store.GetRequest(ctx, requestID)
 	if err != nil {
-		return oracle.Request{}, err
+		return Request{}, err
 	}
-	if req.Status != oracle.StatusFailed {
-		return oracle.Request{}, fmt.Errorf("cannot retry request in status %s", req.Status)
+	if req.Status != StatusFailed {
+		return Request{}, fmt.Errorf("cannot retry request in status %s", req.Status)
 	}
-	req.Status = oracle.StatusPending
+	req.Status = StatusPending
 	req.Attempts = 0
 	req.Error = ""
 	req.Result = ""
@@ -443,16 +442,16 @@ func (s *Service) RetryRequest(ctx context.Context, requestID string) (oracle.Re
 }
 
 // ListRequests returns requests for an account.
-func (s *Service) ListRequests(ctx context.Context, accountID string, limit int, status string) ([]oracle.Request, error) {
+func (s *Service) ListRequests(ctx context.Context, accountID string, limit int, status string) ([]Request, error) {
 	return s.store.ListRequests(ctx, accountID, limit, status)
 }
 
 // ListPending returns requests that are awaiting fulfilment.
-func (s *Service) ListPending(ctx context.Context) ([]oracle.Request, error) {
+func (s *Service) ListPending(ctx context.Context) ([]Request, error) {
 	return s.store.ListPendingRequests(ctx)
 }
 
 // GetRequest returns an individual request.
-func (s *Service) GetRequest(ctx context.Context, requestID string) (oracle.Request, error) {
+func (s *Service) GetRequest(ctx context.Context, requestID string) (Request, error) {
 	return s.store.GetRequest(ctx, requestID)
 }

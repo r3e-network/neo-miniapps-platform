@@ -13,7 +13,6 @@ import (
 	"github.com/R3E-Network/service_layer/domain/automation"
 	"github.com/R3E-Network/service_layer/domain/function"
 	"github.com/R3E-Network/service_layer/domain/gasbank"
-	"github.com/R3E-Network/service_layer/domain/oracle"
 	automationsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.automation"
 	datafeedsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.datafeeds"
 	datalinksvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.datalink"
@@ -278,17 +277,17 @@ func (s *Service) SetAutomationEnabled(ctx context.Context, jobID string, enable
 }
 
 // CreateOracleRequest creates a request via the oracle service.
-func (s *Service) CreateOracleRequest(ctx context.Context, accountID, dataSourceID, payload string) (oracle.Request, error) {
+func (s *Service) CreateOracleRequest(ctx context.Context, accountID, dataSourceID, payload string) (oraclesvc.Request, error) {
 	if s.oracle == nil {
-		return oracle.Request{}, fmt.Errorf("create oracle request: %w", errDependencyUnavailable)
+		return oraclesvc.Request{}, fmt.Errorf("create oracle request: %w", errDependencyUnavailable)
 	}
 	return s.oracle.CreateRequest(ctx, accountID, dataSourceID, payload)
 }
 
 // CompleteOracleRequest marks an oracle request as completed.
-func (s *Service) CompleteOracleRequest(ctx context.Context, requestID, result string) (oracle.Request, error) {
+func (s *Service) CompleteOracleRequest(ctx context.Context, requestID, result string) (oraclesvc.Request, error) {
 	if s.oracle == nil {
-		return oracle.Request{}, fmt.Errorf("complete oracle request: %w", errDependencyUnavailable)
+		return oraclesvc.Request{}, fmt.Errorf("complete oracle request: %w", errDependencyUnavailable)
 	}
 	return s.oracle.CompleteRequest(ctx, requestID, result)
 }

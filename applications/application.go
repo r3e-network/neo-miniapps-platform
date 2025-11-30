@@ -290,7 +290,7 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 	confService := confsvc.New(stores.Accounts, stores.Confidential, log)
 	confService.WithSealedKeyHooks(metrics.ConfidentialSealedKeyHooks())
 	confService.WithAttestationHooks(metrics.ConfidentialAttestationHooks())
-	oracleService := oraclesvc.New(stores.Accounts, stores.Oracle, log)
+	oracleService := oraclesvc.New(stores.Accounts, oraclesvc.NewStoreAdapter(stores.Oracle), log)
 	creService := cresvc.New(stores.Accounts, stores.CRE, log)
 	ccipService := ccipsvc.New(stores.Accounts, stores.CCIP, log)
 	ccipService.WithWorkspaceWallets(stores.WorkspaceWallets)

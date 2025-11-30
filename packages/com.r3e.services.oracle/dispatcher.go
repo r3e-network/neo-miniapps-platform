@@ -6,9 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/R3E-Network/service_layer/pkg/metrics"
-	domain "github.com/R3E-Network/service_layer/domain/oracle"
 	"github.com/R3E-Network/service_layer/pkg/logger"
+	"github.com/R3E-Network/service_layer/pkg/metrics"
 	"github.com/R3E-Network/service_layer/system/framework"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 )
@@ -252,14 +251,14 @@ func (d *Dispatcher) tick(ctx context.Context) {
 			attrs["data_source_id"] = req.DataSourceID
 		}
 
-		func(req domain.Request) {
+		func(req Request) {
 			spanCtx, finishSpan := tracer.StartSpan(ctx, "oracle.dispatch", attrs)
 			var spanErr error
 			defer func() {
 				finishSpan(spanErr)
 			}()
 
-			var current domain.Request
+			var current Request
 			nextAttempt := req.Attempts + 1
 			if maxAttempts > 0 && nextAttempt > maxAttempts {
 				errMsg := fmt.Sprintf("max attempts exceeded (%d)", maxAttempts)
@@ -276,7 +275,7 @@ func (d *Dispatcher) tick(ctx context.Context) {
 				d.clearSchedule(req.ID)
 				return
 			}
-			if req.Status == domain.StatusPending {
+			if req.Status == StatusPending {
 				updated, err := d.service.MarkRunning(spanCtx, req.ID)
 				if err != nil {
 					spanErr = err

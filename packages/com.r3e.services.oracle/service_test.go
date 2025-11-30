@@ -7,10 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/R3E-Network/service_layer/pkg/storage/memory"
 	"github.com/R3E-Network/service_layer/domain/account"
-	domain "github.com/R3E-Network/service_layer/domain/oracle"
 	"github.com/R3E-Network/service_layer/pkg/logger"
+	"github.com/R3E-Network/service_layer/pkg/storage/memory"
 )
 
 func TestService_SourceAndRequestLifecycle(t *testing.T) {
@@ -20,7 +19,7 @@ func TestService_SourceAndRequestLifecycle(t *testing.T) {
 		t.Fatalf("create account: %v", err)
 	}
 
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, err := svc.CreateSource(context.Background(), acct.ID, "prices", "https://api.example.com", "get", "desc", map[string]string{"X-API": "key"}, "")
 	if err != nil {
 		t.Fatalf("create source: %v", err)
@@ -64,7 +63,7 @@ func TestService_SourceAndRequestLifecycle(t *testing.T) {
 	if len(requests) != 1 {
 		t.Fatalf("expected 1 request, got %d", len(requests))
 	}
-	if requests[0].Status != domain.StatusSucceeded {
+	if requests[0].Status != StatusSucceeded {
 		t.Fatalf("expected succeeded status, got %s", requests[0].Status)
 	}
 
@@ -83,7 +82,7 @@ func TestService_RequestStatusValidation(t *testing.T) {
 		t.Fatalf("create account: %v", err)
 	}
 
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, err := svc.CreateSource(context.Background(), acct.ID, "prices", "https://api.example.com", "get", "desc", nil, "")
 	if err != nil {
 		t.Fatalf("create source: %v", err)
@@ -115,7 +114,7 @@ func TestService_RequestStatusValidation(t *testing.T) {
 		t.Fatalf("retry failed request: %v", err)
 	}
 	retried, _ := svc.GetRequest(context.Background(), req.ID)
-	if retried.Status != domain.StatusPending || retried.Attempts != 0 || retried.Error != "" {
+	if retried.Status != StatusPending || retried.Attempts != 0 || retried.Error != "" {
 		t.Fatalf("expected reset pending state, got %+v", retried)
 	}
 	if _, err := svc.MarkRunning(context.Background(), req.ID); err != nil {
@@ -131,7 +130,7 @@ func ExampleService_CreateRequest() {
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "oracle-user"})
 	log := logger.NewDefault("example-oracle")
 	log.SetOutput(io.Discard)
-	svc := New(store, store, log)
+	svc := New(store, NewStoreAdapter(store), log)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "prices", "https://api.example.com", "GET", "", nil, "")
 	req, _ := svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
 	fmt.Println(req.Status)
@@ -181,7 +180,7 @@ func TestService_Lifecycle(t *testing.T) {
 func TestService_ListSources(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	svc.CreateSource(context.Background(), acct.ID, "src1", "https://example.com", "GET", "", nil, "")
 
 	sources, err := svc.ListSources(context.Background(), acct.ID)
@@ -196,7 +195,7 @@ func TestService_ListSources(t *testing.T) {
 func TestService_ListPending(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "src", "https://example.com", "GET", "", nil, "")
 	svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
 
@@ -212,7 +211,7 @@ func TestService_ListPending(t *testing.T) {
 func TestService_IncrementAttempts(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "src", "https://example.com", "GET", "", nil, "")
 	req, _ := svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
 
@@ -236,7 +235,7 @@ func TestService_Publish_UnsupportedEvent(t *testing.T) {
 func TestService_Publish_Request(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "src", "https://example.com", "GET", "", nil, "")
 
 	payload := map[string]any{
@@ -266,7 +265,7 @@ func TestService_WithDefaultFee(t *testing.T) {
 
 func TestService_CreateSource_MissingAccount(t *testing.T) {
 	store := memory.New()
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	_, err := svc.CreateSource(context.Background(), "nonexistent", "src", "https://example.com", "GET", "", nil, "")
 	if err == nil {
 		t.Fatalf("expected account error")
@@ -275,7 +274,7 @@ func TestService_CreateSource_MissingAccount(t *testing.T) {
 
 func TestService_CreateRequest_MissingAccount(t *testing.T) {
 	store := memory.New()
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	_, err := svc.CreateRequest(context.Background(), "nonexistent", "src", "{}")
 	if err == nil {
 		t.Fatalf("expected account error")
@@ -285,7 +284,7 @@ func TestService_CreateRequest_MissingAccount(t *testing.T) {
 func TestService_CreateRequest_SourceNotFound(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	_, err := svc.CreateRequest(context.Background(), acct.ID, "nonexistent", "{}")
 	if err == nil {
 		t.Fatalf("expected source not found error")
@@ -294,7 +293,7 @@ func TestService_CreateRequest_SourceNotFound(t *testing.T) {
 
 func TestService_ListSources_MissingAccount(t *testing.T) {
 	store := memory.New()
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	_, err := svc.ListSources(context.Background(), "nonexistent")
 	if err == nil {
 		t.Fatalf("expected account error")
@@ -304,7 +303,7 @@ func TestService_ListSources_MissingAccount(t *testing.T) {
 func TestService_ListRequests_Empty(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	reqs, err := svc.ListRequests(context.Background(), acct.ID, 10, "")
 	if err != nil {
 		t.Fatalf("list requests: %v", err)
@@ -317,7 +316,7 @@ func TestService_ListRequests_Empty(t *testing.T) {
 func TestService_CreateRequestWithOptions(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "src", "https://example.com", "GET", "", nil, "")
 
 	fee := int64(100)
@@ -335,7 +334,7 @@ func TestService_CreateRequestWithOptions(t *testing.T) {
 func TestService_FailRequestWithOptions(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "src", "https://example.com", "GET", "", nil, "")
 	req, _ := svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
 	svc.MarkRunning(context.Background(), req.ID)
@@ -350,7 +349,7 @@ func TestService_FailRequestWithOptions(t *testing.T) {
 
 func TestRequestResolverFunc_Nil(t *testing.T) {
 	var f RequestResolverFunc = nil
-	done, success, result, errMsg, retryAfter, err := f.Resolve(context.Background(), domain.Request{})
+	done, success, result, errMsg, retryAfter, err := f.Resolve(context.Background(), Request{})
 	if done || success || result != "" || errMsg != "" || retryAfter != 0 || err != nil {
 		t.Fatalf("expected zero values for nil resolver")
 	}
@@ -373,19 +372,19 @@ func TestTimeoutResolver_Resolve(t *testing.T) {
 	r := NewTimeoutResolver(50 * time.Millisecond)
 
 	// Test already succeeded
-	done, success, _, _, _, _ := r.Resolve(context.Background(), domain.Request{Status: domain.StatusSucceeded, Result: "ok"})
+	done, success, _, _, _, _ := r.Resolve(context.Background(), Request{Status: StatusSucceeded, Result: "ok"})
 	if !done || !success {
 		t.Fatalf("expected done and success for succeeded request")
 	}
 
 	// Test already failed
-	done, success, _, _, _, _ = r.Resolve(context.Background(), domain.Request{Status: domain.StatusFailed, Error: "err"})
+	done, success, _, _, _, _ = r.Resolve(context.Background(), Request{Status: StatusFailed, Error: "err"})
 	if !done || success {
 		t.Fatalf("expected done and not success for failed request")
 	}
 
 	// Test pending - first call stores it
-	req := domain.Request{ID: "test-req", Status: domain.StatusPending}
+	req := Request{ID: "test-req", Status: StatusPending}
 	done, _, _, _, retryAfter, _ := r.Resolve(context.Background(), req)
 	if done {
 		t.Fatalf("expected not done on first call")
@@ -417,7 +416,7 @@ func TestTimeoutResolver_Resolve(t *testing.T) {
 func TestService_UpdateSource_Validation(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "prices", "https://api.example.com", "GET", "", nil, "")
 
 	// Test empty name
@@ -472,7 +471,7 @@ func TestService_UpdateSource_Validation(t *testing.T) {
 func TestService_SetSourceEnabled_AlreadyEnabled(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "src", "https://example.com", "GET", "", nil, "")
 
 	// Source is enabled by default, try to enable again
@@ -504,7 +503,7 @@ func TestService_Publish_InvalidPayload(t *testing.T) {
 	// Test payload as map
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc2 := New(store, store, nil)
+	svc2 := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc2.CreateSource(context.Background(), acct.ID, "src", "https://example.com", "GET", "", nil, "")
 	err = svc2.Publish(context.Background(), "request", map[string]any{
 		"account_id": acct.ID,
@@ -519,7 +518,7 @@ func TestService_Publish_InvalidPayload(t *testing.T) {
 func TestService_CompleteRequest_AlreadyCompleted(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "src", "https://example.com", "GET", "", nil, "")
 	req, _ := svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
 
@@ -536,7 +535,7 @@ func TestService_CompleteRequest_AlreadyCompleted(t *testing.T) {
 func TestService_FailRequest_AlreadyFailed(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "src", "https://example.com", "GET", "", nil, "")
 	req, _ := svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
 
@@ -553,7 +552,7 @@ func TestService_FailRequest_AlreadyFailed(t *testing.T) {
 func TestService_RetryRequest_FromRunning(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "src", "https://example.com", "GET", "", nil, "")
 	req, _ := svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
 
@@ -569,7 +568,7 @@ func TestService_RetryRequest_FromRunning(t *testing.T) {
 func TestService_CreateSource_Validation(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 
 	// Test empty account_id
 	_, err := svc.CreateSource(context.Background(), "", "name", "https://example.com", "GET", "", nil, "")
@@ -603,7 +602,7 @@ func TestService_FailRequestWithOptions_RefundFee(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
 	// Create service with a mock fee collector that tracks refunds
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "fee-src", "https://example.com", "GET", "", nil, "")
 
 	// Create request with a fee
@@ -625,7 +624,7 @@ func TestService_FailRequestWithOptions_RefundFee(t *testing.T) {
 func TestService_FailRequest_FromPending(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "pending-fail-src", "https://example.com", "GET", "", nil, "")
 	req, _ := svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
 
@@ -639,7 +638,7 @@ func TestService_FailRequest_FromPending(t *testing.T) {
 func TestService_GetSource(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "get-src", "https://example.com", "GET", "", nil, "")
 
 	retrieved, err := svc.GetSource(context.Background(), src.ID)
@@ -660,7 +659,7 @@ func TestService_GetSource(t *testing.T) {
 func TestService_CompleteRequest_InvalidStatus(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, store, nil)
+	svc := New(store, NewStoreAdapter(store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "invalid-status-src", "https://example.com", "GET", "", nil, "")
 	req, _ := svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
 

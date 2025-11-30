@@ -287,7 +287,7 @@ func TestService_ExecuteProcessesMultipleActions(t *testing.T) {
 
 	gasService := gasbanksvc.New(store, store, nil)
 	automationService := automationsvc.New(store, store, store, nil)
-	oracleService := oraclesvc.New(store, store, nil)
+	oracleService := oraclesvc.New(store, oraclesvc.NewStoreAdapter(store), nil)
 
 	svc.AttachDependencies(automationService, nil, nil, nil, oracleService, gasService, nil)
 
@@ -775,7 +775,7 @@ func TestService_SetAutomationEnabled_NoDependency(t *testing.T) {
 func TestService_CreateOracleRequest(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	oracleSvc := oraclesvc.New(store, store, nil)
+	oracleSvc := oraclesvc.New(store, oraclesvc.NewStoreAdapter(store), nil)
 
 	svc := New(store, store, nil)
 	svc.AttachDependencies(nil, nil, nil, nil, oracleSvc, nil, nil)
@@ -802,7 +802,7 @@ func TestService_CreateOracleRequest_NoDependency(t *testing.T) {
 func TestService_CompleteOracleRequest(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	oracleSvc := oraclesvc.New(store, store, nil)
+	oracleSvc := oraclesvc.New(store, oraclesvc.NewStoreAdapter(store), nil)
 
 	svc := New(store, store, nil)
 	svc.AttachDependencies(nil, nil, nil, nil, oracleSvc, nil, nil)
