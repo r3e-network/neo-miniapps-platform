@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/R3E-Network/service_layer/domain/function"
 )
 
 func clonePayload(payload map[string]any) map[string]any {
@@ -57,14 +55,14 @@ func cloneStrings(items []string) []string {
 	return dup
 }
 
-func cloneActionResults(actions []function.ActionResult) []function.ActionResult {
+func cloneActionResults(actions []ActionResult) []ActionResult {
 	if len(actions) == 0 {
 		return nil
 	}
-	copied := make([]function.ActionResult, len(actions))
+	copied := make([]ActionResult, len(actions))
 	for i, a := range actions {
-		copied[i] = function.ActionResult{
-			Action: function.Action{
+		copied[i] = ActionResult{
+			Action: Action{
 				ID:     a.ID,
 				Type:   a.Type,
 				Params: clonePayload(a.Params),

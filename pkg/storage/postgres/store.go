@@ -193,6 +193,27 @@ func (s *Store) DeleteAccount(ctx context.Context, id string) error {
 	return nil
 }
 
+// AccountExists checks if an account exists by ID.
+// Returns nil if account exists, error otherwise.
+func (s *Store) AccountExists(ctx context.Context, accountID string) error {
+	var exists bool
+	err := s.db.QueryRowContext(ctx, `
+		SELECT EXISTS(SELECT 1 FROM app_accounts WHERE id = $1)
+	`, accountID).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return errors.New("account not found")
+	}
+	return nil
+}
+
+// AccountTenant returns the tenant for an account (empty if none).
+func (s *Store) AccountTenant(ctx context.Context, accountID string) string {
+	return s.accountTenant(ctx, accountID)
+}
+
 // --- FunctionStore ----------------------------------------------------------
 
 func (s *Store) CreateFunction(ctx context.Context, def function.Definition) (function.Definition, error) {

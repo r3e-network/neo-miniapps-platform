@@ -203,6 +203,33 @@ func (s *Store) DeleteAccount(_ context.Context, id string) error {
 	return nil
 }
 
+// AccountExists checks if an account exists by ID.
+// Returns nil if account exists, error otherwise.
+func (s *Store) AccountExists(_ context.Context, accountID string) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if _, ok := s.accounts[accountID]; !ok {
+		return fmt.Errorf("account %s not found", accountID)
+	}
+	return nil
+}
+
+// AccountTenant returns the tenant for an account (empty if none).
+func (s *Store) AccountTenant(_ context.Context, accountID string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	acct, ok := s.accounts[accountID]
+	if !ok {
+		return ""
+	}
+	if acct.Metadata == nil {
+		return ""
+	}
+	return acct.Metadata["tenant"]
+}
+
 // FunctionStore implementation ------------------------------------------------
 
 func (s *Store) CreateFunction(_ context.Context, def function.Definition) (function.Definition, error) {
@@ -1948,6 +1975,16 @@ func (s *Store) FindWorkspaceWalletByAddress(_ context.Context, workspaceID, wal
 		}
 	}
 	return account.WorkspaceWallet{}, fmt.Errorf("workspace wallet not found")
+}
+
+// WalletOwnedBy checks if a wallet is owned by the given account (workspace).
+// This implements the WalletChecker interface used by various services.
+func (s *Store) WalletOwnedBy(ctx context.Context, accountID, wallet string) error {
+	_, err := s.FindWorkspaceWalletByAddress(ctx, accountID, wallet)
+	if err != nil {
+		return fmt.Errorf("wallet %s not owned by account %s: %w", wallet, accountID, err)
+	}
+	return nil
 }
 
 func cloneVRFKey(key vrf.Key) vrf.Key {

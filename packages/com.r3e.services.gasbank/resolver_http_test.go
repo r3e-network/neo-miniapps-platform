@@ -7,8 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	"github.com/R3E-Network/service_layer/domain/gasbank"
 )
 
 func TestHTTPWithdrawalResolver(t *testing.T) {
@@ -38,7 +36,7 @@ func TestHTTPWithdrawalResolver(t *testing.T) {
 		t.Fatalf("new resolver: %v", err)
 	}
 
-	tx := gasbank.Transaction{ID: "tx"}
+	tx := Transaction{ID: "tx"}
 
 	done, success, msg, retry, err := resolver.Resolve(context.Background(), tx)
 	if err != nil || done || success || msg != "" || retry <= 0 {

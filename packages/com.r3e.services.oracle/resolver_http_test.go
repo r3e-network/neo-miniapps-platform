@@ -17,7 +17,7 @@ import (
 func TestHTTPResolver_GetRequest(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, NewStoreAdapter(store), nil)
+	svc := New(NewMemoryAccountChecker(store), NewMemoryStoreAdapter(store, store), nil)
 
 	var receivedQuery string
 	server := newOracleHTTPServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +53,7 @@ func TestHTTPResolver_GetRequest(t *testing.T) {
 func TestHTTPResolver_PostRequest(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, NewStoreAdapter(store), nil)
+	svc := New(NewMemoryAccountChecker(store), NewMemoryStoreAdapter(store, store), nil)
 
 	var body string
 	server := newOracleHTTPServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -93,7 +93,7 @@ func TestHTTPResolver_PostRequest(t *testing.T) {
 func TestHTTPResolver_HandlesErrorStatus(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, NewStoreAdapter(store), nil)
+	svc := New(NewMemoryAccountChecker(store), NewMemoryStoreAdapter(store, store), nil)
 
 	server := newOracleHTTPServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing parameter", http.StatusBadRequest)
@@ -120,7 +120,7 @@ func TestHTTPResolver_HandlesErrorStatus(t *testing.T) {
 func TestHTTPResolver_RetryableStatus(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, NewStoreAdapter(store), nil)
+	svc := New(NewMemoryAccountChecker(store), NewMemoryStoreAdapter(store, store), nil)
 
 	server := newOracleHTTPServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -147,7 +147,7 @@ func TestHTTPResolver_RetryableStatus(t *testing.T) {
 func TestHTTPResolver_MultiSourceAggregate(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, NewStoreAdapter(store), nil)
+	svc := New(NewMemoryAccountChecker(store), NewMemoryStoreAdapter(store, store), nil)
 
 	server1 := newOracleHTTPServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -214,7 +214,7 @@ func (mockHTTPTracer) StartSpan(ctx context.Context, name string, attrs map[stri
 func TestHTTPResolver_SourceNotFound(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, NewStoreAdapter(store), nil)
+	svc := New(NewMemoryAccountChecker(store), NewMemoryStoreAdapter(store, store), nil)
 
 	resolver := NewHTTPResolver(svc, nil, nil)
 	req := Request{ID: "req-notfound", AccountID: acct.ID, DataSourceID: "nonexistent"}
@@ -230,7 +230,7 @@ func TestHTTPResolver_MedianFloatOddCount(t *testing.T) {
 	// Test median with odd number of values
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, NewStoreAdapter(store), nil)
+	svc := New(NewMemoryAccountChecker(store), NewMemoryStoreAdapter(store, store), nil)
 
 	server1 := newOracleHTTPServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -276,7 +276,7 @@ func TestHTTPResolver_MedianFloatOddCount(t *testing.T) {
 func TestHTTPResolver_NonNumericResults(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, NewStoreAdapter(store), nil)
+	svc := New(NewMemoryAccountChecker(store), NewMemoryStoreAdapter(store, store), nil)
 
 	server1 := newOracleHTTPServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -361,7 +361,7 @@ func TestHTTPResolver_NoService(t *testing.T) {
 func TestHTTPResolver_EmptyDataSourceID(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, NewStoreAdapter(store), nil)
+	svc := New(NewMemoryAccountChecker(store), NewMemoryStoreAdapter(store, store), nil)
 
 	resolver := NewHTTPResolver(svc, nil, nil)
 	req := Request{

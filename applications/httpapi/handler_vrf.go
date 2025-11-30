@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	domainvrf "github.com/R3E-Network/service_layer/domain/vrf"
+	vrfsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.vrf"
 )
 
 func (h *handler) accountVRF(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {
@@ -49,11 +49,11 @@ func (h *handler) accountVRFKeys(w http.ResponseWriter, r *http.Request, account
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			key := domainvrf.Key{
+			key := vrfsvc.Key{
 				AccountID:     accountID,
 				PublicKey:     payload.PublicKey,
 				Label:         payload.Label,
-				Status:        domainvrf.KeyStatus(payload.Status),
+				Status:        vrfsvc.KeyStatus(payload.Status),
 				WalletAddress: payload.WalletAddress,
 				Attestation:   payload.Attestation,
 				Metadata:      payload.Metadata,
@@ -98,12 +98,12 @@ func (h *handler) accountVRFKeys(w http.ResponseWriter, r *http.Request, account
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			key := domainvrf.Key{
+			key := vrfsvc.Key{
 				ID:            keyID,
 				AccountID:     existing.AccountID,
 				PublicKey:     payload.PublicKey,
 				Label:         payload.Label,
-				Status:        domainvrf.KeyStatus(payload.Status),
+				Status:        vrfsvc.KeyStatus(payload.Status),
 				WalletAddress: payload.WalletAddress,
 				Attestation:   payload.Attestation,
 				Metadata:      payload.Metadata,

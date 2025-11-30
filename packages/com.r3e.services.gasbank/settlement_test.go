@@ -7,9 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/R3E-Network/service_layer/pkg/storage/memory"
-	"github.com/R3E-Network/service_layer/domain/account"
-	domain "github.com/R3E-Network/service_layer/domain/gasbank"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 )
 
@@ -18,7 +15,7 @@ type stubResolver struct {
 	calls map[string]int
 }
 
-func (s *stubResolver) Resolve(ctx context.Context, tx domain.Transaction) (bool, bool, string, time.Duration, error) {
+func (s *stubResolver) Resolve(ctx context.Context, tx Transaction) (bool, bool, string, time.Duration, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.calls == nil {
@@ -30,8 +27,8 @@ func (s *stubResolver) Resolve(ctx context.Context, tx domain.Transaction) (bool
 }
 
 func TestSettlementPoller(t *testing.T) {
-	store := memory.New()
-	acct, err := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, err := store.CreateAccount(context.Background(), "owner")
 	if err != nil {
 		t.Fatalf("create account: %v", err)
 	}
@@ -82,7 +79,7 @@ func TestSettlementPoller(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get tx: %v", err)
 	}
-	if updated.Status != domain.StatusCompleted {
+	if updated.Status != StatusCompleted {
 		t.Fatalf("expected completed status, got %s", updated.Status)
 	}
 }
@@ -103,7 +100,7 @@ func TestTimeoutResolver_New(t *testing.T) {
 func TestTimeoutResolver_Resolve(t *testing.T) {
 	r := NewTimeoutResolver(50 * time.Millisecond)
 
-	tx := domain.Transaction{ID: "test-tx", Status: domain.StatusPending}
+	tx := Transaction{ID: "test-tx", Status: StatusPending}
 
 	// First call stores the tx
 	done, success, msg, retryAfter, err := r.Resolve(context.Background(), tx)
@@ -218,7 +215,7 @@ func TestSettlementPoller_StartStop_NoResolver(t *testing.T) {
 }
 
 func TestSettlementPoller_DoubleStart(t *testing.T) {
-	store := memory.New()
+	store := newMockStore()
 	resolver := &stubResolver{}
 	poller := NewSettlementPoller(store, nil, resolver, nil)
 	poller.interval = 100 * time.Millisecond
@@ -238,8 +235,8 @@ func TestSettlementPoller_DoubleStart(t *testing.T) {
 }
 
 func TestSettlementPollerHonoursNextAttemptFromStore(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet")
 	_, _, _ = svc.Deposit(context.Background(), gasAcct.ID, 5, "tx", "from", "to")
@@ -296,7 +293,7 @@ type errorResolver struct {
 	calls int
 }
 
-func (e *errorResolver) Resolve(ctx context.Context, tx domain.Transaction) (bool, bool, string, time.Duration, error) {
+func (e *errorResolver) Resolve(ctx context.Context, tx Transaction) (bool, bool, string, time.Duration, error) {
 	e.mu.Lock()
 	e.calls++
 	e.mu.Unlock()
@@ -310,7 +307,7 @@ type retryResolver struct {
 	maxCalls int
 }
 
-func (r *retryResolver) Resolve(ctx context.Context, tx domain.Transaction) (bool, bool, string, time.Duration, error) {
+func (r *retryResolver) Resolve(ctx context.Context, tx Transaction) (bool, bool, string, time.Duration, error) {
 	r.mu.Lock()
 	if r.calls == nil {
 		r.calls = make(map[string]int)
@@ -326,8 +323,8 @@ func (r *retryResolver) Resolve(ctx context.Context, tx domain.Transaction) (boo
 }
 
 func TestSettlementPoller_WithErrorResolver(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-err")
 	svc.Deposit(context.Background(), gasAcct.ID, 5, "tx", "from", "to")
@@ -357,8 +354,8 @@ func TestSettlementPoller_WithErrorResolver(t *testing.T) {
 }
 
 func TestSettlementPoller_WithRetryResolver(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-retry")
 	svc.Deposit(context.Background(), gasAcct.ID, 5, "tx", "from", "to")
@@ -381,13 +378,13 @@ func TestSettlementPoller_WithRetryResolver(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	updated, _ := store.GetGasTransaction(context.Background(), tx.ID)
-	if updated.Status != domain.StatusCompleted {
+	if updated.Status != StatusCompleted {
 		t.Fatalf("expected completed, got %s", updated.Status)
 	}
 }
 
 func TestSettlementPoller_Ready_Running(t *testing.T) {
-	store := memory.New()
+	store := newMockStore()
 	resolver := &stubResolver{}
 	poller := NewSettlementPoller(store, nil, resolver, nil)
 	poller.interval = 100 * time.Millisecond

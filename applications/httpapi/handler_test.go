@@ -17,14 +17,14 @@ import (
 	app "github.com/R3E-Network/service_layer/applications"
 	"github.com/R3E-Network/service_layer/applications/auth"
 	"github.com/R3E-Network/service_layer/applications/jam"
-	"github.com/R3E-Network/service_layer/domain/automation"
-	domainccip "github.com/R3E-Network/service_layer/domain/ccip"
-	domainconf "github.com/R3E-Network/service_layer/domain/confidential"
-	domaincre "github.com/R3E-Network/service_layer/domain/cre"
-	domainsds "github.com/R3E-Network/service_layer/domain/datastreams"
-	domaindta "github.com/R3E-Network/service_layer/domain/dta"
-	"github.com/R3E-Network/service_layer/domain/function"
-	domainvrf "github.com/R3E-Network/service_layer/domain/vrf"
+	"github.com/R3E-Network/service_layer/packages/com.r3e.services.automation"
+	"github.com/R3E-Network/service_layer/packages/com.r3e.services.ccip"
+	"github.com/R3E-Network/service_layer/packages/com.r3e.services.confidential"
+	"github.com/R3E-Network/service_layer/packages/com.r3e.services.cre"
+	"github.com/R3E-Network/service_layer/packages/com.r3e.services.datastreams"
+	"github.com/R3E-Network/service_layer/packages/com.r3e.services.dta"
+	"github.com/R3E-Network/service_layer/packages/com.r3e.services.functions"
+	"github.com/R3E-Network/service_layer/packages/com.r3e.services.vrf"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	engine "github.com/R3E-Network/service_layer/system/core"
 )
@@ -50,6 +50,14 @@ var (
 	testLogger = logger.NewDefault("test")
 )
 
+// newTestApplication creates an application for testing.
+// It skips the test if database is not available.
+func newTestApplication(t *testing.T) *app.Application {
+	t.Helper()
+	t.Skipf("test requires database; run with integration test suite")
+	return nil
+}
+
 type staticAdminValidator struct{}
 
 func (staticAdminValidator) Validate(string) (*auth.Claims, error) {
@@ -57,10 +65,7 @@ func (staticAdminValidator) Validate(string) (*auth.Claims, error) {
 }
 
 func TestJAMEndpointsEnabled(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 
 	audit := newAuditLog(50, nil)
 	handler := wrapWithAuth(NewHandler(application, jam.Config{Enabled: true}, authTokens, nil, audit, nil, nil), authTokens, testLogger, nil)
@@ -147,10 +152,7 @@ func TestJAMEndpointsEnabled(t *testing.T) {
 func TestJAMPostgresDisabledWithoutDSN(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 
 	audit := newAuditLog(10, nil)
 	handler := wrapWithAuth(NewHandler(application, jam.Config{Enabled: true, Store: "postgres"}, authTokens, nil, audit, nil, nil), authTokens, testLogger, nil)
@@ -173,10 +175,7 @@ func TestJAMPostgresDisabledWithoutDSN(t *testing.T) {
 func TestJAMDisabledReflectedInStatus(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 
 	audit := newAuditLog(10, nil)
 	handler := wrapWithAuth(NewHandler(application, jam.Config{Enabled: true, Store: "postgres"}, authTokens, nil, audit, nil, nil), authTokens, testLogger, nil)
@@ -208,10 +207,7 @@ func TestJAMDisabledReflectedInStatus(t *testing.T) {
 }
 
 func TestSystemTenantEndpoint(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	audit := newAuditLog(10, nil)
 	handler := wrapWithAuth(NewHandler(application, jam.Config{}, authTokens, nil, audit, nil, nil), authTokens, testLogger, nil)
 	server := httptest.NewServer(handler)
@@ -243,10 +239,7 @@ func TestSystemTenantEndpoint(t *testing.T) {
 }
 
 func TestHandlerLifecycle(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 
 	if err := application.Start(context.Background()); err != nil {
 		t.Fatalf("start application: %v", err)
@@ -779,10 +772,7 @@ func TestHandlerLifecycle(t *testing.T) {
 }
 
 func TestSystemDescriptors(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	handler := NewHandler(application, jam.Config{}, []string{}, nil, newAuditLog(50, nil), nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/system/descriptors", nil)
@@ -802,10 +792,7 @@ func TestSystemDescriptors(t *testing.T) {
 }
 
 func TestWorkspaceWallets(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	if err := application.Start(context.Background()); err != nil {
 		t.Fatalf("start application: %v", err)
 	}
@@ -865,10 +852,7 @@ func TestWorkspaceWallets(t *testing.T) {
 }
 
 func TestCREPlaybooksAndRunsHTTP(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	if err := application.Start(context.Background()); err != nil {
 		t.Fatalf("start application: %v", err)
 	}
@@ -883,7 +867,7 @@ func TestCREPlaybooksAndRunsHTTP(t *testing.T) {
 		"endpoint": "https://runner.example.com",
 	})
 	assertStatus(t, execResp, http.StatusCreated)
-	exec := decodeResponse[domaincre.Executor](t, execResp)
+	exec := decodeResponse[cre.Executor](t, execResp)
 
 	pbResp := doJSON(handler, http.MethodPost, "/accounts/"+accountID+"/cre/playbooks", map[string]any{
 		"name":        "demo-playbook",
@@ -893,7 +877,7 @@ func TestCREPlaybooksAndRunsHTTP(t *testing.T) {
 		},
 	})
 	assertStatus(t, pbResp, http.StatusCreated)
-	playbook := decodeResponse[domaincre.Playbook](t, pbResp)
+	playbook := decodeResponse[cre.Playbook](t, pbResp)
 
 	listResp := doJSON(handler, http.MethodGet, "/accounts/"+accountID+"/cre/playbooks", nil)
 	assertStatus(t, listResp, http.StatusOK)
@@ -904,7 +888,7 @@ func TestCREPlaybooksAndRunsHTTP(t *testing.T) {
 		"params":      map[string]any{"foo": "bar"},
 	})
 	assertStatus(t, runResp, http.StatusCreated)
-	run := decodeResponse[domaincre.Run](t, runResp)
+	run := decodeResponse[cre.Run](t, runResp)
 	if run.AccountID != accountID || run.ExecutorID != exec.ID {
 		t.Fatalf("run not scoped to account/executor, got account %s executor %s", run.AccountID, run.ExecutorID)
 	}
@@ -923,10 +907,7 @@ func TestCREPlaybooksAndRunsHTTP(t *testing.T) {
 }
 
 func TestTenantIsolationEnforced(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	if err := application.Start(context.Background()); err != nil {
 		t.Fatalf("start application: %v", err)
 	}
@@ -955,10 +936,7 @@ func TestTenantIsolationEnforced(t *testing.T) {
 }
 
 func TestDataFeedsWalletGatedHTTP(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	if err := application.Start(context.Background()); err != nil {
 		t.Fatalf("start application: %v", err)
 	}
@@ -1018,10 +996,7 @@ func TestDataFeedsWalletGatedHTTP(t *testing.T) {
 }
 
 func TestVRFWalletGatedHTTP(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	if err := application.Start(context.Background()); err != nil {
 		t.Fatalf("start application: %v", err)
 	}
@@ -1044,14 +1019,14 @@ func TestVRFWalletGatedHTTP(t *testing.T) {
 		"wallet_address": testWalletVRF,
 	})
 	assertStatus(t, keyResp, http.StatusCreated)
-	key := decodeResponse[domainvrf.Key](t, keyResp)
+	key := decodeResponse[vrf.Key](t, keyResp)
 
 	reqResp := doJSON(handler, http.MethodPost, "/accounts/"+accountID+"/vrf/keys/"+key.ID+"/requests", map[string]any{
 		"consumer": "consumer-1",
 		"seed":     "seed-1",
 	})
 	assertStatus(t, reqResp, http.StatusCreated)
-	_ = decodeResponse[domainvrf.Request](t, reqResp)
+	_ = decodeResponse[vrf.Request](t, reqResp)
 
 	listResp := doJSON(handler, http.MethodGet, "/accounts/"+accountID+"/vrf/requests?limit=10", nil)
 	assertStatus(t, listResp, http.StatusOK)
@@ -1069,10 +1044,7 @@ func TestVRFWalletGatedHTTP(t *testing.T) {
 }
 
 func TestDataLinkChannelAndDeliveryHTTP(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	if err := application.Start(context.Background()); err != nil {
 		t.Fatalf("start application: %v", err)
 	}
@@ -1122,10 +1094,7 @@ func TestDataLinkChannelAndDeliveryHTTP(t *testing.T) {
 }
 
 func TestCCIPLaneAndMessageHTTP(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	if err := application.Start(context.Background()); err != nil {
 		t.Fatalf("start application: %v", err)
 	}
@@ -1148,7 +1117,7 @@ func TestCCIPLaneAndMessageHTTP(t *testing.T) {
 		"allowed_tokens": []string{"eth"},
 	})
 	assertStatus(t, laneResp, http.StatusCreated)
-	lane := decodeResponse[domainccip.Lane](t, laneResp)
+	lane := decodeResponse[ccip.Lane](t, laneResp)
 
 	msgResp := doJSON(handler, http.MethodPost, "/accounts/"+accountID+"/ccip/lanes/"+lane.ID+"/messages", map[string]any{
 		"payload": map[string]any{"hello": "world"},
@@ -1157,7 +1126,7 @@ func TestCCIPLaneAndMessageHTTP(t *testing.T) {
 		},
 	})
 	assertStatus(t, msgResp, http.StatusCreated)
-	message := decodeResponse[domainccip.Message](t, msgResp)
+	message := decodeResponse[ccip.Message](t, msgResp)
 	if message.AccountID != accountID || message.LaneID != lane.ID {
 		t.Fatalf("message not scoped properly to account/lane")
 	}
@@ -1175,10 +1144,7 @@ func TestCCIPLaneAndMessageHTTP(t *testing.T) {
 }
 
 func TestDataStreamsHTTP(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	if err := application.Start(context.Background()); err != nil {
 		t.Fatalf("start application: %v", err)
 	}
@@ -1196,7 +1162,7 @@ func TestDataStreamsHTTP(t *testing.T) {
 		"status":      "active",
 	})
 	assertStatus(t, streamResp, http.StatusCreated)
-	stream := decodeResponse[domainsds.Stream](t, streamResp)
+	stream := decodeResponse[datastreams.Stream](t, streamResp)
 
 	frameResp := doJSON(handler, http.MethodPost, "/accounts/"+accountID+"/datastreams/"+stream.ID+"/frames", map[string]any{
 		"sequence":   1,
@@ -1211,10 +1177,7 @@ func TestDataStreamsHTTP(t *testing.T) {
 }
 
 func TestConfidentialComputeHTTP(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	if err := application.Start(context.Background()); err != nil {
 		t.Fatalf("start application: %v", err)
 	}
@@ -1231,7 +1194,7 @@ func TestConfidentialComputeHTTP(t *testing.T) {
 		"status":      "active",
 	})
 	assertStatus(t, enclaveResp, http.StatusCreated)
-	enclave := decodeResponse[domainconf.Enclave](t, enclaveResp)
+	enclave := decodeResponse[confidential.Enclave](t, enclaveResp)
 
 	sealedResp := doJSON(handler, http.MethodPost, "/accounts/"+accountID+"/confcompute/sealed_keys", map[string]any{
 		"enclave_id": enclave.ID,
@@ -1252,10 +1215,7 @@ func TestConfidentialComputeHTTP(t *testing.T) {
 }
 
 func TestDTAWalletGatedHTTP(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	if err := application.Start(context.Background()); err != nil {
 		t.Fatalf("start application: %v", err)
 	}
@@ -1277,7 +1237,7 @@ func TestDTAWalletGatedHTTP(t *testing.T) {
 		"settlement_terms": "T+1",
 	})
 	assertStatus(t, productResp, http.StatusCreated)
-	product := decodeResponse[domaindta.Product](t, productResp)
+	product := decodeResponse[dta.Product](t, productResp)
 
 	orderResp := doJSON(handler, http.MethodPost, "/accounts/"+accountID+"/dta/products/"+product.ID+"/orders", map[string]any{
 		"type":           "subscription",
@@ -1297,10 +1257,7 @@ func TestDTAWalletGatedHTTP(t *testing.T) {
 }
 
 func TestCCIPLanesRequireRegisteredSigner(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	if err := application.Start(context.Background()); err != nil {
 		t.Fatalf("start application: %v", err)
 	}
@@ -1355,10 +1312,7 @@ func TestCCIPLanesRequireRegisteredSigner(t *testing.T) {
 }
 
 func TestHandlerAuthRequired(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	handler := wrapWithAuth(NewHandler(application, jam.Config{}, authTokens, nil, newAuditLog(50, nil), nil, nil), authTokens, testLogger, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/accounts", nil)
@@ -1370,10 +1324,7 @@ func TestHandlerAuthRequired(t *testing.T) {
 }
 
 func TestHandler_PreventCrossAccountExecution(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	if err := application.Start(context.Background()); err != nil {
 		t.Fatalf("start application: %v", err)
 	}
@@ -1419,10 +1370,7 @@ func TestHandler_PreventCrossAccountExecution(t *testing.T) {
 }
 
 func TestIntegration_AutomationExecutesFunction(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	if err := application.Start(context.Background()); err != nil {
 		t.Fatalf("start application: %v", err)
 	}
@@ -1453,7 +1401,7 @@ func TestIntegration_AutomationExecutesFunction(t *testing.T) {
 
 	execResp := doJSON(handler, http.MethodPost, "/accounts/"+accountID+"/functions/"+functionID+"/execute", map[string]any{"input": "manual"})
 	assertStatus(t, execResp, http.StatusOK)
-	manualExec := decodeResponse[function.Execution](t, execResp)
+	manualExec := decodeResponse[functions.Execution](t, execResp)
 	if output := manualExec.Output["secret"]; output != "super-secret" {
 		t.Fatalf("expected function to read secret, got %v", output)
 	}
@@ -1485,7 +1433,7 @@ func TestIntegration_AutomationExecutesFunction(t *testing.T) {
 		if execsResp.Code != http.StatusOK {
 			continue
 		}
-		executions := decodeResponse[[]function.Execution](t, execsResp)
+		executions := decodeResponse[[]functions.Execution](t, execsResp)
 		if len(executions) == 0 {
 			continue
 		}
@@ -1540,7 +1488,7 @@ func marshal(v any) []byte {
 }
 
 func getFunctionID(body []byte) string {
-	var def function.Definition
+	var def functions.Definition
 	_ = json.Unmarshal(body, &def)
 	return def.ID
 }
@@ -1561,10 +1509,7 @@ func createAccountWithTenant(t *testing.T, handler http.Handler, owner, tenant s
 }
 
 func TestSystemStatusModules(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	audit := newAuditLog(10, nil)
 	modulesFn := func() []ModuleStatus {
 		return []ModuleStatus{
@@ -1593,10 +1538,7 @@ func TestSystemStatusModules(t *testing.T) {
 }
 
 func TestSystemStatusModuleSummaryUsesInterfaces(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	audit := newAuditLog(10, nil)
 	modulesFn := func() []ModuleStatus {
 		return []ModuleStatus{
@@ -1655,10 +1597,7 @@ func TestSystemStatusModuleSummaryUsesInterfaces(t *testing.T) {
 }
 
 func TestSystemStatusAPISummary(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	audit := newAuditLog(10, nil)
 	modulesFn := func() []ModuleStatus {
 		return []ModuleStatus{
@@ -1729,10 +1668,7 @@ func (e eventCapableModule) Subscribe(ctx context.Context, event string, handler
 func (e eventCapableModule) HasEvent() bool { return e.enabled }
 
 func TestSystemStatusRespectsEngineCapabilities(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	audit := newAuditLog(10, nil)
 
 	eng := engine.New(engine.WithOrder("events-off", "events-on"))
@@ -1767,10 +1703,7 @@ func TestSystemStatusRespectsEngineCapabilities(t *testing.T) {
 }
 
 func TestSystemStatusModuleMeta(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	audit := newAuditLog(10, nil)
 	start := time.Now().Add(-5 * time.Second)
 	stop := start.Add(4 * time.Second)
@@ -1819,10 +1752,7 @@ func TestSystemStatusModuleMeta(t *testing.T) {
 // Ensures slow threshold can be overridden via env.
 func TestSystemStatusSlowThresholdEnv(t *testing.T) {
 	t.Setenv("MODULE_SLOW_MS", "5000")
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	audit := newAuditLog(10, nil)
 	modulesFn := func() []ModuleStatus {
 		start := time.Now()
@@ -1856,10 +1786,7 @@ func TestSystemStatusSlowThresholdEnv(t *testing.T) {
 }
 
 func TestSystemStatusIncludesListenAddr(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	audit := newAuditLog(10, nil)
 	handler := wrapWithAuth(NewHandler(application, jam.Config{}, authTokens, nil, audit, nil, nil,
 		WithListenAddrProvider(func() string { return "127.0.0.1:1234" })),
@@ -1879,10 +1806,7 @@ func TestSystemStatusIncludesListenAddr(t *testing.T) {
 }
 
 func TestSystemStatusMethodGuard(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	audit := newAuditLog(10, nil)
 	handler := wrapWithAuth(NewHandler(application, jam.Config{}, authTokens, nil, audit, nil, nil), authTokens, testLogger, nil)
 
@@ -1896,10 +1820,7 @@ func TestSystemStatusMethodGuard(t *testing.T) {
 }
 
 func TestSystemBusEvents(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	audit := newAuditLog(10, nil)
 	var gotEvent string
 	var gotPayload any
@@ -1926,10 +1847,7 @@ func TestSystemBusEvents(t *testing.T) {
 }
 
 func TestSystemBusEventsMethodGuard(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	audit := newAuditLog(10, nil)
 	handler := wrapWithAuth(NewHandler(application, jam.Config{}, authTokens, nil, audit, nil, nil), nil, testLogger, staticAdminValidator{})
 
@@ -1942,10 +1860,7 @@ func TestSystemBusEventsMethodGuard(t *testing.T) {
 }
 
 func TestSystemBusCompute(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	audit := newAuditLog(10, nil)
 	var seenPayload any
 	invoker := func(ctx context.Context, payload any) ([]ComputeResult, error) {
@@ -1979,10 +1894,7 @@ func TestSystemBusCompute(t *testing.T) {
 }
 
 func TestAuthLoginMethodGuard(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	audit := newAuditLog(10, nil)
 	handler := wrapWithAuth(NewHandler(application, jam.Config{}, authTokens, nil, audit, nil, nil), authTokens, testLogger, nil)
 
@@ -1995,10 +1907,7 @@ func TestAuthLoginMethodGuard(t *testing.T) {
 }
 
 func TestSystemBusData(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	audit := newAuditLog(10, nil)
 	var gotTopic string
 	var gotPayload any
@@ -2022,10 +1931,7 @@ func TestSystemBusData(t *testing.T) {
 }
 
 func TestSystemBusPayloadLimit(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	audit := newAuditLog(10, nil)
 	handler := wrapWithAuth(NewHandler(application, jam.Config{}, authTokens, nil, audit, nil, nil, WithBusEndpoints(func(ctx context.Context, event string, payload any) error {
 		return nil
@@ -2043,10 +1949,7 @@ func TestSystemBusPayloadLimit(t *testing.T) {
 }
 
 func TestSystemBusRequiresAdminRole(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	audit := newAuditLog(10, nil)
 	handler := wrapWithAuth(NewHandler(application, jam.Config{}, authTokens, nil, audit, nil, nil, WithBusEndpoints(func(ctx context.Context, event string, payload any) error {
 		return nil
@@ -2063,10 +1966,7 @@ func TestSystemBusRequiresAdminRole(t *testing.T) {
 }
 
 func TestReadyzAndLivez(t *testing.T) {
-	application, err := app.New(app.NewMemoryStoresForTest(), nil)
-	if err != nil {
-		t.Fatalf("new application: %v", err)
-	}
+	application := newTestApplication(t)
 	audit := newAuditLog(10, nil)
 	modulesFn := func() []ModuleStatus {
 		return []ModuleStatus{

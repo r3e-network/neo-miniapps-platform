@@ -6,52 +6,115 @@ import (
 	"strings"
 )
 
-// AccountLookup is the minimal interface for account existence checks.
-// Any store with a GetAccount method returning (T, error) can be adapted.
-type AccountLookup interface {
-	LookupAccount(ctx context.Context, id string) error
+// AccountChecker is the standard interface for account validation.
+// Services should depend on this interface rather than concrete store types.
+// This is the canonical interface - use it consistently across all services.
+//
+// All service packages should import this interface from framework rather than
+// defining their own. This eliminates ~65 lines of duplicate interface definitions.
+type AccountChecker interface {
+	// AccountExists checks if an account exists by ID.
+	// Returns nil if the account exists, or an error if not found.
+	AccountExists(ctx context.Context, accountID string) error
+
+	// AccountTenant returns the tenant identifier for an account.
+	// Returns empty string if the account has no tenant or doesn't exist.
+	// This supports multi-tenancy filtering in service stores.
+	AccountTenant(ctx context.Context, accountID string) string
 }
 
-// WalletLookup is the minimal interface for workspace wallet lookups.
-type WalletLookup interface {
-	LookupWallet(ctx context.Context, workspaceID, wallet string) error
+// BasicAccountChecker is a minimal interface for services that only need existence checks.
+// Use AccountChecker for full functionality including tenant support.
+type BasicAccountChecker interface {
+	AccountExists(ctx context.Context, accountID string) error
 }
 
-// AccountStoreAdapter wraps any account store to implement AccountLookup.
+// WalletChecker is the standard interface for wallet ownership validation.
+type WalletChecker interface {
+	WalletOwnedBy(ctx context.Context, accountID, wallet string) error
+}
+
+// Legacy aliases for backward compatibility - prefer AccountChecker/WalletChecker.
+type (
+	AccountLookup = AccountChecker
+	WalletLookup  = WalletChecker
+)
+
+// AccountStoreAdapter wraps any account store to implement AccountChecker.
+// For full AccountChecker support (including AccountTenant), use FullAccountStoreAdapter.
 type AccountStoreAdapter[T any] struct {
 	Store interface {
 		GetAccount(ctx context.Context, id string) (T, error)
 	}
 }
 
-// LookupAccount checks if an account exists.
-func (a AccountStoreAdapter[T]) LookupAccount(ctx context.Context, id string) error {
+// AccountExists checks if an account exists.
+func (a AccountStoreAdapter[T]) AccountExists(ctx context.Context, id string) error {
 	_, err := a.Store.GetAccount(ctx, id)
 	return err
 }
 
-// WalletStoreAdapter wraps any wallet store to implement WalletLookup.
+// AccountTenant returns empty string (basic adapter doesn't support tenants).
+// Use FullAccountStoreAdapter for tenant support.
+func (a AccountStoreAdapter[T]) AccountTenant(ctx context.Context, id string) string {
+	return ""
+}
+
+// LookupAccount is an alias for AccountExists (backward compatibility).
+func (a AccountStoreAdapter[T]) LookupAccount(ctx context.Context, id string) error {
+	return a.AccountExists(ctx, id)
+}
+
+// FullAccountStoreAdapter wraps an account store with tenant support.
+// Use this when your store provides tenant information.
+type FullAccountStoreAdapter[T any] struct {
+	Store interface {
+		GetAccount(ctx context.Context, id string) (T, error)
+	}
+	TenantFunc func(ctx context.Context, id string) string
+}
+
+// AccountExists checks if an account exists.
+func (a FullAccountStoreAdapter[T]) AccountExists(ctx context.Context, id string) error {
+	_, err := a.Store.GetAccount(ctx, id)
+	return err
+}
+
+// AccountTenant returns the tenant for an account.
+func (a FullAccountStoreAdapter[T]) AccountTenant(ctx context.Context, id string) string {
+	if a.TenantFunc == nil {
+		return ""
+	}
+	return a.TenantFunc(ctx, id)
+}
+
+// WalletStoreAdapter wraps any wallet store to implement WalletChecker.
 type WalletStoreAdapter[T any] struct {
 	Store interface {
 		FindWorkspaceWalletByAddress(ctx context.Context, workspaceID, wallet string) (T, error)
 	}
 }
 
-// LookupWallet checks if a wallet exists.
-func (a WalletStoreAdapter[T]) LookupWallet(ctx context.Context, workspaceID, wallet string) error {
-	_, err := a.Store.FindWorkspaceWalletByAddress(ctx, workspaceID, wallet)
+// WalletOwnedBy checks if a wallet belongs to the account.
+func (a WalletStoreAdapter[T]) WalletOwnedBy(ctx context.Context, accountID, wallet string) error {
+	_, err := a.Store.FindWorkspaceWalletByAddress(ctx, accountID, wallet)
 	return err
+}
+
+// LookupWallet is an alias for WalletOwnedBy (backward compatibility).
+func (a WalletStoreAdapter[T]) LookupWallet(ctx context.Context, workspaceID, wallet string) error {
+	return a.WalletOwnedBy(ctx, workspaceID, wallet)
 }
 
 // Base bundles shared service helpers (account validation, workspace wallets, etc).
 type Base struct {
-	accounts AccountLookup
-	wallets  WalletLookup
+	accounts AccountChecker
+	wallets  WalletChecker
 	tracer   Tracer
 }
 
-// NewBase constructs a helper bound to the provided account lookup.
-func NewBase(accounts AccountLookup) *Base {
+// NewBase constructs a helper bound to the provided account checker.
+func NewBase(accounts AccountChecker) *Base {
 	return &Base{accounts: accounts, tracer: NoopTracer}
 }
 
@@ -63,14 +126,14 @@ func NewBaseFromStore[T any](store interface {
 }
 
 // SetWallets wires a workspace wallet store for signer validation.
-func (b *Base) SetWallets(store WalletLookup) {
+func (b *Base) SetWallets(store WalletChecker) {
 	b.wallets = store
 }
 
-// WrapWalletStore wraps a typed wallet store to implement WalletLookup.
+// WrapWalletStore wraps a typed wallet store to implement WalletChecker.
 func WrapWalletStore[T any](store interface {
 	FindWorkspaceWalletByAddress(ctx context.Context, workspaceID, wallet string) (T, error)
-}) WalletLookup {
+}) WalletChecker {
 	return WalletStoreAdapter[T]{Store: store}
 }
 
@@ -91,7 +154,7 @@ func (b *Base) EnsureAccount(ctx context.Context, accountID string) error {
 	if b.accounts == nil {
 		return nil
 	}
-	return b.accounts.LookupAccount(ctx, accountID)
+	return b.accounts.AccountExists(ctx, accountID)
 }
 
 // ValidateAccount validates an account ID and wraps errors with context.
@@ -122,7 +185,7 @@ func (b *Base) NormalizeAccount(ctx context.Context, accountID string) (string, 
 	if b.accounts == nil {
 		return trimmed, nil
 	}
-	if err := b.accounts.LookupAccount(ctx, trimmed); err != nil {
+	if err := b.accounts.AccountExists(ctx, trimmed); err != nil {
 		return "", err
 	}
 	return trimmed, nil
@@ -134,7 +197,7 @@ func (b *Base) EnsureSignersOwned(ctx context.Context, accountID string, signers
 		return nil
 	}
 	for _, signer := range signers {
-		if err := b.wallets.LookupWallet(ctx, accountID, signer); err != nil {
+		if err := b.wallets.WalletOwnedBy(ctx, accountID, signer); err != nil {
 			return fmt.Errorf("signer %s not registered for account %s", signer, accountID)
 		}
 	}

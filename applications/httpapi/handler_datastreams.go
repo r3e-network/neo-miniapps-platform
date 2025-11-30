@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	domainds "github.com/R3E-Network/service_layer/domain/datastreams"
+	datastreamsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.datastreams"
 )
 
 func (h *handler) accountDataStreams(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {
@@ -35,14 +35,14 @@ func (h *handler) accountDataStreams(w http.ResponseWriter, r *http.Request, acc
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			stream := domainds.Stream{
+			stream := datastreamsvc.Stream{
 				AccountID:   accountID,
 				Name:        payload.Name,
 				Symbol:      payload.Symbol,
 				Description: payload.Description,
 				Frequency:   payload.Frequency,
 				SLAms:       payload.SLAMs,
-				Status:      domainds.StreamStatus(payload.Status),
+				Status:      datastreamsvc.StreamStatus(payload.Status),
 				Metadata:    payload.Metadata,
 			}
 			created, err := h.services.DataStreamsService().CreateStream(r.Context(), stream)
@@ -81,7 +81,7 @@ func (h *handler) accountDataStreams(w http.ResponseWriter, r *http.Request, acc
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			stream := domainds.Stream{
+			stream := datastreamsvc.Stream{
 				ID:          streamID,
 				AccountID:   accountID,
 				Name:        payload.Name,
@@ -89,7 +89,7 @@ func (h *handler) accountDataStreams(w http.ResponseWriter, r *http.Request, acc
 				Description: payload.Description,
 				Frequency:   payload.Frequency,
 				SLAms:       payload.SLAMs,
-				Status:      domainds.StreamStatus(payload.Status),
+				Status:      datastreamsvc.StreamStatus(payload.Status),
 				Metadata:    payload.Metadata,
 			}
 			updated, err := h.services.DataStreamsService().UpdateStream(r.Context(), stream)
@@ -130,7 +130,7 @@ func (h *handler) accountDataStreams(w http.ResponseWriter, r *http.Request, acc
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			frame, err := h.services.DataStreamsService().CreateFrame(r.Context(), accountID, streamID, payload.Sequence, payload.Payload, payload.LatencyMS, domainds.FrameStatus(payload.Status), payload.Metadata)
+			frame, err := h.services.DataStreamsService().CreateFrame(r.Context(), accountID, streamID, payload.Sequence, payload.Payload, payload.LatencyMS, datastreamsvc.FrameStatus(payload.Status), payload.Metadata)
 			if err != nil {
 				writeError(w, http.StatusBadRequest, err)
 				return

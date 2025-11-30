@@ -13,13 +13,10 @@
 package contracts
 
 import (
-	"github.com/R3E-Network/service_layer/domain/account"
 	"context"
 	"fmt"
 	"strings"
 
-	"github.com/R3E-Network/service_layer/pkg/storage"
-	domaincontract "github.com/R3E-Network/service_layer/domain/contract"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	engine "github.com/R3E-Network/service_layer/system/core"
 	"github.com/R3E-Network/service_layer/system/framework"
@@ -28,27 +25,27 @@ import (
 
 // Deployer handles contract deployment to blockchain networks.
 type Deployer interface {
-	Deploy(ctx context.Context, deployment domaincontract.Deployment) (domaincontract.Deployment, error)
+	Deploy(ctx context.Context, deployment Deployment) (Deployment, error)
 }
 
 // DeployerFunc adapts a function to the Deployer interface.
-type DeployerFunc func(ctx context.Context, deployment domaincontract.Deployment) (domaincontract.Deployment, error)
+type DeployerFunc func(ctx context.Context, deployment Deployment) (Deployment, error)
 
 // Deploy calls f(ctx, deployment).
-func (f DeployerFunc) Deploy(ctx context.Context, deployment domaincontract.Deployment) (domaincontract.Deployment, error) {
+func (f DeployerFunc) Deploy(ctx context.Context, deployment Deployment) (Deployment, error) {
 	return f(ctx, deployment)
 }
 
 // Invoker handles contract method invocations.
 type Invoker interface {
-	Invoke(ctx context.Context, invocation domaincontract.Invocation) (domaincontract.Invocation, error)
+	Invoke(ctx context.Context, invocation Invocation) (Invocation, error)
 }
 
 // InvokerFunc adapts a function to the Invoker interface.
-type InvokerFunc func(ctx context.Context, invocation domaincontract.Invocation) (domaincontract.Invocation, error)
+type InvokerFunc func(ctx context.Context, invocation Invocation) (Invocation, error)
 
 // Invoke calls f(ctx, invocation).
-func (f InvokerFunc) Invoke(ctx context.Context, invocation domaincontract.Invocation) (domaincontract.Invocation, error) {
+func (f InvokerFunc) Invoke(ctx context.Context, invocation Invocation) (Invocation, error) {
 	return f(ctx, invocation)
 }
 
@@ -56,7 +53,7 @@ func (f InvokerFunc) Invoke(ctx context.Context, invocation domaincontract.Invoc
 type Service struct {
 	framework.ServiceBase
 	base     *core.Base
-	store    storage.ContractStore
+	store    Store
 	deployer Deployer
 	invoker  Invoker
 	dispatch core.DispatchOptions
@@ -89,20 +86,20 @@ func (s *Service) Descriptor() core.Descriptor { return s.Manifest().ToDescripto
 // Start/Stop/Ready are inherited from framework.ServiceBase.
 
 // New constructs a contracts service.
-func New(accounts storage.AccountStore, store storage.ContractStore, log *logger.Logger) *Service {
+func New(accounts core.AccountChecker, store Store, log *logger.Logger) *Service {
 	if log == nil {
 		log = logger.NewDefault("contracts")
 	}
 	svc := &Service{
-		base:     core.NewBaseFromStore[account.Account](accounts),
+		base:     core.NewBase(accounts),
 		store:    store,
 		log:      log,
 		hooks:    core.NoopObservationHooks,
 		dispatch: core.NewDispatchOptions(),
-		deployer: DeployerFunc(func(_ context.Context, d domaincontract.Deployment) (domaincontract.Deployment, error) {
+		deployer: DeployerFunc(func(_ context.Context, d Deployment) (Deployment, error) {
 			return d, nil // No-op default
 		}),
-		invoker: InvokerFunc(func(_ context.Context, inv domaincontract.Invocation) (domaincontract.Invocation, error) {
+		invoker: InvokerFunc(func(_ context.Context, inv Invocation) (Invocation, error) {
 			return inv, nil // No-op default
 		}),
 	}
@@ -145,65 +142,65 @@ func (s *Service) WithObservationHooks(h core.ObservationHooks) {
 }
 
 // CreateContract registers a new contract.
-func (s *Service) CreateContract(ctx context.Context, c domaincontract.Contract) (domaincontract.Contract, error) {
+func (s *Service) CreateContract(ctx context.Context, c Contract) (Contract, error) {
 	if err := s.base.EnsureAccount(ctx, c.AccountID); err != nil {
-		return domaincontract.Contract{}, err
+		return Contract{}, err
 	}
 	if err := s.normalizeContract(&c); err != nil {
-		return domaincontract.Contract{}, err
+		return Contract{}, err
 	}
 	created, err := s.store.CreateContract(ctx, c)
 	if err != nil {
-		return domaincontract.Contract{}, err
+		return Contract{}, err
 	}
 	s.log.WithField("contract_id", created.ID).WithField("account_id", created.AccountID).Info("contract registered")
 	return created, nil
 }
 
 // UpdateContract updates contract metadata.
-func (s *Service) UpdateContract(ctx context.Context, c domaincontract.Contract) (domaincontract.Contract, error) {
+func (s *Service) UpdateContract(ctx context.Context, c Contract) (Contract, error) {
 	stored, err := s.store.GetContract(ctx, c.ID)
 	if err != nil {
-		return domaincontract.Contract{}, err
+		return Contract{}, err
 	}
 	if err := core.EnsureOwnership(stored.AccountID, c.AccountID, "contract", c.ID); err != nil {
-		return domaincontract.Contract{}, err
+		return Contract{}, err
 	}
 	c.AccountID = stored.AccountID
 	if err := s.normalizeContract(&c); err != nil {
-		return domaincontract.Contract{}, err
+		return Contract{}, err
 	}
 	updated, err := s.store.UpdateContract(ctx, c)
 	if err != nil {
-		return domaincontract.Contract{}, err
+		return Contract{}, err
 	}
 	s.log.WithField("contract_id", c.ID).WithField("account_id", c.AccountID).Info("contract updated")
 	return updated, nil
 }
 
 // GetContract fetches a contract ensuring ownership.
-func (s *Service) GetContract(ctx context.Context, accountID, contractID string) (domaincontract.Contract, error) {
+func (s *Service) GetContract(ctx context.Context, accountID, contractID string) (Contract, error) {
 	c, err := s.store.GetContract(ctx, contractID)
 	if err != nil {
-		return domaincontract.Contract{}, err
+		return Contract{}, err
 	}
 	// Engine contracts are accessible to all accounts
-	if c.Type == domaincontract.ContractTypeEngine {
+	if c.Type == ContractTypeEngine {
 		return c, nil
 	}
 	if err := core.EnsureOwnership(c.AccountID, accountID, "contract", contractID); err != nil {
-		return domaincontract.Contract{}, err
+		return Contract{}, err
 	}
 	return c, nil
 }
 
 // GetContractByAddress fetches a contract by network and address.
-func (s *Service) GetContractByAddress(ctx context.Context, network domaincontract.Network, address string) (domaincontract.Contract, error) {
+func (s *Service) GetContractByAddress(ctx context.Context, network Network, address string) (Contract, error) {
 	return s.store.GetContractByAddress(ctx, network, address)
 }
 
 // ListContracts lists account contracts.
-func (s *Service) ListContracts(ctx context.Context, accountID string) ([]domaincontract.Contract, error) {
+func (s *Service) ListContracts(ctx context.Context, accountID string) ([]Contract, error) {
 	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
 		return nil, err
 	}
@@ -211,47 +208,47 @@ func (s *Service) ListContracts(ctx context.Context, accountID string) ([]domain
 }
 
 // ListEngineContracts lists all engine-level contracts.
-func (s *Service) ListEngineContracts(ctx context.Context) ([]domaincontract.Contract, error) {
+func (s *Service) ListEngineContracts(ctx context.Context) ([]Contract, error) {
 	return s.store.ListContractsByService(ctx, "")
 }
 
 // ListContractsByService lists contracts for a specific service.
-func (s *Service) ListContractsByService(ctx context.Context, serviceID string) ([]domaincontract.Contract, error) {
+func (s *Service) ListContractsByService(ctx context.Context, serviceID string) ([]Contract, error) {
 	return s.store.ListContractsByService(ctx, serviceID)
 }
 
 // ListContractsByNetwork lists contracts deployed on a network.
-func (s *Service) ListContractsByNetwork(ctx context.Context, network domaincontract.Network) ([]domaincontract.Contract, error) {
+func (s *Service) ListContractsByNetwork(ctx context.Context, network Network) ([]Contract, error) {
 	return s.store.ListContractsByNetwork(ctx, network)
 }
 
 // Deploy initiates a contract deployment.
-func (s *Service) Deploy(ctx context.Context, accountID, contractID string, constructorArgs map[string]any, gasLimit int64, metadata map[string]string) (domaincontract.Deployment, error) {
+func (s *Service) Deploy(ctx context.Context, accountID, contractID string, constructorArgs map[string]any, gasLimit int64, metadata map[string]string) (Deployment, error) {
 	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
-		return domaincontract.Deployment{}, err
+		return Deployment{}, err
 	}
 	c, err := s.GetContract(ctx, accountID, contractID)
 	if err != nil {
-		return domaincontract.Deployment{}, err
+		return Deployment{}, err
 	}
 	if c.Bytecode == "" {
-		return domaincontract.Deployment{}, fmt.Errorf("contract %s has no bytecode", contractID)
+		return Deployment{}, fmt.Errorf("contract %s has no bytecode", contractID)
 	}
 
-	deployment := domaincontract.Deployment{
+	deployment := Deployment{
 		AccountID:       accountID,
 		ContractID:      contractID,
 		Network:         c.Network,
 		Bytecode:        c.Bytecode,
 		ConstructorArgs: constructorArgs,
 		GasLimit:        gasLimit,
-		Status:          domaincontract.DeploymentStatusPending,
+		Status:          DeploymentStatusPending,
 		Metadata:        core.NormalizeMetadata(metadata),
 	}
 
 	created, err := s.store.CreateDeployment(ctx, deployment)
 	if err != nil {
-		return domaincontract.Deployment{}, err
+		return Deployment{}, err
 	}
 
 	attrs := map[string]string{"deployment_id": created.ID, "contract_id": contractID}
@@ -275,35 +272,35 @@ func (s *Service) Deploy(ctx context.Context, accountID, contractID string, cons
 }
 
 // Invoke calls a contract method.
-func (s *Service) Invoke(ctx context.Context, accountID, contractID, methodName string, args map[string]any, gasLimit int64, value string, metadata map[string]string) (domaincontract.Invocation, error) {
+func (s *Service) Invoke(ctx context.Context, accountID, contractID, methodName string, args map[string]any, gasLimit int64, value string, metadata map[string]string) (Invocation, error) {
 	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
-		return domaincontract.Invocation{}, err
+		return Invocation{}, err
 	}
 	c, err := s.GetContract(ctx, accountID, contractID)
 	if err != nil {
-		return domaincontract.Invocation{}, err
+		return Invocation{}, err
 	}
-	if c.Status != domaincontract.ContractStatusActive {
-		return domaincontract.Invocation{}, fmt.Errorf("contract %s is not active (status: %s)", contractID, c.Status)
+	if c.Status != ContractStatusActive {
+		return Invocation{}, fmt.Errorf("contract %s is not active (status: %s)", contractID, c.Status)
 	}
 	if methodName = strings.TrimSpace(methodName); methodName == "" {
-		return domaincontract.Invocation{}, core.RequiredError("method_name")
+		return Invocation{}, core.RequiredError("method_name")
 	}
 
-	invocation := domaincontract.Invocation{
+	invocation := Invocation{
 		AccountID:  accountID,
 		ContractID: contractID,
 		MethodName: methodName,
 		Args:       args,
 		GasLimit:   gasLimit,
 		Value:      strings.TrimSpace(value),
-		Status:     domaincontract.InvocationStatusPending,
+		Status:     InvocationStatusPending,
 		Metadata:   core.NormalizeMetadata(metadata),
 	}
 
 	created, err := s.store.CreateInvocation(ctx, invocation)
 	if err != nil {
-		return domaincontract.Invocation{}, err
+		return Invocation{}, err
 	}
 
 	attrs := map[string]string{"invocation_id": created.ID, "contract_id": contractID, "method": methodName}
@@ -324,19 +321,19 @@ func (s *Service) Invoke(ctx context.Context, accountID, contractID, methodName 
 }
 
 // GetInvocation fetches an invocation.
-func (s *Service) GetInvocation(ctx context.Context, accountID, invocationID string) (domaincontract.Invocation, error) {
+func (s *Service) GetInvocation(ctx context.Context, accountID, invocationID string) (Invocation, error) {
 	inv, err := s.store.GetInvocation(ctx, invocationID)
 	if err != nil {
-		return domaincontract.Invocation{}, err
+		return Invocation{}, err
 	}
 	if err := core.EnsureOwnership(inv.AccountID, accountID, "invocation", invocationID); err != nil {
-		return domaincontract.Invocation{}, err
+		return Invocation{}, err
 	}
 	return inv, nil
 }
 
 // ListInvocations lists invocations for a contract.
-func (s *Service) ListInvocations(ctx context.Context, accountID, contractID string, limit int) ([]domaincontract.Invocation, error) {
+func (s *Service) ListInvocations(ctx context.Context, accountID, contractID string, limit int) ([]Invocation, error) {
 	if _, err := s.GetContract(ctx, accountID, contractID); err != nil {
 		return nil, err
 	}
@@ -345,7 +342,7 @@ func (s *Service) ListInvocations(ctx context.Context, accountID, contractID str
 }
 
 // ListAccountInvocations lists all invocations for an account.
-func (s *Service) ListAccountInvocations(ctx context.Context, accountID string, limit int) ([]domaincontract.Invocation, error) {
+func (s *Service) ListAccountInvocations(ctx context.Context, accountID string, limit int) ([]Invocation, error) {
 	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
 		return nil, err
 	}
@@ -354,19 +351,19 @@ func (s *Service) ListAccountInvocations(ctx context.Context, accountID string, 
 }
 
 // GetDeployment fetches a deployment.
-func (s *Service) GetDeployment(ctx context.Context, accountID, deploymentID string) (domaincontract.Deployment, error) {
+func (s *Service) GetDeployment(ctx context.Context, accountID, deploymentID string) (Deployment, error) {
 	d, err := s.store.GetDeployment(ctx, deploymentID)
 	if err != nil {
-		return domaincontract.Deployment{}, err
+		return Deployment{}, err
 	}
 	if err := core.EnsureOwnership(d.AccountID, accountID, "deployment", deploymentID); err != nil {
-		return domaincontract.Deployment{}, err
+		return Deployment{}, err
 	}
 	return d, nil
 }
 
 // ListDeployments lists deployments for a contract.
-func (s *Service) ListDeployments(ctx context.Context, accountID, contractID string, limit int) ([]domaincontract.Deployment, error) {
+func (s *Service) ListDeployments(ctx context.Context, accountID, contractID string, limit int) ([]Deployment, error) {
 	if _, err := s.GetContract(ctx, accountID, contractID); err != nil {
 		return nil, err
 	}
@@ -375,16 +372,16 @@ func (s *Service) ListDeployments(ctx context.Context, accountID, contractID str
 }
 
 // GetNetworkConfig returns configuration for a network.
-func (s *Service) GetNetworkConfig(ctx context.Context, network domaincontract.Network) (domaincontract.NetworkConfig, error) {
+func (s *Service) GetNetworkConfig(ctx context.Context, network Network) (NetworkConfig, error) {
 	return s.store.GetNetworkConfig(ctx, network)
 }
 
 // ListNetworkConfigs lists all configured networks.
-func (s *Service) ListNetworkConfigs(ctx context.Context) ([]domaincontract.NetworkConfig, error) {
+func (s *Service) ListNetworkConfigs(ctx context.Context) ([]NetworkConfig, error) {
 	return s.store.ListNetworkConfigs(ctx)
 }
 
-func (s *Service) normalizeContract(c *domaincontract.Contract) error {
+func (s *Service) normalizeContract(c *Contract) error {
 	c.Name = strings.TrimSpace(c.Name)
 	c.Symbol = strings.ToUpper(strings.TrimSpace(c.Symbol))
 	c.Description = strings.TrimSpace(c.Description)
@@ -403,26 +400,26 @@ func (s *Service) normalizeContract(c *domaincontract.Contract) error {
 		c.Version = "1.0.0"
 	}
 
-	contractType := domaincontract.ContractType(strings.ToLower(strings.TrimSpace(string(c.Type))))
+	contractType := ContractType(strings.ToLower(strings.TrimSpace(string(c.Type))))
 	if contractType == "" {
-		contractType = domaincontract.ContractTypeUser
+		contractType = ContractTypeUser
 	}
 	switch contractType {
-	case domaincontract.ContractTypeEngine, domaincontract.ContractTypeService, domaincontract.ContractTypeUser:
+	case ContractTypeEngine, ContractTypeService, ContractTypeUser:
 		c.Type = contractType
 	default:
 		return fmt.Errorf("invalid contract type %s", contractType)
 	}
 
-	status := domaincontract.ContractStatus(strings.ToLower(strings.TrimSpace(string(c.Status))))
+	status := ContractStatus(strings.ToLower(strings.TrimSpace(string(c.Status))))
 	if status == "" {
-		status = domaincontract.ContractStatusDraft
+		status = ContractStatusDraft
 	}
 	switch status {
-	case domaincontract.ContractStatusDraft, domaincontract.ContractStatusDeploying,
-		domaincontract.ContractStatusActive, domaincontract.ContractStatusPaused,
-		domaincontract.ContractStatusUpgrading, domaincontract.ContractStatusDeprecated,
-		domaincontract.ContractStatusRevoked:
+	case ContractStatusDraft, ContractStatusDeploying,
+		ContractStatusActive, ContractStatusPaused,
+		ContractStatusUpgrading, ContractStatusDeprecated,
+		ContractStatusRevoked:
 		c.Status = status
 	default:
 		return fmt.Errorf("invalid status %s", status)

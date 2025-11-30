@@ -4,28 +4,27 @@ import (
 	"context"
 	"testing"
 
-	"github.com/R3E-Network/service_layer/pkg/storage/memory"
-	"github.com/R3E-Network/service_layer/domain/account"
-	domainccip "github.com/R3E-Network/service_layer/domain/ccip"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 )
 
 const testLaneWallet = "0xaaaabbbbccccddddeeeeffffaaaabbbbccccdddd"
 
-func TestService_CreateLane(t *testing.T) {
-	store := memory.New()
-	acct, err := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
-	if err != nil {
-		t.Fatalf("create account: %v", err)
-	}
+func setupTest() (*MemoryStore, *MockAccountChecker, *MockWalletChecker) {
+	store := NewMemoryStore()
+	accounts := NewMockAccountChecker()
+	wallets := NewMockWalletChecker()
+	return store, accounts, wallets
+}
 
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
-	if _, err := store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct.ID, WalletAddress: testLaneWallet}); err != nil {
-		t.Fatalf("seed wallet: %v", err)
-	}
-	lane, err := svc.CreateLane(context.Background(), domainccip.Lane{
-		AccountID:   acct.ID,
+func TestService_CreateLane(t *testing.T) {
+	store, accounts, wallets := setupTest()
+	accounts.AddAccount("acct-1", "")
+	wallets.AddWallet("acct-1", testLaneWallet)
+
+	svc := New(accounts, store, nil)
+	svc.WithWalletChecker(wallets)
+	lane, err := svc.CreateLane(context.Background(), Lane{
+		AccountID:   "acct-1",
 		Name:        "Primary Lane",
 		SourceChain: "Ethereum",
 		DestChain:   "Neo",
@@ -38,7 +37,7 @@ func TestService_CreateLane(t *testing.T) {
 		t.Fatalf("expected normalized source chain, got %s", lane.SourceChain)
 	}
 
-	lanes, err := svc.ListLanes(context.Background(), acct.ID)
+	lanes, err := svc.ListLanes(context.Background(), "acct-1")
 	if err != nil {
 		t.Fatalf("list lanes: %v", err)
 	}
@@ -48,34 +47,25 @@ func TestService_CreateLane(t *testing.T) {
 }
 
 func TestService_CreateLaneValidation(t *testing.T) {
-	store := memory.New()
-	acct, err := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
-	if err != nil {
-		t.Fatalf("create account: %v", err)
-	}
-	svc := New(store, store, nil)
-	if _, err := svc.CreateLane(context.Background(), domainccip.Lane{AccountID: acct.ID}); err == nil {
+	store, accounts, _ := setupTest()
+	accounts.AddAccount("acct-1", "")
+
+	svc := New(accounts, store, nil)
+	if _, err := svc.CreateLane(context.Background(), Lane{AccountID: "acct-1"}); err == nil {
 		t.Fatalf("expected validation error")
 	}
 }
 
 func TestService_SendMessageOwnership(t *testing.T) {
-	store := memory.New()
-	acct1, err := store.CreateAccount(context.Background(), account.Account{Owner: "one"})
-	if err != nil {
-		t.Fatalf("create account1: %v", err)
-	}
-	acct2, err := store.CreateAccount(context.Background(), account.Account{Owner: "two"})
-	if err != nil {
-		t.Fatalf("create account2: %v", err)
-	}
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
-	if _, err := store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct1.ID, WalletAddress: testLaneWallet}); err != nil {
-		t.Fatalf("seed wallet: %v", err)
-	}
-	lane, err := svc.CreateLane(context.Background(), domainccip.Lane{
-		AccountID:   acct1.ID,
+	store, accounts, wallets := setupTest()
+	accounts.AddAccount("acct-1", "")
+	accounts.AddAccount("acct-2", "")
+	wallets.AddWallet("acct-1", testLaneWallet)
+
+	svc := New(accounts, store, nil)
+	svc.WithWalletChecker(wallets)
+	lane, err := svc.CreateLane(context.Background(), Lane{
+		AccountID:   "acct-1",
 		Name:        "Lane",
 		SourceChain: "eth",
 		DestChain:   "neo",
@@ -85,24 +75,20 @@ func TestService_SendMessageOwnership(t *testing.T) {
 		t.Fatalf("create lane: %v", err)
 	}
 
-	if _, err := svc.SendMessage(context.Background(), acct2.ID, lane.ID, nil, nil, nil, nil); err == nil {
+	if _, err := svc.SendMessage(context.Background(), "acct-2", lane.ID, nil, nil, nil, nil); err == nil {
 		t.Fatalf("expected ownership error when sending with foreign account")
 	}
 }
 
 func TestService_SendMessageDispatch(t *testing.T) {
-	store := memory.New()
-	acct, err := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
-	if err != nil {
-		t.Fatalf("create account: %v", err)
-	}
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
-	if _, err := store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct.ID, WalletAddress: testLaneWallet}); err != nil {
-		t.Fatalf("seed wallet: %v", err)
-	}
-	lane, err := svc.CreateLane(context.Background(), domainccip.Lane{
-		AccountID:   acct.ID,
+	store, accounts, wallets := setupTest()
+	accounts.AddAccount("acct-1", "")
+	wallets.AddWallet("acct-1", testLaneWallet)
+
+	svc := New(accounts, store, nil)
+	svc.WithWalletChecker(wallets)
+	lane, err := svc.CreateLane(context.Background(), Lane{
+		AccountID:   "acct-1",
 		Name:        "Lane",
 		SourceChain: "eth",
 		DestChain:   "neo",
@@ -112,7 +98,7 @@ func TestService_SendMessageDispatch(t *testing.T) {
 		t.Fatalf("create lane: %v", err)
 	}
 	called := false
-	svc.WithDispatcher(DispatcherFunc(func(ctx context.Context, msg domainccip.Message, ln domainccip.Lane) error {
+	svc.WithDispatcher(DispatcherFunc(func(ctx context.Context, msg Message, ln Lane) error {
 		called = true
 		if msg.LaneID != ln.ID {
 			t.Fatalf("dispatcher lane mismatch")
@@ -120,7 +106,7 @@ func TestService_SendMessageDispatch(t *testing.T) {
 		return nil
 	}))
 
-	msg, err := svc.SendMessage(context.Background(), acct.ID, lane.ID, map[string]any{"hello": "world"}, []domainccip.TokenTransfer{{Token: "eth", Amount: "1", Recipient: "addr"}}, map[string]string{"Env": "Prod"}, []string{"Priority"})
+	msg, err := svc.SendMessage(context.Background(), "acct-1", lane.ID, map[string]any{"hello": "world"}, []TokenTransfer{{Token: "eth", Amount: "1", Recipient: "addr"}}, map[string]string{"Env": "Prod"}, []string{"Priority"})
 	if err != nil {
 		t.Fatalf("send message: %v", err)
 	}
@@ -131,7 +117,7 @@ func TestService_SendMessageDispatch(t *testing.T) {
 		t.Fatalf("expected dispatcher to be called")
 	}
 
-	msgs, err := svc.ListMessages(context.Background(), acct.ID, 10)
+	msgs, err := svc.ListMessages(context.Background(), "acct-1", 10)
 	if err != nil {
 		t.Fatalf("list messages: %v", err)
 	}
@@ -141,14 +127,15 @@ func TestService_SendMessageDispatch(t *testing.T) {
 }
 
 func TestService_UpdateLane(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
-	store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct.ID, WalletAddress: testLaneWallet})
-	lane, _ := svc.CreateLane(context.Background(), domainccip.Lane{AccountID: acct.ID, Name: "Lane", SourceChain: "eth", DestChain: "neo", SignerSet: []string{testLaneWallet}})
+	store, accounts, wallets := setupTest()
+	accounts.AddAccount("acct-1", "")
+	wallets.AddWallet("acct-1", testLaneWallet)
 
-	updated, err := svc.UpdateLane(context.Background(), domainccip.Lane{ID: lane.ID, AccountID: acct.ID, Name: "Updated", SourceChain: "bsc", DestChain: "polygon", SignerSet: []string{testLaneWallet}})
+	svc := New(accounts, store, nil)
+	svc.WithWalletChecker(wallets)
+	lane, _ := svc.CreateLane(context.Background(), Lane{AccountID: "acct-1", Name: "Lane", SourceChain: "eth", DestChain: "neo", SignerSet: []string{testLaneWallet}})
+
+	updated, err := svc.UpdateLane(context.Background(), Lane{ID: lane.ID, AccountID: "acct-1", Name: "Updated", SourceChain: "bsc", DestChain: "polygon", SignerSet: []string{testLaneWallet}})
 	if err != nil {
 		t.Fatalf("update lane: %v", err)
 	}
@@ -161,28 +148,30 @@ func TestService_UpdateLane(t *testing.T) {
 }
 
 func TestService_UpdateLaneOwnership(t *testing.T) {
-	store := memory.New()
-	acct1, _ := store.CreateAccount(context.Background(), account.Account{Owner: "one"})
-	acct2, _ := store.CreateAccount(context.Background(), account.Account{Owner: "two"})
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
-	store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct1.ID, WalletAddress: testLaneWallet})
-	lane, _ := svc.CreateLane(context.Background(), domainccip.Lane{AccountID: acct1.ID, Name: "Lane", SourceChain: "eth", DestChain: "neo", SignerSet: []string{testLaneWallet}})
+	store, accounts, wallets := setupTest()
+	accounts.AddAccount("acct-1", "")
+	accounts.AddAccount("acct-2", "")
+	wallets.AddWallet("acct-1", testLaneWallet)
 
-	if _, err := svc.UpdateLane(context.Background(), domainccip.Lane{ID: lane.ID, AccountID: acct2.ID, Name: "Hacked", SourceChain: "eth", DestChain: "neo", SignerSet: []string{testLaneWallet}}); err == nil {
+	svc := New(accounts, store, nil)
+	svc.WithWalletChecker(wallets)
+	lane, _ := svc.CreateLane(context.Background(), Lane{AccountID: "acct-1", Name: "Lane", SourceChain: "eth", DestChain: "neo", SignerSet: []string{testLaneWallet}})
+
+	if _, err := svc.UpdateLane(context.Background(), Lane{ID: lane.ID, AccountID: "acct-2", Name: "Hacked", SourceChain: "eth", DestChain: "neo", SignerSet: []string{testLaneWallet}}); err == nil {
 		t.Fatalf("expected ownership error")
 	}
 }
 
 func TestService_GetLane(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
-	store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct.ID, WalletAddress: testLaneWallet})
-	lane, _ := svc.CreateLane(context.Background(), domainccip.Lane{AccountID: acct.ID, Name: "Lane", SourceChain: "eth", DestChain: "neo", SignerSet: []string{testLaneWallet}})
+	store, accounts, wallets := setupTest()
+	accounts.AddAccount("acct-1", "")
+	wallets.AddWallet("acct-1", testLaneWallet)
 
-	got, err := svc.GetLane(context.Background(), acct.ID, lane.ID)
+	svc := New(accounts, store, nil)
+	svc.WithWalletChecker(wallets)
+	lane, _ := svc.CreateLane(context.Background(), Lane{AccountID: "acct-1", Name: "Lane", SourceChain: "eth", DestChain: "neo", SignerSet: []string{testLaneWallet}})
+
+	got, err := svc.GetLane(context.Background(), "acct-1", lane.ID)
 	if err != nil {
 		t.Fatalf("get lane: %v", err)
 	}
@@ -192,29 +181,31 @@ func TestService_GetLane(t *testing.T) {
 }
 
 func TestService_GetLaneOwnership(t *testing.T) {
-	store := memory.New()
-	acct1, _ := store.CreateAccount(context.Background(), account.Account{Owner: "one"})
-	acct2, _ := store.CreateAccount(context.Background(), account.Account{Owner: "two"})
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
-	store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct1.ID, WalletAddress: testLaneWallet})
-	lane, _ := svc.CreateLane(context.Background(), domainccip.Lane{AccountID: acct1.ID, Name: "Lane", SourceChain: "eth", DestChain: "neo", SignerSet: []string{testLaneWallet}})
+	store, accounts, wallets := setupTest()
+	accounts.AddAccount("acct-1", "")
+	accounts.AddAccount("acct-2", "")
+	wallets.AddWallet("acct-1", testLaneWallet)
 
-	if _, err := svc.GetLane(context.Background(), acct2.ID, lane.ID); err == nil {
+	svc := New(accounts, store, nil)
+	svc.WithWalletChecker(wallets)
+	lane, _ := svc.CreateLane(context.Background(), Lane{AccountID: "acct-1", Name: "Lane", SourceChain: "eth", DestChain: "neo", SignerSet: []string{testLaneWallet}})
+
+	if _, err := svc.GetLane(context.Background(), "acct-2", lane.ID); err == nil {
 		t.Fatalf("expected ownership error")
 	}
 }
 
 func TestService_GetMessage(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
-	store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct.ID, WalletAddress: testLaneWallet})
-	lane, _ := svc.CreateLane(context.Background(), domainccip.Lane{AccountID: acct.ID, Name: "Lane", SourceChain: "eth", DestChain: "neo", SignerSet: []string{testLaneWallet}})
-	msg, _ := svc.SendMessage(context.Background(), acct.ID, lane.ID, nil, nil, nil, nil)
+	store, accounts, wallets := setupTest()
+	accounts.AddAccount("acct-1", "")
+	wallets.AddWallet("acct-1", testLaneWallet)
 
-	got, err := svc.GetMessage(context.Background(), acct.ID, msg.ID)
+	svc := New(accounts, store, nil)
+	svc.WithWalletChecker(wallets)
+	lane, _ := svc.CreateLane(context.Background(), Lane{AccountID: "acct-1", Name: "Lane", SourceChain: "eth", DestChain: "neo", SignerSet: []string{testLaneWallet}})
+	msg, _ := svc.SendMessage(context.Background(), "acct-1", lane.ID, nil, nil, nil, nil)
+
+	got, err := svc.GetMessage(context.Background(), "acct-1", msg.ID)
 	if err != nil {
 		t.Fatalf("get message: %v", err)
 	}
@@ -224,16 +215,17 @@ func TestService_GetMessage(t *testing.T) {
 }
 
 func TestService_GetMessageOwnership(t *testing.T) {
-	store := memory.New()
-	acct1, _ := store.CreateAccount(context.Background(), account.Account{Owner: "one"})
-	acct2, _ := store.CreateAccount(context.Background(), account.Account{Owner: "two"})
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
-	store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct1.ID, WalletAddress: testLaneWallet})
-	lane, _ := svc.CreateLane(context.Background(), domainccip.Lane{AccountID: acct1.ID, Name: "Lane", SourceChain: "eth", DestChain: "neo", SignerSet: []string{testLaneWallet}})
-	msg, _ := svc.SendMessage(context.Background(), acct1.ID, lane.ID, nil, nil, nil, nil)
+	store, accounts, wallets := setupTest()
+	accounts.AddAccount("acct-1", "")
+	accounts.AddAccount("acct-2", "")
+	wallets.AddWallet("acct-1", testLaneWallet)
 
-	if _, err := svc.GetMessage(context.Background(), acct2.ID, msg.ID); err == nil {
+	svc := New(accounts, store, nil)
+	svc.WithWalletChecker(wallets)
+	lane, _ := svc.CreateLane(context.Background(), Lane{AccountID: "acct-1", Name: "Lane", SourceChain: "eth", DestChain: "neo", SignerSet: []string{testLaneWallet}})
+	msg, _ := svc.SendMessage(context.Background(), "acct-1", lane.ID, nil, nil, nil, nil)
+
+	if _, err := svc.GetMessage(context.Background(), "acct-2", msg.ID); err == nil {
 		t.Fatalf("expected ownership error")
 	}
 }
@@ -274,20 +266,21 @@ func TestService_Descriptor(t *testing.T) {
 }
 
 func TestService_LaneValidation(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
-	svc := New(store, store, nil)
+	store, accounts, _ := setupTest()
+	accounts.AddAccount("acct-1", "")
+
+	svc := New(accounts, store, nil)
 
 	// Missing name
-	if _, err := svc.CreateLane(context.Background(), domainccip.Lane{AccountID: acct.ID, SourceChain: "eth", DestChain: "neo"}); err == nil {
+	if _, err := svc.CreateLane(context.Background(), Lane{AccountID: "acct-1", SourceChain: "eth", DestChain: "neo"}); err == nil {
 		t.Fatalf("expected name required error")
 	}
 	// Missing source chain
-	if _, err := svc.CreateLane(context.Background(), domainccip.Lane{AccountID: acct.ID, Name: "Lane", DestChain: "neo"}); err == nil {
+	if _, err := svc.CreateLane(context.Background(), Lane{AccountID: "acct-1", Name: "Lane", DestChain: "neo"}); err == nil {
 		t.Fatalf("expected source_chain required error")
 	}
 	// Missing dest chain
-	if _, err := svc.CreateLane(context.Background(), domainccip.Lane{AccountID: acct.ID, Name: "Lane", SourceChain: "eth"}); err == nil {
+	if _, err := svc.CreateLane(context.Background(), Lane{AccountID: "acct-1", Name: "Lane", SourceChain: "eth"}); err == nil {
 		t.Fatalf("expected dest_chain required error")
 	}
 }
@@ -308,15 +301,16 @@ func TestService_WithTracer(t *testing.T) {
 }
 
 func TestService_TokenTransferNormalization(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
-	store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct.ID, WalletAddress: testLaneWallet})
-	lane, _ := svc.CreateLane(context.Background(), domainccip.Lane{AccountID: acct.ID, Name: "Lane", SourceChain: "eth", DestChain: "neo", SignerSet: []string{testLaneWallet}})
+	store, accounts, wallets := setupTest()
+	accounts.AddAccount("acct-1", "")
+	wallets.AddWallet("acct-1", testLaneWallet)
+
+	svc := New(accounts, store, nil)
+	svc.WithWalletChecker(wallets)
+	lane, _ := svc.CreateLane(context.Background(), Lane{AccountID: "acct-1", Name: "Lane", SourceChain: "eth", DestChain: "neo", SignerSet: []string{testLaneWallet}})
 
 	// Empty token transfer fields should be filtered
-	msg, err := svc.SendMessage(context.Background(), acct.ID, lane.ID, nil, []domainccip.TokenTransfer{
+	msg, err := svc.SendMessage(context.Background(), "acct-1", lane.ID, nil, []TokenTransfer{
 		{Token: "", Amount: "1", Recipient: "addr"},   // missing token
 		{Token: "eth", Amount: "", Recipient: "addr"}, // missing amount
 		{Token: "eth", Amount: "1", Recipient: ""},    // missing recipient
@@ -331,15 +325,16 @@ func TestService_TokenTransferNormalization(t *testing.T) {
 }
 
 func TestService_CreateLane_DuplicateSigners(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
-	store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct.ID, WalletAddress: testLaneWallet})
+	store, accounts, wallets := setupTest()
+	accounts.AddAccount("acct-1", "")
+	wallets.AddWallet("acct-1", testLaneWallet)
+
+	svc := New(accounts, store, nil)
+	svc.WithWalletChecker(wallets)
 
 	// Test with duplicate signers - should deduplicate
-	lane, err := svc.CreateLane(context.Background(), domainccip.Lane{
-		AccountID:   acct.ID,
+	lane, err := svc.CreateLane(context.Background(), Lane{
+		AccountID:   "acct-1",
 		Name:        "Lane",
 		SourceChain: "eth",
 		DestChain:   "neo",
@@ -354,14 +349,15 @@ func TestService_CreateLane_DuplicateSigners(t *testing.T) {
 }
 
 func TestService_CreateLane_EmptySigners(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
+	store, accounts, wallets := setupTest()
+	accounts.AddAccount("acct-1", "")
+
+	svc := New(accounts, store, nil)
+	svc.WithWalletChecker(wallets)
 
 	// Test with empty signers - should succeed
-	lane, err := svc.CreateLane(context.Background(), domainccip.Lane{
-		AccountID:   acct.ID,
+	lane, err := svc.CreateLane(context.Background(), Lane{
+		AccountID:   "acct-1",
 		Name:        "Lane",
 		SourceChain: "eth",
 		DestChain:   "neo",
@@ -376,8 +372,8 @@ func TestService_CreateLane_EmptySigners(t *testing.T) {
 }
 
 func TestService_ListLanes_MissingAccount(t *testing.T) {
-	store := memory.New()
-	svc := New(store, store, nil)
+	store, accounts, _ := setupTest()
+	svc := New(accounts, store, nil)
 	_, err := svc.ListLanes(context.Background(), "nonexistent")
 	if err == nil {
 		t.Fatalf("expected error for nonexistent account")
@@ -385,8 +381,8 @@ func TestService_ListLanes_MissingAccount(t *testing.T) {
 }
 
 func TestService_ListMessages_MissingAccount(t *testing.T) {
-	store := memory.New()
-	svc := New(store, store, nil)
+	store, accounts, _ := setupTest()
+	svc := New(accounts, store, nil)
 	_, err := svc.ListMessages(context.Background(), "nonexistent", 10)
 	if err == nil {
 		t.Fatalf("expected error for nonexistent account")

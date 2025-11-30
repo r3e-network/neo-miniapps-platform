@@ -3,8 +3,10 @@ package app
 import (
 	"context"
 	"crypto/ed25519"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,10 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/R3E-Network/service_layer/pkg/metrics"
-	"github.com/R3E-Network/service_layer/pkg/storage"
 	"github.com/R3E-Network/service_layer/applications/system"
-	"github.com/R3E-Network/service_layer/domain/function"
 	"github.com/R3E-Network/service_layer/packages/com.r3e.services.accounts"
 	automationsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.automation"
 	ccipsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.ccip"
@@ -27,30 +26,20 @@ import (
 	dtasvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.dta"
 	"github.com/R3E-Network/service_layer/packages/com.r3e.services.functions"
 	gasbanksvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.gasbank"
+	mixersvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.mixer"
 	oraclesvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.oracle"
 	"github.com/R3E-Network/service_layer/packages/com.r3e.services.secrets"
 	vrfsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.vrf"
 	"github.com/R3E-Network/service_layer/pkg/logger"
+	"github.com/R3E-Network/service_layer/pkg/metrics"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 )
 
-// Stores encapsulates persistence dependencies. All stores must be provided.
+// Stores encapsulates persistence dependencies.
 type Stores struct {
-	Accounts         storage.AccountStore
-	Functions        storage.FunctionStore
-	GasBank          storage.GasBankStore
-	Automation       storage.AutomationStore
-	DataFeeds        storage.DataFeedStore
-	DataStreams      storage.DataStreamStore
-	DataLink         storage.DataLinkStore
-	DTA              storage.DTAStore
-	Confidential     storage.ConfidentialStore
-	Oracle           storage.OracleStore
-	Secrets          storage.SecretStore
-	CRE              storage.CREStore
-	CCIP             storage.CCIPStore
-	VRF              storage.VRFStore
-	WorkspaceWallets storage.WorkspaceWalletStore
+	// Database is the database connection for service-local stores.
+	// Each service package creates its own typed store using this connection.
+	Database *sql.DB
 }
 
 // RuntimeConfig captures environment-dependent wiring that was previously
@@ -125,58 +114,8 @@ type runtimeSettings struct {
 }
 
 func validateStores(stores Stores) error {
-	missing := map[string]bool{}
-	if stores.Accounts == nil {
-		missing["accounts"] = true
-	}
-	if stores.Functions == nil {
-		missing["functions"] = true
-	}
-	if stores.GasBank == nil {
-		missing["gasbank"] = true
-	}
-	if stores.Automation == nil {
-		missing["automation"] = true
-	}
-	if stores.DataFeeds == nil {
-		missing["datafeeds"] = true
-	}
-	if stores.DataStreams == nil {
-		missing["datastreams"] = true
-	}
-	if stores.DataLink == nil {
-		missing["datalink"] = true
-	}
-	if stores.DTA == nil {
-		missing["dta"] = true
-	}
-	if stores.Confidential == nil {
-		missing["confidential"] = true
-	}
-	if stores.Oracle == nil {
-		missing["oracle"] = true
-	}
-	if stores.Secrets == nil {
-		missing["secrets"] = true
-	}
-	if stores.CRE == nil {
-		missing["cre"] = true
-	}
-	if stores.CCIP == nil {
-		missing["ccip"] = true
-	}
-	if stores.VRF == nil {
-		missing["vrf"] = true
-	}
-	if stores.WorkspaceWallets == nil {
-		missing["workspace_wallets"] = true
-	}
-	if len(missing) > 0 {
-		keys := make([]string, 0, len(missing))
-		for k := range missing {
-			keys = append(keys, k)
-		}
-		return fmt.Errorf("missing required stores: %s", strings.Join(keys, ", "))
+	if stores.Database == nil {
+		return fmt.Errorf("database connection required")
 	}
 	return nil
 }
@@ -235,8 +174,8 @@ type Application struct {
 	CRE                *cresvc.Service
 	CCIP               *ccipsvc.Service
 	VRF                *vrfsvc.Service
+	Mixer              *mixersvc.Service
 	OracleRunnerTokens []string
-	WorkspaceWallets   storage.WorkspaceWalletStore
 	AutomationRunner   *automationsvc.Scheduler
 	OracleRunner       *oraclesvc.Dispatcher
 	GasBankSettlement  system.Service
@@ -260,9 +199,32 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 		manager = system.NewManager()
 	}
 
-	acctService := accounts.New(stores.Accounts, log)
-	funcService := functions.New(stores.Accounts, stores.Functions, log)
-	secretsService := secrets.New(stores.Accounts, stores.Secrets, log)
+	db := stores.Database
+
+	// Create all service-local stores using the database connection
+	acctStore := accounts.NewPostgresStore(db)
+	acctService := accounts.New(acctStore, log)
+
+	// Use acctService as AccountChecker for other stores
+	funcStore := functions.NewPostgresStore(db, acctService)
+	secretStore := secrets.NewPostgresStore(db, acctService)
+	gasStore := gasbanksvc.NewPostgresStore(db, acctService)
+	dsStore := datastreamsvc.NewPostgresStore(db, acctService)
+	dfStore := datafeedsvc.NewPostgresStore(db, acctService)
+	dlStore := datalinksvc.NewPostgresStore(db, acctService)
+	dtaStore := dtasvc.NewPostgresStore(db, acctService)
+	confStore := confsvc.NewPostgresStore(db, acctService)
+	oracleStore := oraclesvc.NewPostgresStore(db, acctService)
+	creStore := cresvc.NewPostgresStore(db, acctService)
+	ccipStore := ccipsvc.NewPostgresStore(db, acctService)
+	vrfStore := vrfsvc.NewPostgresStore(db, acctService)
+	autoStore := automationsvc.NewPostgresStore(db, acctService)
+
+	// Create services with their local stores
+	funcService := functions.New(acctService, funcStore, log)
+	secretsService := secrets.New(acctService, secretStore, log)
+	gasService := gasbanksvc.New(acctService, gasStore, log)
+	dataStreamService := datastreamsvc.New(acctService, dsStore, log)
 	var executor functions.FunctionExecutor
 	switch options.runtime.teeMode {
 	case "mock", "disabled", "off":
@@ -273,43 +235,55 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 	}
 	funcService.AttachExecutor(executor)
 	funcService.AttachSecretResolver(secretsService)
-	gasService := gasbanksvc.New(stores.Accounts, stores.GasBank, log)
-	automationService := automationsvc.New(stores.Accounts, stores.Functions, automationsvc.NewStoreAdapter(stores.Automation), log)
-	dataFeedService := datafeedsvc.New(stores.Accounts, stores.DataFeeds, log)
+	dataStreamService.WithObservationHooks(metrics.DatastreamFrameHooks())
+	automationService := automationsvc.New(acctService, autoStore, log)
+	dataFeedService := datafeedsvc.New(acctService, dfStore, log)
 	dataFeedService.WithAggregationConfig(options.runtime.dataFeedMinSigners, options.runtime.dataFeedAggregation)
 	dataFeedService.WithObservationHooks(metrics.DataFeedUpdateHooks())
-	dataFeedService.WithWorkspaceWallets(stores.WorkspaceWallets)
-	dataStreamService := datastreamsvc.New(stores.Accounts, stores.DataStreams, log)
-	dataStreamService.WithObservationHooks(metrics.DatastreamFrameHooks())
-	dataLinkService := datalinksvc.New(stores.Accounts, stores.DataLink, log)
-	dataLinkService.WithWorkspaceWallets(stores.WorkspaceWallets)
+	dataLinkService := datalinksvc.New(acctService, dlStore, log)
 	dataLinkService.WithDispatcherHooks(metrics.DataLinkDispatchHooks())
-	dtaService := dtasvc.New(stores.Accounts, stores.DTA, log)
-	dtaService.WithWorkspaceWallets(stores.WorkspaceWallets)
+	dtaService := dtasvc.New(acctService, dtaStore, log)
 	dtaService.WithObservationHooks(metrics.DTAOrderHooks())
-	confService := confsvc.New(stores.Accounts, stores.Confidential, log)
+	confService := confsvc.New(acctService, confStore, log)
 	confService.WithSealedKeyHooks(metrics.ConfidentialSealedKeyHooks())
 	confService.WithAttestationHooks(metrics.ConfidentialAttestationHooks())
-	oracleService := oraclesvc.New(stores.Accounts, oraclesvc.NewStoreAdapter(stores.Oracle), log)
-	creService := cresvc.New(stores.Accounts, stores.CRE, log)
-	ccipService := ccipsvc.New(stores.Accounts, stores.CCIP, log)
-	ccipService.WithWorkspaceWallets(stores.WorkspaceWallets)
+	oracleService := oraclesvc.New(acctService, oracleStore, log)
+	creService := cresvc.New(acctService, creStore, log)
+	ccipService := ccipsvc.New(acctService, ccipStore, log)
 	ccipService.WithDispatcherHooks(metrics.CCIPDispatchHooks())
-	vrfService := vrfsvc.New(stores.Accounts, stores.VRF, log)
-	vrfService.WithWorkspaceWallets(stores.WorkspaceWallets)
+	vrfService := vrfsvc.New(acctService, vrfStore, log)
 	vrfService.WithDispatcherHooks(metrics.VRFDispatchHooks())
 
 	httpClient := options.httpClient
 
-	funcService.AttachDependencies(automationService, dataFeedService, dataStreamService, dataLinkService, oracleService, gasService, vrfService)
+	// Wire action processor to decouple Functions from direct service dependencies
+	actionProcessor := newServiceActionProcessor(automationService, dataFeedService, dataStreamService, dataLinkService, oracleService, gasService, vrfService)
+	funcService.AttachActionProcessor(actionProcessor)
 
 	if options.runtime.creHTTPRunner {
 		creService.WithRunner(cresvc.NewHTTPRunner(httpClient, log))
 	}
 
 	autoRunner := automationsvc.NewScheduler(automationService, log)
-	autoRunner.WithDispatcher(automationsvc.NewFunctionDispatcher(automationsvc.FunctionRunnerFunc(func(ctx context.Context, functionID string, payload map[string]any) (function.Execution, error) {
-		return funcService.Execute(ctx, functionID, payload)
+	autoRunner.WithDispatcher(automationsvc.NewFunctionDispatcher(automationsvc.FunctionRunnerFunc(func(ctx context.Context, functionID string, payload map[string]any) (automationsvc.FunctionExecution, error) {
+		exec, err := funcService.Execute(ctx, functionID, payload)
+		if err != nil {
+			return automationsvc.FunctionExecution{}, err
+		}
+		// Convert functions.Execution to automationsvc.FunctionExecution
+		return automationsvc.FunctionExecution{
+			ID:          exec.ID,
+			AccountID:   exec.AccountID,
+			FunctionID:  exec.FunctionID,
+			Input:       exec.Input,
+			Output:      exec.Output,
+			Logs:        exec.Logs,
+			Error:       exec.Error,
+			Status:      string(exec.Status),
+			StartedAt:   exec.StartedAt,
+			CompletedAt: exec.CompletedAt,
+			Duration:    exec.Duration,
+		}, nil
 	}), automationService, log))
 
 	oracleRunner := oraclesvc.NewDispatcher(oracleService, log)
@@ -323,7 +297,7 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 		if err != nil {
 			log.WithError(err).Warn("configure gas bank resolver")
 		} else {
-			poller := gasbanksvc.NewSettlementPoller(stores.GasBank, gasService, resolver, log)
+			poller := gasbanksvc.NewSettlementPoller(gasStore, gasService, resolver, log)
 			poller.WithObservationHooks(metrics.GasBankSettlementHooks())
 			poller.WithRetryPolicy(options.runtime.gasBankMaxAttempts, options.runtime.gasBankPollInterval)
 			settlement = poller
@@ -398,7 +372,6 @@ func New(stores Stores, log *logger.Logger, opts ...Option) (*Application, error
 		DTA:                dtaService,
 		Confidential:       confService,
 		OracleRunnerTokens: options.runtime.oracleRunnerTokens,
-		WorkspaceWallets:   stores.WorkspaceWallets,
 		AutomationRunner:   autoRunner,
 		OracleRunner:       oracleRunner,
 		GasBankSettlement:  settlement,
@@ -658,4 +631,317 @@ func decodeSigningKey(value string) ([]byte, error) {
 		return decoded, nil
 	}
 	return nil, fmt.Errorf("invalid signing key encoding; provide base64 or hex encoded ed25519 key")
+}
+
+// serviceActionProcessor implements functions.ActionProcessor by routing
+// devpack actions to the appropriate service implementations.
+type serviceActionProcessor struct {
+	automation  *automationsvc.Service
+	dataFeeds   *datafeedsvc.Service
+	dataStreams *datastreamsvc.Service
+	dataLink    *datalinksvc.Service
+	oracle      *oraclesvc.Service
+	gasBank     *gasbanksvc.Service
+	vrf         *vrfsvc.Service
+}
+
+// newServiceActionProcessor creates a new service action processor.
+func newServiceActionProcessor(
+	automation *automationsvc.Service,
+	dataFeeds *datafeedsvc.Service,
+	dataStreams *datastreamsvc.Service,
+	dataLink *datalinksvc.Service,
+	oracle *oraclesvc.Service,
+	gasBank *gasbanksvc.Service,
+	vrf *vrfsvc.Service,
+) *serviceActionProcessor {
+	return &serviceActionProcessor{
+		automation:  automation,
+		dataFeeds:   dataFeeds,
+		dataStreams: dataStreams,
+		dataLink:    dataLink,
+		oracle:      oracle,
+		gasBank:     gasBank,
+		vrf:         vrf,
+	}
+}
+
+// SupportsAction returns true if this processor can handle the given action type.
+func (p *serviceActionProcessor) SupportsAction(actionType string) bool {
+	switch actionType {
+	case functions.ActionTypeGasBankEnsureAccount,
+		functions.ActionTypeGasBankWithdraw,
+		functions.ActionTypeGasBankBalance,
+		functions.ActionTypeGasBankListTx,
+		functions.ActionTypeOracleCreateRequest,
+		functions.ActionTypeDataFeedSubmit,
+		functions.ActionTypeDatastreamPublish,
+		functions.ActionTypeDatalinkDeliver,
+		functions.ActionTypeAutomationSchedule:
+		return true
+	}
+	return false
+}
+
+// ProcessAction handles a single devpack action by routing to the appropriate service.
+func (p *serviceActionProcessor) ProcessAction(ctx context.Context, accountID string, actionType string, params map[string]any) (map[string]any, error) {
+	switch actionType {
+	case functions.ActionTypeGasBankEnsureAccount:
+		return p.handleGasBankEnsure(ctx, accountID, params)
+	case functions.ActionTypeGasBankWithdraw:
+		return p.handleGasBankWithdraw(ctx, accountID, params)
+	case functions.ActionTypeGasBankBalance:
+		return p.handleGasBankBalance(ctx, accountID, params)
+	case functions.ActionTypeGasBankListTx:
+		return p.handleGasBankListTx(ctx, accountID, params)
+	case functions.ActionTypeOracleCreateRequest:
+		return p.handleOracleCreateRequest(ctx, accountID, params)
+	case functions.ActionTypeDataFeedSubmit:
+		return p.handleDataFeedSubmit(ctx, accountID, params)
+	case functions.ActionTypeDatastreamPublish:
+		return p.handleDatastreamPublish(ctx, accountID, params)
+	case functions.ActionTypeDatalinkDeliver:
+		return p.handleDatalinkDeliver(ctx, accountID, params)
+	case functions.ActionTypeAutomationSchedule:
+		return p.handleAutomationSchedule(ctx, accountID, params)
+	default:
+		return nil, fmt.Errorf("unsupported action type: %s", actionType)
+	}
+}
+
+func (p *serviceActionProcessor) handleGasBankEnsure(ctx context.Context, accountID string, params map[string]any) (map[string]any, error) {
+	if p.gasBank == nil {
+		return nil, fmt.Errorf("gasbank service not configured")
+	}
+	wallet, _ := params["wallet"].(string)
+	acct, err := p.gasBank.EnsureAccount(ctx, accountID, wallet)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"account": toMap(acct)}, nil
+}
+
+func (p *serviceActionProcessor) handleGasBankWithdraw(ctx context.Context, accountID string, params map[string]any) (map[string]any, error) {
+	if p.gasBank == nil {
+		return nil, fmt.Errorf("gasbank service not configured")
+	}
+	gasAccountID, _ := params["gasAccountId"].(string)
+	wallet, _ := params["wallet"].(string)
+	if gasAccountID == "" && wallet == "" {
+		return nil, fmt.Errorf("gasAccountId or wallet required")
+	}
+	if gasAccountID == "" {
+		ensured, err := p.gasBank.EnsureAccount(ctx, accountID, wallet)
+		if err != nil {
+			return nil, err
+		}
+		gasAccountID = ensured.ID
+	}
+	amount, _ := params["amount"].(float64)
+	if amount <= 0 {
+		return nil, fmt.Errorf("amount must be positive")
+	}
+	toAddress, _ := params["to"].(string)
+	updated, tx, err := p.gasBank.Withdraw(ctx, accountID, gasAccountID, amount, toAddress)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"account": toMap(updated), "transaction": toMap(tx)}, nil
+}
+
+func (p *serviceActionProcessor) handleGasBankBalance(ctx context.Context, accountID string, params map[string]any) (map[string]any, error) {
+	if p.gasBank == nil {
+		return nil, fmt.Errorf("gasbank service not configured")
+	}
+	gasAccountID, _ := params["gasAccountId"].(string)
+	wallet, _ := params["wallet"].(string)
+	if gasAccountID == "" && wallet == "" {
+		return nil, fmt.Errorf("gasAccountId or wallet required")
+	}
+	var acct gasbanksvc.GasBankAccount
+	var err error
+	if gasAccountID != "" {
+		acct, err = p.gasBank.GetAccount(ctx, gasAccountID)
+	} else {
+		acct, err = p.gasBank.EnsureAccount(ctx, accountID, wallet)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"account": toMap(acct)}, nil
+}
+
+func (p *serviceActionProcessor) handleGasBankListTx(ctx context.Context, accountID string, params map[string]any) (map[string]any, error) {
+	if p.gasBank == nil {
+		return nil, fmt.Errorf("gasbank service not configured")
+	}
+	gasAccountID, _ := params["gasAccountId"].(string)
+	wallet, _ := params["wallet"].(string)
+	if gasAccountID == "" && wallet == "" {
+		return nil, fmt.Errorf("gasAccountId or wallet required")
+	}
+	var acct gasbanksvc.GasBankAccount
+	var err error
+	if gasAccountID != "" {
+		acct, err = p.gasBank.GetAccount(ctx, gasAccountID)
+	} else {
+		acct, err = p.gasBank.EnsureAccount(ctx, accountID, wallet)
+	}
+	if err != nil {
+		return nil, err
+	}
+	status, _ := params["status"].(string)
+	txType, _ := params["type"].(string)
+	limit := core.DefaultListLimit
+	if l, ok := params["limit"].(int); ok && l > 0 {
+		limit = l
+	}
+	txs, err := p.gasBank.ListTransactionsFiltered(ctx, acct.ID, txType, status, limit)
+	if err != nil {
+		return nil, err
+	}
+	serialized := make([]map[string]any, len(txs))
+	for i, tx := range txs {
+		serialized[i] = toMap(tx)
+	}
+	return map[string]any{"transactions": serialized}, nil
+}
+
+func (p *serviceActionProcessor) handleOracleCreateRequest(ctx context.Context, accountID string, params map[string]any) (map[string]any, error) {
+	if p.oracle == nil {
+		return nil, fmt.Errorf("oracle service not configured")
+	}
+	dataSourceID, _ := params["dataSourceId"].(string)
+	if dataSourceID == "" {
+		return nil, fmt.Errorf("dataSourceId required")
+	}
+	payload, _ := params["payload"].(string)
+	req, err := p.oracle.CreateRequest(ctx, accountID, dataSourceID, payload)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"request": toMap(req)}, nil
+}
+
+func (p *serviceActionProcessor) handleDataFeedSubmit(ctx context.Context, accountID string, params map[string]any) (map[string]any, error) {
+	if p.dataFeeds == nil {
+		return nil, fmt.Errorf("datafeeds service not configured")
+	}
+	feedID, _ := params["feedId"].(string)
+	if feedID == "" {
+		feedID, _ = params["feed_id"].(string)
+	}
+	if feedID == "" {
+		return nil, fmt.Errorf("feedId required")
+	}
+	roundID, _ := params["roundId"].(int64)
+	if roundID == 0 {
+		if r, ok := params["round_id"].(int64); ok {
+			roundID = r
+		}
+	}
+	price, _ := params["price"].(string)
+	ts := time.Now().UTC()
+	signer, _ := params["signer"].(string)
+	signature, _ := params["signature"].(string)
+	meta := make(map[string]string)
+	if m, ok := params["metadata"].(map[string]string); ok {
+		meta = m
+	}
+	update, err := p.dataFeeds.SubmitUpdate(ctx, accountID, feedID, roundID, price, ts, signer, signature, meta)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"update": toMap(update)}, nil
+}
+
+func (p *serviceActionProcessor) handleDatastreamPublish(ctx context.Context, accountID string, params map[string]any) (map[string]any, error) {
+	if p.dataStreams == nil {
+		return nil, fmt.Errorf("datastreams service not configured")
+	}
+	streamID, _ := params["streamId"].(string)
+	if streamID == "" {
+		streamID, _ = params["stream_id"].(string)
+	}
+	if streamID == "" {
+		return nil, fmt.Errorf("streamId required")
+	}
+	seq, _ := params["sequence"].(int64)
+	if seq == 0 {
+		if s, ok := params["seq"].(int64); ok {
+			seq = s
+		}
+	}
+	payload, _ := params["payload"].(map[string]any)
+	latency, _ := params["latencyMs"].(int)
+	status := datastreamsvc.FrameStatus(params["status"].(string))
+	meta := make(map[string]string)
+	if m, ok := params["metadata"].(map[string]string); ok {
+		meta = m
+	}
+	frame, err := p.dataStreams.CreateFrame(ctx, accountID, streamID, seq, payload, latency, status, meta)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"frame": toMap(frame)}, nil
+}
+
+func (p *serviceActionProcessor) handleDatalinkDeliver(ctx context.Context, accountID string, params map[string]any) (map[string]any, error) {
+	if p.dataLink == nil {
+		return nil, fmt.Errorf("datalink service not configured")
+	}
+	channelID, _ := params["channelId"].(string)
+	if channelID == "" {
+		channelID, _ = params["channel_id"].(string)
+	}
+	if channelID == "" {
+		return nil, fmt.Errorf("channelId required")
+	}
+	payload, _ := params["payload"].(map[string]any)
+	meta := make(map[string]string)
+	if m, ok := params["metadata"].(map[string]string); ok {
+		meta = m
+	}
+	delivery, err := p.dataLink.CreateDelivery(ctx, accountID, channelID, payload, meta)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"delivery": toMap(delivery)}, nil
+}
+
+func (p *serviceActionProcessor) handleAutomationSchedule(ctx context.Context, accountID string, params map[string]any) (map[string]any, error) {
+	if p.automation == nil {
+		return nil, fmt.Errorf("automation service not configured")
+	}
+	name, _ := params["name"].(string)
+	if name == "" {
+		return nil, fmt.Errorf("name required")
+	}
+	schedule, _ := params["schedule"].(string)
+	if schedule == "" {
+		return nil, fmt.Errorf("schedule required")
+	}
+	description, _ := params["description"].(string)
+	functionID, _ := params["functionId"].(string)
+	job, err := p.automation.CreateJob(ctx, accountID, functionID, name, schedule, description)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"job": toMap(job)}, nil
+}
+
+// toMap converts a struct to map[string]any using JSON marshaling.
+func toMap(v any) map[string]any {
+	if v == nil {
+		return nil
+	}
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	var result map[string]any
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	return result
 }

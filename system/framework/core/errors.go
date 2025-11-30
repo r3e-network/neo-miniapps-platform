@@ -38,6 +38,18 @@ var (
 
 	// ErrInternal indicates an unexpected internal error.
 	ErrInternal = errors.New("internal error")
+
+	// ErrInvalidManifest indicates a service manifest is invalid.
+	ErrInvalidManifest = errors.New("invalid manifest")
+
+	// ErrServiceAlreadyStarted indicates a service is already running.
+	ErrServiceAlreadyStarted = errors.New("service already started")
+
+	// ErrHookFailed indicates a lifecycle hook failed.
+	ErrHookFailed = errors.New("lifecycle hook failed")
+
+	// ErrBusUnavailable indicates no bus engine is configured.
+	ErrBusUnavailable = errors.New("bus unavailable")
 )
 
 // NotFoundError provides detailed not-found errors with resource context.
@@ -204,4 +216,39 @@ func EnsureOwnership(resourceAccountID, requestAccountID, resourceType, resource
 func IsOwnershipError(err error) bool {
 	var oe *OwnershipError
 	return errors.As(err, &oe)
+}
+
+// HookError represents a lifecycle hook error.
+type HookError struct {
+	Service  string // Service name
+	HookType string // Hook type (PreStart, PostStart, PreStop, PostStop)
+	HookName string // Optional hook name
+	Err      error  // Underlying error
+}
+
+// Error implements the error interface.
+func (e *HookError) Error() string {
+	if e.HookName != "" {
+		return fmt.Sprintf("%s: %s hook %q failed: %v", e.Service, e.HookType, e.HookName, e.Err)
+	}
+	return fmt.Sprintf("%s: %s hook failed: %v", e.Service, e.HookType, e.Err)
+}
+
+// Unwrap returns the underlying error.
+func (e *HookError) Unwrap() error {
+	return e.Err
+}
+
+// NewHookError creates a new HookError.
+func NewHookError(service, hookType string, err error) *HookError {
+	return &HookError{
+		Service:  service,
+		HookType: hookType,
+		Err:      err,
+	}
+}
+
+// IsHookError returns true if the error is a hook error.
+func IsHookError(err error) bool {
+	return errors.Is(err, ErrHookFailed)
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/R3E-Network/service_layer/domain/gasbank"
 	"github.com/R3E-Network/service_layer/packages/com.r3e.services.oracle"
 )
 
@@ -58,13 +57,13 @@ func (fc *FeeCollector) CollectFee(ctx context.Context, accountID string, amount
 	}
 
 	// Record the fee transaction
-	tx := gasbank.Transaction{
+	tx := Transaction{
 		AccountID:     updated.ID,
 		UserAccountID: updated.AccountID,
 		Type:          "fee",
 		Amount:        feeAmount,
 		NetAmount:     feeAmount,
-		Status:        gasbank.StatusCompleted,
+		Status:        StatusCompleted,
 		Notes:         reference,
 	}
 	if _, err := fc.svc.store.CreateGasTransaction(ctx, tx); err != nil {
@@ -121,13 +120,13 @@ func (fc *FeeCollector) RefundFee(ctx context.Context, accountID string, amount 
 	}
 
 	// Record the refund transaction
-	tx := gasbank.Transaction{
+	tx := Transaction{
 		AccountID:     updated.ID,
 		UserAccountID: updated.AccountID,
 		Type:          "refund",
 		Amount:        refundAmount,
 		NetAmount:     refundAmount,
-		Status:        gasbank.StatusCompleted,
+		Status:        StatusCompleted,
 		Notes:         reference,
 	}
 	if _, err := fc.svc.store.CreateGasTransaction(ctx, tx); err != nil {

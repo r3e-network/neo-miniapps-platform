@@ -1,7 +1,6 @@
 package datafeeds
 
 import (
-	"github.com/R3E-Network/service_layer/domain/account"
 	"context"
 	"fmt"
 	"math/big"
@@ -10,10 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/R3E-Network/service_layer/pkg/metrics"
-	"github.com/R3E-Network/service_layer/pkg/storage"
-	domaindf "github.com/R3E-Network/service_layer/domain/datafeeds"
 	"github.com/R3E-Network/service_layer/pkg/logger"
+	"github.com/R3E-Network/service_layer/pkg/metrics"
 	engine "github.com/R3E-Network/service_layer/system/core"
 	"github.com/R3E-Network/service_layer/system/framework"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
@@ -29,10 +26,11 @@ var _ eventPublisher = (*Service)(nil)
 // Service manages centralized Chainlink data feeds per account.
 type Service struct {
 	framework.ServiceBase
-	base  *core.Base
-	store storage.DataFeedStore
-	log   *logger.Logger
-	hooks core.ObservationHooks
+	accounts AccountChecker
+	wallets  WalletChecker
+	store    Store
+	log      *logger.Logger
+	hooks    core.ObservationHooks
 	// aggregation defaults
 	minSigners  int
 	aggregation string
@@ -61,18 +59,18 @@ func (s *Service) Manifest() *framework.Manifest {
 func (s *Service) Descriptor() core.Descriptor { return s.Manifest().ToDescriptor() }
 
 // New constructs a data feed service.
-func New(accounts storage.AccountStore, store storage.DataFeedStore, log *logger.Logger) *Service {
+func New(accounts AccountChecker, store Store, log *logger.Logger) *Service {
 	if log == nil {
 		log = logger.NewDefault("datafeeds")
 	}
-	svc := &Service{base: core.NewBaseFromStore[account.Account](accounts), store: store, log: log, hooks: core.NoopObservationHooks}
+	svc := &Service{accounts: accounts, store: store, log: log, hooks: core.NoopObservationHooks}
 	svc.SetName(svc.Name())
 	return svc
 }
 
-// WithWorkspaceWallets enforces signer set ownership when provided.
-func (s *Service) WithWorkspaceWallets(store storage.WorkspaceWalletStore) {
-	s.base.SetWallets(core.WrapWalletStore[account.WorkspaceWallet](store))
+// WithWalletChecker injects a wallet checker for ownership validation.
+func (s *Service) WithWalletChecker(w WalletChecker) {
+	s.wallets = w
 }
 
 // WithAggregationConfig sets baseline aggregation parameters.
@@ -120,39 +118,39 @@ func (s *Service) Publish(ctx context.Context, event string, payload any) error 
 }
 
 // CreateFeed validates and creates a feed.
-func (s *Service) CreateFeed(ctx context.Context, feed domaindf.Feed) (domaindf.Feed, error) {
-	if err := s.base.EnsureAccount(ctx, feed.AccountID); err != nil {
-		return domaindf.Feed{}, err
+func (s *Service) CreateFeed(ctx context.Context, feed Feed) (Feed, error) {
+	if err := s.accounts.AccountExists(ctx, feed.AccountID); err != nil {
+		return Feed{}, err
 	}
 	if err := s.normalizeFeed(&feed); err != nil {
-		return domaindf.Feed{}, err
+		return Feed{}, err
 	}
-	if err := s.base.EnsureSignersOwned(ctx, feed.AccountID, feed.SignerSet); err != nil {
-		return domaindf.Feed{}, err
+	if err := s.ensureSignersOwned(ctx, feed.AccountID, feed.SignerSet); err != nil {
+		return Feed{}, err
 	}
 	created, err := s.store.CreateDataFeed(ctx, feed)
 	if err != nil {
-		return domaindf.Feed{}, err
+		return Feed{}, err
 	}
 	s.log.WithField("feed_id", created.ID).WithField("account_id", created.AccountID).Info("data feed created")
 	return created, nil
 }
 
 // UpdateFeed updates mutable fields on a feed.
-func (s *Service) UpdateFeed(ctx context.Context, feed domaindf.Feed) (domaindf.Feed, error) {
+func (s *Service) UpdateFeed(ctx context.Context, feed Feed) (Feed, error) {
 	stored, err := s.store.GetDataFeed(ctx, feed.ID)
 	if err != nil {
-		return domaindf.Feed{}, err
+		return Feed{}, err
 	}
 	if err := core.EnsureOwnership(stored.AccountID, feed.AccountID, "feed", feed.ID); err != nil {
-		return domaindf.Feed{}, err
+		return Feed{}, err
 	}
 	feed.AccountID = stored.AccountID
 	if err := s.normalizeFeed(&feed); err != nil {
-		return domaindf.Feed{}, err
+		return Feed{}, err
 	}
-	if err := s.base.EnsureSignersOwned(ctx, feed.AccountID, feed.SignerSet); err != nil {
-		return domaindf.Feed{}, err
+	if err := s.ensureSignersOwned(ctx, feed.AccountID, feed.SignerSet); err != nil {
+		return Feed{}, err
 	}
 	start := time.Now()
 	s.hooks.OnStart(ctx, map[string]string{"account_id": feed.AccountID, "feed_id": feed.ID})
@@ -161,27 +159,27 @@ func (s *Service) UpdateFeed(ctx context.Context, feed domaindf.Feed) (domaindf.
 	}()
 	updated, err := s.store.UpdateDataFeed(ctx, feed)
 	if err != nil {
-		return domaindf.Feed{}, err
+		return Feed{}, err
 	}
 	s.log.WithField("feed_id", feed.ID).WithField("account_id", feed.AccountID).Info("data feed updated")
 	return updated, nil
 }
 
 // GetFeed fetches a feed ensuring ownership.
-func (s *Service) GetFeed(ctx context.Context, accountID, feedID string) (domaindf.Feed, error) {
+func (s *Service) GetFeed(ctx context.Context, accountID, feedID string) (Feed, error) {
 	feed, err := s.store.GetDataFeed(ctx, feedID)
 	if err != nil {
-		return domaindf.Feed{}, err
+		return Feed{}, err
 	}
 	if err := core.EnsureOwnership(feed.AccountID, accountID, "feed", feedID); err != nil {
-		return domaindf.Feed{}, err
+		return Feed{}, err
 	}
 	return feed, nil
 }
 
 // ListFeeds lists feeds for an account.
-func (s *Service) ListFeeds(ctx context.Context, accountID string) ([]domaindf.Feed, error) {
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
+func (s *Service) ListFeeds(ctx context.Context, accountID string) ([]Feed, error) {
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
 		return nil, err
 	}
 	return s.store.ListDataFeeds(ctx, accountID)
@@ -189,19 +187,19 @@ func (s *Service) ListFeeds(ctx context.Context, accountID string) ([]domaindf.F
 
 // SubmitUpdate stores a price update for a feed, enforcing signer verification,
 // heartbeat/deviation thresholds, and the configured aggregation strategy.
-func (s *Service) SubmitUpdate(ctx context.Context, accountID, feedID string, roundID int64, price string, ts time.Time, signer string, signature string, metadata map[string]string) (domaindf.Update, error) {
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
-		return domaindf.Update{}, err
+func (s *Service) SubmitUpdate(ctx context.Context, accountID, feedID string, roundID int64, price string, ts time.Time, signer string, signature string, metadata map[string]string) (Update, error) {
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
+		return Update{}, err
 	}
 	feed, err := s.store.GetDataFeed(ctx, feedID)
 	if err != nil {
-		return domaindf.Update{}, err
+		return Update{}, err
 	}
 	if err := core.EnsureOwnership(feed.AccountID, accountID, "feed", feedID); err != nil {
-		return domaindf.Update{}, err
+		return Update{}, err
 	}
 	if roundID <= 0 {
-		return domaindf.Update{}, fmt.Errorf("round_id must be positive")
+		return Update{}, fmt.Errorf("round_id must be positive")
 	}
 	if ts.IsZero() {
 		ts = time.Now().UTC()
@@ -211,43 +209,43 @@ func (s *Service) SubmitUpdate(ctx context.Context, accountID, feedID string, ro
 	signer = strings.TrimSpace(signer)
 	if len(feed.SignerSet) > 0 {
 		if signer == "" {
-			return domaindf.Update{}, core.RequiredError("signer")
+			return Update{}, core.RequiredError("signer")
 		}
 		if !core.ContainsCaseInsensitive(feed.SignerSet, signer) {
-			return domaindf.Update{}, fmt.Errorf("signer %s is not authorized for feed %s", signer, feedID)
+			return Update{}, fmt.Errorf("signer %s is not authorized for feed %s", signer, feedID)
 		}
 	}
 
 	sig := strings.TrimSpace(signature)
 	if signer != "" && sig == "" {
-		return domaindf.Update{}, fmt.Errorf("signature is required for signer submissions")
+		return Update{}, fmt.Errorf("signature is required for signer submissions")
 	}
 
 	priceInt, normalizedPrice, err := normalizePrice(price, feed.Decimals)
 	if err != nil {
-		return domaindf.Update{}, err
+		return Update{}, err
 	}
 
 	latest, err := s.store.GetLatestDataFeedUpdate(ctx, feedID)
 	if err == nil {
 		if roundID < latest.RoundID {
-			return domaindf.Update{}, fmt.Errorf("round_id must be at least %d", latest.RoundID)
+			return Update{}, fmt.Errorf("round_id must be at least %d", latest.RoundID)
 		}
 		if roundID > latest.RoundID {
 			latestInt, _, parseErr := normalizePrice(latest.Price, feed.Decimals)
 			if parseErr == nil && !shouldPublishDatafeed(latestInt, priceInt, latest.Timestamp, ts, feed.ThresholdPPM, feed.Heartbeat) {
-				return domaindf.Update{}, fmt.Errorf("heartbeat/deviation thresholds not met for new round %d", roundID)
+				return Update{}, fmt.Errorf("heartbeat/deviation thresholds not met for new round %d", roundID)
 			}
 		}
 	}
 
 	existingRound, err := s.store.ListDataFeedUpdatesByRound(ctx, feedID, roundID)
 	if err != nil {
-		return domaindf.Update{}, err
+		return Update{}, err
 	}
 	for _, upd := range existingRound {
 		if signer != "" && strings.EqualFold(upd.Signer, signer) {
-			return domaindf.Update{}, fmt.Errorf("signer %s already submitted for round %d", signer, roundID)
+			return Update{}, fmt.Errorf("signer %s already submitted for round %d", signer, roundID)
 		}
 	}
 
@@ -279,9 +277,9 @@ func (s *Service) SubmitUpdate(ctx context.Context, accountID, feedID string, ro
 		allPrices = append(allPrices, parsed)
 	}
 
-	status := domaindf.UpdateStatusPending
+	status := UpdateStatusPending
 	if submissions >= threshold {
-		status = domaindf.UpdateStatusAccepted
+		status = UpdateStatusAccepted
 		aggPrice := aggregatePrices(allPrices, aggregation)
 		meta["aggregated_price"] = formatPrice(aggPrice, feed.Decimals)
 		meta["quorum_met"] = "true"
@@ -289,7 +287,7 @@ func (s *Service) SubmitUpdate(ctx context.Context, accountID, feedID string, ro
 		meta["quorum_met"] = "false"
 	}
 
-	upd := domaindf.Update{
+	upd := Update{
 		AccountID: accountID,
 		FeedID:    feedID,
 		RoundID:   roundID,
@@ -305,7 +303,7 @@ func (s *Service) SubmitUpdate(ctx context.Context, accountID, feedID string, ro
 	created, err := s.store.CreateDataFeedUpdate(ctx, upd)
 	if err != nil {
 		finish(err)
-		return domaindf.Update{}, err
+		return Update{}, err
 	}
 	finish(nil)
 	s.log.WithField("feed_id", feedID).WithField("round_id", roundID).Info("data feed update stored")
@@ -314,7 +312,7 @@ func (s *Service) SubmitUpdate(ctx context.Context, accountID, feedID string, ro
 }
 
 // ListUpdates lists recent updates for a feed.
-func (s *Service) ListUpdates(ctx context.Context, accountID, feedID string, limit int) ([]domaindf.Update, error) {
+func (s *Service) ListUpdates(ctx context.Context, accountID, feedID string, limit int) ([]Update, error) {
 	if _, err := s.GetFeed(ctx, accountID, feedID); err != nil {
 		return nil, err
 	}
@@ -323,9 +321,9 @@ func (s *Service) ListUpdates(ctx context.Context, accountID, feedID string, lim
 }
 
 // LatestUpdate returns the latest accepted update.
-func (s *Service) LatestUpdate(ctx context.Context, accountID, feedID string) (domaindf.Update, error) {
+func (s *Service) LatestUpdate(ctx context.Context, accountID, feedID string) (Update, error) {
 	if _, err := s.GetFeed(ctx, accountID, feedID); err != nil {
-		return domaindf.Update{}, err
+		return Update{}, err
 	}
 	upd, err := s.store.GetLatestDataFeedUpdate(ctx, feedID)
 	if err == nil {
@@ -347,7 +345,7 @@ func (s *Service) recordStaleness(feedID string, ts time.Time) {
 	metrics.RecordDatafeedStaleness(feedID, status, age)
 }
 
-func (s *Service) signerThreshold(feed domaindf.Feed) int {
+func (s *Service) signerThreshold(feed Feed) int {
 	threshold := s.minSigners
 	if threshold <= 0 {
 		threshold = len(feed.SignerSet)
@@ -526,7 +524,7 @@ func extremumPrice(prices []*big.Int, wantMax bool) *big.Int {
 	return choice
 }
 
-func (s *Service) normalizeFeed(feed *domaindf.Feed) error {
+func (s *Service) normalizeFeed(feed *Feed) error {
 	feed.Pair = strings.ToUpper(strings.TrimSpace(feed.Pair))
 	feed.Description = strings.TrimSpace(feed.Description)
 	feed.Metadata = core.NormalizeMetadata(feed.Metadata)
@@ -554,6 +552,21 @@ func (s *Service) normalizeFeed(feed *domaindf.Feed) error {
 	}
 	if feed.ThresholdPPM < 0 {
 		feed.ThresholdPPM = 0
+	}
+	return nil
+}
+
+func (s *Service) ensureSignersOwned(ctx context.Context, accountID string, signers []string) error {
+	if len(signers) == 0 {
+		return nil
+	}
+	if s.wallets == nil {
+		return nil
+	}
+	for _, signer := range signers {
+		if err := s.wallets.WalletOwnedBy(ctx, accountID, signer); err != nil {
+			return err
+		}
 	}
 	return nil
 }

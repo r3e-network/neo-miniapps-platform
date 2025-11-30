@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	domaindta "github.com/R3E-Network/service_layer/domain/dta"
+	"github.com/R3E-Network/service_layer/packages/com.r3e.services.dta"
 )
 
 func (h *handler) accountDTA(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {
@@ -49,12 +49,12 @@ func (h *handler) accountDTAProducts(w http.ResponseWriter, r *http.Request, acc
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			product := domaindta.Product{
+			product := dta.Product{
 				AccountID:       accountID,
 				Name:            payload.Name,
 				Symbol:          payload.Symbol,
 				Type:            payload.Type,
-				Status:          domaindta.ProductStatus(payload.Status),
+				Status:          dta.ProductStatus(payload.Status),
 				SettlementTerms: payload.SettlementTerms,
 				Metadata:        payload.Metadata,
 			}
@@ -93,13 +93,13 @@ func (h *handler) accountDTAProducts(w http.ResponseWriter, r *http.Request, acc
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			product := domaindta.Product{
+			product := dta.Product{
 				ID:              productID,
 				AccountID:       accountID,
 				Name:            payload.Name,
 				Symbol:          payload.Symbol,
 				Type:            payload.Type,
-				Status:          domaindta.ProductStatus(payload.Status),
+				Status:          dta.ProductStatus(payload.Status),
 				SettlementTerms: payload.SettlementTerms,
 				Metadata:        payload.Metadata,
 			}
@@ -130,7 +130,7 @@ func (h *handler) accountDTAProducts(w http.ResponseWriter, r *http.Request, acc
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		order, err := h.services.DTAService().CreateOrder(r.Context(), accountID, productID, domaindta.OrderType(payload.Type), payload.Amount, payload.WalletAddress, payload.Metadata)
+		order, err := h.services.DTAService().CreateOrder(r.Context(), accountID, productID, dta.OrderType(payload.Type), payload.Amount, payload.WalletAddress, payload.Metadata)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return

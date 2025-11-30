@@ -4,8 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/R3E-Network/service_layer/domain/function"
-	"github.com/R3E-Network/service_layer/domain/secret"
+	"github.com/R3E-Network/service_layer/packages/com.r3e.services.functions"
 	"github.com/R3E-Network/service_layer/packages/com.r3e.services.secrets"
 )
 
@@ -24,7 +23,7 @@ func (h *handler) accountFunctions(w http.ResponseWriter, r *http.Request, accou
 				return
 			}
 
-			def := function.Definition{
+			def := functions.Definition{
 				AccountID:   accountID,
 				Name:        payload.Name,
 				Description: payload.Description,
@@ -197,7 +196,7 @@ func (h *handler) accountSecrets(w http.ResponseWriter, r *http.Request, account
 			}
 			opts := secrets.CreateOptions{}
 			if payload.ACL != nil {
-				acl := secret.ACL(*payload.ACL)
+				acl := secrets.ACL(*payload.ACL)
 				opts.ACL = acl
 			}
 			meta, err := h.services.SecretsService().CreateWithOptions(r.Context(), accountID, payload.Name, payload.Value, opts)
@@ -242,7 +241,7 @@ func (h *handler) accountSecrets(w http.ResponseWriter, r *http.Request, account
 			opts.Value = payload.Value
 		}
 		if payload.ACL != nil {
-			acl := secret.ACL(*payload.ACL)
+			acl := secrets.ACL(*payload.ACL)
 			opts.ACL = &acl
 		}
 		// Require at least one field to update

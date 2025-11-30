@@ -3,12 +3,10 @@ package automation
 import (
 	"context"
 	"testing"
-
-	functiondomain "github.com/R3E-Network/service_layer/domain/function"
 )
 
 type scriptStep struct {
-	output functiondomain.Execution
+	output FunctionExecution
 	err    error
 }
 
@@ -17,10 +15,10 @@ type scriptedRunner struct {
 	payload []map[string]any
 }
 
-func (r *scriptedRunner) Execute(ctx context.Context, functionID string, payload map[string]any) (functiondomain.Execution, error) {
+func (r *scriptedRunner) Execute(ctx context.Context, functionID string, payload map[string]any) (FunctionExecution, error) {
 	r.payload = append(r.payload, cloneMap(payload))
 	if len(r.script) == 0 {
-		return functiondomain.Execution{}, nil
+		return FunctionExecution{}, nil
 	}
 	step := r.script[0]
 	r.script = r.script[1:]
@@ -28,7 +26,7 @@ func (r *scriptedRunner) Execute(ctx context.Context, functionID string, payload
 }
 
 func TestFunctionDispatcher_PerformFlow(t *testing.T) {
-	checkOutput := functiondomain.Execution{
+	checkOutput := FunctionExecution{
 		Output: map[string]any{
 			"shouldPerform": true,
 			"performPayload": map[string]any{
@@ -39,7 +37,7 @@ func TestFunctionDispatcher_PerformFlow(t *testing.T) {
 	runner := &scriptedRunner{
 		script: []scriptStep{
 			{output: checkOutput},
-			{output: functiondomain.Execution{}},
+			{output: FunctionExecution{}},
 		},
 	}
 	dispatcher := NewFunctionDispatcher(runner, nil, nil)
@@ -65,7 +63,7 @@ func TestFunctionDispatcher_PerformFlow(t *testing.T) {
 func TestFunctionDispatcher_CheckSkip(t *testing.T) {
 	runner := &scriptedRunner{
 		script: []scriptStep{
-			{output: functiondomain.Execution{
+			{output: FunctionExecution{
 				Output: map[string]any{
 					"shouldPerform": false,
 				},

@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/R3E-Network/service_layer/domain/cre"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 )
 
@@ -30,7 +29,7 @@ func NewHTTPRunner(client *http.Client, log *logger.Logger) *HTTPRunner {
 }
 
 // Dispatch POSTS the run + playbook to the executor endpoint if provided.
-func (r *HTTPRunner) Dispatch(ctx context.Context, run cre.Run, playbook cre.Playbook, exec *cre.Executor) error {
+func (r *HTTPRunner) Dispatch(ctx context.Context, run Run, playbook Playbook, exec *Executor) error {
 	if exec == nil {
 		r.log.WithField("run_id", run.ID).Info("no executor provided; skipping dispatch")
 		return nil

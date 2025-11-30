@@ -439,9 +439,9 @@ func TestBusWithConfig(t *testing.T) {
 	}
 }
 
-// TestPermissionManagerAllAndClear tests permission manager all/clear.
-func TestPermissionManagerAllAndClear(t *testing.T) {
-	pm := NewPermissionManager()
+// TestBusPermissionManagerAllAndClear tests bus permission manager all/clear.
+func TestBusPermissionManagerAllAndClear(t *testing.T) {
+	pm := NewBusPermissionManager()
 	pm.SetPermissions("mod1", BusPermissions{AllowEvents: true})
 	pm.SetPermissions("mod2", BusPermissions{AllowData: true})
 

@@ -4,9 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/R3E-Network/service_layer/pkg/storage/memory"
 	"github.com/R3E-Network/service_layer/domain/account"
-	domainvrf "github.com/R3E-Network/service_layer/domain/vrf"
+	"github.com/R3E-Network/service_layer/pkg/storage/memory"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 )
 
@@ -21,8 +20,8 @@ func TestService_CreateKeyAndList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create account: %v", err)
 	}
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
+	svc, _ := NewFromLegacyStores(nil, store, store)
+	svc.WithWalletChecker(&LegacyWalletChecker{Store: store})
 	if _, err := store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{
 		WorkspaceID:   acct.ID,
 		WalletAddress: testVRFWallet,
@@ -30,7 +29,7 @@ func TestService_CreateKeyAndList(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("seed wallet: %v", err)
 	}
-	key, err := svc.CreateKey(context.Background(), domainvrf.Key{
+	key, err := svc.CreateKey(context.Background(), Key{
 		AccountID:     acct.ID,
 		PublicKey:     "pk",
 		Label:         "Label",
@@ -39,7 +38,7 @@ func TestService_CreateKeyAndList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create key: %v", err)
 	}
-	if key.Status != domainvrf.KeyStatusInactive {
+	if key.Status != KeyStatusInactive {
 		t.Fatalf("expected inactive status")
 	}
 
@@ -62,12 +61,12 @@ func TestService_UpdateKeyOwnership(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create account2: %v", err)
 	}
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
+	svc, _ := NewFromLegacyStores(nil, store, store)
+	svc.WithWalletChecker(&LegacyWalletChecker{Store: store})
 	if _, err := store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct1.ID, WalletAddress: testVRFWallet}); err != nil {
 		t.Fatalf("seed wallet: %v", err)
 	}
-	key, err := svc.CreateKey(context.Background(), domainvrf.Key{
+	key, err := svc.CreateKey(context.Background(), Key{
 		AccountID:     acct1.ID,
 		PublicKey:     "pk",
 		WalletAddress: testVRFWallet,
@@ -76,7 +75,7 @@ func TestService_UpdateKeyOwnership(t *testing.T) {
 		t.Fatalf("create key: %v", err)
 	}
 
-	_, err = svc.UpdateKey(context.Background(), acct2.ID, domainvrf.Key{ID: key.ID, AccountID: acct2.ID, PublicKey: "pk", WalletAddress: testVRFWallet})
+	_, err = svc.UpdateKey(context.Background(), acct2.ID, Key{ID: key.ID, AccountID: acct2.ID, PublicKey: "pk", WalletAddress: testVRFWallet})
 	if err == nil {
 		t.Fatalf("expected ownership error")
 	}
@@ -88,17 +87,17 @@ func TestService_CreateRequestDispatcher(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create account: %v", err)
 	}
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
+	svc, _ := NewFromLegacyStores(nil, store, store)
+	svc.WithWalletChecker(&LegacyWalletChecker{Store: store})
 	if _, err := store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct.ID, WalletAddress: testVRFWallet}); err != nil {
 		t.Fatalf("seed wallet: %v", err)
 	}
-	key, err := svc.CreateKey(context.Background(), domainvrf.Key{AccountID: acct.ID, PublicKey: "pk", WalletAddress: testVRFWallet, Status: domainvrf.KeyStatusActive})
+	key, err := svc.CreateKey(context.Background(), Key{AccountID: acct.ID, PublicKey: "pk", WalletAddress: testVRFWallet, Status: KeyStatusActive})
 	if err != nil {
 		t.Fatalf("create key: %v", err)
 	}
 	called := false
-	svc.WithDispatcher(DispatcherFunc(func(ctx context.Context, req domainvrf.Request, k domainvrf.Key) error {
+	svc.WithDispatcher(DispatcherFunc(func(ctx context.Context, req Request, k Key) error {
 		called = true
 		if req.KeyID != k.ID {
 			t.Fatalf("dispatcher key mismatch")
@@ -132,8 +131,8 @@ func TestService_CreateRequestRejectsForeignKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create account2: %v", err)
 	}
-	svc := New(store, store, nil)
-	key, err := svc.CreateKey(context.Background(), domainvrf.Key{
+	svc, _ := NewFromLegacyStores(nil, store, store)
+	key, err := svc.CreateKey(context.Background(), Key{
 		AccountID:     acct1.ID,
 		PublicKey:     "pk",
 		WalletAddress: testVRFWallet,
@@ -153,10 +152,10 @@ func TestService_CreateKeyRequiresWalletRegistration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create account: %v", err)
 	}
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
+	svc, _ := NewFromLegacyStores(nil, store, store)
+	svc.WithWalletChecker(&LegacyWalletChecker{Store: store})
 
-	if _, err := svc.CreateKey(context.Background(), domainvrf.Key{
+	if _, err := svc.CreateKey(context.Background(), Key{
 		AccountID:     acct.ID,
 		PublicKey:     "pk",
 		WalletAddress: testVRFBadWallet,
@@ -168,10 +167,10 @@ func TestService_CreateKeyRequiresWalletRegistration(t *testing.T) {
 func TestService_GetKey(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
+	svc, _ := NewFromLegacyStores(nil, store, store)
+	svc.WithWalletChecker(&LegacyWalletChecker{Store: store})
 	store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct.ID, WalletAddress: testVRFWallet})
-	key, _ := svc.CreateKey(context.Background(), domainvrf.Key{AccountID: acct.ID, PublicKey: "pk", WalletAddress: testVRFWallet})
+	key, _ := svc.CreateKey(context.Background(), Key{AccountID: acct.ID, PublicKey: "pk", WalletAddress: testVRFWallet})
 
 	got, err := svc.GetKey(context.Background(), acct.ID, key.ID)
 	if err != nil {
@@ -186,10 +185,10 @@ func TestService_GetKeyOwnership(t *testing.T) {
 	store := memory.New()
 	acct1, _ := store.CreateAccount(context.Background(), account.Account{Owner: "one"})
 	acct2, _ := store.CreateAccount(context.Background(), account.Account{Owner: "two"})
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
+	svc, _ := NewFromLegacyStores(nil, store, store)
+	svc.WithWalletChecker(&LegacyWalletChecker{Store: store})
 	store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct1.ID, WalletAddress: testVRFWallet})
-	key, _ := svc.CreateKey(context.Background(), domainvrf.Key{AccountID: acct1.ID, PublicKey: "pk", WalletAddress: testVRFWallet})
+	key, _ := svc.CreateKey(context.Background(), Key{AccountID: acct1.ID, PublicKey: "pk", WalletAddress: testVRFWallet})
 
 	if _, err := svc.GetKey(context.Background(), acct2.ID, key.ID); err == nil {
 		t.Fatalf("expected ownership error")
@@ -199,12 +198,12 @@ func TestService_GetKeyOwnership(t *testing.T) {
 func TestService_UpdateKey(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
+	svc, _ := NewFromLegacyStores(nil, store, store)
+	svc.WithWalletChecker(&LegacyWalletChecker{Store: store})
 	store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct.ID, WalletAddress: testVRFWallet})
-	key, _ := svc.CreateKey(context.Background(), domainvrf.Key{AccountID: acct.ID, PublicKey: "pk", WalletAddress: testVRFWallet})
+	key, _ := svc.CreateKey(context.Background(), Key{AccountID: acct.ID, PublicKey: "pk", WalletAddress: testVRFWallet})
 
-	updated, err := svc.UpdateKey(context.Background(), acct.ID, domainvrf.Key{ID: key.ID, AccountID: acct.ID, PublicKey: "pk2", WalletAddress: testVRFWallet, Label: "updated", Status: domainvrf.KeyStatusActive})
+	updated, err := svc.UpdateKey(context.Background(), acct.ID, Key{ID: key.ID, AccountID: acct.ID, PublicKey: "pk2", WalletAddress: testVRFWallet, Label: "updated", Status: KeyStatusActive})
 	if err != nil {
 		t.Fatalf("update key: %v", err)
 	}
@@ -216,10 +215,10 @@ func TestService_UpdateKey(t *testing.T) {
 func TestService_ListRequests(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
+	svc, _ := NewFromLegacyStores(nil, store, store)
+	svc.WithWalletChecker(&LegacyWalletChecker{Store: store})
 	store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct.ID, WalletAddress: testVRFWallet})
-	key, _ := svc.CreateKey(context.Background(), domainvrf.Key{AccountID: acct.ID, PublicKey: "pk", WalletAddress: testVRFWallet})
+	key, _ := svc.CreateKey(context.Background(), Key{AccountID: acct.ID, PublicKey: "pk", WalletAddress: testVRFWallet})
 	svc.CreateRequest(context.Background(), acct.ID, key.ID, "consumer", "seed", nil)
 
 	requests, err := svc.ListRequests(context.Background(), acct.ID, 10)
@@ -235,10 +234,10 @@ func TestService_GetRequestOwnership(t *testing.T) {
 	store := memory.New()
 	acct1, _ := store.CreateAccount(context.Background(), account.Account{Owner: "one"})
 	acct2, _ := store.CreateAccount(context.Background(), account.Account{Owner: "two"})
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
+	svc, _ := NewFromLegacyStores(nil, store, store)
+	svc.WithWalletChecker(&LegacyWalletChecker{Store: store})
 	store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct1.ID, WalletAddress: testVRFWallet})
-	key, _ := svc.CreateKey(context.Background(), domainvrf.Key{AccountID: acct1.ID, PublicKey: "pk", WalletAddress: testVRFWallet})
+	key, _ := svc.CreateKey(context.Background(), Key{AccountID: acct1.ID, PublicKey: "pk", WalletAddress: testVRFWallet})
 	req, _ := svc.CreateRequest(context.Background(), acct1.ID, key.ID, "consumer", "seed", nil)
 
 	if _, err := svc.GetRequest(context.Background(), acct2.ID, req.ID); err == nil {
@@ -249,18 +248,18 @@ func TestService_GetRequestOwnership(t *testing.T) {
 func TestService_KeyValidation(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
-	svc := New(store, store, nil)
+	svc, _ := NewFromLegacyStores(nil, store, store)
 
 	// Missing public key
-	if _, err := svc.CreateKey(context.Background(), domainvrf.Key{AccountID: acct.ID, WalletAddress: testVRFWallet}); err == nil {
+	if _, err := svc.CreateKey(context.Background(), Key{AccountID: acct.ID, WalletAddress: testVRFWallet}); err == nil {
 		t.Fatalf("expected public_key required error")
 	}
 	// Missing wallet address
-	if _, err := svc.CreateKey(context.Background(), domainvrf.Key{AccountID: acct.ID, PublicKey: "pk"}); err == nil {
+	if _, err := svc.CreateKey(context.Background(), Key{AccountID: acct.ID, PublicKey: "pk"}); err == nil {
 		t.Fatalf("expected wallet_address required error")
 	}
 	// Invalid status
-	if _, err := svc.CreateKey(context.Background(), domainvrf.Key{AccountID: acct.ID, PublicKey: "pk", WalletAddress: testVRFWallet, Status: "invalid"}); err == nil {
+	if _, err := svc.CreateKey(context.Background(), Key{AccountID: acct.ID, PublicKey: "pk", WalletAddress: testVRFWallet, Status: "invalid"}); err == nil {
 		t.Fatalf("expected invalid status error")
 	}
 }
@@ -268,10 +267,10 @@ func TestService_KeyValidation(t *testing.T) {
 func TestService_RequestValidation(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "acct"})
-	svc := New(store, store, nil)
-	svc.WithWorkspaceWallets(store)
+	svc, _ := NewFromLegacyStores(nil, store, store)
+	svc.WithWalletChecker(&LegacyWalletChecker{Store: store})
 	store.CreateWorkspaceWallet(context.Background(), account.WorkspaceWallet{WorkspaceID: acct.ID, WalletAddress: testVRFWallet})
-	key, _ := svc.CreateKey(context.Background(), domainvrf.Key{AccountID: acct.ID, PublicKey: "pk", WalletAddress: testVRFWallet})
+	key, _ := svc.CreateKey(context.Background(), Key{AccountID: acct.ID, PublicKey: "pk", WalletAddress: testVRFWallet})
 
 	// Missing consumer
 	if _, err := svc.CreateRequest(context.Background(), acct.ID, key.ID, "", "seed", nil); err == nil {

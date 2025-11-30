@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	domaindf "github.com/R3E-Network/service_layer/domain/datafeeds"
+	"github.com/R3E-Network/service_layer/packages/com.r3e.services.datafeeds"
 )
 
 func (h *handler) accountDataFeeds(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {
@@ -38,7 +38,7 @@ func (h *handler) accountDataFeeds(w http.ResponseWriter, r *http.Request, accou
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			feed := domaindf.Feed{
+			feed := datafeeds.Feed{
 				AccountID:    accountID,
 				Pair:         payload.Pair,
 				Description:  payload.Description,
@@ -88,7 +88,7 @@ func (h *handler) accountDataFeeds(w http.ResponseWriter, r *http.Request, accou
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			feed := domaindf.Feed{
+			feed := datafeeds.Feed{
 				ID:           feedID,
 				AccountID:    accountID,
 				Pair:         payload.Pair,

@@ -23,7 +23,6 @@ import (
 	"github.com/R3E-Network/service_layer/pkg/config"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	"github.com/R3E-Network/service_layer/pkg/pgnotify"
-	"github.com/R3E-Network/service_layer/pkg/storage/postgres"
 	"github.com/R3E-Network/service_layer/pkg/supabase"
 	"github.com/R3E-Network/service_layer/pkg/version"
 	"github.com/R3E-Network/service_layer/system/bootstrap"
@@ -86,24 +85,10 @@ func main() {
 		log.Println("Migrations completed successfully")
 	}
 
-	// Create stores
-	pgStore := postgres.New(db)
+	// Create stores - simplified: only database connection needed
+	// Each service creates its own local PostgresStore
 	stores := app.Stores{
-		Accounts:         pgStore,
-		Functions:        pgStore,
-		GasBank:          pgStore,
-		Automation:       pgStore,
-		DataFeeds:        pgStore,
-		DataStreams:      pgStore,
-		DataLink:         pgStore,
-		DTA:              pgStore,
-		Confidential:     pgStore,
-		Oracle:           pgStore,
-		Secrets:          pgStore,
-		CRE:              pgStore,
-		CCIP:             pgStore,
-		VRF:              pgStore,
-		WorkspaceWallets: pgStore,
+		Database: db,
 	}
 
 	// Create logger

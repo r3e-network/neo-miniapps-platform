@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/dop251/goja"
-
-	"github.com/R3E-Network/service_layer/domain/function"
 )
 
 // TEEExecutor executes functions inside a Goja runtime and resolves secrets on demand.
@@ -27,25 +25,25 @@ func (e *TEEExecutor) SetSecretResolver(resolver SecretResolver) {
 }
 
 // Execute runs the function source code with params and resolved secrets.
-func (e *TEEExecutor) Execute(ctx context.Context, def function.Definition, payload map[string]any) (function.ExecutionResult, error) {
+func (e *TEEExecutor) Execute(ctx context.Context, def Definition, payload map[string]any) (ExecutionResult, error) {
 	secrets := map[string]string{}
 	if len(def.Secrets) > 0 {
 		if e.resolver == nil {
-			return function.ExecutionResult{}, fmt.Errorf("secret resolver not configured")
+			return ExecutionResult{}, fmt.Errorf("secret resolver not configured")
 		}
 		resolved, err := e.resolver.ResolveSecrets(ctx, def.AccountID, def.Secrets)
 		if err != nil {
-			return function.ExecutionResult{}, err
+			return ExecutionResult{}, err
 		}
 		secrets = resolved
 	}
 
 	rt := goja.New()
 	if _, err := rt.RunString(devpackRuntimeSource); err != nil {
-		return function.ExecutionResult{}, fmt.Errorf("load devpack runtime: %w", err)
+		return ExecutionResult{}, fmt.Errorf("load devpack runtime: %w", err)
 	}
 	if err := initialiseDevpack(rt, def); err != nil {
-		return function.ExecutionResult{}, fmt.Errorf("init devpack: %w", err)
+		return ExecutionResult{}, fmt.Errorf("init devpack: %w", err)
 	}
 
 	stop := make(chan struct{})
@@ -61,13 +59,13 @@ func (e *TEEExecutor) Execute(ctx context.Context, def function.Definition, payl
 
 	var logs []string
 	if err := attachConsole(rt, &logs); err != nil {
-		return function.ExecutionResult{}, fmt.Errorf("attach console: %w", err)
+		return ExecutionResult{}, fmt.Errorf("attach console: %w", err)
 	}
 	if err := rt.Set("params", clonePayload(payload)); err != nil {
-		return function.ExecutionResult{}, fmt.Errorf("set params: %w", err)
+		return ExecutionResult{}, fmt.Errorf("set params: %w", err)
 	}
 	if err := rt.Set("secrets", secrets); err != nil {
-		return function.ExecutionResult{}, fmt.Errorf("set secrets: %w", err)
+		return ExecutionResult{}, fmt.Errorf("set secrets: %w", err)
 	}
 
 	script := fmt.Sprintf(`(function() {
@@ -81,17 +79,17 @@ func (e *TEEExecutor) Execute(ctx context.Context, def function.Definition, payl
 	started := time.Now().UTC()
 	val, err := rt.RunString(script)
 	if err != nil {
-		return function.ExecutionResult{}, runtimeError(err, ctx, "execute")
+		return ExecutionResult{}, runtimeError(err, ctx, "execute")
 	}
 
 	val, err = resolveValue(ctx, val)
 	if err != nil {
-		return function.ExecutionResult{}, runtimeError(err, ctx, "await function result")
+		return ExecutionResult{}, runtimeError(err, ctx, "await function result")
 	}
 
 	actions, err := collectDevpackActions(rt)
 	if err != nil {
-		return function.ExecutionResult{}, runtimeError(err, ctx, "collect devpack actions")
+		return ExecutionResult{}, runtimeError(err, ctx, "collect devpack actions")
 	}
 
 	exported := val.Export()
@@ -109,11 +107,11 @@ func (e *TEEExecutor) Execute(ctx context.Context, def function.Definition, payl
 	}
 
 	completed := time.Now().UTC()
-	return function.ExecutionResult{
+	return ExecutionResult{
 		FunctionID:  def.ID,
 		Output:      output,
 		Logs:        logs,
-		Status:      function.ExecutionStatusSucceeded,
+		Status:      ExecutionStatusSucceeded,
 		StartedAt:   started,
 		CompletedAt: completed,
 		Duration:    completed.Sub(started),
@@ -212,7 +210,7 @@ func runtimeError(err error, ctx context.Context, when string) error {
 	}
 }
 
-func initialiseDevpack(rt *goja.Runtime, def function.Definition) error {
+func initialiseDevpack(rt *goja.Runtime, def Definition) error {
 	devpack := rt.Get("Devpack")
 	if goja.IsUndefined(devpack) || goja.IsNull(devpack) {
 		return nil
@@ -239,7 +237,7 @@ func initialiseDevpack(rt *goja.Runtime, def function.Definition) error {
 	return nil
 }
 
-func collectDevpackActions(rt *goja.Runtime) ([]function.Action, error) {
+func collectDevpackActions(rt *goja.Runtime) ([]Action, error) {
 	devpack := rt.Get("Devpack")
 	if goja.IsUndefined(devpack) || goja.IsNull(devpack) {
 		return nil, nil
@@ -266,7 +264,7 @@ func collectDevpackActions(rt *goja.Runtime) ([]function.Action, error) {
 		return nil, fmt.Errorf("unexpected devpack actions type %T", exported)
 	}
 
-	actions := make([]function.Action, 0, len(rawActions))
+	actions := make([]Action, 0, len(rawActions))
 	for _, item := range rawActions {
 		actionMap, ok := item.(map[string]any)
 		if !ok {
@@ -281,17 +279,17 @@ func collectDevpackActions(rt *goja.Runtime) ([]function.Action, error) {
 	return actions, nil
 }
 
-func decodeAction(raw map[string]any) (function.Action, error) {
+func decodeAction(raw map[string]any) (Action, error) {
 	actionType := stringOrDefault(raw["type"], "")
 	if actionType == "" {
-		return function.Action{}, errors.New("devpack action missing type")
+		return Action{}, errors.New("devpack action missing type")
 	}
 	id := stringOrDefault(raw["id"], "")
 	if id == "" {
 		id = fmt.Sprintf("action_%d", time.Now().UnixNano())
 	}
 	params := mapFromAny(raw["params"])
-	return function.Action{
+	return Action{
 		ID:     id,
 		Type:   actionType,
 		Params: params,

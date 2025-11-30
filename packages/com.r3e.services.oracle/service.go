@@ -7,9 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/R3E-Network/service_layer/domain/account"
 	"github.com/R3E-Network/service_layer/pkg/logger"
-	"github.com/R3E-Network/service_layer/pkg/storage"
 	engine "github.com/R3E-Network/service_layer/system/core"
 	"github.com/R3E-Network/service_layer/system/framework"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
@@ -35,7 +33,7 @@ type FeeCollector interface {
 // Service manages oracle data sources and requests.
 type Service struct {
 	framework.ServiceBase
-	base         *core.Base
+	accounts     AccountChecker
 	store        Store
 	log          *logger.Logger
 	feeCollector FeeCollector
@@ -80,12 +78,12 @@ func WithDefaultFee(fee int64) Option {
 }
 
 // New constructs a new oracle service.
-func New(accounts storage.AccountStore, store Store, log *logger.Logger, opts ...Option) *Service {
+func New(accounts AccountChecker, store Store, log *logger.Logger, opts ...Option) *Service {
 	if log == nil {
 		log = logger.NewDefault("oracle")
 	}
 	svc := &Service{
-		base:       core.NewBaseFromStore[account.Account](accounts),
+		accounts:   accounts,
 		store:      store,
 		log:        log,
 		defaultFee: 0, // free by default
@@ -146,7 +144,7 @@ func (s *Service) CreateSource(ctx context.Context, accountID, name, url, method
 		method = "GET"
 	}
 
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
 		return DataSource{}, fmt.Errorf("account validation failed: %w", err)
 	}
 
@@ -253,7 +251,7 @@ func (s *Service) SetSourceEnabled(ctx context.Context, sourceID string, enabled
 
 // ListSources returns sources for an account.
 func (s *Service) ListSources(ctx context.Context, accountID string) ([]DataSource, error) {
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
 		return nil, err
 	}
 	return s.store.ListDataSources(ctx, accountID)
@@ -286,7 +284,7 @@ func (s *Service) CreateRequestWithOptions(ctx context.Context, accountID, sourc
 	if sourceID == "" {
 		return Request{}, core.RequiredError("data_source_id")
 	}
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
 		return Request{}, fmt.Errorf("account validation failed: %w", err)
 	}
 

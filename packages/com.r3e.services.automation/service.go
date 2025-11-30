@@ -6,9 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/R3E-Network/service_layer/domain/account"
 	"github.com/R3E-Network/service_layer/pkg/logger"
-	"github.com/R3E-Network/service_layer/pkg/storage"
 	engine "github.com/R3E-Network/service_layer/system/core"
 	"github.com/R3E-Network/service_layer/system/framework"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
@@ -17,10 +15,9 @@ import (
 // Service coordinates automation jobs.
 type Service struct {
 	framework.ServiceBase
-	base      *core.Base
-	functions storage.FunctionStore
-	store     Store
-	log       *logger.Logger
+	accounts AccountChecker
+	store    Store
+	log      *logger.Logger
 }
 
 // Name returns the stable engine module name.
@@ -46,15 +43,14 @@ func (s *Service) Manifest() *framework.Manifest {
 func (s *Service) Descriptor() core.Descriptor { return s.Manifest().ToDescriptor() }
 
 // New creates a configured automation service.
-func New(accounts storage.AccountStore, functions storage.FunctionStore, store Store, log *logger.Logger) *Service {
+func New(accounts AccountChecker, store Store, log *logger.Logger) *Service {
 	if log == nil {
 		log = logger.NewDefault("automation")
 	}
 	svc := &Service{
-		base:      core.NewBaseFromStore[account.Account](accounts),
-		functions: functions,
-		store:     store,
-		log:       log,
+		accounts: accounts,
+		store:    store,
+		log:      log,
 	}
 	svc.SetName(svc.Name())
 	return svc
@@ -82,18 +78,11 @@ func (s *Service) CreateJob(ctx context.Context, accountID, functionID, name, sc
 		return Job{}, core.RequiredError("schedule")
 	}
 
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
 		return Job{}, fmt.Errorf("account validation failed: %w", err)
 	}
-	if s.functions != nil {
-		fn, err := s.functions.GetFunction(ctx, functionID)
-		if err != nil {
-			return Job{}, fmt.Errorf("function validation failed: %w", err)
-		}
-		if err := core.EnsureOwnership(fn.AccountID, accountID, "function", functionID); err != nil {
-			return Job{}, err
-		}
-	}
+	// Note: Function validation is handled by the caller (application layer)
+	// since we don't have direct access to the functions store here.
 
 	existing, err := s.store.ListAutomationJobs(ctx, accountID)
 	if err != nil {
@@ -231,7 +220,7 @@ func (s *Service) ListJobs(ctx context.Context, accountID string) ([]Job, error)
 		}
 		return nil, core.RequiredError("account_id")
 	}
-	if err := s.base.EnsureAccount(ctx, trimmed); err != nil {
+	if err := s.accounts.AccountExists(ctx, trimmed); err != nil {
 		return nil, err
 	}
 	return s.store.ListAutomationJobs(ctx, trimmed)

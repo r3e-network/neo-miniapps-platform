@@ -6,36 +6,53 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/R3E-Network/service_layer/pkg/storage/memory"
-	"github.com/R3E-Network/service_layer/domain/account"
-	"github.com/R3E-Network/service_layer/domain/secret"
 )
 
-type mockStore struct {
-	items map[string]secret.Secret
+// mockAccountChecker implements AccountChecker for testing.
+type mockAccountChecker struct {
+	accounts map[string]bool
 }
 
-func newMockStore() *mockStore { return &mockStore{items: make(map[string]secret.Secret)} }
+func newMockAccountChecker(accountIDs ...string) *mockAccountChecker {
+	m := &mockAccountChecker{accounts: make(map[string]bool)}
+	for _, id := range accountIDs {
+		m.accounts[id] = true
+	}
+	return m
+}
+
+func (m *mockAccountChecker) AccountExists(_ context.Context, accountID string) error {
+	if !m.accounts[accountID] {
+		return fmt.Errorf("account not found: %s", accountID)
+	}
+	return nil
+}
+
+func (m *mockAccountChecker) AccountTenant(_ context.Context, _ string) string {
+	return ""
+}
+
+type mockStore struct {
+	items map[string]Secret
+}
+
+func newMockStore() *mockStore { return &mockStore{items: make(map[string]Secret)} }
 
 func newTestService(t *testing.T, accountID string) (*Service, *mockStore) {
 	t.Helper()
 	if strings.TrimSpace(accountID) == "" {
 		accountID = "acct"
 	}
-	acctStore := memory.New()
-	if _, err := acctStore.CreateAccount(context.Background(), account.Account{ID: accountID, Owner: "owner"}); err != nil {
-		t.Fatalf("create account: %v", err)
-	}
+	acctChecker := newMockAccountChecker(accountID)
 	secretStore := newMockStore()
-	svc := New(acctStore, secretStore, nil)
+	svc := New(acctChecker, secretStore, nil)
 	return svc, secretStore
 }
 
-func (m *mockStore) CreateSecret(_ context.Context, sec secret.Secret) (secret.Secret, error) {
+func (m *mockStore) CreateSecret(_ context.Context, sec Secret) (Secret, error) {
 	key := sec.AccountID + "|" + sec.Name
 	if _, exists := m.items[key]; exists {
-		return secret.Secret{}, fmt.Errorf("secret already exists")
+		return Secret{}, fmt.Errorf("secret already exists")
 	}
 	if sec.Version == 0 {
 		sec.Version = 1
@@ -49,11 +66,11 @@ func (m *mockStore) CreateSecret(_ context.Context, sec secret.Secret) (secret.S
 	return sec, nil
 }
 
-func (m *mockStore) UpdateSecret(_ context.Context, sec secret.Secret) (secret.Secret, error) {
+func (m *mockStore) UpdateSecret(_ context.Context, sec Secret) (Secret, error) {
 	key := sec.AccountID + "|" + sec.Name
 	existing, ok := m.items[key]
 	if !ok {
-		return secret.Secret{}, fmt.Errorf("secret not found")
+		return Secret{}, fmt.Errorf("secret not found")
 	}
 	sec.ID = existing.ID
 	if existing.Version == 0 {
@@ -66,16 +83,16 @@ func (m *mockStore) UpdateSecret(_ context.Context, sec secret.Secret) (secret.S
 	return sec, nil
 }
 
-func (m *mockStore) GetSecret(_ context.Context, accountID, name string) (secret.Secret, error) {
+func (m *mockStore) GetSecret(_ context.Context, accountID, name string) (Secret, error) {
 	sec, ok := m.items[accountID+"|"+name]
 	if !ok {
-		return secret.Secret{}, fmt.Errorf("secret not found")
+		return Secret{}, fmt.Errorf("secret not found")
 	}
 	return sec, nil
 }
 
-func (m *mockStore) ListSecrets(_ context.Context, accountID string) ([]secret.Secret, error) {
-	var out []secret.Secret
+func (m *mockStore) ListSecrets(_ context.Context, accountID string) ([]Secret, error) {
+	var out []Secret
 	for key, item := range m.items {
 		if strings.HasPrefix(key, accountID+"|") {
 			out = append(out, item)
@@ -241,12 +258,11 @@ func TestService_AccountIDValidation(t *testing.T) {
 }
 
 func ExampleService_Create() {
-	acctStore := memory.New()
-	acct, _ := acctStore.CreateAccount(context.Background(), account.Account{ID: "acct", Owner: "owner"})
+	acctChecker := newMockAccountChecker("acct")
 	store := newMockStore()
-	svc := New(acctStore, store, nil)
-	meta, _ := svc.Create(context.Background(), acct.ID, "apiKey", "secret")
-	resolved, _ := svc.ResolveSecrets(context.Background(), acct.ID, []string{"apiKey"})
+	svc := New(acctChecker, store, nil)
+	meta, _ := svc.Create(context.Background(), "acct", "apiKey", "secret")
+	resolved, _ := svc.ResolveSecrets(context.Background(), "acct", []string{"apiKey"})
 	fmt.Println(meta.Name, len(resolved["apiKey"]))
 	// Output:
 	// apiKey 6
@@ -334,7 +350,7 @@ func TestService_ResolveSecretsWithACL(t *testing.T) {
 	acctID := "acct"
 	svc, _ := newTestService(t, acctID)
 	svc.CreateWithOptions(context.Background(), acctID, "mykey", "myvalue", CreateOptions{
-		ACL: secret.ACLFunctionAccess,
+		ACL: ACLFunctionAccess,
 	})
 
 	resolved, err := svc.ResolveSecretsWithACL(context.Background(), acctID, []string{"mykey"}, CallerFunctions)
@@ -350,7 +366,7 @@ func TestService_ResolveSecretsWithACL_AutomationCaller(t *testing.T) {
 	acctID := "acct3"
 	svc, _ := newTestService(t, acctID)
 	svc.CreateWithOptions(context.Background(), acctID, "autokey", "autovalue", CreateOptions{
-		ACL: secret.ACLAutomationAccess,
+		ACL: ACLAutomationAccess,
 	})
 
 	resolved, err := svc.ResolveSecretsWithACL(context.Background(), acctID, []string{"autokey"}, CallerAutomation)
@@ -366,7 +382,7 @@ func TestService_ResolveSecretsWithACL_OracleCaller(t *testing.T) {
 	acctID := "acct4"
 	svc, _ := newTestService(t, acctID)
 	svc.CreateWithOptions(context.Background(), acctID, "oraclekey", "oraclevalue", CreateOptions{
-		ACL: secret.ACLOracleAccess,
+		ACL: ACLOracleAccess,
 	})
 
 	resolved, err := svc.ResolveSecretsWithACL(context.Background(), acctID, []string{"oraclekey"}, CallerOracle)

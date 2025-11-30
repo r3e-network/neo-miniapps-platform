@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/R3E-Network/service_layer/domain/gasbank"
 	gasbanksvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.gasbank"
 )
 
@@ -124,8 +123,8 @@ func (h *handler) accountGasBank(w http.ResponseWriter, r *http.Request, account
 					return
 				}
 				writeJSON(w, http.StatusOK, struct {
-					Approval    gasbank.WithdrawalApproval `json:"approval"`
-					Transaction gasbank.Transaction        `json:"transaction"`
+					Approval    gasbanksvc.WithdrawalApproval `json:"approval"`
+					Transaction gasbanksvc.Transaction        `json:"transaction"`
 				}{
 					Approval:    recorded,
 					Transaction: tx,
@@ -172,8 +171,8 @@ func (h *handler) accountGasBank(w http.ResponseWriter, r *http.Request, account
 				return
 			}
 			writeJSON(w, http.StatusOK, struct {
-				Account     gasbank.Account     `json:"account"`
-				Transaction gasbank.Transaction `json:"transaction"`
+				Account     gasbanksvc.GasBankAccount     `json:"account"`
+				Transaction gasbanksvc.Transaction `json:"transaction"`
 			}{
 				Account:     updated,
 				Transaction: tx,
@@ -225,8 +224,8 @@ func (h *handler) accountGasBank(w http.ResponseWriter, r *http.Request, account
 				return
 			}
 			writeJSON(w, http.StatusOK, struct {
-				Account     gasbank.Account     `json:"account"`
-				Transaction gasbank.Transaction `json:"transaction"`
+				Account     gasbanksvc.GasBankAccount     `json:"account"`
+				Transaction gasbanksvc.Transaction `json:"transaction"`
 			}{
 				Account:     updated,
 				Transaction: tx,
@@ -269,7 +268,7 @@ func (h *handler) accountGasBank(w http.ResponseWriter, r *http.Request, account
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			txs, err := h.services.GasBankService().ListTransactionsFiltered(r.Context(), gasAcct.ID, gasbank.TransactionDeposit, "", limit)
+			txs, err := h.services.GasBankService().ListTransactionsFiltered(r.Context(), gasAcct.ID, gasbanksvc.TransactionDeposit, "", limit)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err)
 				return
@@ -297,7 +296,7 @@ func (h *handler) accountGasBank(w http.ResponseWriter, r *http.Request, account
 					return
 				}
 				status := strings.TrimSpace(r.URL.Query().Get("status"))
-				txs, err := h.services.GasBankService().ListTransactionsFiltered(r.Context(), gasAcct.ID, gasbank.TransactionWithdrawal, status, limit)
+				txs, err := h.services.GasBankService().ListTransactionsFiltered(r.Context(), gasAcct.ID, gasbanksvc.TransactionWithdrawal, status, limit)
 				if err != nil {
 					writeError(w, http.StatusInternalServerError, err)
 					return
@@ -422,17 +421,17 @@ func (h *handler) accountGasBank(w http.ResponseWriter, r *http.Request, account
 	}
 }
 
-func (h *handler) resolveGasAccount(ctx context.Context, accountID string, gasAccountID string) (gasbank.Account, error) {
+func (h *handler) resolveGasAccount(ctx context.Context, accountID string, gasAccountID string) (gasbanksvc.GasBankAccount, error) {
 	if strings.TrimSpace(gasAccountID) == "" {
-		return gasbank.Account{}, fmt.Errorf("gas_account_id is required")
+		return gasbanksvc.GasBankAccount{}, fmt.Errorf("gas_account_id is required")
 	}
 
 	acct, err := h.services.GasBankService().GetAccount(ctx, gasAccountID)
 	if err != nil {
-		return gasbank.Account{}, err
+		return gasbanksvc.GasBankAccount{}, err
 	}
 	if acct.AccountID != accountID {
-		return gasbank.Account{}, fmt.Errorf("gas account %s not owned by %s", gasAccountID, accountID)
+		return gasbanksvc.GasBankAccount{}, fmt.Errorf("gas account %s not owned by %s", gasAccountID, accountID)
 	}
 	return acct, nil
 }

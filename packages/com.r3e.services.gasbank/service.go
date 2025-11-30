@@ -8,9 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/R3E-Network/service_layer/pkg/storage"
-	"github.com/R3E-Network/service_layer/domain/account"
-	"github.com/R3E-Network/service_layer/domain/gasbank"
+	accountsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.accounts"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	engine "github.com/R3E-Network/service_layer/system/core"
 	"github.com/R3E-Network/service_layer/system/framework"
@@ -20,9 +18,10 @@ import (
 // Service wraps business logic for the gas bank module.
 type Service struct {
 	framework.ServiceBase
-	base  *core.Base
-	store storage.GasBankStore
-	log   *logger.Logger
+	base     *core.Base
+	accounts AccountChecker
+	store    Store
+	log      *logger.Logger
 }
 
 // Name returns the stable engine module name.
@@ -63,7 +62,7 @@ type Summary struct {
 
 // AccountSummary provides per-gas-account rollups.
 type AccountSummary struct {
-	Account            gasbank.Account `json:"account"`
+	Account            GasBankAccount `json:"account"`
 	PendingWithdrawals int             `json:"pending_withdrawals"`
 	PendingAmount      float64         `json:"pending_amount"`
 }
@@ -82,11 +81,11 @@ type TransactionBrief struct {
 }
 
 // New constructs a gas bank service.
-func New(accounts storage.AccountStore, store storage.GasBankStore, log *logger.Logger) *Service {
+func New(accounts AccountChecker, store Store, log *logger.Logger) *Service {
 	if log == nil {
 		log = logger.NewDefault("gasbank")
 	}
-	svc := &Service{base: core.NewBaseFromStore[account.Account](accounts), store: store, log: log}
+	svc := &Service{accounts: accounts, store: store, log: log}
 	svc.SetName(svc.Name())
 	return svc
 }
@@ -113,59 +112,59 @@ type EnsureAccountOptions struct {
 
 // EnsureAccount retrieves a gas account for the given owner account, creating
 // one if it does not exist.
-func (s *Service) EnsureAccount(ctx context.Context, accountID string, walletAddress string) (gasbank.Account, error) {
+func (s *Service) EnsureAccount(ctx context.Context, accountID string, walletAddress string) (GasBankAccount, error) {
 	return s.EnsureAccountWithOptions(ctx, accountID, EnsureAccountOptions{WalletAddress: walletAddress})
 }
 
 // EnsureAccountWithOptions allows setting configuration parameters while ensuring the account exists.
-func (s *Service) EnsureAccountWithOptions(ctx context.Context, accountID string, opts EnsureAccountOptions) (gasbank.Account, error) {
+func (s *Service) EnsureAccountWithOptions(ctx context.Context, accountID string, opts EnsureAccountOptions) (GasBankAccount, error) {
 	if accountID == "" {
-		return gasbank.Account{}, fmt.Errorf("account_id required")
+		return GasBankAccount{}, fmt.Errorf("account_id required")
 	}
 
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
-		return gasbank.Account{}, fmt.Errorf("account validation failed: %w", err)
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
+		return GasBankAccount{}, fmt.Errorf("account validation failed: %w", err)
 	}
 
-	normalizedWallet := account.NormalizeWalletAddress(opts.WalletAddress)
+	normalizedWallet := accountsvc.NormalizeWalletAddress(opts.WalletAddress)
 	if normalizedWallet != "" {
 		// Ensure the wallet is not already linked to a different account.
 		allAccounts, err := s.store.ListGasAccounts(ctx, "")
 		if err != nil {
-			return gasbank.Account{}, err
+			return GasBankAccount{}, err
 		}
 		for _, existing := range allAccounts {
-			if account.NormalizeWalletAddress(existing.WalletAddress) == normalizedWallet && existing.AccountID != accountID {
-				return gasbank.Account{}, ErrWalletInUse
+			if accountsvc.NormalizeWalletAddress(existing.WalletAddress) == normalizedWallet && existing.AccountID != accountID {
+				return GasBankAccount{}, ErrWalletInUse
 			}
 		}
 	}
 
 	accounts, err := s.store.ListGasAccounts(ctx, accountID)
 	if err != nil {
-		return gasbank.Account{}, err
+		return GasBankAccount{}, err
 	}
 	if len(accounts) > 0 {
 		acct := accounts[0]
-		if normalizedWallet != "" && account.NormalizeWalletAddress(acct.WalletAddress) != normalizedWallet {
+		if normalizedWallet != "" && accountsvc.NormalizeWalletAddress(acct.WalletAddress) != normalizedWallet {
 			acct.WalletAddress = normalizedWallet
 		}
 		applyEnsureOptions(&acct, opts)
 		if normalizedWallet != "" || hasEnsureFields(opts) {
 			updated, err := s.store.UpdateGasAccount(ctx, acct)
 			if err != nil {
-				return gasbank.Account{}, err
+				return GasBankAccount{}, err
 			}
 			return updated, nil
 		}
 		return acct, nil
 	}
 
-	acct := gasbank.Account{AccountID: accountID, WalletAddress: normalizedWallet}
+	acct := GasBankAccount{AccountID: accountID, WalletAddress: normalizedWallet}
 	applyEnsureOptions(&acct, opts)
 	created, err := s.store.CreateGasAccount(ctx, acct)
 	if err != nil {
-		return gasbank.Account{}, err
+		return GasBankAccount{}, err
 	}
 	s.log.WithField("gas_account_id", created.ID).
 		WithField("account_id", accountID).
@@ -175,20 +174,20 @@ func (s *Service) EnsureAccountWithOptions(ctx context.Context, accountID string
 }
 
 // Deposit credits the specified amount and records a transaction.
-func (s *Service) Deposit(ctx context.Context, gasAccountID string, amount float64, txID string, from string, to string) (gasbank.Account, gasbank.Transaction, error) {
+func (s *Service) Deposit(ctx context.Context, gasAccountID string, amount float64, txID string, from string, to string) (GasBankAccount, Transaction, error) {
 	if amount <= 0 {
-		return gasbank.Account{}, gasbank.Transaction{}, errInvalidAmount
+		return GasBankAccount{}, Transaction{}, errInvalidAmount
 	}
 
 	acct, err := s.store.GetGasAccount(ctx, gasAccountID)
 	if err != nil {
-		return gasbank.Account{}, gasbank.Transaction{}, err
+		return GasBankAccount{}, Transaction{}, err
 	}
 	original := acct
 
 	if acct.AccountID != "" {
-		if err := s.base.EnsureAccount(ctx, acct.AccountID); err != nil {
-			return gasbank.Account{}, gasbank.Transaction{}, fmt.Errorf("account validation failed: %w", err)
+		if err := s.accounts.AccountExists(ctx, acct.AccountID); err != nil {
+			return GasBankAccount{}, Transaction{}, fmt.Errorf("account validation failed: %w", err)
 		}
 	}
 
@@ -197,16 +196,16 @@ func (s *Service) Deposit(ctx context.Context, gasAccountID string, amount float
 	updated.Available += amount
 	updated.UpdatedAt = time.Now().UTC()
 	if updated, err = s.store.UpdateGasAccount(ctx, updated); err != nil {
-		return gasbank.Account{}, gasbank.Transaction{}, err
+		return GasBankAccount{}, Transaction{}, err
 	}
 
-	tx := gasbank.Transaction{
+	tx := Transaction{
 		AccountID:      updated.ID,
 		UserAccountID:  updated.AccountID,
-		Type:           gasbank.TransactionDeposit,
+		Type:           TransactionDeposit,
 		Amount:         amount,
 		NetAmount:      amount,
-		Status:         gasbank.StatusCompleted,
+		Status:         StatusCompleted,
 		BlockchainTxID: txID,
 		FromAddress:    from,
 		ToAddress:      to,
@@ -218,7 +217,7 @@ func (s *Service) Deposit(ctx context.Context, gasAccountID string, amount float
 				WithField("gas_account_id", original.ID).
 				Error("failed to rollback gas account after deposit failure")
 		}
-		return gasbank.Account{}, gasbank.Transaction{}, fmt.Errorf("create gas transaction: %w", err)
+		return GasBankAccount{}, Transaction{}, fmt.Errorf("create gas transaction: %w", err)
 	}
 	s.log.WithField("gas_account_id", updated.ID).
 		WithField("account_id", updated.AccountID).
@@ -229,7 +228,7 @@ func (s *Service) Deposit(ctx context.Context, gasAccountID string, amount float
 }
 
 // Withdraw debits the specified amount if funds are available.
-func (s *Service) Withdraw(ctx context.Context, accountID, gasAccountID string, amount float64, to string) (gasbank.Account, gasbank.Transaction, error) {
+func (s *Service) Withdraw(ctx context.Context, accountID, gasAccountID string, amount float64, to string) (GasBankAccount, Transaction, error) {
 	return s.WithdrawWithOptions(ctx, accountID, gasAccountID, WithdrawOptions{
 		Amount:    amount,
 		ToAddress: to,
@@ -237,44 +236,44 @@ func (s *Service) Withdraw(ctx context.Context, accountID, gasAccountID string, 
 }
 
 // WithdrawWithOptions debits funds with scheduling and limit enforcement.
-func (s *Service) WithdrawWithOptions(ctx context.Context, accountID, gasAccountID string, opts WithdrawOptions) (gasbank.Account, gasbank.Transaction, error) {
+func (s *Service) WithdrawWithOptions(ctx context.Context, accountID, gasAccountID string, opts WithdrawOptions) (GasBankAccount, Transaction, error) {
 	accountID = strings.TrimSpace(accountID)
 	if accountID == "" {
-		return gasbank.Account{}, gasbank.Transaction{}, fmt.Errorf("account_id required")
+		return GasBankAccount{}, Transaction{}, fmt.Errorf("account_id required")
 	}
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
-		return gasbank.Account{}, gasbank.Transaction{}, fmt.Errorf("account validation failed: %w", err)
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
+		return GasBankAccount{}, Transaction{}, fmt.Errorf("account validation failed: %w", err)
 	}
 
 	amount := opts.Amount
 	if amount <= 0 {
-		return gasbank.Account{}, gasbank.Transaction{}, errInvalidAmount
+		return GasBankAccount{}, Transaction{}, errInvalidAmount
 	}
 
 	acct, err := s.store.GetGasAccount(ctx, gasAccountID)
 	if err != nil {
-		return gasbank.Account{}, gasbank.Transaction{}, err
+		return GasBankAccount{}, Transaction{}, err
 	}
 	original := acct
 
 	if err := core.EnsureOwnership(acct.AccountID, accountID, "gas account", gasAccountID); err != nil {
-		return gasbank.Account{}, gasbank.Transaction{}, err
+		return GasBankAccount{}, Transaction{}, err
 	}
 
 	if acct.Available < amount-Epsilon {
-		return gasbank.Account{}, gasbank.Transaction{}, errInsufficientFunds
+		return GasBankAccount{}, Transaction{}, errInsufficientFunds
 	}
 
 	now := time.Now().UTC()
 	if acct.MinBalance > 0 && acct.Available-amount < acct.MinBalance-Epsilon {
-		return gasbank.Account{}, gasbank.Transaction{}, errMinBalance
+		return GasBankAccount{}, Transaction{}, errMinBalance
 	}
 	dailyUsed := acct.DailyWithdrawal
 	if acct.LastWithdrawal.IsZero() || !sameDay(acct.LastWithdrawal, now) {
 		dailyUsed = 0
 	}
 	if acct.DailyLimit > 0 && dailyUsed+amount > acct.DailyLimit+Epsilon {
-		return gasbank.Account{}, gasbank.Transaction{}, errDailyLimit
+		return GasBankAccount{}, Transaction{}, errDailyLimit
 	}
 
 	updated := acct
@@ -297,31 +296,31 @@ func (s *Service) WithdrawWithOptions(ctx context.Context, accountID, gasAccount
 	}
 	cronExpr := strings.TrimSpace(opts.CronExpression)
 	if cronExpr != "" {
-		return gasbank.Account{}, gasbank.Transaction{}, errCronUnsupported
+		return GasBankAccount{}, Transaction{}, errCronUnsupported
 	}
 
 	requiredApprovals := updated.RequiredApprovals
-	tx := gasbank.Transaction{
+	tx := Transaction{
 		AccountID:      updated.ID,
 		UserAccountID:  updated.AccountID,
-		Type:           gasbank.TransactionWithdrawal,
+		Type:           TransactionWithdrawal,
 		Amount:         amount,
 		NetAmount:      amount,
-		Status:         gasbank.StatusPending,
+		Status:         StatusPending,
 		ToAddress:      opts.ToAddress,
 		ScheduleAt:     scheduleAt,
 		CronExpression: cronExpr,
-		ApprovalPolicy: gasbank.ApprovalPolicy{Required: requiredApprovals},
+		ApprovalPolicy: ApprovalPolicy{Required: requiredApprovals},
 	}
 	if requiredApprovals > 0 {
-		tx.Status = gasbank.StatusAwaitingApproval
+		tx.Status = StatusAwaitingApproval
 	}
 	if isScheduled {
-		tx.Status = gasbank.StatusScheduled
+		tx.Status = StatusScheduled
 	}
 
 	if updated, err = s.store.UpdateGasAccount(ctx, updated); err != nil {
-		return gasbank.Account{}, gasbank.Transaction{}, err
+		return GasBankAccount{}, Transaction{}, err
 	}
 
 	tx, err = s.store.CreateGasTransaction(ctx, tx)
@@ -331,11 +330,11 @@ func (s *Service) WithdrawWithOptions(ctx context.Context, accountID, gasAccount
 				WithField("gas_account_id", original.ID).
 				Error("failed to rollback gas account after withdrawal failure")
 		}
-		return gasbank.Account{}, gasbank.Transaction{}, fmt.Errorf("create gas transaction: %w", err)
+		return GasBankAccount{}, Transaction{}, fmt.Errorf("create gas transaction: %w", err)
 	}
 
-	if tx.Status == gasbank.StatusScheduled {
-		schedule := gasbank.WithdrawalSchedule{
+	if tx.Status == StatusScheduled {
+		schedule := WithdrawalSchedule{
 			TransactionID:  tx.ID,
 			ScheduleAt:     scheduleAt,
 			CronExpression: cronExpr,
@@ -360,14 +359,14 @@ func (s *Service) WithdrawWithOptions(ctx context.Context, accountID, gasAccount
 }
 
 // GetAccount returns the requested gas account.
-func (s *Service) GetAccount(ctx context.Context, id string) (gasbank.Account, error) {
+func (s *Service) GetAccount(ctx context.Context, id string) (GasBankAccount, error) {
 	return s.store.GetGasAccount(ctx, id)
 }
 
 // ListAccounts returns gas accounts for the specified owner.
-func (s *Service) ListAccounts(ctx context.Context, ownerAccountID string) ([]gasbank.Account, error) {
+func (s *Service) ListAccounts(ctx context.Context, ownerAccountID string) ([]GasBankAccount, error) {
 	if strings.TrimSpace(ownerAccountID) != "" {
-		if err := s.base.EnsureAccount(ctx, ownerAccountID); err != nil {
+		if err := s.accounts.AccountExists(ctx, ownerAccountID); err != nil {
 			return nil, err
 		}
 	}
@@ -380,7 +379,7 @@ func (s *Service) Summary(ctx context.Context, ownerAccountID string) (Summary, 
 	if ownerAccountID == "" {
 		return Summary{}, fmt.Errorf("account_id required")
 	}
-	if err := s.base.EnsureAccount(ctx, ownerAccountID); err != nil {
+	if err := s.accounts.AccountExists(ctx, ownerAccountID); err != nil {
 		return Summary{}, err
 	}
 
@@ -405,16 +404,16 @@ func (s *Service) Summary(ctx context.Context, ownerAccountID string) (Summary, 
 			return Summary{}, err
 		}
 		for _, tx := range txs {
-			if tx.Type == gasbank.TransactionWithdrawal && isActiveWithdrawalStatus(tx.Status) {
+			if tx.Type == TransactionWithdrawal && isActiveWithdrawalStatus(tx.Status) {
 				summary.PendingWithdrawals++
 				summary.PendingAmount += tx.Amount
 				acctSummary.PendingWithdrawals++
 				acctSummary.PendingAmount += tx.Amount
 			}
-			if tx.Type == gasbank.TransactionDeposit {
+			if tx.Type == TransactionDeposit {
 				summary.LastDeposit = latestBrief(summary.LastDeposit, tx)
 			}
-			if tx.Type == gasbank.TransactionWithdrawal {
+			if tx.Type == TransactionWithdrawal {
 				summary.LastWithdrawal = latestBrief(summary.LastWithdrawal, tx)
 			}
 		}
@@ -425,18 +424,18 @@ func (s *Service) Summary(ctx context.Context, ownerAccountID string) (Summary, 
 }
 
 // ListTransactions returns transactions for a gas account.
-func (s *Service) ListTransactions(ctx context.Context, gasAccountID string, limit int) ([]gasbank.Transaction, error) {
+func (s *Service) ListTransactions(ctx context.Context, gasAccountID string, limit int) ([]Transaction, error) {
 	return s.ListTransactionsFiltered(ctx, gasAccountID, "", "", limit)
 }
 
 // ListTransactionsFiltered returns transactions filtered by type/status.
-func (s *Service) ListTransactionsFiltered(ctx context.Context, gasAccountID, txType, status string, limit int) ([]gasbank.Transaction, error) {
+func (s *Service) ListTransactionsFiltered(ctx context.Context, gasAccountID, txType, status string, limit int) ([]Transaction, error) {
 	clamped := core.ClampLimit(limit, core.DefaultListLimit, core.MaxListLimit)
 	items, err := s.store.ListGasTransactions(ctx, gasAccountID, clamped)
 	if err != nil {
 		return nil, err
 	}
-	filtered := make([]gasbank.Transaction, 0, len(items))
+	filtered := make([]Transaction, 0, len(items))
 	txType = strings.TrimSpace(txType)
 	status = strings.TrimSpace(status)
 	for _, tx := range items {
@@ -468,7 +467,7 @@ func (s *Service) ActivateDueSchedules(ctx context.Context, limit int) error {
 				Warn("activate schedule: get transaction failed")
 			continue
 		}
-		if tx.Status != gasbank.StatusScheduled {
+		if tx.Status != StatusScheduled {
 			_ = s.store.DeleteWithdrawalSchedule(ctx, schedule.TransactionID)
 			continue
 		}
@@ -479,13 +478,13 @@ func (s *Service) ActivateDueSchedules(ctx context.Context, limit int) error {
 				Warn("activate schedule: get gas account failed")
 			continue
 		}
-		nextStatus := gasbank.StatusPending
+		nextStatus := StatusPending
 		required := tx.ApprovalPolicy.Required
 		if required <= 0 {
 			required = acct.RequiredApprovals
 		}
 		if required > 0 {
-			nextStatus = gasbank.StatusAwaitingApproval
+			nextStatus = StatusAwaitingApproval
 		}
 
 		tx.Status = nextStatus
@@ -511,30 +510,30 @@ func (s *Service) ActivateDueSchedules(ctx context.Context, limit int) error {
 }
 
 // GetWithdrawal returns a withdrawal transaction for the specified account.
-func (s *Service) GetWithdrawal(ctx context.Context, accountID, transactionID string) (gasbank.Transaction, error) {
+func (s *Service) GetWithdrawal(ctx context.Context, accountID, transactionID string) (Transaction, error) {
 	accountID = strings.TrimSpace(accountID)
 	transactionID = strings.TrimSpace(transactionID)
 	if accountID == "" || transactionID == "" {
-		return gasbank.Transaction{}, fmt.Errorf("account_id and transaction_id are required")
+		return Transaction{}, fmt.Errorf("account_id and transaction_id are required")
 	}
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
-		return gasbank.Transaction{}, err
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
+		return Transaction{}, err
 	}
 	tx, err := s.store.GetGasTransaction(ctx, transactionID)
 	if err != nil {
-		return gasbank.Transaction{}, err
+		return Transaction{}, err
 	}
 	if err := core.EnsureOwnership(tx.UserAccountID, accountID, "withdrawal", transactionID); err != nil {
-		return gasbank.Transaction{}, err
+		return Transaction{}, err
 	}
-	if tx.Type != gasbank.TransactionWithdrawal {
-		return gasbank.Transaction{}, fmt.Errorf("transaction %s is not a withdrawal", transactionID)
+	if tx.Type != TransactionWithdrawal {
+		return Transaction{}, fmt.Errorf("transaction %s is not a withdrawal", transactionID)
 	}
 	return tx, nil
 }
 
 // ListApprovals returns recorded approvals for a withdrawal.
-func (s *Service) ListApprovals(ctx context.Context, transactionID string) ([]gasbank.WithdrawalApproval, error) {
+func (s *Service) ListApprovals(ctx context.Context, transactionID string) ([]WithdrawalApproval, error) {
 	transactionID = strings.TrimSpace(transactionID)
 	if transactionID == "" {
 		return nil, fmt.Errorf("transaction_id required")
@@ -543,13 +542,13 @@ func (s *Service) ListApprovals(ctx context.Context, transactionID string) ([]ga
 }
 
 // ListSettlementAttempts returns resolver attempts for a withdrawal.
-func (s *Service) ListSettlementAttempts(ctx context.Context, accountID, transactionID string, limit int) ([]gasbank.SettlementAttempt, error) {
+func (s *Service) ListSettlementAttempts(ctx context.Context, accountID, transactionID string, limit int) ([]SettlementAttempt, error) {
 	accountID = strings.TrimSpace(accountID)
 	transactionID = strings.TrimSpace(transactionID)
 	if accountID == "" || transactionID == "" {
 		return nil, fmt.Errorf("account_id and transaction_id are required")
 	}
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
 		return nil, err
 	}
 	tx, err := s.store.GetGasTransaction(ctx, transactionID)
@@ -564,12 +563,12 @@ func (s *Service) ListSettlementAttempts(ctx context.Context, accountID, transac
 }
 
 // ListDeadLetters returns dead-lettered withdrawals for an account.
-func (s *Service) ListDeadLetters(ctx context.Context, accountID string, limit int) ([]gasbank.DeadLetter, error) {
+func (s *Service) ListDeadLetters(ctx context.Context, accountID string, limit int) ([]DeadLetter, error) {
 	accountID = strings.TrimSpace(accountID)
 	if accountID == "" {
 		return nil, fmt.Errorf("account_id required")
 	}
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
 		return nil, err
 	}
 	clamped := core.ClampLimit(limit, core.DefaultListLimit, core.MaxListLimit)
@@ -577,27 +576,27 @@ func (s *Service) ListDeadLetters(ctx context.Context, accountID string, limit i
 }
 
 // RetryDeadLetter requeues a dead-lettered withdrawal.
-func (s *Service) RetryDeadLetter(ctx context.Context, accountID, transactionID string) (gasbank.Transaction, error) {
+func (s *Service) RetryDeadLetter(ctx context.Context, accountID, transactionID string) (Transaction, error) {
 	accountID = strings.TrimSpace(accountID)
 	transactionID = strings.TrimSpace(transactionID)
 	if accountID == "" || transactionID == "" {
-		return gasbank.Transaction{}, fmt.Errorf("account_id and transaction_id are required")
+		return Transaction{}, fmt.Errorf("account_id and transaction_id are required")
 	}
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
-		return gasbank.Transaction{}, err
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
+		return Transaction{}, err
 	}
 	entry, err := s.store.GetDeadLetter(ctx, transactionID)
 	if err != nil {
-		return gasbank.Transaction{}, err
+		return Transaction{}, err
 	}
 	if err := core.EnsureOwnership(entry.AccountID, accountID, "dead letter", transactionID); err != nil {
-		return gasbank.Transaction{}, err
+		return Transaction{}, err
 	}
 	tx, err := s.store.GetGasTransaction(ctx, transactionID)
 	if err != nil {
-		return gasbank.Transaction{}, err
+		return Transaction{}, err
 	}
-	nextStatus := gasbank.StatusPending
+	nextStatus := StatusPending
 	required := tx.ApprovalPolicy.Required
 	if required <= 0 {
 		acct, err := s.store.GetGasAccount(ctx, tx.AccountID)
@@ -606,7 +605,7 @@ func (s *Service) RetryDeadLetter(ctx context.Context, accountID, transactionID 
 		}
 	}
 	if required > 0 {
-		nextStatus = gasbank.StatusAwaitingApproval
+		nextStatus = StatusAwaitingApproval
 	}
 	tx.Status = nextStatus
 	tx.DeadLetterReason = ""
@@ -616,10 +615,10 @@ func (s *Service) RetryDeadLetter(ctx context.Context, accountID, transactionID 
 	tx.NextAttemptAt = time.Time{}
 	tx.UpdatedAt = time.Now().UTC()
 	if _, err := s.store.UpdateGasTransaction(ctx, tx); err != nil {
-		return gasbank.Transaction{}, err
+		return Transaction{}, err
 	}
 	if err := s.store.RemoveDeadLetter(ctx, transactionID); err != nil {
-		return gasbank.Transaction{}, err
+		return Transaction{}, err
 	}
 	s.log.WithField("transaction_id", tx.ID).
 		WithField("account_id", accountID).
@@ -634,7 +633,7 @@ func (s *Service) DeleteDeadLetter(ctx context.Context, accountID, transactionID
 	if accountID == "" || transactionID == "" {
 		return fmt.Errorf("account_id and transaction_id are required")
 	}
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
 		return err
 	}
 	entry, err := s.store.GetDeadLetter(ctx, transactionID)
@@ -648,7 +647,7 @@ func (s *Service) DeleteDeadLetter(ctx context.Context, accountID, transactionID
 	if err != nil {
 		return err
 	}
-	if tx.Status != gasbank.StatusCancelled && tx.Status != gasbank.StatusCompleted {
+	if tx.Status != StatusCancelled && tx.Status != StatusCompleted {
 		if _, _, err := s.cancelWithdrawal(ctx, tx, "dead letter cancelled"); err != nil {
 			return err
 		}
@@ -663,15 +662,20 @@ func (s *Service) DeleteDeadLetter(ctx context.Context, accountID, transactionID
 }
 
 // MarkDeadLetter records that a withdrawal has been moved to the dead-letter queue.
-func (s *Service) MarkDeadLetter(ctx context.Context, tx gasbank.Transaction, reason, lastErr string) error {
-	if tx.Type != gasbank.TransactionWithdrawal {
+func (s *Service) MarkDeadLetter(ctx context.Context, tx Transaction, reason, lastErr string) error {
+	if tx.Type != TransactionWithdrawal {
 		return fmt.Errorf("transaction %s is not a withdrawal", tx.ID)
 	}
-	if err := s.base.EnsureAccount(ctx, tx.UserAccountID); err != nil {
-		return err
+	if tx.UserAccountID == "" {
+		return fmt.Errorf("transaction user_account_id required")
+	}
+	if s.accounts != nil {
+		if err := s.accounts.AccountExists(ctx, tx.UserAccountID); err != nil {
+			return err
+		}
 	}
 	now := time.Now().UTC()
-	tx.Status = gasbank.StatusDeadLetter
+	tx.Status = StatusDeadLetter
 	tx.DeadLetterReason = reason
 	tx.ResolverError = lastErr
 	tx.NextAttemptAt = time.Time{}
@@ -679,7 +683,7 @@ func (s *Service) MarkDeadLetter(ctx context.Context, tx gasbank.Transaction, re
 	if _, err := s.store.UpdateGasTransaction(ctx, tx); err != nil {
 		return err
 	}
-	entry := gasbank.DeadLetter{
+	entry := DeadLetter{
 		TransactionID: tx.ID,
 		AccountID:     tx.AccountID,
 		Reason:        reason,
@@ -699,43 +703,43 @@ func (s *Service) MarkDeadLetter(ctx context.Context, tx gasbank.Transaction, re
 }
 
 // CancelWithdrawal cancels a pending withdrawal transaction.
-func (s *Service) CancelWithdrawal(ctx context.Context, accountID, transactionID, reason string) (gasbank.Transaction, error) {
+func (s *Service) CancelWithdrawal(ctx context.Context, accountID, transactionID, reason string) (Transaction, error) {
 	tx, err := s.GetWithdrawal(ctx, accountID, transactionID)
 	if err != nil {
-		return gasbank.Transaction{}, err
+		return Transaction{}, err
 	}
 	_, updated, err := s.cancelWithdrawal(ctx, tx, reason)
 	if err != nil {
-		return gasbank.Transaction{}, err
+		return Transaction{}, err
 	}
 	return updated, nil
 }
 
 // SubmitApproval records an approval or rejection for the specified withdrawal.
-func (s *Service) SubmitApproval(ctx context.Context, transactionID, approver, signature, note string, approve bool) (gasbank.WithdrawalApproval, gasbank.Transaction, error) {
+func (s *Service) SubmitApproval(ctx context.Context, transactionID, approver, signature, note string, approve bool) (WithdrawalApproval, Transaction, error) {
 	transactionID = strings.TrimSpace(transactionID)
 	if transactionID == "" {
-		return gasbank.WithdrawalApproval{}, gasbank.Transaction{}, fmt.Errorf("transaction_id required")
+		return WithdrawalApproval{}, Transaction{}, fmt.Errorf("transaction_id required")
 	}
 	approver = strings.TrimSpace(approver)
 	if approver == "" {
-		return gasbank.WithdrawalApproval{}, gasbank.Transaction{}, fmt.Errorf("approver required")
+		return WithdrawalApproval{}, Transaction{}, fmt.Errorf("approver required")
 	}
 
 	tx, err := s.store.GetGasTransaction(ctx, transactionID)
 	if err != nil {
-		return gasbank.WithdrawalApproval{}, gasbank.Transaction{}, err
+		return WithdrawalApproval{}, Transaction{}, err
 	}
-	if tx.Type != gasbank.TransactionWithdrawal {
-		return gasbank.WithdrawalApproval{}, gasbank.Transaction{}, fmt.Errorf("transaction %s is not a withdrawal", transactionID)
+	if tx.Type != TransactionWithdrawal {
+		return WithdrawalApproval{}, Transaction{}, fmt.Errorf("transaction %s is not a withdrawal", transactionID)
 	}
 
-	status := gasbank.ApprovalApproved
+	status := ApprovalApproved
 	if !approve {
-		status = gasbank.ApprovalRejected
+		status = ApprovalRejected
 	}
 
-	approval := gasbank.WithdrawalApproval{
+	approval := WithdrawalApproval{
 		TransactionID: transactionID,
 		Approver:      approver,
 		Status:        status,
@@ -746,18 +750,18 @@ func (s *Service) SubmitApproval(ctx context.Context, transactionID, approver, s
 
 	recorded, err := s.store.UpsertWithdrawalApproval(ctx, approval)
 	if err != nil {
-		return gasbank.WithdrawalApproval{}, gasbank.Transaction{}, err
+		return WithdrawalApproval{}, Transaction{}, err
 	}
 
 	approvals, err := s.store.ListWithdrawalApprovals(ctx, transactionID)
 	if err != nil {
-		return gasbank.WithdrawalApproval{}, gasbank.Transaction{}, err
+		return WithdrawalApproval{}, Transaction{}, err
 	}
 
 	// Evaluate approval requirements once we know the account configuration.
 	acct, err := s.store.GetGasAccount(ctx, tx.AccountID)
 	if err != nil {
-		return gasbank.WithdrawalApproval{}, gasbank.Transaction{}, err
+		return WithdrawalApproval{}, Transaction{}, err
 	}
 	required := tx.ApprovalPolicy.Required
 	if required <= 0 {
@@ -765,18 +769,18 @@ func (s *Service) SubmitApproval(ctx context.Context, transactionID, approver, s
 	}
 
 	switch status {
-	case gasbank.ApprovalRejected:
-		if tx.Status != gasbank.StatusCancelled && tx.Status != gasbank.StatusFailed {
+	case ApprovalRejected:
+		if tx.Status != StatusCancelled && tx.Status != StatusFailed {
 			if _, _, err := s.cancelWithdrawal(ctx, tx, fmt.Sprintf("rejected by %s", approver)); err != nil {
-				return gasbank.WithdrawalApproval{}, gasbank.Transaction{}, err
+				return WithdrawalApproval{}, Transaction{}, err
 			}
 		}
-	case gasbank.ApprovalApproved:
-		if required > 0 && countApprovals(approvals) >= required && tx.Status == gasbank.StatusAwaitingApproval {
-			tx.Status = gasbank.StatusPending
+	case ApprovalApproved:
+		if required > 0 && countApprovals(approvals) >= required && tx.Status == StatusAwaitingApproval {
+			tx.Status = StatusPending
 			tx.UpdatedAt = time.Now().UTC()
 			if tx, err = s.store.UpdateGasTransaction(ctx, tx); err != nil {
-				return gasbank.WithdrawalApproval{}, gasbank.Transaction{}, err
+				return WithdrawalApproval{}, Transaction{}, err
 			}
 		}
 	}
@@ -788,36 +792,36 @@ const Epsilon = 1e-8
 
 // CompleteWithdrawal finalises a pending withdrawal transaction. When success
 // is false, funds are returned to the available balance.
-func (s *Service) CompleteWithdrawal(ctx context.Context, txID string, success bool, errMsg string) (gasbank.Account, gasbank.Transaction, error) {
+func (s *Service) CompleteWithdrawal(ctx context.Context, txID string, success bool, errMsg string) (GasBankAccount, Transaction, error) {
 	if strings.TrimSpace(txID) == "" {
-		return gasbank.Account{}, gasbank.Transaction{}, fmt.Errorf("transaction id required")
+		return GasBankAccount{}, Transaction{}, fmt.Errorf("transaction id required")
 	}
 
 	tx, err := s.store.GetGasTransaction(ctx, txID)
 	if err != nil {
-		return gasbank.Account{}, gasbank.Transaction{}, err
+		return GasBankAccount{}, Transaction{}, err
 	}
-	if tx.Type != gasbank.TransactionWithdrawal {
-		return gasbank.Account{}, gasbank.Transaction{}, fmt.Errorf("transaction %s is not a withdrawal", txID)
+	if tx.Type != TransactionWithdrawal {
+		return GasBankAccount{}, Transaction{}, fmt.Errorf("transaction %s is not a withdrawal", txID)
 	}
 
 	acct, err := s.store.GetGasAccount(ctx, tx.AccountID)
 	if err != nil {
-		return gasbank.Account{}, gasbank.Transaction{}, err
+		return GasBankAccount{}, Transaction{}, err
 	}
 
 	if success {
 		if acct.Pending < tx.Amount-Epsilon {
-			return gasbank.Account{}, gasbank.Transaction{}, fmt.Errorf("pending balance insufficient to settle withdrawal")
+			return GasBankAccount{}, Transaction{}, fmt.Errorf("pending balance insufficient to settle withdrawal")
 		}
 		acct.Pending -= tx.Amount
 		acct.Balance = math.Max(acct.Balance-tx.Amount, 0)
-		tx.Status = gasbank.StatusCompleted
+		tx.Status = StatusCompleted
 		tx.Error = ""
 	} else {
 		acct.Pending -= tx.Amount
 		acct.Available += tx.Amount
-		tx.Status = gasbank.StatusFailed
+		tx.Status = StatusFailed
 		tx.Error = errMsg
 		tx.NetAmount = 0
 	}
@@ -826,7 +830,7 @@ func (s *Service) CompleteWithdrawal(ctx context.Context, txID string, success b
 	acct.UpdatedAt = time.Now().UTC()
 	acct, err = s.store.UpdateGasAccount(ctx, acct)
 	if err != nil {
-		return gasbank.Account{}, gasbank.Transaction{}, err
+		return GasBankAccount{}, Transaction{}, err
 	}
 
 	tx.UpdatedAt = time.Now().UTC()
@@ -834,7 +838,7 @@ func (s *Service) CompleteWithdrawal(ctx context.Context, txID string, success b
 		tx.CompletedAt = time.Now().UTC()
 	}
 	if tx, err = s.store.UpdateGasTransaction(ctx, tx); err != nil {
-		return gasbank.Account{}, gasbank.Transaction{}, err
+		return GasBankAccount{}, Transaction{}, err
 	}
 
 	s.log.WithField("gas_account_id", acct.ID).
@@ -845,28 +849,28 @@ func (s *Service) CompleteWithdrawal(ctx context.Context, txID string, success b
 	return acct, tx, nil
 }
 
-func (s *Service) cancelWithdrawal(ctx context.Context, tx gasbank.Transaction, reason string) (gasbank.Account, gasbank.Transaction, error) {
+func (s *Service) cancelWithdrawal(ctx context.Context, tx Transaction, reason string) (GasBankAccount, Transaction, error) {
 	acct, err := s.store.GetGasAccount(ctx, tx.AccountID)
 	if err != nil {
-		return gasbank.Account{}, gasbank.Transaction{}, err
+		return GasBankAccount{}, Transaction{}, err
 	}
 	if acct.Pending < tx.Amount-Epsilon {
-		return gasbank.Account{}, gasbank.Transaction{}, fmt.Errorf("pending balance insufficient to cancel withdrawal")
+		return GasBankAccount{}, Transaction{}, fmt.Errorf("pending balance insufficient to cancel withdrawal")
 	}
 	acct.Pending -= tx.Amount
 	acct.Available += tx.Amount
 	acct.Locked = math.Max(acct.Locked-tx.Amount, 0)
 	acct.UpdatedAt = time.Now().UTC()
 	if _, err := s.store.UpdateGasAccount(ctx, acct); err != nil {
-		return gasbank.Account{}, gasbank.Transaction{}, err
+		return GasBankAccount{}, Transaction{}, err
 	}
 
-	tx.Status = gasbank.StatusCancelled
+	tx.Status = StatusCancelled
 	tx.Error = reason
 	tx.NetAmount = 0
 	tx.UpdatedAt = time.Now().UTC()
 	if tx, err = s.store.UpdateGasTransaction(ctx, tx); err != nil {
-		return gasbank.Account{}, gasbank.Transaction{}, err
+		return GasBankAccount{}, Transaction{}, err
 	}
 	s.log.WithField("transaction_id", tx.ID).
 		WithField("account_id", acct.AccountID).
@@ -875,7 +879,7 @@ func (s *Service) cancelWithdrawal(ctx context.Context, tx gasbank.Transaction, 
 	return acct, tx, nil
 }
 
-func latestBrief(current *TransactionBrief, tx gasbank.Transaction) *TransactionBrief {
+func latestBrief(current *TransactionBrief, tx Transaction) *TransactionBrief {
 	brief := transactionToBrief(tx)
 	if current == nil || brief.CreatedAt.After(current.CreatedAt) {
 		return &brief
@@ -883,7 +887,7 @@ func latestBrief(current *TransactionBrief, tx gasbank.Transaction) *Transaction
 	return current
 }
 
-func transactionToBrief(tx gasbank.Transaction) TransactionBrief {
+func transactionToBrief(tx Transaction) TransactionBrief {
 	return TransactionBrief{
 		ID:          tx.ID,
 		Type:        tx.Type,
@@ -899,27 +903,27 @@ func transactionToBrief(tx gasbank.Transaction) TransactionBrief {
 
 func isActiveWithdrawalStatus(status string) bool {
 	switch status {
-	case gasbank.StatusPending,
-		gasbank.StatusAwaitingApproval,
-		gasbank.StatusScheduled,
-		gasbank.StatusApproved:
+	case StatusPending,
+		StatusAwaitingApproval,
+		StatusScheduled,
+		StatusApproved:
 		return true
 	default:
 		return false
 	}
 }
 
-func countApprovals(approvals []gasbank.WithdrawalApproval) int {
+func countApprovals(approvals []WithdrawalApproval) int {
 	count := 0
 	for _, approval := range approvals {
-		if approval.Status == gasbank.ApprovalApproved {
+		if approval.Status == ApprovalApproved {
 			count++
 		}
 	}
 	return count
 }
 
-func applyEnsureOptions(acct *gasbank.Account, opts EnsureAccountOptions) {
+func applyEnsureOptions(acct *GasBankAccount, opts EnsureAccountOptions) {
 	if opts.MinBalance != nil {
 		acct.MinBalance = math.Max(*opts.MinBalance, 0)
 	}

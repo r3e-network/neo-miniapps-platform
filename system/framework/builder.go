@@ -247,10 +247,10 @@ func (b *ServiceBuilder) WithBus(bus BusClient) *ServiceBuilder {
 func (b *ServiceBuilder) Build() (*BuiltService, error) {
 	// Validate required fields
 	if b.name == "" {
-		return nil, fmt.Errorf("%w: service name required", ErrInvalidManifest)
+		return nil, fmt.Errorf("%w: service name required", service.ErrInvalidManifest)
 	}
 	if b.domain == "" {
-		return nil, fmt.Errorf("%w: service domain required", ErrInvalidManifest)
+		return nil, fmt.Errorf("%w: service domain required", service.ErrInvalidManifest)
 	}
 
 	// Normalize and validate manifest
@@ -259,7 +259,7 @@ func (b *ServiceBuilder) Build() (*BuiltService, error) {
 	b.manifest.Normalize()
 
 	if err := b.manifest.Validate(); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidManifest, err)
+		return nil, fmt.Errorf("%w: %v", service.ErrInvalidManifest, err)
 	}
 
 	// Check for accumulated errors
@@ -315,18 +315,18 @@ func (s *BuiltService) Manifest() *Manifest {
 // Start starts the service with proper hook execution.
 func (s *BuiltService) Start(ctx context.Context) error {
 	if s.started {
-		return ErrServiceAlreadyStarted
+		return service.ErrServiceAlreadyStarted
 	}
 
 	// Run pre-start hooks
 	if err := s.hooks.RunPreStart(ctx); err != nil {
-		return NewHookError(s.Name(), "PreStart", err)
+		return service.NewHookError(s.Name(), "PreStart", err)
 	}
 
 	// Run main start function if provided
 	if s.startFn != nil {
 		if err := s.startFn(ctx); err != nil {
-			return WrapServiceError(s.Name(), "start", err)
+			return service.WrapServiceError(s.Name(), "start", err)
 		}
 	}
 
@@ -337,7 +337,7 @@ func (s *BuiltService) Start(ctx context.Context) error {
 	// Run post-start hooks
 	if err := s.hooks.RunPostStart(ctx); err != nil {
 		// Still started, but log the hook error
-		return NewHookError(s.Name(), "PostStart", err)
+		return service.NewHookError(s.Name(), "PostStart", err)
 	}
 
 	return nil
@@ -354,7 +354,7 @@ func (s *BuiltService) Stop(ctx context.Context) error {
 
 	// Run pre-stop hooks
 	if err := s.hooks.RunPreStop(ctx); err != nil {
-		return NewHookError(s.Name(), "PreStop", err)
+		return service.NewHookError(s.Name(), "PreStop", err)
 	}
 
 	// Mark as not ready
@@ -363,7 +363,7 @@ func (s *BuiltService) Stop(ctx context.Context) error {
 	// Run main stop function if provided
 	if s.stopFn != nil {
 		if err := s.stopFn(ctx); err != nil {
-			return WrapServiceError(s.Name(), "stop", err)
+			return service.WrapServiceError(s.Name(), "stop", err)
 		}
 	}
 
@@ -371,7 +371,7 @@ func (s *BuiltService) Stop(ctx context.Context) error {
 
 	// Run post-stop hooks (in reverse order)
 	if err := s.hooks.RunPostStop(ctx); err != nil {
-		return NewHookError(s.Name(), "PostStop", err)
+		return service.NewHookError(s.Name(), "PostStop", err)
 	}
 
 	return nil

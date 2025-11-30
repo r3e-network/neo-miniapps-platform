@@ -1,130 +1,73 @@
 // Package pkg provides the StoreProvider implementation.
 package pkg
 
+import (
+	"context"
+	"database/sql"
+	"errors"
+)
+
 // storeProvider implements StoreProvider interface.
-// It wraps the actual storage implementations from pkg/storage.
+// It provides generic database access to service packages.
 type storeProvider struct {
-	accounts         AccountStoreAPI
-	functions        FunctionStoreAPI
-	gasBank          GasBankStoreAPI
-	automation       AutomationStoreAPI
-	dataFeeds        DataFeedStoreAPI
-	dataStreams      DataStreamStoreAPI
-	dataLink         DataLinkStoreAPI
-	dta              DTAStoreAPI
-	confidential     ConfidentialStoreAPI
-	oracle           OracleStoreAPI
-	secrets          SecretStoreAPI
-	cre              CREStoreAPI
-	ccip             CCIPStoreAPI
-	vrf              VRFStoreAPI
-	workspaceWallets WorkspaceWalletStoreAPI
+	db *sql.DB
 }
 
-// StoreProviderConfig contains all storage implementations to inject.
+// StoreProviderConfig contains configuration for creating a StoreProvider.
 type StoreProviderConfig struct {
-	Accounts         AccountStoreAPI
-	Functions        FunctionStoreAPI
-	GasBank          GasBankStoreAPI
-	Automation       AutomationStoreAPI
-	DataFeeds        DataFeedStoreAPI
-	DataStreams      DataStreamStoreAPI
-	DataLink         DataLinkStoreAPI
-	DTA              DTAStoreAPI
-	Confidential     ConfidentialStoreAPI
-	Oracle           OracleStoreAPI
-	Secrets          SecretStoreAPI
-	CRE              CREStoreAPI
-	CCIP             CCIPStoreAPI
-	VRF              VRFStoreAPI
-	WorkspaceWallets WorkspaceWalletStoreAPI
+	// Database is the generic database connection for service packages.
+	Database *sql.DB
 }
 
 // NewStoreProvider creates a StoreProvider from the given configuration.
 func NewStoreProvider(cfg StoreProviderConfig) StoreProvider {
 	return &storeProvider{
-		accounts:         cfg.Accounts,
-		functions:        cfg.Functions,
-		gasBank:          cfg.GasBank,
-		automation:       cfg.Automation,
-		dataFeeds:        cfg.DataFeeds,
-		dataStreams:      cfg.DataStreams,
-		dataLink:         cfg.DataLink,
-		dta:              cfg.DTA,
-		confidential:     cfg.Confidential,
-		oracle:           cfg.Oracle,
-		secrets:          cfg.Secrets,
-		cre:              cfg.CRE,
-		ccip:             cfg.CCIP,
-		vrf:              cfg.VRF,
-		workspaceWallets: cfg.WorkspaceWallets,
+		db: cfg.Database,
 	}
 }
 
-// Implement StoreProvider interface methods
-
-func (s *storeProvider) AccountStore() AccountStoreAPI {
-	return s.accounts
+// Database returns the underlying database connection.
+// Service packages use this to create their own typed stores.
+func (s *storeProvider) Database() any {
+	return s.db
 }
 
-func (s *storeProvider) FunctionStore() FunctionStoreAPI {
-	return s.functions
+// AccountExists checks if an account exists by ID.
+// Returns nil if account exists, error otherwise.
+func (s *storeProvider) AccountExists(ctx context.Context, accountID string) error {
+	if s.db == nil {
+		return errors.New("database not available")
+	}
+	var exists bool
+	err := s.db.QueryRowContext(ctx, `
+		SELECT EXISTS(SELECT 1 FROM app_accounts WHERE id = $1)
+	`, accountID).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return errors.New("account not found")
+	}
+	return nil
 }
 
-func (s *storeProvider) GasBankStore() GasBankStoreAPI {
-	return s.gasBank
+// AccountTenant returns the tenant for an account (empty if none).
+func (s *storeProvider) AccountTenant(ctx context.Context, accountID string) string {
+	if s.db == nil {
+		return ""
+	}
+	var tenant sql.NullString
+	_ = s.db.QueryRowContext(ctx, `
+		SELECT tenant FROM app_accounts WHERE id = $1
+	`, accountID).Scan(&tenant)
+	if tenant.Valid {
+		return tenant.String
+	}
+	return ""
 }
 
-func (s *storeProvider) AutomationStore() AutomationStoreAPI {
-	return s.automation
-}
-
-func (s *storeProvider) DataFeedStore() DataFeedStoreAPI {
-	return s.dataFeeds
-}
-
-func (s *storeProvider) DataStreamStore() DataStreamStoreAPI {
-	return s.dataStreams
-}
-
-func (s *storeProvider) DataLinkStore() DataLinkStoreAPI {
-	return s.dataLink
-}
-
-func (s *storeProvider) DTAStore() DTAStoreAPI {
-	return s.dta
-}
-
-func (s *storeProvider) ConfidentialStore() ConfidentialStoreAPI {
-	return s.confidential
-}
-
-func (s *storeProvider) OracleStore() OracleStoreAPI {
-	return s.oracle
-}
-
-func (s *storeProvider) SecretStore() SecretStoreAPI {
-	return s.secrets
-}
-
-func (s *storeProvider) CREStore() CREStoreAPI {
-	return s.cre
-}
-
-func (s *storeProvider) CCIPStore() CCIPStoreAPI {
-	return s.ccip
-}
-
-func (s *storeProvider) VRFStore() VRFStoreAPI {
-	return s.vrf
-}
-
-func (s *storeProvider) WorkspaceWalletStore() WorkspaceWalletStoreAPI {
-	return s.workspaceWallets
-}
-
-// NilStoreProvider returns a StoreProvider with all nil stores.
-// This is useful for testing or when stores are not yet available.
+// NilStoreProvider returns a StoreProvider with nil database.
+// This is useful for testing or when database is not yet available.
 func NilStoreProvider() StoreProvider {
 	return &storeProvider{}
 }

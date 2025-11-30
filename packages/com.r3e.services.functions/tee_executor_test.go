@@ -5,8 +5,6 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	"github.com/R3E-Network/service_layer/domain/function"
 )
 
 type teeSecretResolver struct {
@@ -31,7 +29,7 @@ func TestTEEExecutorExecutesJavaScript(t *testing.T) {
 	resolver := &teeSecretResolver{values: map[string]string{"apiKey": "secret"}}
 	exec := NewTEEExecutor(resolver)
 
-	def := function.Definition{
+	def := Definition{
 		ID:        "fn-1",
 		AccountID: "acct-1",
 		Source:    `() => { console.log("running"); return {foo: params.foo, secret: secrets.apiKey}; }`,
@@ -43,7 +41,7 @@ func TestTEEExecutorExecutesJavaScript(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	if result.Status != function.ExecutionStatusSucceeded {
+	if result.Status != ExecutionStatusSucceeded {
 		t.Fatalf("unexpected status: %s", result.Status)
 	}
 	if result.Output["foo"] != "bar" {
@@ -65,7 +63,7 @@ func TestTEEExecutorExecutesJavaScript(t *testing.T) {
 
 func TestTEEExecutorMissingResolver(t *testing.T) {
 	exec := NewTEEExecutor(nil)
-	def := function.Definition{
+	def := Definition{
 		ID:        "fn-1",
 		AccountID: "acct",
 		Source:    `() => ({ ok: true })`,
@@ -81,7 +79,7 @@ func TestTEEExecutorSetSecretResolver(t *testing.T) {
 	resolver := &teeSecretResolver{values: map[string]string{"token": "value"}}
 	exec.SetSecretResolver(resolver)
 
-	def := function.Definition{
+	def := Definition{
 		ID:        "fn-1",
 		AccountID: "acct",
 		Source:    `() => secrets.token`,
@@ -99,7 +97,7 @@ func TestTEEExecutorSetSecretResolver(t *testing.T) {
 func TestTEEExecutorHandlesJavaScriptError(t *testing.T) {
 	resolver := &teeSecretResolver{}
 	exec := NewTEEExecutor(resolver)
-	def := function.Definition{
+	def := Definition{
 		ID:        "fn-1",
 		AccountID: "acct",
 		Source:    `() => { throw new Error("boom"); }`,
@@ -111,7 +109,7 @@ func TestTEEExecutorHandlesJavaScriptError(t *testing.T) {
 
 func TestTEEExecutorHandlesAsyncFunction(t *testing.T) {
 	exec := NewTEEExecutor(nil)
-	def := function.Definition{
+	def := Definition{
 		ID:        "fn-async",
 		AccountID: "acct",
 		Source: `async (params) => {
@@ -137,7 +135,7 @@ func TestTEEExecutorHandlesAsyncFunction(t *testing.T) {
 
 func TestTEEExecutorPropagatesPromiseRejection(t *testing.T) {
 	exec := NewTEEExecutor(nil)
-	def := function.Definition{
+	def := Definition{
 		ID:        "fn-reject",
 		AccountID: "acct",
 		Source: `async () => {
@@ -156,7 +154,7 @@ func TestTEEExecutorHonorsContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
-	def := function.Definition{
+	def := Definition{
 		ID:        "fn-timeout",
 		AccountID: "acct",
 		Source: `() => {
@@ -175,7 +173,7 @@ func TestTEEExecutorHonorsContextCancellation(t *testing.T) {
 
 func TestTEEExecutorDevpackActions(t *testing.T) {
 	exec := NewTEEExecutor(nil)
-	def := function.Definition{
+	def := Definition{
 		ID:        "fn-devpack",
 		AccountID: "acct",
 		Source: `() => {
@@ -191,7 +189,7 @@ func TestTEEExecutorDevpackActions(t *testing.T) {
 	if len(result.Actions) != 1 {
 		t.Fatalf("expected 1 action, got %d", len(result.Actions))
 	}
-	if result.Actions[0].Type != function.ActionTypeGasBankEnsureAccount {
+	if result.Actions[0].Type != ActionTypeGasBankEnsureAccount {
 		t.Fatalf("action type mismatch: %s", result.Actions[0].Type)
 	}
 }

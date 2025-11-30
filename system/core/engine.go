@@ -7,7 +7,7 @@
 //   - HealthMonitor: Health and readiness tracking
 //   - DependencyManager: Dependency resolution and ordering
 //   - Bus: Event publishing, data pushing, compute invocation
-//   - PermissionManager: Bus permission control
+//   - BusPermissionManager: Bus permission control
 //   - MetadataManager: Module notes, capabilities, quotas
 package engine
 
@@ -26,7 +26,7 @@ type Engine struct {
 	health    *HealthMonitor
 	deps      *DependencyManager
 	bus       *Bus
-	perms     *PermissionManager
+	perms     *BusPermissionManager
 	metadata  *MetadataManager
 
 	// Configuration
@@ -39,7 +39,7 @@ func New(opts ...Option) *Engine {
 		registry: NewRegistry(),
 		health:   NewHealthMonitor(),
 		deps:     NewDependencyManager(),
-		perms:    NewPermissionManager(),
+		perms:    NewBusPermissionManager(),
 		metadata: NewMetadataManager(),
 		log:      log.Default(),
 	}
@@ -411,8 +411,8 @@ func (e *Engine) Dependencies() *DependencyManager {
 	return e.deps
 }
 
-// Permissions returns the underlying permission manager for advanced use cases.
-func (e *Engine) Permissions() *PermissionManager {
+// Permissions returns the underlying bus permission manager for advanced use cases.
+func (e *Engine) Permissions() *BusPermissionManager {
 	return e.perms
 }
 

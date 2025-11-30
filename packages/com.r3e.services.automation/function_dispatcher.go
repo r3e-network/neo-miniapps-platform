@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/R3E-Network/service_layer/domain/function"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	"github.com/R3E-Network/service_layer/pkg/metrics"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
@@ -13,15 +12,15 @@ import (
 
 // FunctionRunner executes functions referenced by automation jobs.
 type FunctionRunner interface {
-	Execute(ctx context.Context, functionID string, payload map[string]any) (function.Execution, error)
+	Execute(ctx context.Context, functionID string, payload map[string]any) (FunctionExecution, error)
 }
 
 // FunctionRunnerFunc adapts a function to the FunctionRunner interface.
-type FunctionRunnerFunc func(ctx context.Context, functionID string, payload map[string]any) (function.Execution, error)
+type FunctionRunnerFunc func(ctx context.Context, functionID string, payload map[string]any) (FunctionExecution, error)
 
-func (f FunctionRunnerFunc) Execute(ctx context.Context, functionID string, payload map[string]any) (function.Execution, error) {
+func (f FunctionRunnerFunc) Execute(ctx context.Context, functionID string, payload map[string]any) (FunctionExecution, error) {
 	if f == nil {
-		return function.Execution{}, nil
+		return FunctionExecution{}, nil
 	}
 	return f(ctx, functionID, payload)
 }

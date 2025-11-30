@@ -1,7 +1,6 @@
 package secrets
 
 import (
-	"github.com/R3E-Network/service_layer/domain/account"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -9,10 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/R3E-Network/service_layer/pkg/storage"
-	"github.com/R3E-Network/service_layer/domain/secret"
 	"github.com/R3E-Network/service_layer/pkg/logger"
-	engine "github.com/R3E-Network/service_layer/system/core"
 	"github.com/R3E-Network/service_layer/system/framework"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 )
@@ -35,35 +31,12 @@ type Resolver interface {
 }
 
 // Service manages account secrets.
+// Uses ServiceEngine for common functionality (validation, logging, manifest).
 type Service struct {
-	framework.ServiceBase
-	base   *core.Base
-	store  storage.SecretStore
-	log    *logger.Logger
-	cipher Cipher
+	*framework.ServiceEngine // Provides: ValidateAccount, Manifest, Descriptor, Logger, etc.
+	store                    Store
+	cipher                   Cipher
 }
-
-// Name returns the stable service identifier.
-func (s *Service) Name() string { return "secrets" }
-
-// Domain reports the service domain.
-func (s *Service) Domain() string { return "secrets" }
-
-// Manifest describes the service contract for the engine OS.
-func (s *Service) Manifest() *framework.Manifest {
-	return &framework.Manifest{
-		Name:         s.Name(),
-		Domain:       s.Domain(),
-		Description:  "Secret storage and resolution",
-		Layer:        "service",
-		DependsOn:    []string{"store", "svc-accounts"},
-		RequiresAPIs: []engine.APISurface{engine.APISurfaceStore},
-		Capabilities: []string{"secrets"},
-	}
-}
-
-// Descriptor advertises the service for system discovery.
-func (s *Service) Descriptor() core.Descriptor { return s.Manifest().ToDescriptor() }
 
 // Option configures the secrets service.
 type Option func(*Service)
@@ -74,24 +47,22 @@ func WithCipher(c Cipher) Option {
 }
 
 // New creates a secrets service.
-func New(accounts storage.AccountStore, store storage.SecretStore, log *logger.Logger, opts ...Option) *Service {
-	if log == nil {
-		log = logger.NewDefault("secrets")
-	}
+func New(accounts AccountChecker, store Store, log *logger.Logger, opts ...Option) *Service {
 	svc := &Service{
-		base:   core.NewBaseFromStore[account.Account](accounts),
+		ServiceEngine: framework.NewServiceEngine(framework.ServiceConfig{
+			Name:        "secrets",
+			Description: "Secret storage and resolution",
+			Accounts:    accounts,
+			Logger:      log,
+		}),
 		store:  store,
-		log:    log,
 		cipher: noopCipher{},
 	}
 	for _, opt := range opts {
 		opt(svc)
 	}
-	svc.SetName(svc.Name())
 	return svc
 }
-
-// Start/Stop/Ready are inherited from framework.ServiceBase.
 
 // SetCipher overrides the encryption cipher used by the service.
 func (s *Service) SetCipher(cipher Cipher) {
@@ -104,34 +75,35 @@ func (s *Service) SetCipher(cipher Cipher) {
 
 // CreateOptions configures secret creation.
 type CreateOptions struct {
-	ACL secret.ACL // Access control flags for service access
+	ACL ACL // Access control flags for service access
 }
 
 // Create stores a new secret value.
-func (s *Service) Create(ctx context.Context, accountID, name, value string) (secret.Metadata, error) {
+func (s *Service) Create(ctx context.Context, accountID, name, value string) (Metadata, error) {
 	return s.CreateWithOptions(ctx, accountID, name, value, CreateOptions{})
 }
 
 // CreateWithOptions stores a new secret value with ACL settings.
 // Aligned with SecretsVault.cs contract ACL support.
-func (s *Service) CreateWithOptions(ctx context.Context, accountID, name, value string, opts CreateOptions) (secret.Metadata, error) {
-	accountID, err := s.base.NormalizeAccount(ctx, accountID)
+func (s *Service) CreateWithOptions(ctx context.Context, accountID, name, value string, opts CreateOptions) (Metadata, error) {
+	// Use ServiceEngine's ValidateAccount (trims + validates existence)
+	accountID, err := s.ValidateAccount(ctx, accountID)
 	if err != nil {
-		return secret.Metadata{}, err
+		return Metadata{}, err
 	}
 	if err := validateName(name); err != nil {
-		return secret.Metadata{}, err
+		return Metadata{}, err
 	}
 	if value == "" {
-		return secret.Metadata{}, core.RequiredError("value")
+		return Metadata{}, core.RequiredError("value")
 	}
 
 	ciphertext, err := s.encrypt(value)
 	if err != nil {
-		return secret.Metadata{}, err
+		return Metadata{}, err
 	}
 
-	record := secret.Secret{
+	record := Secret{
 		ID:        uuid.NewString(),
 		AccountID: accountID,
 		Name:      name,
@@ -141,40 +113,41 @@ func (s *Service) CreateWithOptions(ctx context.Context, accountID, name, value 
 
 	stored, err := s.store.CreateSecret(ctx, record)
 	if err != nil {
-		return secret.Metadata{}, err
+		return Metadata{}, err
 	}
 	return stored.ToMetadata(), nil
 }
 
 // UpdateOptions configures secret update.
 type UpdateOptions struct {
-	ACL   *secret.ACL // If set, updates the ACL; nil keeps existing ACL
-	Value *string     // If set, updates the value; nil keeps existing value
+	ACL   *ACL    // If set, updates the ACL; nil keeps existing ACL
+	Value *string // If set, updates the value; nil keeps existing value
 }
 
 // Update replaces the secret value.
-func (s *Service) Update(ctx context.Context, accountID, name, value string) (secret.Metadata, error) {
+func (s *Service) Update(ctx context.Context, accountID, name, value string) (Metadata, error) {
 	return s.UpdateWithOptions(ctx, accountID, name, UpdateOptions{Value: &value})
 }
 
 // UpdateWithOptions updates a secret with optional ACL and value changes.
 // Aligned with SecretsVault.cs contract ACL support.
-func (s *Service) UpdateWithOptions(ctx context.Context, accountID, name string, opts UpdateOptions) (secret.Metadata, error) {
-	accountID, err := s.base.NormalizeAccount(ctx, accountID)
+func (s *Service) UpdateWithOptions(ctx context.Context, accountID, name string, opts UpdateOptions) (Metadata, error) {
+	// Use ServiceEngine's ValidateAccount
+	accountID, err := s.ValidateAccount(ctx, accountID)
 	if err != nil {
-		return secret.Metadata{}, err
+		return Metadata{}, err
 	}
 	if err := validateName(name); err != nil {
-		return secret.Metadata{}, err
+		return Metadata{}, err
 	}
 
 	// Get existing secret to preserve fields not being updated
 	existing, err := s.store.GetSecret(ctx, accountID, name)
 	if err != nil {
-		return secret.Metadata{}, err
+		return Metadata{}, err
 	}
 
-	record := secret.Secret{
+	record := Secret{
 		ID:        existing.ID,
 		AccountID: accountID,
 		Name:      name,
@@ -186,11 +159,11 @@ func (s *Service) UpdateWithOptions(ctx context.Context, accountID, name string,
 	// Update value if provided
 	if opts.Value != nil {
 		if *opts.Value == "" {
-			return secret.Metadata{}, core.RequiredError("value")
+			return Metadata{}, core.RequiredError("value")
 		}
 		ciphertext, err := s.encrypt(*opts.Value)
 		if err != nil {
-			return secret.Metadata{}, err
+			return Metadata{}, err
 		}
 		record.Value = ciphertext
 	}
@@ -202,37 +175,39 @@ func (s *Service) UpdateWithOptions(ctx context.Context, accountID, name string,
 
 	updated, err := s.store.UpdateSecret(ctx, record)
 	if err != nil {
-		return secret.Metadata{}, err
+		return Metadata{}, err
 	}
 	return updated.ToMetadata(), nil
 }
 
 // Get retrieves a secret including its decrypted value.
-func (s *Service) Get(ctx context.Context, accountID, name string) (secret.Secret, error) {
-	accountID, err := s.base.NormalizeAccount(ctx, accountID)
+func (s *Service) Get(ctx context.Context, accountID, name string) (Secret, error) {
+	// Use ServiceEngine's ValidateAccount
+	accountID, err := s.ValidateAccount(ctx, accountID)
 	if err != nil {
-		return secret.Secret{}, err
+		return Secret{}, err
 	}
 	if err := validateName(name); err != nil {
-		return secret.Secret{}, err
+		return Secret{}, err
 	}
 
 	record, err := s.store.GetSecret(ctx, accountID, name)
 	if err != nil {
-		return secret.Secret{}, err
+		return Secret{}, err
 	}
 
 	plaintext, err := s.decrypt(record.Value)
 	if err != nil {
-		return secret.Secret{}, err
+		return Secret{}, err
 	}
 	record.Value = plaintext
 	return record, nil
 }
 
 // List returns metadata for all secrets on the account.
-func (s *Service) List(ctx context.Context, accountID string) ([]secret.Metadata, error) {
-	accountID, err := s.base.NormalizeAccount(ctx, accountID)
+func (s *Service) List(ctx context.Context, accountID string) ([]Metadata, error) {
+	// Use ServiceEngine's ValidateAccount
+	accountID, err := s.ValidateAccount(ctx, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +217,7 @@ func (s *Service) List(ctx context.Context, accountID string) ([]secret.Metadata
 		return nil, err
 	}
 
-	result := make([]secret.Metadata, 0, len(records))
+	result := make([]Metadata, 0, len(records))
 	for _, rec := range records {
 		result = append(result, rec.ToMetadata())
 	}
@@ -251,7 +226,8 @@ func (s *Service) List(ctx context.Context, accountID string) ([]secret.Metadata
 
 // Delete removes a secret.
 func (s *Service) Delete(ctx context.Context, accountID, name string) error {
-	accountID, err := s.base.NormalizeAccount(ctx, accountID)
+	// Use ServiceEngine's ValidateAccount
+	accountID, err := s.ValidateAccount(ctx, accountID)
 	if err != nil {
 		return err
 	}
@@ -265,10 +241,12 @@ func (s *Service) Delete(ctx context.Context, accountID, name string) error {
 // Note: This method bypasses ACL checks for backward compatibility.
 // Use ResolveSecretsWithACL for ACL-enforced access.
 func (s *Service) ResolveSecrets(ctx context.Context, accountID string, names []string) (map[string]string, error) {
-	accountID, err := s.base.NormalizeAccount(ctx, accountID)
+	// Use ServiceEngine's ValidateAccount
+	accountID, err := s.ValidateAccount(ctx, accountID)
 	if err != nil {
 		return nil, err
 	}
+
 	resolved := make(map[string]string, len(names))
 	for _, name := range names {
 		name = strings.TrimSpace(name)
@@ -291,7 +269,8 @@ func (s *Service) ResolveSecrets(ctx context.Context, accountID string, names []
 // ResolveSecretsWithACL returns secrets that the caller service has access to.
 // Aligned with SecretsVault.cs contract ACL enforcement.
 func (s *Service) ResolveSecretsWithACL(ctx context.Context, accountID string, names []string, caller CallerService) (map[string]string, error) {
-	accountID, err := s.base.NormalizeAccount(ctx, accountID)
+	// Use ServiceEngine's ValidateAccount
+	accountID, err := s.ValidateAccount(ctx, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -326,18 +305,18 @@ func (s *Service) ResolveSecretsWithACL(ctx context.Context, accountID string, n
 }
 
 // callerToACL maps a caller service to its required ACL flag.
-func callerToACL(caller CallerService) secret.ACL {
+func callerToACL(caller CallerService) ACL {
 	switch caller {
 	case CallerOracle:
-		return secret.ACLOracleAccess
+		return ACLOracleAccess
 	case CallerAutomation:
-		return secret.ACLAutomationAccess
+		return ACLAutomationAccess
 	case CallerFunctions:
-		return secret.ACLFunctionAccess
+		return ACLFunctionAccess
 	case CallerJAM:
-		return secret.ACLJAMAccess
+		return ACLJAMAccess
 	default:
-		return secret.ACLNone
+		return ACLNone
 	}
 }
 

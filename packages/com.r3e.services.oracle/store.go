@@ -4,7 +4,11 @@
 // and the system/infrastructure layer provides implementations.
 package oracle
 
-import "context"
+import (
+	"context"
+
+	"github.com/R3E-Network/service_layer/system/framework"
+)
 
 // Store defines the persistence contract for oracle data sources and requests.
 // Implementations are provided by the infrastructure layer (postgres, memory, etc.).
@@ -20,3 +24,7 @@ type Store interface {
 	ListRequests(ctx context.Context, accountID string, limit int, status string) ([]Request, error)
 	ListPendingRequests(ctx context.Context) ([]Request, error)
 }
+
+// AccountChecker is an alias for the canonical framework.AccountChecker interface.
+// Use framework.AccountChecker directly in new code.
+type AccountChecker = framework.AccountChecker

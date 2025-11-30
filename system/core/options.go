@@ -49,8 +49,8 @@ func WithDependencyManager(d *DependencyManager) Option {
 	}
 }
 
-// WithPermissionManager sets a custom permission manager.
-func WithPermissionManager(p *PermissionManager) Option {
+// WithBusPermissionManager sets a custom bus permission manager.
+func WithBusPermissionManager(p *BusPermissionManager) Option {
 	return func(e *Engine) {
 		if p != nil {
 			e.perms = p

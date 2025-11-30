@@ -20,7 +20,7 @@ import (
 	"github.com/R3E-Network/service_layer/applications/auth"
 	"github.com/R3E-Network/service_layer/applications/jam"
 	"github.com/R3E-Network/service_layer/pkg/metrics"
-	domainaccount "github.com/R3E-Network/service_layer/domain/account"
+	"github.com/R3E-Network/service_layer/packages/com.r3e.services.accounts"
 	oraclesvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.oracle"
 	engine "github.com/R3E-Network/service_layer/system/core"
 	"github.com/R3E-Network/service_layer/system/platform/database"
@@ -326,7 +326,7 @@ func (h *handler) accounts(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
-		filtered := make([]domainaccount.Account, 0, len(accts))
+		filtered := make([]accounts.Account, 0, len(accts))
 		for _, a := range accts {
 			accountTenant := strings.TrimSpace(tenantFromMetadata(a.Metadata))
 			if accountTenant == tenant {
@@ -420,6 +420,8 @@ func (h *handler) accountResources(w http.ResponseWriter, r *http.Request) {
 		h.accountDTA(w, r, accountID, parts[2:])
 	case "confcompute":
 		h.accountConfCompute(w, r, accountID, parts[2:])
+	case "mixer":
+		h.accountMixer(w, r, accountID, parts[2:])
 	case "workspace-wallets":
 		h.accountWorkspaceWallets(w, r, accountID, parts[2:])
 	default:

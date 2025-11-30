@@ -6,12 +6,11 @@ import (
 	"io"
 	"testing"
 
-	"github.com/R3E-Network/service_layer/pkg/storage/memory"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 )
 
 func TestNew(t *testing.T) {
-	store := memory.New()
+	store := NewMemoryStore()
 
 	// Test with nil logger - should use default
 	svc := New(store, nil)
@@ -32,7 +31,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestService_Manifest(t *testing.T) {
-	store := memory.New()
+	store := NewMemoryStore()
 	svc := New(store, nil)
 
 	manifest := svc.Manifest()
@@ -51,7 +50,7 @@ func TestService_Manifest(t *testing.T) {
 }
 
 func TestService_Descriptor(t *testing.T) {
-	store := memory.New()
+	store := NewMemoryStore()
 	svc := New(store, nil)
 
 	desc := svc.Descriptor()
@@ -64,7 +63,7 @@ func TestService_Descriptor(t *testing.T) {
 }
 
 func TestService_StartStop(t *testing.T) {
-	store := memory.New()
+	store := NewMemoryStore()
 	svc := New(store, nil)
 	ctx := context.Background()
 
@@ -92,7 +91,7 @@ func TestService_StartStop(t *testing.T) {
 }
 
 func TestService_Create(t *testing.T) {
-	store := memory.New()
+	store := NewMemoryStore()
 	log := logger.NewDefault("test-accounts")
 	log.SetOutput(io.Discard)
 	svc := New(store, log)
@@ -121,7 +120,7 @@ func TestService_Create(t *testing.T) {
 }
 
 func TestService_Get(t *testing.T) {
-	store := memory.New()
+	store := NewMemoryStore()
 	log := logger.NewDefault("test-accounts")
 	log.SetOutput(io.Discard)
 	svc := New(store, log)
@@ -151,7 +150,7 @@ func TestService_Get(t *testing.T) {
 }
 
 func TestService_UpdateMetadata(t *testing.T) {
-	store := memory.New()
+	store := NewMemoryStore()
 	log := logger.NewDefault("test-accounts")
 	log.SetOutput(io.Discard)
 	svc := New(store, log)
@@ -184,7 +183,7 @@ func TestService_UpdateMetadata(t *testing.T) {
 }
 
 func TestService_List(t *testing.T) {
-	store := memory.New()
+	store := NewMemoryStore()
 	log := logger.NewDefault("test-accounts")
 	log.SetOutput(io.Discard)
 	svc := New(store, log)
@@ -214,7 +213,7 @@ func TestService_List(t *testing.T) {
 }
 
 func TestService_Delete(t *testing.T) {
-	store := memory.New()
+	store := NewMemoryStore()
 	log := logger.NewDefault("test-accounts")
 	log.SetOutput(io.Discard)
 	svc := New(store, log)
@@ -247,7 +246,7 @@ func TestService_Delete(t *testing.T) {
 }
 
 func TestService_DeleteWithWhitespace(t *testing.T) {
-	store := memory.New()
+	store := NewMemoryStore()
 	log := logger.NewDefault("test-accounts")
 	log.SetOutput(io.Discard)
 	svc := New(store, log)
@@ -269,7 +268,7 @@ func TestService_DeleteWithWhitespace(t *testing.T) {
 }
 
 func TestService_CreateAccount_EngineAPI(t *testing.T) {
-	store := memory.New()
+	store := NewMemoryStore()
 	log := logger.NewDefault("test-accounts")
 	log.SetOutput(io.Discard)
 	svc := New(store, log)
@@ -295,7 +294,7 @@ func TestService_CreateAccount_EngineAPI(t *testing.T) {
 }
 
 func TestService_ListAccounts_EngineAPI(t *testing.T) {
-	store := memory.New()
+	store := NewMemoryStore()
 	log := logger.NewDefault("test-accounts")
 	log.SetOutput(io.Discard)
 	svc := New(store, log)
@@ -316,7 +315,7 @@ func TestService_ListAccounts_EngineAPI(t *testing.T) {
 }
 
 func TestService(t *testing.T) {
-	store := memory.New()
+	store := NewMemoryStore()
 	svc := New(store, nil)
 
 	acct, err := svc.Create(context.Background(), "alice", map[string]string{"tier": "pro"})
@@ -345,7 +344,7 @@ func TestService(t *testing.T) {
 }
 
 func ExampleService_Create() {
-	store := memory.New()
+	store := NewMemoryStore()
 	log := logger.NewDefault("example-accounts")
 	log.SetOutput(io.Discard)
 	svc := New(store, log)

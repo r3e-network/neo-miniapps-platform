@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/R3E-Network/service_layer/domain/account"
-	domainccip "github.com/R3E-Network/service_layer/domain/ccip"
-	domainlink "github.com/R3E-Network/service_layer/domain/datalink"
+	"github.com/R3E-Network/service_layer/packages/com.r3e.services.accounts"
+	"github.com/R3E-Network/service_layer/packages/com.r3e.services.ccip"
+	"github.com/R3E-Network/service_layer/packages/com.r3e.services.datalink"
 )
 
 func (h *handler) accountCCIP(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {
@@ -54,7 +54,7 @@ func (h *handler) accountCCIPLanes(w http.ResponseWriter, r *http.Request, accou
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			lane := domainccip.Lane{
+			lane := ccip.Lane{
 				AccountID:      accountID,
 				Name:           payload.Name,
 				SourceChain:    payload.SourceChain,
@@ -83,7 +83,7 @@ func (h *handler) accountCCIPLanes(w http.ResponseWriter, r *http.Request, accou
 			}
 			var payload struct {
 				Payload        map[string]any             `json:"payload"`
-				TokenTransfers []domainccip.TokenTransfer `json:"token_transfers"`
+				TokenTransfers []ccip.TokenTransfer `json:"token_transfers"`
 				Metadata       map[string]string          `json:"metadata"`
 				Tags           []string                   `json:"tags"`
 			}
@@ -122,7 +122,7 @@ func (h *handler) accountCCIPLanes(w http.ResponseWriter, r *http.Request, accou
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			lane := domainccip.Lane{
+			lane := ccip.Lane{
 				ID:             laneID,
 				AccountID:      accountID,
 				Name:           payload.Name,
@@ -225,13 +225,13 @@ func (h *handler) accountDataLinkChannels(w http.ResponseWriter, r *http.Request
 				writeError(w, http.StatusBadRequest, fmt.Errorf("signer_set is required"))
 				return
 			}
-			ch := domainlink.Channel{
+			ch := datalink.Channel{
 				AccountID: accountID,
 				Name:      payload.Name,
 				Endpoint:  payload.Endpoint,
 				AuthToken: payload.AuthToken,
 				SignerSet: payload.SignerSet,
-				Status:    domainlink.ChannelStatus(payload.Status),
+				Status:    datalink.ChannelStatus(payload.Status),
 				Metadata:  payload.Metadata,
 			}
 			created, err := h.services.DataLinkService().CreateChannel(r.Context(), ch)
@@ -273,14 +273,14 @@ func (h *handler) accountDataLinkChannels(w http.ResponseWriter, r *http.Request
 				writeError(w, http.StatusBadRequest, fmt.Errorf("signer_set is required"))
 				return
 			}
-			ch := domainlink.Channel{
+			ch := datalink.Channel{
 				ID:        channelID,
 				AccountID: accountID,
 				Name:      payload.Name,
 				Endpoint:  payload.Endpoint,
 				AuthToken: payload.AuthToken,
 				SignerSet: payload.SignerSet,
-				Status:    domainlink.ChannelStatus(payload.Status),
+				Status:    datalink.ChannelStatus(payload.Status),
 				Metadata:  payload.Metadata,
 			}
 			updated, err := h.services.DataLinkService().UpdateChannel(r.Context(), ch)
@@ -354,14 +354,15 @@ func (h *handler) accountDataLinkDeliveries(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *handler) accountWorkspaceWallets(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {
-	if h.services.WorkspaceWalletStore() == nil {
-		writeError(w, http.StatusNotImplemented, fmt.Errorf("workspace wallet store not configured"))
+	acctSvc := h.services.AccountsService()
+	if acctSvc == nil {
+		writeError(w, http.StatusNotImplemented, fmt.Errorf("accounts service not configured"))
 		return
 	}
 	switch len(rest) {
 	case 0:
 		if r.Method == http.MethodGet {
-			wallets, err := h.services.WorkspaceWalletStore().ListWorkspaceWallets(r.Context(), accountID)
+			wallets, err := acctSvc.ListWorkspaceWallets(r.Context(), accountID)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err)
 				return
@@ -379,12 +380,12 @@ func (h *handler) accountWorkspaceWallets(w http.ResponseWriter, r *http.Request
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			if err := account.ValidateWalletAddress(payload.WalletAddress); err != nil {
+			if err := accounts.ValidateWalletAddress(payload.WalletAddress); err != nil {
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			addr := account.NormalizeWalletAddress(payload.WalletAddress)
-			wallet, err := h.services.WorkspaceWalletStore().CreateWorkspaceWallet(r.Context(), account.WorkspaceWallet{
+			addr := accounts.NormalizeWalletAddress(payload.WalletAddress)
+			wallet, err := acctSvc.CreateWorkspaceWallet(r.Context(), accounts.WorkspaceWallet{
 				WorkspaceID:   accountID,
 				WalletAddress: addr,
 				Label:         payload.Label,
@@ -400,7 +401,7 @@ func (h *handler) accountWorkspaceWallets(w http.ResponseWriter, r *http.Request
 	default:
 		if r.Method == http.MethodGet {
 			walletID := rest[0]
-			wallet, err := h.services.WorkspaceWalletStore().GetWorkspaceWallet(r.Context(), walletID)
+			wallet, err := acctSvc.GetWorkspaceWallet(r.Context(), walletID)
 			if err != nil {
 				writeError(w, http.StatusNotFound, err)
 				return

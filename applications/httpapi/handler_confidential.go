@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	domainconf "github.com/R3E-Network/service_layer/domain/confidential"
+	"github.com/R3E-Network/service_layer/packages/com.r3e.services.confidential"
 )
 
 func (h *handler) accountConfCompute(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {
@@ -66,12 +66,12 @@ func (h *handler) accountConfEnclaves(w http.ResponseWriter, r *http.Request, ac
 				}
 				meta["measurement"] = payload.Measurement
 			}
-			enclave := domainconf.Enclave{
+			enclave := confidential.Enclave{
 				AccountID:   accountID,
 				Name:        payload.Name,
 				Endpoint:    payload.Endpoint,
 				Attestation: payload.Attestation,
-				Status:      domainconf.EnclaveStatus(payload.Status),
+				Status:      confidential.EnclaveStatus(payload.Status),
 				Metadata:    meta,
 			}
 			created, err := h.services.ConfidentialService().CreateEnclave(r.Context(), enclave)
@@ -123,13 +123,13 @@ func (h *handler) accountConfEnclaves(w http.ResponseWriter, r *http.Request, ac
 				}
 				meta["measurement"] = payload.Measurement
 			}
-			enclave := domainconf.Enclave{
+			enclave := confidential.Enclave{
 				ID:          enclaveID,
 				AccountID:   accountID,
 				Name:        payload.Name,
 				Endpoint:    payload.Endpoint,
 				Attestation: payload.Attestation,
-				Status:      domainconf.EnclaveStatus(payload.Status),
+				Status:      confidential.EnclaveStatus(payload.Status),
 				Metadata:    meta,
 			}
 			updated, err := h.services.ConfidentialService().UpdateEnclave(r.Context(), enclave)
@@ -168,7 +168,7 @@ func (h *handler) accountConfEnclaves(w http.ResponseWriter, r *http.Request, ac
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			key := domainconf.SealedKey{
+			key := confidential.SealedKey{
 				AccountID: accountID,
 				EnclaveID: enclaveID,
 				Name:      payload.Name,
@@ -207,7 +207,7 @@ func (h *handler) accountConfSealedKeys(w http.ResponseWriter, r *http.Request, 
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		key := domainconf.SealedKey{
+		key := confidential.SealedKey{
 			AccountID: accountID,
 			EnclaveID: payload.EnclaveID,
 			Name:      payload.Name,
@@ -259,7 +259,7 @@ func (h *handler) accountConfAttestations(w http.ResponseWriter, r *http.Request
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		att := domainconf.Attestation{
+		att := confidential.Attestation{
 			AccountID: accountID,
 			EnclaveID: payload.EnclaveID,
 			Report:    payload.Report,
@@ -279,7 +279,7 @@ func (h *handler) accountConfAttestations(w http.ResponseWriter, r *http.Request
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		var result []domainconf.Attestation
+		var result []confidential.Attestation
 		if enclaveID == "" {
 			result, err = h.services.ConfidentialService().ListAccountAttestations(r.Context(), accountID, limit)
 			if err != nil {

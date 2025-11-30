@@ -9,15 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/R3E-Network/service_layer/pkg/storage/memory"
-	"github.com/R3E-Network/service_layer/domain/account"
-	domain "github.com/R3E-Network/service_layer/domain/gasbank"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 )
 
 func TestService_DepositWithdraw(t *testing.T) {
-	store := memory.New()
-	acct, err := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, err := store.CreateAccount(context.Background(), "owner")
 	if err != nil {
 		t.Fatalf("create account: %v", err)
 	}
@@ -72,7 +69,7 @@ func TestService_DepositWithdraw(t *testing.T) {
 	if math.Abs(settled.Balance-5.0) > 1e-3 {
 		t.Fatalf("balance not reduced: %v", settled.Balance)
 	}
-	if settledTx.Status != domain.StatusCompleted {
+	if settledTx.Status != StatusCompleted {
 		t.Fatalf("unexpected status: %s", settledTx.Status)
 	}
 
@@ -91,18 +88,18 @@ func TestService_DepositWithdraw(t *testing.T) {
 	if math.Abs(failureAcct.Available-5.0) > 1e-3 {
 		t.Fatalf("available not restored: %v", failureAcct.Available)
 	}
-	if failureTx.Status != domain.StatusFailed {
+	if failureTx.Status != StatusFailed {
 		t.Fatalf("unexpected failure status: %s", failureTx.Status)
 	}
 }
 
 func TestService_PreventDuplicateWallets(t *testing.T) {
-	store := memory.New()
-	acct1, err := store.CreateAccount(context.Background(), account.Account{Owner: "a"})
+	store := newMockStore()
+	acct1, err := store.CreateAccount(context.Background(), "a")
 	if err != nil {
 		t.Fatalf("create account 1: %v", err)
 	}
-	acct2, err := store.CreateAccount(context.Background(), account.Account{Owner: "b"})
+	acct2, err := store.CreateAccount(context.Background(), "b")
 	if err != nil {
 		t.Fatalf("create account 2: %v", err)
 	}
@@ -117,12 +114,12 @@ func TestService_PreventDuplicateWallets(t *testing.T) {
 }
 
 func TestService_WithdrawRejectsForeignAccount(t *testing.T) {
-	store := memory.New()
-	owner, err := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	owner, err := store.CreateAccount(context.Background(), "owner")
 	if err != nil {
 		t.Fatalf("create owner: %v", err)
 	}
-	other, err := store.CreateAccount(context.Background(), account.Account{Owner: "other"})
+	other, err := store.CreateAccount(context.Background(), "other")
 	if err != nil {
 		t.Fatalf("create other: %v", err)
 	}
@@ -142,12 +139,12 @@ func TestService_WithdrawRejectsForeignAccount(t *testing.T) {
 }
 
 func TestService_DepositRollsBackOnTransactionFailure(t *testing.T) {
-	store := &failingGasBankStore{Store: memory.New(), failCreateTx: true}
-	acct, err := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := &failingGasBankStore{mockStore: newMockStore(), failCreateTx: true}
+	acct, err := store.CreateAccount(context.Background(), "owner")
 	if err != nil {
 		t.Fatalf("create account: %v", err)
 	}
-	gasAcct, err := store.CreateGasAccount(context.Background(), domain.Account{AccountID: acct.ID})
+	gasAcct, err := store.CreateGasAccount(context.Background(), GasBankAccount{AccountID: acct.ID})
 	if err != nil {
 		t.Fatalf("create gas account: %v", err)
 	}
@@ -167,8 +164,8 @@ func TestService_DepositRollsBackOnTransactionFailure(t *testing.T) {
 }
 
 func TestService_Summary(t *testing.T) {
-	store := memory.New()
-	acct, err := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, err := store.CreateAccount(context.Background(), "owner")
 	if err != nil {
 		t.Fatalf("create account: %v", err)
 	}
@@ -210,8 +207,8 @@ func TestService_Summary(t *testing.T) {
 }
 
 func TestService_SubmitApproval(t *testing.T) {
-	store := memory.New()
-	acct, err := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, err := store.CreateAccount(context.Background(), "owner")
 	if err != nil {
 		t.Fatalf("create account: %v", err)
 	}
@@ -233,7 +230,7 @@ func TestService_SubmitApproval(t *testing.T) {
 	if err != nil {
 		t.Fatalf("withdraw: %v", err)
 	}
-	if tx.Status != domain.StatusAwaitingApproval {
+	if tx.Status != StatusAwaitingApproval {
 		t.Fatalf("expected awaiting approval status, got %s", tx.Status)
 	}
 	if math.Abs(updated.Available-6) > 1e-6 {
@@ -247,7 +244,7 @@ func TestService_SubmitApproval(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get transaction: %v", err)
 	}
-	if txAfterFirst.Status != domain.StatusAwaitingApproval {
+	if txAfterFirst.Status != StatusAwaitingApproval {
 		t.Fatalf("expected awaiting approval after first approval, got %s", txAfterFirst.Status)
 	}
 
@@ -258,7 +255,7 @@ func TestService_SubmitApproval(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get transaction after second approval: %v", err)
 	}
-	if txAfterSecond.Status != domain.StatusPending {
+	if txAfterSecond.Status != StatusPending {
 		t.Fatalf("expected pending status after threshold met, got %s", txAfterSecond.Status)
 	}
 	approvals, err := svc.ListApprovals(context.Background(), tx.ID)
@@ -287,14 +284,14 @@ func TestService_SubmitApproval(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get rejected transaction: %v", err)
 	}
-	if rejectedTx.Status != domain.StatusCancelled {
+	if rejectedTx.Status != StatusCancelled {
 		t.Fatalf("expected cancelled status, got %s", rejectedTx.Status)
 	}
 }
 
 func TestService_EnsureAccountWithOptions(t *testing.T) {
-	store := memory.New()
-	acct, err := store.CreateAccount(context.Background(), account.Account{Owner: "opt-owner"})
+	store := newMockStore()
+	acct, err := store.CreateAccount(context.Background(), "opt-owner")
 	if err != nil {
 		t.Fatalf("create account: %v", err)
 	}
@@ -344,8 +341,8 @@ func TestService_EnsureAccountWithOptions(t *testing.T) {
 }
 
 func TestService_WithdrawWithScheduleAndLimits(t *testing.T) {
-	store := memory.New()
-	acct, err := store.CreateAccount(context.Background(), account.Account{Owner: "limits"})
+	store := newMockStore()
+	acct, err := store.CreateAccount(context.Background(), "limits")
 	if err != nil {
 		t.Fatalf("create account: %v", err)
 	}
@@ -389,13 +386,13 @@ func TestService_WithdrawWithScheduleAndLimits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scheduled withdraw: %v", err)
 	}
-	if scheduledTx.Status != domain.StatusScheduled {
+	if scheduledTx.Status != StatusScheduled {
 		t.Fatalf("expected scheduled status, got %s", scheduledTx.Status)
 	}
 
 	// Force schedule due and activate
 	due := time.Now().Add(-time.Minute)
-	if _, err := store.SaveWithdrawalSchedule(context.Background(), domain.WithdrawalSchedule{
+	if _, err := store.SaveWithdrawalSchedule(context.Background(), WithdrawalSchedule{
 		TransactionID: scheduledTx.ID,
 		ScheduleAt:    due,
 		NextRunAt:     due,
@@ -412,15 +409,15 @@ func TestService_WithdrawWithScheduleAndLimits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get activated transaction: %v", err)
 	}
-	if tx.Status != domain.StatusPending {
+	if tx.Status != StatusPending {
 		t.Fatalf("expected pending status after activation, got %s", tx.Status)
 	}
 }
 
 func TestService_WithdrawRejectsCronExpressions(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	gasAcct, _ := store.CreateGasAccount(context.Background(), domain.Account{AccountID: acct.ID})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
+	gasAcct, _ := store.CreateGasAccount(context.Background(), GasBankAccount{AccountID: acct.ID})
 
 	svc := New(store, store, nil)
 	_, _, err := svc.Deposit(context.Background(), gasAcct.ID, 10, "tx", "", "")
@@ -439,12 +436,12 @@ func TestService_WithdrawRejectsCronExpressions(t *testing.T) {
 }
 
 func TestService_WithdrawRollsBackOnTransactionFailure(t *testing.T) {
-	store := &failingGasBankStore{Store: memory.New()}
-	acct, err := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := &failingGasBankStore{mockStore: newMockStore()}
+	acct, err := store.CreateAccount(context.Background(), "owner")
 	if err != nil {
 		t.Fatalf("create account: %v", err)
 	}
-	gasAcct, err := store.CreateGasAccount(context.Background(), domain.Account{AccountID: acct.ID})
+	gasAcct, err := store.CreateGasAccount(context.Background(), GasBankAccount{AccountID: acct.ID})
 	if err != nil {
 		t.Fatalf("create gas account: %v", err)
 	}
@@ -472,15 +469,15 @@ func TestService_WithdrawRollsBackOnTransactionFailure(t *testing.T) {
 }
 
 type failingGasBankStore struct {
-	*memory.Store
+	*mockStore
 	failCreateTx bool
 }
 
-func (s *failingGasBankStore) CreateGasTransaction(ctx context.Context, tx domain.Transaction) (domain.Transaction, error) {
+func (s *failingGasBankStore) CreateGasTransaction(ctx context.Context, tx Transaction) (Transaction, error) {
 	if s.failCreateTx {
-		return domain.Transaction{}, fmt.Errorf("stub create gas transaction failure")
+		return Transaction{}, fmt.Errorf("stub create gas transaction failure")
 	}
-	created, err := s.Store.CreateGasTransaction(ctx, tx)
+	created, err := s.mockStore.CreateGasTransaction(ctx, tx)
 	if err == nil {
 		// Reset failure flag so subsequent operations can toggle explicitly.
 		s.failCreateTx = false
@@ -489,9 +486,9 @@ func (s *failingGasBankStore) CreateGasTransaction(ctx context.Context, tx domai
 }
 
 func ExampleService_Deposit() {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	gasAcct, _ := store.CreateGasAccount(context.Background(), domain.Account{AccountID: acct.ID})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
+	gasAcct, _ := store.CreateGasAccount(context.Background(), GasBankAccount{AccountID: acct.ID})
 
 	log := logger.NewDefault("example-gasbank")
 	log.SetOutput(io.Discard)
@@ -535,8 +532,8 @@ func TestService_Descriptor(t *testing.T) {
 }
 
 func TestService_GetAccount(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-get")
 
@@ -550,8 +547,8 @@ func TestService_GetAccount(t *testing.T) {
 }
 
 func TestService_ListAccounts(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	svc.EnsureAccount(context.Background(), acct.ID, "wallet1")
 
@@ -565,8 +562,8 @@ func TestService_ListAccounts(t *testing.T) {
 }
 
 func TestService_ListTransactions(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-tx")
 	svc.Deposit(context.Background(), gasAcct.ID, 10, "tx1", "from", "to")
@@ -581,8 +578,8 @@ func TestService_ListTransactions(t *testing.T) {
 }
 
 func TestService_GetWithdrawal(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-wd")
 	svc.Deposit(context.Background(), gasAcct.ID, 10, "tx-wd", "from", "to")
@@ -610,8 +607,8 @@ func TestService_GetWithdrawal_MissingParams(t *testing.T) {
 }
 
 func TestService_CancelWithdrawal(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-cancel")
 	svc.Deposit(context.Background(), gasAcct.ID, 10, "tx-dep", "from", "to")
@@ -621,14 +618,14 @@ func TestService_CancelWithdrawal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cancel withdrawal: %v", err)
 	}
-	if cancelled.Status != domain.StatusCancelled {
+	if cancelled.Status != StatusCancelled {
 		t.Fatalf("expected cancelled status, got %s", cancelled.Status)
 	}
 }
 
 func TestService_ListDeadLetters(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 
 	letters, err := svc.ListDeadLetters(context.Background(), acct.ID, 10)
@@ -649,8 +646,8 @@ func TestService_ListDeadLetters_MissingParams(t *testing.T) {
 }
 
 func TestService_ListSettlementAttempts(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-settle")
 	svc.Deposit(context.Background(), gasAcct.ID, 10, "tx-dep", "from", "to")
@@ -675,8 +672,8 @@ func TestService_ListSettlementAttempts_MissingParams(t *testing.T) {
 }
 
 func TestService_RetryDeadLetter(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 
 	// Test missing params
@@ -695,8 +692,8 @@ func TestService_RetryDeadLetter_MissingParams(t *testing.T) {
 }
 
 func TestService_DeleteDeadLetter(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 
 	// Test missing params
@@ -715,8 +712,8 @@ func TestService_DeleteDeadLetter_MissingParams(t *testing.T) {
 }
 
 func TestService_MarkDeadLetter(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-mark")
 	svc.Deposit(context.Background(), gasAcct.ID, 10, "tx-dep", "from", "to")
@@ -728,22 +725,22 @@ func TestService_MarkDeadLetter(t *testing.T) {
 	}
 	// Verify tx status updated
 	updatedTx, _ := store.GetGasTransaction(context.Background(), tx.ID)
-	if updatedTx.Status != domain.StatusDeadLetter {
+	if updatedTx.Status != StatusDeadLetter {
 		t.Fatalf("expected dead lettered status, got %s", updatedTx.Status)
 	}
 }
 
 func TestService_MarkDeadLetter_MissingParams(t *testing.T) {
 	svc := New(nil, nil, nil)
-	err := svc.MarkDeadLetter(context.Background(), domain.Transaction{Type: domain.TransactionWithdrawal}, "reason", "")
+	err := svc.MarkDeadLetter(context.Background(), Transaction{Type: TransactionWithdrawal}, "reason", "")
 	if err == nil {
 		t.Fatalf("expected error for missing account")
 	}
 }
 
 func TestService_ListTransactionsFiltered(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-filter")
 	svc.Deposit(context.Background(), gasAcct.ID, 10, "tx-dep", "from", "to")
@@ -761,7 +758,7 @@ func TestService_ListTransactionsFiltered(t *testing.T) {
 // FeeCollector tests
 
 func TestFeeCollector_NewFeeCollector(t *testing.T) {
-	store := memory.New()
+	store := newMockStore()
 	svc := New(store, store, nil)
 	fc := NewFeeCollector(svc)
 	if fc == nil {
@@ -770,7 +767,7 @@ func TestFeeCollector_NewFeeCollector(t *testing.T) {
 }
 
 func TestFeeCollector_CollectFee_ZeroAmount(t *testing.T) {
-	store := memory.New()
+	store := newMockStore()
 	svc := New(store, store, nil)
 	fc := NewFeeCollector(svc)
 	// Zero amount should return nil
@@ -785,8 +782,8 @@ func TestFeeCollector_CollectFee_ZeroAmount(t *testing.T) {
 }
 
 func TestFeeCollector_CollectFee_NoGasAccount(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	fc := NewFeeCollector(svc)
 	err := fc.CollectFee(context.Background(), acct.ID, 100000000, "ref")
@@ -796,8 +793,8 @@ func TestFeeCollector_CollectFee_NoGasAccount(t *testing.T) {
 }
 
 func TestFeeCollector_CollectFee_InsufficientBalance(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	fc := NewFeeCollector(svc)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-fee")
@@ -810,8 +807,8 @@ func TestFeeCollector_CollectFee_InsufficientBalance(t *testing.T) {
 }
 
 func TestFeeCollector_CollectFee_Success(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	fc := NewFeeCollector(svc)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-fee")
@@ -828,7 +825,7 @@ func TestFeeCollector_CollectFee_Success(t *testing.T) {
 }
 
 func TestFeeCollector_RefundFee_ZeroAmount(t *testing.T) {
-	store := memory.New()
+	store := newMockStore()
 	svc := New(store, store, nil)
 	fc := NewFeeCollector(svc)
 	err := fc.RefundFee(context.Background(), "acct", 0, "ref")
@@ -838,8 +835,8 @@ func TestFeeCollector_RefundFee_ZeroAmount(t *testing.T) {
 }
 
 func TestFeeCollector_RefundFee_NoGasAccount(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	fc := NewFeeCollector(svc)
 	err := fc.RefundFee(context.Background(), acct.ID, 100000000, "ref")
@@ -849,8 +846,8 @@ func TestFeeCollector_RefundFee_NoGasAccount(t *testing.T) {
 }
 
 func TestFeeCollector_RefundFee_Success(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	fc := NewFeeCollector(svc)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-refund")
@@ -864,8 +861,8 @@ func TestFeeCollector_RefundFee_Success(t *testing.T) {
 }
 
 func TestFeeCollector_RefundFee_ExceedsLocked(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	fc := NewFeeCollector(svc)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-refund2")
@@ -879,7 +876,7 @@ func TestFeeCollector_RefundFee_ExceedsLocked(t *testing.T) {
 }
 
 func TestFeeCollector_SettleFee_ZeroAmount(t *testing.T) {
-	store := memory.New()
+	store := newMockStore()
 	svc := New(store, store, nil)
 	fc := NewFeeCollector(svc)
 	err := fc.SettleFee(context.Background(), "acct", 0, "ref")
@@ -889,8 +886,8 @@ func TestFeeCollector_SettleFee_ZeroAmount(t *testing.T) {
 }
 
 func TestFeeCollector_SettleFee_NoGasAccount(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	fc := NewFeeCollector(svc)
 	err := fc.SettleFee(context.Background(), acct.ID, 100000000, "ref")
@@ -900,8 +897,8 @@ func TestFeeCollector_SettleFee_NoGasAccount(t *testing.T) {
 }
 
 func TestFeeCollector_SettleFee_Success(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	fc := NewFeeCollector(svc)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-settle")
@@ -915,8 +912,8 @@ func TestFeeCollector_SettleFee_Success(t *testing.T) {
 }
 
 func TestFeeCollector_SettleFee_ExceedsLocked(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	fc := NewFeeCollector(svc)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-settle2")
@@ -932,7 +929,7 @@ func TestFeeCollector_SettleFee_ExceedsLocked(t *testing.T) {
 // Additional service tests for edge cases
 
 func TestService_ActivateDueSchedules(t *testing.T) {
-	store := memory.New()
+	store := newMockStore()
 	svc := New(store, store, nil)
 	err := svc.ActivateDueSchedules(context.Background(), 10)
 	if err != nil {
@@ -941,8 +938,8 @@ func TestService_ActivateDueSchedules(t *testing.T) {
 }
 
 func TestService_ListApprovals(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet")
 	svc.Deposit(context.Background(), gasAcct.ID, 10, "tx-dep", "from", "to")
@@ -965,7 +962,7 @@ func TestService_ListApprovals_MissingParams(t *testing.T) {
 }
 
 func TestService_EnsureAccountWithOptions_InvalidOwner(t *testing.T) {
-	store := memory.New()
+	store := newMockStore()
 	svc := New(store, store, nil)
 	_, err := svc.EnsureAccountWithOptions(context.Background(), "", EnsureAccountOptions{WalletAddress: "wallet"})
 	if err == nil {
@@ -974,8 +971,8 @@ func TestService_EnsureAccountWithOptions_InvalidOwner(t *testing.T) {
 }
 
 func TestService_Deposit_InvalidAmount(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet")
 	_, _, err := svc.Deposit(context.Background(), gasAcct.ID, 0, "tx", "from", "to")
@@ -989,8 +986,8 @@ func TestService_Deposit_InvalidAmount(t *testing.T) {
 }
 
 func TestService_RetryDeadLetter_Success(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-retry")
 	svc.Deposit(context.Background(), gasAcct.ID, 10, "tx-dep", "from", "to")
@@ -1000,7 +997,7 @@ func TestService_RetryDeadLetter_Success(t *testing.T) {
 	svc.MarkDeadLetter(context.Background(), tx, "test reason", "test error")
 
 	// Create dead letter entry in store
-	store.UpsertDeadLetter(context.Background(), domain.DeadLetter{
+	store.UpsertDeadLetter(context.Background(), DeadLetter{
 		TransactionID: tx.ID,
 		AccountID:     acct.ID,
 		Reason:        "test reason",
@@ -1011,21 +1008,21 @@ func TestService_RetryDeadLetter_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("retry dead letter: %v", err)
 	}
-	if retried.Status == domain.StatusDeadLetter {
+	if retried.Status == StatusDeadLetter {
 		t.Fatalf("expected status to change from dead letter")
 	}
 }
 
 func TestService_RetryDeadLetter_WrongOwner(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	acct2, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner2"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
+	acct2, _ := store.CreateAccount(context.Background(), "owner2")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet")
 	svc.Deposit(context.Background(), gasAcct.ID, 10, "tx-dep", "from", "to")
 	_, tx, _ := svc.Withdraw(context.Background(), acct.ID, gasAcct.ID, 3, "dest")
 
-	store.UpsertDeadLetter(context.Background(), domain.DeadLetter{
+	store.UpsertDeadLetter(context.Background(), DeadLetter{
 		TransactionID: tx.ID,
 		AccountID:     acct.ID,
 	})
@@ -1038,15 +1035,15 @@ func TestService_RetryDeadLetter_WrongOwner(t *testing.T) {
 }
 
 func TestService_DeleteDeadLetter_Success(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-del")
 	svc.Deposit(context.Background(), gasAcct.ID, 10, "tx-dep", "from", "to")
 	_, tx, _ := svc.Withdraw(context.Background(), acct.ID, gasAcct.ID, 3, "dest")
 
 	svc.MarkDeadLetter(context.Background(), tx, "test reason", "test error")
-	store.UpsertDeadLetter(context.Background(), domain.DeadLetter{
+	store.UpsertDeadLetter(context.Background(), DeadLetter{
 		TransactionID: tx.ID,
 		AccountID:     acct.ID,
 	})
@@ -1058,15 +1055,15 @@ func TestService_DeleteDeadLetter_Success(t *testing.T) {
 }
 
 func TestService_DeleteDeadLetter_WrongOwner(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	acct2, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner2"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
+	acct2, _ := store.CreateAccount(context.Background(), "owner2")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet")
 	svc.Deposit(context.Background(), gasAcct.ID, 10, "tx-dep", "from", "to")
 	_, tx, _ := svc.Withdraw(context.Background(), acct.ID, gasAcct.ID, 3, "dest")
 
-	store.UpsertDeadLetter(context.Background(), domain.DeadLetter{
+	store.UpsertDeadLetter(context.Background(), DeadLetter{
 		TransactionID: tx.ID,
 		AccountID:     acct.ID,
 	})
@@ -1086,8 +1083,8 @@ func TestService_Summary_Error(t *testing.T) {
 }
 
 func TestService_GetWithdrawal_Success(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-getwd")
 	svc.Deposit(context.Background(), gasAcct.ID, 10, "tx-dep", "from", "to")
@@ -1103,8 +1100,8 @@ func TestService_GetWithdrawal_Success(t *testing.T) {
 }
 
 func TestService_ListAccounts_Success(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	svc.EnsureAccount(context.Background(), acct.ID, "wallet")
 	accounts, err := svc.ListAccounts(context.Background(), acct.ID)
@@ -1117,7 +1114,7 @@ func TestService_ListAccounts_Success(t *testing.T) {
 }
 
 func TestService_ListAccounts_EmptyOwner(t *testing.T) {
-	store := memory.New()
+	store := newMockStore()
 	svc := New(store, store, nil)
 	// Empty owner ID still works, returns empty list
 	accounts, err := svc.ListAccounts(context.Background(), "")
@@ -1130,7 +1127,7 @@ func TestService_ListAccounts_EmptyOwner(t *testing.T) {
 }
 
 func TestService_CancelWithdrawal_Validation(t *testing.T) {
-	store := memory.New()
+	store := newMockStore()
 	svc := New(store, store, nil)
 	_, err := svc.CancelWithdrawal(context.Background(), "", "tx", "reason")
 	if err == nil {
@@ -1143,9 +1140,9 @@ func TestService_CancelWithdrawal_Validation(t *testing.T) {
 }
 
 func TestService_CancelWithdrawal_WrongOwner(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	acct2, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner2"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
+	acct2, _ := store.CreateAccount(context.Background(), "owner2")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet")
 	svc.Deposit(context.Background(), gasAcct.ID, 10, "tx-dep", "from", "to")
@@ -1158,9 +1155,9 @@ func TestService_CancelWithdrawal_WrongOwner(t *testing.T) {
 }
 
 func TestService_GetWithdrawal_WrongOwner(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	acct2, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner2"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
+	acct2, _ := store.CreateAccount(context.Background(), "owner2")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet")
 	svc.Deposit(context.Background(), gasAcct.ID, 10, "tx-dep", "from", "to")
@@ -1173,9 +1170,9 @@ func TestService_GetWithdrawal_WrongOwner(t *testing.T) {
 }
 
 func TestService_ListSettlementAttempts_WrongOwner(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	acct2, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner2"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
+	acct2, _ := store.CreateAccount(context.Background(), "owner2")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet")
 	svc.Deposit(context.Background(), gasAcct.ID, 10, "tx-dep", "from", "to")
@@ -1188,7 +1185,7 @@ func TestService_ListSettlementAttempts_WrongOwner(t *testing.T) {
 }
 
 func TestService_SubmitApproval_Validation(t *testing.T) {
-	store := memory.New()
+	store := newMockStore()
 	svc := New(store, store, nil)
 	// Missing transaction_id
 	_, _, err := svc.SubmitApproval(context.Background(), "", "approver", "", "", true)
@@ -1198,7 +1195,7 @@ func TestService_SubmitApproval_Validation(t *testing.T) {
 }
 
 func TestService_SubmitApproval_TxNotFound(t *testing.T) {
-	store := memory.New()
+	store := newMockStore()
 	svc := New(store, store, nil)
 	_, _, err := svc.SubmitApproval(context.Background(), "nonexistent", "approver", "", "", true)
 	if err == nil {
@@ -1207,8 +1204,8 @@ func TestService_SubmitApproval_TxNotFound(t *testing.T) {
 }
 
 func TestService_ActivateDueSchedules_WithApproval(t *testing.T) {
-	store := memory.New()
-	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
+	store := newMockStore()
+	acct, _ := store.CreateAccount(context.Background(), "owner")
 	svc := New(store, store, nil)
 	gasAcct, _ := svc.EnsureAccount(context.Background(), acct.ID, "wallet-sched")
 	gasAcct.RequiredApprovals = 2
@@ -1226,7 +1223,7 @@ func TestService_ActivateDueSchedules_WithApproval(t *testing.T) {
 
 	// Make it due
 	due := time.Now().Add(-time.Minute)
-	store.SaveWithdrawalSchedule(context.Background(), domain.WithdrawalSchedule{
+	store.SaveWithdrawalSchedule(context.Background(), WithdrawalSchedule{
 		TransactionID: scheduledTx.ID,
 		ScheduleAt:    due,
 		NextRunAt:     due,
@@ -1240,7 +1237,7 @@ func TestService_ActivateDueSchedules_WithApproval(t *testing.T) {
 	}
 
 	tx, _ := store.GetGasTransaction(context.Background(), scheduledTx.ID)
-	if tx.Status != domain.StatusAwaitingApproval {
+	if tx.Status != StatusAwaitingApproval {
 		t.Fatalf("expected awaiting approval status, got %s", tx.Status)
 	}
 }

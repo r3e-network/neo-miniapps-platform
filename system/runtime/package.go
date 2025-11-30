@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/R3E-Network/service_layer/pkg/storage"
 	engine "github.com/R3E-Network/service_layer/system/core"
 	"github.com/R3E-Network/service_layer/system/framework"
 )
@@ -112,8 +111,8 @@ type PackageRuntime interface {
 	// Storage access (if permission granted) - generic key-value storage
 	Storage() (PackageStorage, error)
 
-	// StoreProvider returns typed database stores - analogous to Android's ContentResolver.
-	// This provides access to relational database operations for each service domain.
+	// StoreProvider returns database access - analogous to Android's ContentResolver.
+	// This provides generic database access. Services create their own typed stores.
 	StoreProvider() StoreProvider
 
 	// Bus access (if permission granted)
@@ -213,47 +212,24 @@ func (m *PackageManifest) CheckPermissions(granted map[string]bool) []string {
 // Store Provider Interface (Android ContentResolver equivalent)
 // =============================================================================
 
-// StoreProvider provides typed access to relational database stores.
-// This is analogous to Android's ContentResolver, providing domain-specific
-// data access to service packages.
+// StoreProvider provides generic database access to service packages.
+// This is analogous to Android's ContentResolver, providing only generic
+// database access. Each service package is responsible for creating its own
+// typed store implementation using the database connection.
 //
-// Unlike PackageStorage (generic key-value), StoreProvider offers typed
-// interfaces for each service domain's persistence needs.
+// Design Principle: The Service Engine knows NOTHING about service-specific
+// types or interfaces. Each service package defines its own model, store
+// interface, and store implementation internally.
 type StoreProvider interface {
-	AccountStore() AccountStoreAPI
-	FunctionStore() FunctionStoreAPI
-	GasBankStore() GasBankStoreAPI
-	AutomationStore() AutomationStoreAPI
-	DataFeedStore() DataFeedStoreAPI
-	DataStreamStore() DataStreamStoreAPI
-	DataLinkStore() DataLinkStoreAPI
-	DTAStore() DTAStoreAPI
-	ConfidentialStore() ConfidentialStoreAPI
-	OracleStore() OracleStoreAPI
-	SecretStore() SecretStoreAPI
-	CREStore() CREStoreAPI
-	CCIPStore() CCIPStoreAPI
-	VRFStore() VRFStoreAPI
-	WorkspaceWalletStore() WorkspaceWalletStoreAPI
+	// Database returns the underlying database connection (*sql.DB).
+	// Service packages use this to create their own typed stores.
+	Database() any
+
+	// AccountExists checks if an account exists by ID.
+	// This is a shared utility since most services need account validation.
+	AccountExists(ctx context.Context, accountID string) error
+
+	// AccountTenant returns the tenant for an account (empty if none).
+	// This supports multi-tenancy filtering in service stores.
+	AccountTenant(ctx context.Context, accountID string) string
 }
-
-// Store API interfaces - these are implemented by pkg/storage
-// We define minimal interfaces here to avoid import cycles.
-// The actual implementations come from pkg/storage package.
-
-// AccountStoreAPI is the interface for account persistence.
-type AccountStoreAPI interface{ storage.AccountStore }
-type FunctionStoreAPI interface{ storage.FunctionStore }
-type GasBankStoreAPI interface{ storage.GasBankStore }
-type AutomationStoreAPI interface{ storage.AutomationStore }
-type DataFeedStoreAPI interface{ storage.DataFeedStore }
-type DataStreamStoreAPI interface{ storage.DataStreamStore }
-type DataLinkStoreAPI interface{ storage.DataLinkStore }
-type DTAStoreAPI interface{ storage.DTAStore }
-type ConfidentialStoreAPI interface{ storage.ConfidentialStore }
-type OracleStoreAPI interface{ storage.OracleStore }
-type SecretStoreAPI interface{ storage.SecretStore }
-type CREStoreAPI interface{ storage.CREStore }
-type CCIPStoreAPI interface{ storage.CCIPStore }
-type VRFStoreAPI interface{ storage.VRFStore }
-type WorkspaceWalletStoreAPI interface{ storage.WorkspaceWalletStore }

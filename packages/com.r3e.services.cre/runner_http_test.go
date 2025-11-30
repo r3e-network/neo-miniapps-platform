@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/R3E-Network/service_layer/domain/cre"
+	
 )
 
 func TestHTTPRunner_Dispatch(t *testing.T) {
@@ -19,7 +19,7 @@ func TestHTTPRunner_Dispatch(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	runner := NewHTTPRunner(nil, nil)
-	err := runner.Dispatch(context.Background(), cre.Run{ID: "run1"}, cre.Playbook{ID: "pb1"}, &cre.Executor{ID: "exec1", Endpoint: ts.URL})
+	err := runner.Dispatch(context.Background(), Run{ID: "run1"}, Playbook{ID: "pb1"}, &Executor{ID: "exec1", Endpoint: ts.URL})
 	if err != nil {
 		t.Fatalf("dispatch error: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestHTTPRunner_Dispatch(t *testing.T) {
 
 func TestHTTPRunner_SkipWithoutExecutor(t *testing.T) {
 	runner := NewHTTPRunner(nil, nil)
-	if err := runner.Dispatch(context.Background(), cre.Run{}, cre.Playbook{}, nil); err != nil {
+	if err := runner.Dispatch(context.Background(), Run{}, Playbook{}, nil); err != nil {
 		t.Fatalf("expected nil error when executor missing")
 	}
 }

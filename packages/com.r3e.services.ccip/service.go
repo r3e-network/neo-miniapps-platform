@@ -1,13 +1,10 @@
 package ccip
 
 import (
-	"github.com/R3E-Network/service_layer/domain/account"
 	"context"
 	"fmt"
 	"strings"
 
-	"github.com/R3E-Network/service_layer/pkg/storage"
-	domainccip "github.com/R3E-Network/service_layer/domain/ccip"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	engine "github.com/R3E-Network/service_layer/system/core"
 	"github.com/R3E-Network/service_layer/system/framework"
@@ -16,36 +13,37 @@ import (
 
 // Dispatcher notifies downstream deliverers when a CCIP message is ready.
 type Dispatcher interface {
-	Dispatch(ctx context.Context, msg domainccip.Message, lane domainccip.Lane) error
+	Dispatch(ctx context.Context, msg Message, lane Lane) error
 }
 
 // DispatcherFunc adapts a function to the dispatcher interface.
-type DispatcherFunc func(ctx context.Context, msg domainccip.Message, lane domainccip.Lane) error
+type DispatcherFunc func(ctx context.Context, msg Message, lane Lane) error
 
 // Dispatch calls f(ctx, msg, lane).
-func (f DispatcherFunc) Dispatch(ctx context.Context, msg domainccip.Message, lane domainccip.Lane) error {
+func (f DispatcherFunc) Dispatch(ctx context.Context, msg Message, lane Lane) error {
 	return f(ctx, msg, lane)
 }
 
 // Service orchestrates CCIP lanes and messages.
 type Service struct {
 	framework.ServiceBase
-	base       *core.Base
-	store      storage.CCIPStore
+	accounts   AccountChecker
+	wallets    WalletChecker
+	store      Store
 	dispatcher Dispatcher
 	dispatch   core.DispatchOptions
 	log        *logger.Logger
 }
 
 // New creates a CCIP service instance.
-func New(accounts storage.AccountStore, store storage.CCIPStore, log *logger.Logger) *Service {
+func New(accounts AccountChecker, store Store, log *logger.Logger) *Service {
 	if log == nil {
 		log = logger.NewDefault("ccip")
 	}
 	svc := &Service{
-		base:  core.NewBaseFromStore[account.Account](accounts),
-		store: store,
-		dispatcher: DispatcherFunc(func(context.Context, domainccip.Message, domainccip.Lane) error {
+		accounts: accounts,
+		store:    store,
+		dispatcher: DispatcherFunc(func(context.Context, Message, Lane) error {
 			return nil
 		}),
 		dispatch: core.NewDispatchOptions(),
@@ -62,9 +60,9 @@ func (s *Service) WithDispatcher(d Dispatcher) {
 	}
 }
 
-// WithWorkspaceWallets injects wallet validation for signer sets.
-func (s *Service) WithWorkspaceWallets(store storage.WorkspaceWalletStore) {
-	s.base.SetWallets(core.WrapWalletStore[account.WorkspaceWallet](store))
+// WithWalletChecker injects a wallet checker for ownership validation.
+func (s *Service) WithWalletChecker(w WalletChecker) {
+	s.wallets = w
 }
 
 // WithDispatcherRetry configures retry behavior for dispatcher calls.
@@ -104,85 +102,85 @@ func (s *Service) Manifest() *framework.Manifest {
 // Start/Stop/Ready are inherited from framework.ServiceBase.
 
 // CreateLane validates and stores a new lane.
-func (s *Service) CreateLane(ctx context.Context, lane domainccip.Lane) (domainccip.Lane, error) {
-	if err := s.base.EnsureAccount(ctx, lane.AccountID); err != nil {
-		return domainccip.Lane{}, err
+func (s *Service) CreateLane(ctx context.Context, lane Lane) (Lane, error) {
+	if err := s.accounts.AccountExists(ctx, lane.AccountID); err != nil {
+		return Lane{}, err
 	}
 	if err := s.normalizeLane(&lane); err != nil {
-		return domainccip.Lane{}, err
+		return Lane{}, err
 	}
-	if err := s.base.EnsureSignersOwned(ctx, lane.AccountID, lane.SignerSet); err != nil {
-		return domainccip.Lane{}, err
+	if err := s.ensureSignersOwned(ctx, lane.AccountID, lane.SignerSet); err != nil {
+		return Lane{}, err
 	}
 	created, err := s.store.CreateLane(ctx, lane)
 	if err != nil {
-		return domainccip.Lane{}, err
+		return Lane{}, err
 	}
 	s.log.WithField("lane_id", created.ID).WithField("account_id", created.AccountID).Info("ccip lane created")
 	return created, nil
 }
 
 // UpdateLane updates a lane if owned by the account.
-func (s *Service) UpdateLane(ctx context.Context, lane domainccip.Lane) (domainccip.Lane, error) {
+func (s *Service) UpdateLane(ctx context.Context, lane Lane) (Lane, error) {
 	stored, err := s.store.GetLane(ctx, lane.ID)
 	if err != nil {
-		return domainccip.Lane{}, err
+		return Lane{}, err
 	}
 	if err := core.EnsureOwnership(stored.AccountID, lane.AccountID, "lane", lane.ID); err != nil {
-		return domainccip.Lane{}, err
+		return Lane{}, err
 	}
 	lane.AccountID = stored.AccountID
 	if err := s.normalizeLane(&lane); err != nil {
-		return domainccip.Lane{}, err
+		return Lane{}, err
 	}
-	if err := s.base.EnsureSignersOwned(ctx, lane.AccountID, lane.SignerSet); err != nil {
-		return domainccip.Lane{}, err
+	if err := s.ensureSignersOwned(ctx, lane.AccountID, lane.SignerSet); err != nil {
+		return Lane{}, err
 	}
 	updated, err := s.store.UpdateLane(ctx, lane)
 	if err != nil {
-		return domainccip.Lane{}, err
+		return Lane{}, err
 	}
 	s.log.WithField("lane_id", lane.ID).WithField("account_id", lane.AccountID).Info("ccip lane updated")
 	return updated, nil
 }
 
 // GetLane fetches a lane ensuring ownership.
-func (s *Service) GetLane(ctx context.Context, accountID, laneID string) (domainccip.Lane, error) {
+func (s *Service) GetLane(ctx context.Context, accountID, laneID string) (Lane, error) {
 	lane, err := s.store.GetLane(ctx, laneID)
 	if err != nil {
-		return domainccip.Lane{}, err
+		return Lane{}, err
 	}
 	if err := core.EnsureOwnership(lane.AccountID, accountID, "lane", laneID); err != nil {
-		return domainccip.Lane{}, err
+		return Lane{}, err
 	}
 	return lane, nil
 }
 
 // ListLanes returns account lanes.
-func (s *Service) ListLanes(ctx context.Context, accountID string) ([]domainccip.Lane, error) {
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
+func (s *Service) ListLanes(ctx context.Context, accountID string) ([]Lane, error) {
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
 		return nil, err
 	}
 	return s.store.ListLanes(ctx, accountID)
 }
 
 // SendMessage creates a message for a lane.
-func (s *Service) SendMessage(ctx context.Context, accountID, laneID string, payload map[string]any, tokens []domainccip.TokenTransfer, metadata map[string]string, tags []string) (domainccip.Message, error) {
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
-		return domainccip.Message{}, err
+func (s *Service) SendMessage(ctx context.Context, accountID, laneID string, payload map[string]any, tokens []TokenTransfer, metadata map[string]string, tags []string) (Message, error) {
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
+		return Message{}, err
 	}
 	lane, err := s.store.GetLane(ctx, laneID)
 	if err != nil {
-		return domainccip.Message{}, err
+		return Message{}, err
 	}
 	if err := core.EnsureOwnership(lane.AccountID, accountID, "lane", laneID); err != nil {
-		return domainccip.Message{}, err
+		return Message{}, err
 	}
 
-	msg := domainccip.Message{
+	msg := Message{
 		AccountID:      accountID,
 		LaneID:         laneID,
-		Status:         domainccip.MessageStatusPending,
+		Status:         MessageStatusPending,
 		Payload:        core.CloneAnyMap(payload),
 		TokenTransfers: normalizeTransfers(tokens),
 		Metadata:       core.NormalizeMetadata(metadata),
@@ -191,7 +189,7 @@ func (s *Service) SendMessage(ctx context.Context, accountID, laneID string, pay
 
 	created, err := s.store.CreateMessage(ctx, msg)
 	if err != nil {
-		return domainccip.Message{}, err
+		return Message{}, err
 	}
 	attrs := map[string]string{"message_id": created.ID, "lane_id": lane.ID}
 	if err := s.dispatch.Run(ctx, "ccip.dispatch", attrs, func(spanCtx context.Context) error {
@@ -207,20 +205,20 @@ func (s *Service) SendMessage(ctx context.Context, accountID, laneID string, pay
 }
 
 // GetMessage fetches a message for the account.
-func (s *Service) GetMessage(ctx context.Context, accountID, messageID string) (domainccip.Message, error) {
+func (s *Service) GetMessage(ctx context.Context, accountID, messageID string) (Message, error) {
 	msg, err := s.store.GetMessage(ctx, messageID)
 	if err != nil {
-		return domainccip.Message{}, err
+		return Message{}, err
 	}
 	if err := core.EnsureOwnership(msg.AccountID, accountID, "message", messageID); err != nil {
-		return domainccip.Message{}, err
+		return Message{}, err
 	}
 	return msg, nil
 }
 
 // ListMessages lists messages for an account.
-func (s *Service) ListMessages(ctx context.Context, accountID string, limit int) ([]domainccip.Message, error) {
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
+func (s *Service) ListMessages(ctx context.Context, accountID string, limit int) ([]Message, error) {
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
 		return nil, err
 	}
 	clamped := core.ClampLimit(limit, core.DefaultListLimit, core.MaxListLimit)
@@ -230,7 +228,7 @@ func (s *Service) ListMessages(ctx context.Context, accountID string, limit int)
 // Descriptor advertises the service placement and capabilities.
 func (s *Service) Descriptor() core.Descriptor { return s.Manifest().ToDescriptor() }
 
-func (s *Service) normalizeLane(lane *domainccip.Lane) error {
+func (s *Service) normalizeLane(lane *Lane) error {
 	lane.Name = strings.TrimSpace(lane.Name)
 	lane.SourceChain = strings.ToLower(strings.TrimSpace(lane.SourceChain))
 	lane.DestChain = strings.ToLower(strings.TrimSpace(lane.DestChain))
@@ -249,11 +247,11 @@ func (s *Service) normalizeLane(lane *domainccip.Lane) error {
 	return nil
 }
 
-func normalizeTransfers(transfers []domainccip.TokenTransfer) []domainccip.TokenTransfer {
+func normalizeTransfers(transfers []TokenTransfer) []TokenTransfer {
 	if len(transfers) == 0 {
 		return nil
 	}
-	result := make([]domainccip.TokenTransfer, 0, len(transfers))
+	result := make([]TokenTransfer, 0, len(transfers))
 	for _, tr := range transfers {
 		token := strings.ToLower(strings.TrimSpace(tr.Token))
 		amount := strings.TrimSpace(tr.Amount)
@@ -261,11 +259,26 @@ func normalizeTransfers(transfers []domainccip.TokenTransfer) []domainccip.Token
 		if token == "" || amount == "" || recipient == "" {
 			continue
 		}
-		result = append(result, domainccip.TokenTransfer{Token: token, Amount: amount, Recipient: recipient})
+		result = append(result, TokenTransfer{Token: token, Amount: amount, Recipient: recipient})
 	}
 	if len(result) == 0 {
 		return nil
 	}
 	return result
+}
+
+func (s *Service) ensureSignersOwned(ctx context.Context, accountID string, signers []string) error {
+	if len(signers) == 0 {
+		return nil
+	}
+	if s.wallets == nil {
+		return nil
+	}
+	for _, signer := range signers {
+		if err := s.wallets.WalletOwnedBy(ctx, accountID, signer); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 

@@ -60,3 +60,22 @@ func ContainsCaseInsensitive(list []string, target string) bool {
 	}
 	return false
 }
+
+// TrimAndValidate trims a string and validates it's not empty.
+// This is the most common validation pattern.
+func TrimAndValidate(value, fieldName string) (string, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "", RequiredError(fieldName)
+	}
+	return trimmed, nil
+}
+
+// TrimOrDefault trims a string and returns a default if empty.
+func TrimOrDefault(value, defaultValue string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return defaultValue
+	}
+	return trimmed
+}

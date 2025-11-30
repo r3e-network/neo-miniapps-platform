@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	service "github.com/R3E-Network/service_layer/system/framework/core"
 )
 
 func TestServiceBuilder_MinimalBuild(t *testing.T) {
@@ -25,7 +27,7 @@ func TestServiceBuilder_MissingName(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing name")
 	}
-	if !errors.Is(err, ErrInvalidManifest) {
+	if !errors.Is(err, service.ErrInvalidManifest) {
 		t.Errorf("expected ErrInvalidManifest, got %v", err)
 	}
 }
@@ -35,7 +37,7 @@ func TestServiceBuilder_MissingDomain(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing domain")
 	}
-	if !errors.Is(err, ErrInvalidManifest) {
+	if !errors.Is(err, service.ErrInvalidManifest) {
 		t.Errorf("expected ErrInvalidManifest, got %v", err)
 	}
 }
@@ -213,8 +215,8 @@ func TestServiceBuilder_DoubleStart(t *testing.T) {
 	}
 
 	err := svc.Start(context.Background())
-	if !errors.Is(err, ErrServiceAlreadyStarted) {
-		t.Errorf("expected ErrServiceAlreadyStarted, got %v", err)
+	if !errors.Is(err, service.ErrServiceAlreadyStarted) {
+		t.Errorf("expected service.ErrServiceAlreadyStarted, got %v", err)
 	}
 }
 

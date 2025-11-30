@@ -30,12 +30,12 @@ type Bus struct {
 	mu       sync.RWMutex
 	subs     map[string][]EventHandler
 	registry *Registry
-	perms    *PermissionManager
+	perms    *BusPermissionManager
 	config   BusConfig
 }
 
 // NewBus creates a new bus instance with default configuration.
-func NewBus(registry *Registry, perms *PermissionManager) *Bus {
+func NewBus(registry *Registry, perms *BusPermissionManager) *Bus {
 	return &Bus{
 		subs:     make(map[string][]EventHandler),
 		registry: registry,
@@ -47,7 +47,7 @@ func NewBus(registry *Registry, perms *PermissionManager) *Bus {
 }
 
 // NewBusWithConfig creates a new bus instance with custom configuration.
-func NewBusWithConfig(registry *Registry, perms *PermissionManager, config BusConfig) *Bus {
+func NewBusWithConfig(registry *Registry, perms *BusPermissionManager, config BusConfig) *Bus {
 	if config.Timeout == 0 {
 		config.Timeout = DefaultBusTimeout
 	}
@@ -344,21 +344,21 @@ func (b *Bus) ClearSubscribers() {
 	b.subs = make(map[string][]EventHandler)
 }
 
-// PermissionManager manages bus permissions for modules.
-type PermissionManager struct {
+// BusPermissionManager manages bus permissions for modules.
+type BusPermissionManager struct {
 	mu    sync.RWMutex
 	perms map[string]BusPermissions
 }
 
-// NewPermissionManager creates a new permission manager.
-func NewPermissionManager() *PermissionManager {
-	return &PermissionManager{
+// NewBusPermissionManager creates a new bus permission manager.
+func NewBusPermissionManager() *BusPermissionManager {
+	return &BusPermissionManager{
 		perms: make(map[string]BusPermissions),
 	}
 }
 
 // SetPermissions sets the bus permissions for a module.
-func (p *PermissionManager) SetPermissions(name string, perms BusPermissions) {
+func (p *BusPermissionManager) SetPermissions(name string, perms BusPermissions) {
 	if p == nil {
 		return
 	}
@@ -374,7 +374,7 @@ func (p *PermissionManager) SetPermissions(name string, perms BusPermissions) {
 
 // GetPermissions returns the bus permissions for a module.
 // Returns default permissions (all allowed) if not explicitly set.
-func (p *PermissionManager) GetPermissions(name string) BusPermissions {
+func (p *BusPermissionManager) GetPermissions(name string) BusPermissions {
 	if p == nil {
 		return DefaultBusPermissions()
 	}
@@ -389,7 +389,7 @@ func (p *PermissionManager) GetPermissions(name string) BusPermissions {
 }
 
 // HasPermission checks if a module has specific bus permission.
-func (p *PermissionManager) HasPermission(name string, permType string) bool {
+func (p *BusPermissionManager) HasPermission(name string, permType string) bool {
 	perms := p.GetPermissions(name)
 
 	switch permType {
@@ -405,7 +405,7 @@ func (p *PermissionManager) HasPermission(name string, permType string) bool {
 }
 
 // AllPermissions returns all permissions map.
-func (p *PermissionManager) AllPermissions() map[string]BusPermissions {
+func (p *BusPermissionManager) AllPermissions() map[string]BusPermissions {
 	if p == nil {
 		return nil
 	}
@@ -421,7 +421,7 @@ func (p *PermissionManager) AllPermissions() map[string]BusPermissions {
 }
 
 // RemovePermissions removes permissions for a module.
-func (p *PermissionManager) RemovePermissions(name string) {
+func (p *BusPermissionManager) RemovePermissions(name string) {
 	if p == nil {
 		return
 	}
@@ -432,7 +432,7 @@ func (p *PermissionManager) RemovePermissions(name string) {
 }
 
 // Clear removes all permissions.
-func (p *PermissionManager) Clear() {
+func (p *BusPermissionManager) Clear() {
 	if p == nil {
 		return
 	}

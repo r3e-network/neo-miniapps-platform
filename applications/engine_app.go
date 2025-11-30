@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/R3E-Network/service_layer/pkg/storage"
 	"github.com/R3E-Network/service_layer/applications/system"
 	"github.com/R3E-Network/service_layer/packages/com.r3e.services.accounts"
 	automationsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.automation"
@@ -21,6 +20,7 @@ import (
 	dtasvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.dta"
 	"github.com/R3E-Network/service_layer/packages/com.r3e.services.functions"
 	gasbanksvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.gasbank"
+	mixersvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.mixer"
 	oraclesvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.oracle"
 	"github.com/R3E-Network/service_layer/packages/com.r3e.services.secrets"
 	vrfsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.vrf"
@@ -55,9 +55,9 @@ type EngineApplication struct {
 	CRE          *cresvc.Service
 	CCIP         *ccipsvc.Service
 	VRF          *vrfsvc.Service
+	Mixer        *mixersvc.Service
 
 	// Additional components
-	WorkspaceWallets   storage.WorkspaceWalletStore
 	OracleRunnerTokens []string
 
 	// Background runners
@@ -121,10 +121,9 @@ func NewEngineApplication(ctx context.Context, cfg EngineAppConfig) (*EngineAppl
 	}
 
 	app := &EngineApplication{
-		engine:           result.Engine,
-		loader:           result.Loader,
-		log:              appLog,
-		WorkspaceWallets: cfg.Stores.WorkspaceWallets,
+		engine: result.Engine,
+		loader: result.Loader,
+		log:    appLog,
 	}
 
 	// Extract typed service references from the engine
@@ -209,6 +208,11 @@ func (a *EngineApplication) wireServices(eng *engine.Engine) error {
 			a.VRF = svc
 		}
 	}
+	if mod := eng.Lookup("mixer"); mod != nil {
+		if svc, ok := mod.(*mixersvc.Service); ok {
+			a.Mixer = svc
+		}
+	}
 
 	return nil
 }
@@ -270,20 +274,6 @@ func (a *EngineApplication) Attach(service system.Service) error {
 // ContentResolver pattern used by service packages.
 func storesToStoreProvider(stores Stores) pkg.StoreProvider {
 	return pkg.NewStoreProvider(pkg.StoreProviderConfig{
-		Accounts:         stores.Accounts,
-		Functions:        stores.Functions,
-		GasBank:          stores.GasBank,
-		Automation:       stores.Automation,
-		DataFeeds:        stores.DataFeeds,
-		DataStreams:      stores.DataStreams,
-		DataLink:         stores.DataLink,
-		DTA:              stores.DTA,
-		Confidential:     stores.Confidential,
-		Oracle:           stores.Oracle,
-		Secrets:          stores.Secrets,
-		CRE:              stores.CRE,
-		CCIP:             stores.CCIP,
-		VRF:              stores.VRF,
-		WorkspaceWallets: stores.WorkspaceWallets,
+		Database: stores.Database,
 	})
 }

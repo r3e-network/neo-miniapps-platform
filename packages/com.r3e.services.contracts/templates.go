@@ -5,73 +5,72 @@ import (
 	"fmt"
 	"strings"
 
-	domaincontract "github.com/R3E-Network/service_layer/domain/contract"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 )
 
 // CreateTemplate registers a contract template.
-func (s *Service) CreateTemplate(ctx context.Context, t domaincontract.Template) (domaincontract.Template, error) {
+func (s *Service) CreateTemplate(ctx context.Context, t Template) (Template, error) {
 	if err := s.normalizeTemplate(&t); err != nil {
-		return domaincontract.Template{}, err
+		return Template{}, err
 	}
 	created, err := s.store.CreateTemplate(ctx, t)
 	if err != nil {
-		return domaincontract.Template{}, err
+		return Template{}, err
 	}
 	s.log.WithField("template_id", created.ID).WithField("name", created.Name).Info("contract template registered")
 	return created, nil
 }
 
 // UpdateTemplate updates template metadata.
-func (s *Service) UpdateTemplate(ctx context.Context, t domaincontract.Template) (domaincontract.Template, error) {
+func (s *Service) UpdateTemplate(ctx context.Context, t Template) (Template, error) {
 	stored, err := s.store.GetTemplate(ctx, t.ID)
 	if err != nil {
-		return domaincontract.Template{}, err
+		return Template{}, err
 	}
 	t.ServiceID = stored.ServiceID // Preserve owning service
 	if err := s.normalizeTemplate(&t); err != nil {
-		return domaincontract.Template{}, err
+		return Template{}, err
 	}
 	updated, err := s.store.UpdateTemplate(ctx, t)
 	if err != nil {
-		return domaincontract.Template{}, err
+		return Template{}, err
 	}
 	s.log.WithField("template_id", t.ID).Info("contract template updated")
 	return updated, nil
 }
 
 // GetTemplate fetches a template.
-func (s *Service) GetTemplate(ctx context.Context, templateID string) (domaincontract.Template, error) {
+func (s *Service) GetTemplate(ctx context.Context, templateID string) (Template, error) {
 	return s.store.GetTemplate(ctx, templateID)
 }
 
 // ListTemplates lists templates by category.
-func (s *Service) ListTemplates(ctx context.Context, category domaincontract.TemplateCategory) ([]domaincontract.Template, error) {
+func (s *Service) ListTemplates(ctx context.Context, category TemplateCategory) ([]Template, error) {
 	return s.store.ListTemplates(ctx, category)
 }
 
 // ListTemplatesByService lists templates for a specific service.
-func (s *Service) ListTemplatesByService(ctx context.Context, serviceID string) ([]domaincontract.Template, error) {
+func (s *Service) ListTemplatesByService(ctx context.Context, serviceID string) ([]Template, error) {
 	return s.store.ListTemplatesByService(ctx, serviceID)
 }
 
 // ListEngineTemplates lists all engine-level templates.
-func (s *Service) ListEngineTemplates(ctx context.Context) ([]domaincontract.Template, error) {
-	return s.store.ListTemplates(ctx, domaincontract.TemplateCategoryEngine)
+func (s *Service) ListEngineTemplates(ctx context.Context) ([]Template, error) {
+	return s.store.ListTemplates(ctx, TemplateCategoryEngine)
 }
 
 // DeployFromTemplate creates a contract from a template and deploys it.
-func (s *Service) DeployFromTemplate(ctx context.Context, accountID, templateID string, name string, constructorArgs map[string]any, gasLimit int64, metadata map[string]string) (domaincontract.Contract, domaincontract.Deployment, error) {
+func (s *Service) DeployFromTemplate(ctx context.Context, accountID, templateID string, name string, constructorArgs map[string]any, gasLimit int64, metadata map[string]string) (Contract, Deployment, error) {
 	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
-		return domaincontract.Contract{}, domaincontract.Deployment{}, err
+		return Contract{}, Deployment{}, err
 	}
 
 	tpl, err := s.store.GetTemplate(ctx, templateID)
 	if err != nil {
-		return domaincontract.Contract{}, domaincontract.Deployment{}, err
+		return Contract{}, Deployment{}, err
 	}
-	if tpl.Status != domaincontract.TemplateStatusActive {
-		return domaincontract.Contract{}, domaincontract.Deployment{}, fmt.Errorf("template %s is not active", templateID)
+	if tpl.Status != TemplateStatusActive {
+		return Contract{}, Deployment{}, fmt.Errorf("template %s is not active", templateID)
 	}
 
 	name = strings.TrimSpace(name)
@@ -80,21 +79,21 @@ func (s *Service) DeployFromTemplate(ctx context.Context, accountID, templateID 
 	}
 
 	// Determine contract type
-	contractType := domaincontract.ContractTypeUser
-	if tpl.Category == domaincontract.TemplateCategoryEngine {
-		contractType = domaincontract.ContractTypeEngine
+	contractType := ContractTypeUser
+	if tpl.Category == TemplateCategoryEngine {
+		contractType = ContractTypeEngine
 	} else if tpl.ServiceID != "" {
-		contractType = domaincontract.ContractTypeService
+		contractType = ContractTypeService
 	}
 
 	// Default to first supported network
-	network := domaincontract.NetworkNeoN3
+	network := NetworkNeoN3
 	if len(tpl.Networks) > 0 {
 		network = tpl.Networks[0]
 	}
 
 	// Create contract record
-	c := domaincontract.Contract{
+	c := Contract{
 		AccountID:    accountID,
 		ServiceID:    tpl.ServiceID,
 		Name:         name,
@@ -106,7 +105,7 @@ func (s *Service) DeployFromTemplate(ctx context.Context, accountID, templateID 
 		Version:      tpl.Version,
 		ABI:          tpl.ABI,
 		Bytecode:     tpl.Bytecode,
-		Status:       domaincontract.ContractStatusDraft,
+		Status:       ContractStatusDraft,
 		Capabilities: tpl.Capabilities,
 		DependsOn:    tpl.DependsOn,
 		Metadata:     core.NormalizeMetadata(metadata),
@@ -114,14 +113,14 @@ func (s *Service) DeployFromTemplate(ctx context.Context, accountID, templateID 
 
 	createdContract, err := s.store.CreateContract(ctx, c)
 	if err != nil {
-		return domaincontract.Contract{}, domaincontract.Deployment{}, err
+		return Contract{}, Deployment{}, err
 	}
 
 	// Deploy the contract
 	deployment, err := s.Deploy(ctx, accountID, createdContract.ID, constructorArgs, gasLimit, metadata)
 	if err != nil {
 		// Mark contract as failed deployment
-		createdContract.Status = domaincontract.ContractStatusDraft
+		createdContract.Status = ContractStatusDraft
 		_, _ = s.store.UpdateContract(ctx, createdContract)
 		return createdContract, deployment, err
 	}
@@ -131,18 +130,18 @@ func (s *Service) DeployFromTemplate(ctx context.Context, accountID, templateID 
 }
 
 // CreateServiceBinding binds a service to a contract.
-func (s *Service) CreateServiceBinding(ctx context.Context, binding domaincontract.ServiceContractBinding) (domaincontract.ServiceContractBinding, error) {
+func (s *Service) CreateServiceBinding(ctx context.Context, binding ServiceContractBinding) (ServiceContractBinding, error) {
 	if err := s.base.EnsureAccount(ctx, binding.AccountID); err != nil {
-		return domaincontract.ServiceContractBinding{}, err
+		return ServiceContractBinding{}, err
 	}
 	// Verify contract exists and account has access
 	if _, err := s.GetContract(ctx, binding.AccountID, binding.ContractID); err != nil {
-		return domaincontract.ServiceContractBinding{}, err
+		return ServiceContractBinding{}, err
 	}
 
 	binding.ServiceID = strings.TrimSpace(binding.ServiceID)
 	if binding.ServiceID == "" {
-		return domaincontract.ServiceContractBinding{}, core.RequiredError("service_id")
+		return ServiceContractBinding{}, core.RequiredError("service_id")
 	}
 	binding.Role = strings.ToLower(strings.TrimSpace(binding.Role))
 	if binding.Role == "" {
@@ -153,31 +152,31 @@ func (s *Service) CreateServiceBinding(ctx context.Context, binding domaincontra
 
 	created, err := s.store.CreateServiceBinding(ctx, binding)
 	if err != nil {
-		return domaincontract.ServiceContractBinding{}, err
+		return ServiceContractBinding{}, err
 	}
 	s.log.WithField("binding_id", created.ID).WithField("service_id", created.ServiceID).Info("service contract binding created")
 	return created, nil
 }
 
 // GetServiceBinding fetches a service binding.
-func (s *Service) GetServiceBinding(ctx context.Context, bindingID string) (domaincontract.ServiceContractBinding, error) {
+func (s *Service) GetServiceBinding(ctx context.Context, bindingID string) (ServiceContractBinding, error) {
 	return s.store.GetServiceBinding(ctx, bindingID)
 }
 
 // ListServiceBindings lists bindings for a service.
-func (s *Service) ListServiceBindings(ctx context.Context, serviceID string) ([]domaincontract.ServiceContractBinding, error) {
+func (s *Service) ListServiceBindings(ctx context.Context, serviceID string) ([]ServiceContractBinding, error) {
 	return s.store.ListServiceBindings(ctx, serviceID)
 }
 
 // ListAccountBindings lists all bindings for an account.
-func (s *Service) ListAccountBindings(ctx context.Context, accountID string) ([]domaincontract.ServiceContractBinding, error) {
+func (s *Service) ListAccountBindings(ctx context.Context, accountID string) ([]ServiceContractBinding, error) {
 	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
 		return nil, err
 	}
 	return s.store.ListAccountBindings(ctx, accountID)
 }
 
-func (s *Service) normalizeTemplate(t *domaincontract.Template) error {
+func (s *Service) normalizeTemplate(t *Template) error {
 	t.Name = strings.TrimSpace(t.Name)
 	t.Symbol = strings.ToUpper(strings.TrimSpace(t.Symbol))
 	t.Description = strings.TrimSpace(t.Description)
@@ -203,18 +202,18 @@ func (s *Service) normalizeTemplate(t *domaincontract.Template) error {
 		t.Version = "1.0.0"
 	}
 
-	category := domaincontract.TemplateCategory(strings.ToLower(strings.TrimSpace(string(t.Category))))
+	category := TemplateCategory(strings.ToLower(strings.TrimSpace(string(t.Category))))
 	if category == "" {
-		category = domaincontract.TemplateCategoryCustom
+		category = TemplateCategoryCustom
 	}
 	t.Category = category
 
-	status := domaincontract.TemplateStatus(strings.ToLower(strings.TrimSpace(string(t.Status))))
+	status := TemplateStatus(strings.ToLower(strings.TrimSpace(string(t.Status))))
 	if status == "" {
-		status = domaincontract.TemplateStatusDraft
+		status = TemplateStatusDraft
 	}
 	switch status {
-	case domaincontract.TemplateStatusDraft, domaincontract.TemplateStatusActive, domaincontract.TemplateStatusDeprecated:
+	case TemplateStatusDraft, TemplateStatusActive, TemplateStatusDeprecated:
 		t.Status = status
 	default:
 		return fmt.Errorf("invalid status %s", status)

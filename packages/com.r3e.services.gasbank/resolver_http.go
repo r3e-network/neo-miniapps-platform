@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/R3E-Network/service_layer/domain/gasbank"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 )
 
@@ -45,7 +44,7 @@ func NewHTTPWithdrawalResolver(client *http.Client, endpoint, apiKey string, log
 	}, nil
 }
 
-func (r *HTTPWithdrawalResolver) Resolve(ctx context.Context, tx gasbank.Transaction) (bool, bool, string, time.Duration, error) {
+func (r *HTTPWithdrawalResolver) Resolve(ctx context.Context, tx Transaction) (bool, bool, string, time.Duration, error) {
 	requestURL := *r.endpoint
 	q := requestURL.Query()
 	q.Set("transaction_id", tx.ID)

@@ -35,3 +35,19 @@ type Job struct {
 func (j Job) IsCompleted() bool {
 	return j.MaxRuns > 0 && j.RunCount >= j.MaxRuns
 }
+
+// FunctionExecution represents the result of a function execution.
+// This is a local type to avoid circular dependency with the functions package.
+type FunctionExecution struct {
+	ID          string
+	AccountID   string
+	FunctionID  string
+	Input       map[string]any
+	Output      map[string]any
+	Logs        []string
+	Error       string
+	Status      string
+	StartedAt   time.Time
+	CompletedAt time.Time
+	Duration    time.Duration
+}

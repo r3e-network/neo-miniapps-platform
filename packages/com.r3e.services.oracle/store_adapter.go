@@ -1,126 +1,111 @@
-// Package oracle provides oracle data source and request management.
-// This file contains the storage adapter that bridges the external storage
-// implementation (using domain/oracle types) with the service's local types.
-// This follows the Android OS pattern where the system provides storage
-// implementations and services adapt them to their local contracts.
 package oracle
 
 import (
 	"context"
 
+	domainOracle "github.com/R3E-Network/service_layer/domain/oracle"
 	"github.com/R3E-Network/service_layer/pkg/storage"
-	domain "github.com/R3E-Network/service_layer/domain/oracle"
 )
 
-// StoreAdapter wraps a storage.OracleStore and adapts it to the local Store interface.
-// This enables the service to use its own domain types while leveraging the
-// system-provided storage implementation.
-type StoreAdapter struct {
-	store storage.OracleStore
+// legacyStoreAdapter adapts storage.OracleStore to local Store interface.
+type legacyStoreAdapter struct {
+	store    storage.OracleStore
+	accounts AccountChecker
 }
 
-// NewStoreAdapter creates a new adapter wrapping the given storage.OracleStore.
-func NewStoreAdapter(store storage.OracleStore) *StoreAdapter {
-	return &StoreAdapter{store: store}
+// NewLegacyStoreAdapter creates an adapter from storage.OracleStore to local Store.
+func NewLegacyStoreAdapter(store storage.OracleStore, accounts AccountChecker) Store {
+	return &legacyStoreAdapter{store: store, accounts: accounts}
 }
 
-// CreateDataSource adapts the call to the underlying store.
-func (a *StoreAdapter) CreateDataSource(ctx context.Context, src DataSource) (DataSource, error) {
-	result, err := a.store.CreateDataSource(ctx, toExternalDataSource(src))
+func (a *legacyStoreAdapter) CreateDataSource(ctx context.Context, src DataSource) (DataSource, error) {
+	result, err := a.store.CreateDataSource(ctx, toExtDataSource(src))
 	if err != nil {
 		return DataSource{}, err
 	}
-	return fromExternalDataSource(result), nil
+	return fromExtDataSource(result), nil
 }
 
-// UpdateDataSource adapts the call to the underlying store.
-func (a *StoreAdapter) UpdateDataSource(ctx context.Context, src DataSource) (DataSource, error) {
-	result, err := a.store.UpdateDataSource(ctx, toExternalDataSource(src))
+func (a *legacyStoreAdapter) UpdateDataSource(ctx context.Context, src DataSource) (DataSource, error) {
+	result, err := a.store.UpdateDataSource(ctx, toExtDataSource(src))
 	if err != nil {
 		return DataSource{}, err
 	}
-	return fromExternalDataSource(result), nil
+	return fromExtDataSource(result), nil
 }
 
-// GetDataSource adapts the call to the underlying store.
-func (a *StoreAdapter) GetDataSource(ctx context.Context, id string) (DataSource, error) {
+func (a *legacyStoreAdapter) GetDataSource(ctx context.Context, id string) (DataSource, error) {
 	result, err := a.store.GetDataSource(ctx, id)
 	if err != nil {
 		return DataSource{}, err
 	}
-	return fromExternalDataSource(result), nil
+	return fromExtDataSource(result), nil
 }
 
-// ListDataSources adapts the call to the underlying store.
-func (a *StoreAdapter) ListDataSources(ctx context.Context, accountID string) ([]DataSource, error) {
+func (a *legacyStoreAdapter) ListDataSources(ctx context.Context, accountID string) ([]DataSource, error) {
 	results, err := a.store.ListDataSources(ctx, accountID)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]DataSource, len(results))
 	for i, r := range results {
-		out[i] = fromExternalDataSource(r)
+		out[i] = fromExtDataSource(r)
 	}
 	return out, nil
 }
 
-// CreateRequest adapts the call to the underlying store.
-func (a *StoreAdapter) CreateRequest(ctx context.Context, req Request) (Request, error) {
-	result, err := a.store.CreateRequest(ctx, toExternalRequest(req))
+func (a *legacyStoreAdapter) CreateRequest(ctx context.Context, req Request) (Request, error) {
+	result, err := a.store.CreateRequest(ctx, toExtRequest(req))
 	if err != nil {
 		return Request{}, err
 	}
-	return fromExternalRequest(result), nil
+	return fromExtRequest(result), nil
 }
 
-// UpdateRequest adapts the call to the underlying store.
-func (a *StoreAdapter) UpdateRequest(ctx context.Context, req Request) (Request, error) {
-	result, err := a.store.UpdateRequest(ctx, toExternalRequest(req))
+func (a *legacyStoreAdapter) UpdateRequest(ctx context.Context, req Request) (Request, error) {
+	result, err := a.store.UpdateRequest(ctx, toExtRequest(req))
 	if err != nil {
 		return Request{}, err
 	}
-	return fromExternalRequest(result), nil
+	return fromExtRequest(result), nil
 }
 
-// GetRequest adapts the call to the underlying store.
-func (a *StoreAdapter) GetRequest(ctx context.Context, id string) (Request, error) {
+func (a *legacyStoreAdapter) GetRequest(ctx context.Context, id string) (Request, error) {
 	result, err := a.store.GetRequest(ctx, id)
 	if err != nil {
 		return Request{}, err
 	}
-	return fromExternalRequest(result), nil
+	return fromExtRequest(result), nil
 }
 
-// ListRequests adapts the call to the underlying store.
-func (a *StoreAdapter) ListRequests(ctx context.Context, accountID string, limit int, status string) ([]Request, error) {
+func (a *legacyStoreAdapter) ListRequests(ctx context.Context, accountID string, limit int, status string) ([]Request, error) {
 	results, err := a.store.ListRequests(ctx, accountID, limit, status)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]Request, len(results))
 	for i, r := range results {
-		out[i] = fromExternalRequest(r)
+		out[i] = fromExtRequest(r)
 	}
 	return out, nil
 }
 
-// ListPendingRequests adapts the call to the underlying store.
-func (a *StoreAdapter) ListPendingRequests(ctx context.Context) ([]Request, error) {
+func (a *legacyStoreAdapter) ListPendingRequests(ctx context.Context) ([]Request, error) {
 	results, err := a.store.ListPendingRequests(ctx)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]Request, len(results))
 	for i, r := range results {
-		out[i] = fromExternalRequest(r)
+		out[i] = fromExtRequest(r)
 	}
 	return out, nil
 }
 
-// Type conversion helpers
+// Type conversion helpers for legacy adapter
 
-func toExternalDataSource(src DataSource) domain.DataSource {
-	return domain.DataSource{
+func toExtDataSource(src DataSource) domainOracle.DataSource {
+	return domainOracle.DataSource{
 		ID:          src.ID,
 		AccountID:   src.AccountID,
 		Name:        src.Name,
@@ -135,7 +120,7 @@ func toExternalDataSource(src DataSource) domain.DataSource {
 	}
 }
 
-func fromExternalDataSource(src domain.DataSource) DataSource {
+func fromExtDataSource(src domainOracle.DataSource) DataSource {
 	return DataSource{
 		ID:          src.ID,
 		AccountID:   src.AccountID,
@@ -151,12 +136,12 @@ func fromExternalDataSource(src domain.DataSource) DataSource {
 	}
 }
 
-func toExternalRequest(req Request) domain.Request {
-	return domain.Request{
+func toExtRequest(req Request) domainOracle.Request {
+	return domainOracle.Request{
 		ID:           req.ID,
 		AccountID:    req.AccountID,
 		DataSourceID: req.DataSourceID,
-		Status:       domain.RequestStatus(req.Status),
+		Status:       domainOracle.RequestStatus(req.Status),
 		Attempts:     req.Attempts,
 		Fee:          req.Fee,
 		Payload:      req.Payload,
@@ -168,7 +153,7 @@ func toExternalRequest(req Request) domain.Request {
 	}
 }
 
-func fromExternalRequest(req domain.Request) Request {
+func fromExtRequest(req domainOracle.Request) Request {
 	return Request{
 		ID:           req.ID,
 		AccountID:    req.AccountID,

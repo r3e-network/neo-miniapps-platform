@@ -1,13 +1,10 @@
 package confidential
 
 import (
-	"github.com/R3E-Network/service_layer/domain/account"
 	"context"
 	"fmt"
 	"strings"
 
-	"github.com/R3E-Network/service_layer/pkg/storage"
-	domainconf "github.com/R3E-Network/service_layer/domain/confidential"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	engine "github.com/R3E-Network/service_layer/system/core"
 	"github.com/R3E-Network/service_layer/system/framework"
@@ -17,8 +14,8 @@ import (
 // Service manages enclave registrations and sealed keys.
 type Service struct {
 	framework.ServiceBase
-	base           *core.Base
-	store          storage.ConfidentialStore
+	accounts   AccountChecker
+	store          Store
 	log            *logger.Logger
 	sealedKeyHooks core.ObservationHooks
 	attestHooks    core.ObservationHooks
@@ -58,12 +55,12 @@ func clampAttestationLimit(limit int) int {
 }
 
 // New constructs a confidential compute service.
-func New(accounts storage.AccountStore, store storage.ConfidentialStore, log *logger.Logger) *Service {
+func New(accounts AccountChecker, store Store, log *logger.Logger) *Service {
 	if log == nil {
 		log = logger.NewDefault("confidential")
 	}
 	svc := &Service{
-		base:           core.NewBaseFromStore[account.Account](accounts),
+		accounts:   accounts,
 		store:          store,
 		log:            log,
 		sealedKeyHooks: core.NoopObservationHooks,
@@ -84,73 +81,73 @@ func (s *Service) WithAttestationHooks(h core.ObservationHooks) {
 }
 
 // CreateEnclave registers a new enclave for an account.
-func (s *Service) CreateEnclave(ctx context.Context, enclave domainconf.Enclave) (domainconf.Enclave, error) {
-	if err := s.base.EnsureAccount(ctx, enclave.AccountID); err != nil {
-		return domainconf.Enclave{}, err
+func (s *Service) CreateEnclave(ctx context.Context, enclave Enclave) (Enclave, error) {
+	if err := s.accounts.AccountExists(ctx, enclave.AccountID); err != nil {
+		return Enclave{}, err
 	}
 	if err := s.normalizeEnclave(&enclave); err != nil {
-		return domainconf.Enclave{}, err
+		return Enclave{}, err
 	}
 	created, err := s.store.CreateEnclave(ctx, enclave)
 	if err != nil {
-		return domainconf.Enclave{}, err
+		return Enclave{}, err
 	}
 	s.log.WithField("enclave_id", created.ID).WithField("account_id", created.AccountID).Info("enclave registered")
 	return created, nil
 }
 
 // UpdateEnclave updates enclave metadata/status.
-func (s *Service) UpdateEnclave(ctx context.Context, enclave domainconf.Enclave) (domainconf.Enclave, error) {
+func (s *Service) UpdateEnclave(ctx context.Context, enclave Enclave) (Enclave, error) {
 	stored, err := s.store.GetEnclave(ctx, enclave.ID)
 	if err != nil {
-		return domainconf.Enclave{}, err
+		return Enclave{}, err
 	}
 	if err := core.EnsureOwnership(stored.AccountID, enclave.AccountID, "enclave", enclave.ID); err != nil {
-		return domainconf.Enclave{}, err
+		return Enclave{}, err
 	}
 	enclave.AccountID = stored.AccountID
 	if err := s.normalizeEnclave(&enclave); err != nil {
-		return domainconf.Enclave{}, err
+		return Enclave{}, err
 	}
 	updated, err := s.store.UpdateEnclave(ctx, enclave)
 	if err != nil {
-		return domainconf.Enclave{}, err
+		return Enclave{}, err
 	}
 	s.log.WithField("enclave_id", enclave.ID).WithField("account_id", enclave.AccountID).Info("enclave updated")
 	return updated, nil
 }
 
 // ListEnclaves lists an account's enclaves.
-func (s *Service) ListEnclaves(ctx context.Context, accountID string) ([]domainconf.Enclave, error) {
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
+func (s *Service) ListEnclaves(ctx context.Context, accountID string) ([]Enclave, error) {
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
 		return nil, err
 	}
 	return s.store.ListEnclaves(ctx, accountID)
 }
 
 // GetEnclave fetches a single enclave.
-func (s *Service) GetEnclave(ctx context.Context, accountID, enclaveID string) (domainconf.Enclave, error) {
+func (s *Service) GetEnclave(ctx context.Context, accountID, enclaveID string) (Enclave, error) {
 	enclave, err := s.store.GetEnclave(ctx, enclaveID)
 	if err != nil {
-		return domainconf.Enclave{}, err
+		return Enclave{}, err
 	}
 	if err := core.EnsureOwnership(enclave.AccountID, accountID, "enclave", enclaveID); err != nil {
-		return domainconf.Enclave{}, err
+		return Enclave{}, err
 	}
 	return enclave, nil
 }
 
 // CreateSealedKey stores sealed key material for an enclave.
-func (s *Service) CreateSealedKey(ctx context.Context, key domainconf.SealedKey) (domainconf.SealedKey, error) {
-	if err := s.base.EnsureAccount(ctx, key.AccountID); err != nil {
-		return domainconf.SealedKey{}, err
+func (s *Service) CreateSealedKey(ctx context.Context, key SealedKey) (SealedKey, error) {
+	if err := s.accounts.AccountExists(ctx, key.AccountID); err != nil {
+		return SealedKey{}, err
 	}
 	if _, err := s.GetEnclave(ctx, key.AccountID, key.EnclaveID); err != nil {
-		return domainconf.SealedKey{}, err
+		return SealedKey{}, err
 	}
 	key.Name = strings.TrimSpace(key.Name)
 	if key.Name == "" {
-		return domainconf.SealedKey{}, core.RequiredError("name")
+		return SealedKey{}, core.RequiredError("name")
 	}
 	key.Metadata = core.NormalizeMetadata(key.Metadata)
 	attrs := map[string]string{"account_id": key.AccountID, "enclave_id": key.EnclaveID, "resource": "sealed_key"}
@@ -161,14 +158,14 @@ func (s *Service) CreateSealedKey(ctx context.Context, key domainconf.SealedKey)
 	}
 	finish(err)
 	if err != nil {
-		return domainconf.SealedKey{}, err
+		return SealedKey{}, err
 	}
 	s.log.WithField("sealed_key_id", created.ID).WithField("enclave_id", created.EnclaveID).Info("sealed key stored")
 	return created, nil
 }
 
 // ListSealedKeys lists keys for an account/enclave.
-func (s *Service) ListSealedKeys(ctx context.Context, accountID, enclaveID string, limit int) ([]domainconf.SealedKey, error) {
+func (s *Service) ListSealedKeys(ctx context.Context, accountID, enclaveID string, limit int) ([]SealedKey, error) {
 	if _, err := s.GetEnclave(ctx, accountID, enclaveID); err != nil {
 		return nil, err
 	}
@@ -176,16 +173,16 @@ func (s *Service) ListSealedKeys(ctx context.Context, accountID, enclaveID strin
 }
 
 // CreateAttestation stores an attestation proof for an enclave.
-func (s *Service) CreateAttestation(ctx context.Context, att domainconf.Attestation) (domainconf.Attestation, error) {
-	if err := s.base.EnsureAccount(ctx, att.AccountID); err != nil {
-		return domainconf.Attestation{}, err
+func (s *Service) CreateAttestation(ctx context.Context, att Attestation) (Attestation, error) {
+	if err := s.accounts.AccountExists(ctx, att.AccountID); err != nil {
+		return Attestation{}, err
 	}
 	if _, err := s.GetEnclave(ctx, att.AccountID, att.EnclaveID); err != nil {
-		return domainconf.Attestation{}, err
+		return Attestation{}, err
 	}
 	att.Report = strings.TrimSpace(att.Report)
 	if att.Report == "" {
-		return domainconf.Attestation{}, core.RequiredError("report")
+		return Attestation{}, core.RequiredError("report")
 	}
 	att.Status = strings.TrimSpace(att.Status)
 	if att.Status == "" {
@@ -200,14 +197,14 @@ func (s *Service) CreateAttestation(ctx context.Context, att domainconf.Attestat
 	}
 	finish(err)
 	if err != nil {
-		return domainconf.Attestation{}, err
+		return Attestation{}, err
 	}
 	s.log.WithField("attestation_id", created.ID).WithField("enclave_id", created.EnclaveID).Info("attestation recorded")
 	return created, nil
 }
 
 // ListAttestations lists proofs for an enclave.
-func (s *Service) ListAttestations(ctx context.Context, accountID, enclaveID string, limit int) ([]domainconf.Attestation, error) {
+func (s *Service) ListAttestations(ctx context.Context, accountID, enclaveID string, limit int) ([]Attestation, error) {
 	if _, err := s.GetEnclave(ctx, accountID, enclaveID); err != nil {
 		return nil, err
 	}
@@ -215,14 +212,14 @@ func (s *Service) ListAttestations(ctx context.Context, accountID, enclaveID str
 }
 
 // ListAccountAttestations aggregates attestations across all enclaves for an account.
-func (s *Service) ListAccountAttestations(ctx context.Context, accountID string, limit int) ([]domainconf.Attestation, error) {
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
+func (s *Service) ListAccountAttestations(ctx context.Context, accountID string, limit int) ([]Attestation, error) {
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
 		return nil, err
 	}
 	return s.store.ListAccountAttestations(ctx, accountID, clampAttestationLimit(limit))
 }
 
-func (s *Service) normalizeEnclave(enclave *domainconf.Enclave) error {
+func (s *Service) normalizeEnclave(enclave *Enclave) error {
 	enclave.Name = strings.TrimSpace(enclave.Name)
 	enclave.Endpoint = strings.TrimSpace(enclave.Endpoint)
 	enclave.Attestation = strings.TrimSpace(enclave.Attestation)
@@ -233,12 +230,12 @@ func (s *Service) normalizeEnclave(enclave *domainconf.Enclave) error {
 	if enclave.Endpoint == "" {
 		return core.RequiredError("endpoint")
 	}
-	status := domainconf.EnclaveStatus(strings.ToLower(strings.TrimSpace(string(enclave.Status))))
+	status := EnclaveStatus(strings.ToLower(strings.TrimSpace(string(enclave.Status))))
 	if status == "" {
-		status = domainconf.EnclaveStatusInactive
+		status = EnclaveStatusInactive
 	}
 	switch status {
-	case domainconf.EnclaveStatusInactive, domainconf.EnclaveStatusActive, domainconf.EnclaveStatusRevoked:
+	case EnclaveStatusInactive, EnclaveStatusActive, EnclaveStatusRevoked:
 		enclave.Status = status
 	default:
 		return fmt.Errorf("invalid status %s", status)

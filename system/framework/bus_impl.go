@@ -4,6 +4,7 @@ import (
 	"context"
 
 	engine "github.com/R3E-Network/service_layer/system/core"
+	service "github.com/R3E-Network/service_layer/system/framework/core"
 )
 
 // EngineBus wraps engine fan-out so services can depend on BusClient without
@@ -21,7 +22,7 @@ func NewEngineBus(eng *engine.Engine) *EngineBus {
 // PublishEvent fan-outs an event to all registered EventEngines.
 func (b *EngineBus) PublishEvent(ctx context.Context, event string, payload any) error {
 	if b == nil || b.eng == nil {
-		return ErrBusUnavailable
+		return service.ErrBusUnavailable
 	}
 	return b.eng.PublishEvent(ctx, event, payload)
 }
@@ -29,7 +30,7 @@ func (b *EngineBus) PublishEvent(ctx context.Context, event string, payload any)
 // PushData fan-outs a payload to all registered DataEngines.
 func (b *EngineBus) PushData(ctx context.Context, topic string, payload any) error {
 	if b == nil || b.eng == nil {
-		return ErrBusUnavailable
+		return service.ErrBusUnavailable
 	}
 	return b.eng.PushData(ctx, topic, payload)
 }
@@ -37,7 +38,7 @@ func (b *EngineBus) PushData(ctx context.Context, topic string, payload any) err
 // InvokeCompute invokes all ComputeEngines and returns results.
 func (b *EngineBus) InvokeCompute(ctx context.Context, payload any) ([]ComputeResult, error) {
 	if b == nil || b.eng == nil {
-		return nil, ErrBusUnavailable
+		return nil, service.ErrBusUnavailable
 	}
 	results, err := b.eng.InvokeComputeAll(ctx, payload)
 	out := make([]ComputeResult, 0, len(results))

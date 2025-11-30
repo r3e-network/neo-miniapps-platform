@@ -1,13 +1,11 @@
 package dta
 
 import (
-	"github.com/R3E-Network/service_layer/domain/account"
 	"context"
 	"fmt"
 	"strings"
 
-	"github.com/R3E-Network/service_layer/pkg/storage"
-	domaindta "github.com/R3E-Network/service_layer/domain/dta"
+	
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	engine "github.com/R3E-Network/service_layer/system/core"
 	"github.com/R3E-Network/service_layer/system/framework"
@@ -17,10 +15,11 @@ import (
 // Service manages DTA products and orders.
 type Service struct {
 	framework.ServiceBase
-	base  *core.Base
-	store storage.DTAStore
-	log   *logger.Logger
-	hooks core.ObservationHooks
+	accounts AccountChecker
+	wallets  WalletChecker
+	store    Store
+	log      *logger.Logger
+	hooks    core.ObservationHooks
 }
 
 // Name returns the stable service identifier.
@@ -48,18 +47,18 @@ func (s *Service) Descriptor() core.Descriptor { return s.Manifest().ToDescripto
 // Start/Stop/Ready are inherited from framework.ServiceBase.
 
 // New constructs a DTA service.
-func New(accounts storage.AccountStore, store storage.DTAStore, log *logger.Logger) *Service {
+func New(accounts AccountChecker, store Store, log *logger.Logger) *Service {
 	if log == nil {
 		log = logger.NewDefault("dta")
 	}
-	svc := &Service{base: core.NewBaseFromStore[account.Account](accounts), store: store, log: log, hooks: core.NoopObservationHooks}
+	svc := &Service{accounts: accounts, store: store, log: log, hooks: core.NoopObservationHooks}
 	svc.SetName(svc.Name())
 	return svc
 }
 
-// WithWorkspaceWallets injects wallet store enforcement for orders.
-func (s *Service) WithWorkspaceWallets(store storage.WorkspaceWalletStore) {
-	s.base.SetWallets(core.WrapWalletStore[account.WorkspaceWallet](store))
+// WithWalletChecker injects a wallet checker for ownership validation.
+func (s *Service) WithWalletChecker(w WalletChecker) {
+	s.wallets = w
 }
 
 // WithObservationHooks configures callbacks for order creation observability.
@@ -68,95 +67,95 @@ func (s *Service) WithObservationHooks(h core.ObservationHooks) {
 }
 
 // CreateProduct registers a product for an account.
-func (s *Service) CreateProduct(ctx context.Context, product domaindta.Product) (domaindta.Product, error) {
-	if err := s.base.EnsureAccount(ctx, product.AccountID); err != nil {
-		return domaindta.Product{}, err
+func (s *Service) CreateProduct(ctx context.Context, product Product) (Product, error) {
+	if err := s.accounts.AccountExists(ctx, product.AccountID); err != nil {
+		return Product{}, err
 	}
 	if err := s.normalizeProduct(&product); err != nil {
-		return domaindta.Product{}, err
+		return Product{}, err
 	}
 	created, err := s.store.CreateProduct(ctx, product)
 	if err != nil {
-		return domaindta.Product{}, err
+		return Product{}, err
 	}
 	s.log.WithField("product_id", created.ID).WithField("account_id", created.AccountID).Info("dta product created")
 	return created, nil
 }
 
 // UpdateProduct updates product fields.
-func (s *Service) UpdateProduct(ctx context.Context, product domaindta.Product) (domaindta.Product, error) {
+func (s *Service) UpdateProduct(ctx context.Context, product Product) (Product, error) {
 	stored, err := s.store.GetProduct(ctx, product.ID)
 	if err != nil {
-		return domaindta.Product{}, err
+		return Product{}, err
 	}
 	if err := core.EnsureOwnership(stored.AccountID, product.AccountID, "product", product.ID); err != nil {
-		return domaindta.Product{}, err
+		return Product{}, err
 	}
 	product.AccountID = stored.AccountID
 	if err := s.normalizeProduct(&product); err != nil {
-		return domaindta.Product{}, err
+		return Product{}, err
 	}
 	updated, err := s.store.UpdateProduct(ctx, product)
 	if err != nil {
-		return domaindta.Product{}, err
+		return Product{}, err
 	}
 	s.log.WithField("product_id", product.ID).WithField("account_id", product.AccountID).Info("dta product updated")
 	return updated, nil
 }
 
 // GetProduct fetches a product ensuring ownership.
-func (s *Service) GetProduct(ctx context.Context, accountID, productID string) (domaindta.Product, error) {
+func (s *Service) GetProduct(ctx context.Context, accountID, productID string) (Product, error) {
 	product, err := s.store.GetProduct(ctx, productID)
 	if err != nil {
-		return domaindta.Product{}, err
+		return Product{}, err
 	}
 	if err := core.EnsureOwnership(product.AccountID, accountID, "product", productID); err != nil {
-		return domaindta.Product{}, err
+		return Product{}, err
 	}
 	return product, nil
 }
 
 // ListProducts lists account products.
-func (s *Service) ListProducts(ctx context.Context, accountID string) ([]domaindta.Product, error) {
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
+func (s *Service) ListProducts(ctx context.Context, accountID string) ([]Product, error) {
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
 		return nil, err
 	}
 	return s.store.ListProducts(ctx, accountID)
 }
 
 // CreateOrder creates a subscription/redemption order.
-func (s *Service) CreateOrder(ctx context.Context, accountID, productID string, typ domaindta.OrderType, amount string, walletAddr string, metadata map[string]string) (domaindta.Order, error) {
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
-		return domaindta.Order{}, err
+func (s *Service) CreateOrder(ctx context.Context, accountID, productID string, typ OrderType, amount string, walletAddr string, metadata map[string]string) (Order, error) {
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
+		return Order{}, err
 	}
 	product, err := s.GetProduct(ctx, accountID, productID)
 	if err != nil {
-		return domaindta.Order{}, err
+		return Order{}, err
 	}
-	typ = domaindta.OrderType(strings.ToLower(strings.TrimSpace(string(typ))))
+	typ = OrderType(strings.ToLower(strings.TrimSpace(string(typ))))
 	switch typ {
-	case domaindta.OrderTypeSubscription, domaindta.OrderTypeRedemption:
+	case OrderTypeSubscription, OrderTypeRedemption:
 	default:
-		return domaindta.Order{}, fmt.Errorf("invalid order type %s", typ)
+		return Order{}, fmt.Errorf("invalid order type %s", typ)
 	}
 	amount = strings.TrimSpace(amount)
 	if amount == "" {
-		return domaindta.Order{}, core.RequiredError("amount")
+		return Order{}, core.RequiredError("amount")
 	}
 	wallet := strings.ToLower(strings.TrimSpace(walletAddr))
 	if wallet == "" {
-		return domaindta.Order{}, core.RequiredError("wallet_address")
+		return Order{}, core.RequiredError("wallet_address")
 	}
 	if err := s.ensureWalletOwned(ctx, accountID, wallet); err != nil {
-		return domaindta.Order{}, err
+		return Order{}, err
 	}
-	order := domaindta.Order{
+	order := Order{
 		AccountID: accountID,
 		ProductID: product.ID,
 		Type:      typ,
 		Amount:    amount,
 		Wallet:    wallet,
-		Status:    domaindta.OrderStatusPending,
+		Status:    OrderStatusPending,
 		Metadata:  core.NormalizeMetadata(metadata),
 	}
 	attrs := map[string]string{"product_id": product.ID, "order_type": string(typ)}
@@ -164,7 +163,7 @@ func (s *Service) CreateOrder(ctx context.Context, accountID, productID string, 
 	created, err := s.store.CreateOrder(ctx, order)
 	if err != nil {
 		finish(err)
-		return domaindta.Order{}, err
+		return Order{}, err
 	}
 	finish(nil)
 	s.log.WithField("order_id", created.ID).WithField("product_id", product.ID).Info("dta order created")
@@ -172,27 +171,27 @@ func (s *Service) CreateOrder(ctx context.Context, accountID, productID string, 
 }
 
 // GetOrder fetches an order.
-func (s *Service) GetOrder(ctx context.Context, accountID, orderID string) (domaindta.Order, error) {
+func (s *Service) GetOrder(ctx context.Context, accountID, orderID string) (Order, error) {
 	order, err := s.store.GetOrder(ctx, orderID)
 	if err != nil {
-		return domaindta.Order{}, err
+		return Order{}, err
 	}
 	if err := core.EnsureOwnership(order.AccountID, accountID, "order", orderID); err != nil {
-		return domaindta.Order{}, err
+		return Order{}, err
 	}
 	return order, nil
 }
 
 // ListOrders lists recent orders.
-func (s *Service) ListOrders(ctx context.Context, accountID string, limit int) ([]domaindta.Order, error) {
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
+func (s *Service) ListOrders(ctx context.Context, accountID string, limit int) ([]Order, error) {
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
 		return nil, err
 	}
 	clamped := core.ClampLimit(limit, core.DefaultListLimit, core.MaxListLimit)
 	return s.store.ListOrders(ctx, accountID, clamped)
 }
 
-func (s *Service) normalizeProduct(product *domaindta.Product) error {
+func (s *Service) normalizeProduct(product *Product) error {
 	product.Name = strings.TrimSpace(product.Name)
 	product.Symbol = strings.ToUpper(strings.TrimSpace(product.Symbol))
 	product.Type = strings.ToLower(strings.TrimSpace(product.Type))
@@ -204,12 +203,12 @@ func (s *Service) normalizeProduct(product *domaindta.Product) error {
 	if product.Symbol == "" {
 		return core.RequiredError("symbol")
 	}
-	status := domaindta.ProductStatus(strings.ToLower(strings.TrimSpace(string(product.Status))))
+	status := ProductStatus(strings.ToLower(strings.TrimSpace(string(product.Status))))
 	if status == "" {
-		status = domaindta.ProductStatusInactive
+		status = ProductStatusInactive
 	}
 	switch status {
-	case domaindta.ProductStatusInactive, domaindta.ProductStatusActive, domaindta.ProductStatusSuspended:
+	case ProductStatusInactive, ProductStatusActive, ProductStatusSuspended:
 		product.Status = status
 	default:
 		return fmt.Errorf("invalid status %s", status)
@@ -218,5 +217,11 @@ func (s *Service) normalizeProduct(product *domaindta.Product) error {
 }
 
 func (s *Service) ensureWalletOwned(ctx context.Context, accountID, wallet string) error {
-	return s.base.EnsureSignersOwned(ctx, accountID, []string{wallet})
+	if wallet == "" {
+		return core.RequiredError("wallet_address")
+	}
+	if s.wallets == nil {
+		return nil
+	}
+	return s.wallets.WalletOwnedBy(ctx, accountID, wallet)
 }

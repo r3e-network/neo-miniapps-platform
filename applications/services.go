@@ -12,10 +12,10 @@ import (
 	dtasvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.dta"
 	"github.com/R3E-Network/service_layer/packages/com.r3e.services.functions"
 	gasbanksvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.gasbank"
+	mixersvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.mixer"
 	oraclesvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.oracle"
 	"github.com/R3E-Network/service_layer/packages/com.r3e.services.secrets"
 	vrfsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.vrf"
-	"github.com/R3E-Network/service_layer/pkg/storage"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 )
 
@@ -35,7 +35,7 @@ type ServiceProvider interface {
 	DTAService() *dtasvc.Service
 	CREService() *cresvc.Service
 	OracleService() *oraclesvc.Service
-	WorkspaceWalletStore() storage.WorkspaceWalletStore
+	MixerService() *mixersvc.Service
 	OracleRunnerTokensValue() []string
 	DescriptorSnapshot() []core.Descriptor
 }
@@ -54,10 +54,8 @@ func (a *Application) ConfidentialService() *confsvc.Service      { return a.Con
 func (a *Application) DTAService() *dtasvc.Service                { return a.DTA }
 func (a *Application) CREService() *cresvc.Service                { return a.CRE }
 func (a *Application) OracleService() *oraclesvc.Service          { return a.Oracle }
-func (a *Application) WorkspaceWalletStore() storage.WorkspaceWalletStore {
-	return a.WorkspaceWallets
-}
-func (a *Application) OracleRunnerTokensValue() []string { return a.OracleRunnerTokens }
+func (a *Application) MixerService() *mixersvc.Service            { return a.Mixer }
+func (a *Application) OracleRunnerTokensValue() []string          { return a.OracleRunnerTokens }
 func (a *Application) DescriptorSnapshot() []core.Descriptor {
 	return a.Descriptors()
 }
@@ -76,10 +74,8 @@ func (a *EngineApplication) ConfidentialService() *confsvc.Service      { return
 func (a *EngineApplication) DTAService() *dtasvc.Service                { return a.DTA }
 func (a *EngineApplication) CREService() *cresvc.Service                { return a.CRE }
 func (a *EngineApplication) OracleService() *oraclesvc.Service          { return a.Oracle }
-func (a *EngineApplication) WorkspaceWalletStore() storage.WorkspaceWalletStore {
-	return a.WorkspaceWallets
-}
-func (a *EngineApplication) OracleRunnerTokensValue() []string { return a.OracleRunnerTokens }
+func (a *EngineApplication) MixerService() *mixersvc.Service            { return a.Mixer }
+func (a *EngineApplication) OracleRunnerTokensValue() []string          { return a.OracleRunnerTokens }
 func (a *EngineApplication) DescriptorSnapshot() []core.Descriptor {
 	return a.Descriptors()
 }

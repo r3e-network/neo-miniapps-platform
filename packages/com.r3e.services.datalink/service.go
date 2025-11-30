@@ -1,13 +1,10 @@
 package datalink
 
 import (
-	"github.com/R3E-Network/service_layer/domain/account"
 	"context"
 	"fmt"
 	"strings"
 
-	"github.com/R3E-Network/service_layer/pkg/storage"
-	domainlink "github.com/R3E-Network/service_layer/domain/datalink"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	engine "github.com/R3E-Network/service_layer/system/core"
 	"github.com/R3E-Network/service_layer/system/framework"
@@ -23,22 +20,23 @@ var _ eventPublisher = (*Service)(nil)
 
 // Dispatcher handles delivery attempts.
 type Dispatcher interface {
-	Dispatch(ctx context.Context, delivery domainlink.Delivery, channel domainlink.Channel) error
+	Dispatch(ctx context.Context, delivery Delivery, channel Channel) error
 }
 
 // DispatcherFunc converts a function to a Dispatcher.
-type DispatcherFunc func(ctx context.Context, delivery domainlink.Delivery, channel domainlink.Channel) error
+type DispatcherFunc func(ctx context.Context, delivery Delivery, channel Channel) error
 
 // Dispatch calls f(ctx, delivery, channel).
-func (f DispatcherFunc) Dispatch(ctx context.Context, delivery domainlink.Delivery, channel domainlink.Channel) error {
+func (f DispatcherFunc) Dispatch(ctx context.Context, delivery Delivery, channel Channel) error {
 	return f(ctx, delivery, channel)
 }
 
 // Service manages datalink channels and deliveries.
 type Service struct {
 	framework.ServiceBase
-	base       *core.Base
-	store      storage.DataLinkStore
+	accounts   AccountChecker
+	wallets    WalletChecker
+	store      Store
 	dispatcher Dispatcher
 	dispatch   core.DispatchOptions
 	log        *logger.Logger
@@ -67,14 +65,14 @@ func (s *Service) Manifest() *framework.Manifest {
 func (s *Service) Descriptor() core.Descriptor { return s.Manifest().ToDescriptor() }
 
 // New constructs a service.
-func New(accounts storage.AccountStore, store storage.DataLinkStore, log *logger.Logger) *Service {
+func New(accounts AccountChecker, store Store, log *logger.Logger) *Service {
 	if log == nil {
 		log = logger.NewDefault("datalink")
 	}
 	svc := &Service{
-		base:  core.NewBaseFromStore[account.Account](accounts),
-		store: store,
-		dispatcher: DispatcherFunc(func(context.Context, domainlink.Delivery, domainlink.Channel) error {
+		accounts: accounts,
+		store:    store,
+		dispatcher: DispatcherFunc(func(context.Context, Delivery, Channel) error {
 			return nil
 		}),
 		dispatch: core.NewDispatchOptions(),
@@ -136,90 +134,103 @@ func (s *Service) WithTracer(t core.Tracer) {
 	s.dispatch.SetTracer(t)
 }
 
-// WithWorkspaceWallets injects wallet validation for channels.
-func (s *Service) WithWorkspaceWallets(store storage.WorkspaceWalletStore) {
-	s.base.SetWallets(core.WrapWalletStore[account.WorkspaceWallet](store))
+// WithWallets injects wallet validation for channels.
+func (s *Service) WithWallets(wallets WalletChecker) {
+	s.wallets = wallets
+}
+
+// WithWalletChecker is an alias for WithWallets for API consistency.
+func (s *Service) WithWalletChecker(w WalletChecker) {
+	s.wallets = w
 }
 
 // CreateChannel registers a channel.
-func (s *Service) CreateChannel(ctx context.Context, ch domainlink.Channel) (domainlink.Channel, error) {
-	if err := s.base.EnsureAccount(ctx, ch.AccountID); err != nil {
-		return domainlink.Channel{}, err
+func (s *Service) CreateChannel(ctx context.Context, ch Channel) (Channel, error) {
+	if err := s.accounts.AccountExists(ctx, ch.AccountID); err != nil {
+		return Channel{}, err
 	}
 	if err := s.normalizeChannel(&ch); err != nil {
-		return domainlink.Channel{}, err
+		return Channel{}, err
 	}
-	if err := s.base.EnsureSignersOwned(ctx, ch.AccountID, ch.SignerSet); err != nil {
-		return domainlink.Channel{}, err
+	if s.wallets != nil {
+		for _, signer := range ch.SignerSet {
+			if err := s.wallets.WalletOwnedBy(ctx, ch.AccountID, signer); err != nil {
+				return Channel{}, fmt.Errorf("signer %s not owned by account: %w", signer, err)
+			}
+		}
 	}
 	created, err := s.store.CreateChannel(ctx, ch)
 	if err != nil {
-		return domainlink.Channel{}, err
+		return Channel{}, err
 	}
 	s.log.WithField("channel_id", created.ID).WithField("account_id", created.AccountID).Info("datalink channel created")
 	return created, nil
 }
 
 // UpdateChannel mutates channel fields.
-func (s *Service) UpdateChannel(ctx context.Context, ch domainlink.Channel) (domainlink.Channel, error) {
+func (s *Service) UpdateChannel(ctx context.Context, ch Channel) (Channel, error) {
 	stored, err := s.store.GetChannel(ctx, ch.ID)
 	if err != nil {
-		return domainlink.Channel{}, err
+		return Channel{}, err
 	}
 	if err := core.EnsureOwnership(stored.AccountID, ch.AccountID, "channel", ch.ID); err != nil {
-		return domainlink.Channel{}, err
+		return Channel{}, err
 	}
 	ch.AccountID = stored.AccountID
 	if err := s.normalizeChannel(&ch); err != nil {
-		return domainlink.Channel{}, err
+		return Channel{}, err
 	}
-	if err := s.base.EnsureSignersOwned(ctx, ch.AccountID, ch.SignerSet); err != nil {
-		return domainlink.Channel{}, err
+	if s.wallets != nil {
+		for _, signer := range ch.SignerSet {
+			if err := s.wallets.WalletOwnedBy(ctx, ch.AccountID, signer); err != nil {
+				return Channel{}, fmt.Errorf("signer %s not owned by account: %w", signer, err)
+			}
+		}
 	}
 	updated, err := s.store.UpdateChannel(ctx, ch)
 	if err != nil {
-		return domainlink.Channel{}, err
+		return Channel{}, err
 	}
 	s.log.WithField("channel_id", ch.ID).WithField("account_id", ch.AccountID).Info("datalink channel updated")
 	return updated, nil
 }
 
 // GetChannel fetches a channel ensuring ownership.
-func (s *Service) GetChannel(ctx context.Context, accountID, channelID string) (domainlink.Channel, error) {
+func (s *Service) GetChannel(ctx context.Context, accountID, channelID string) (Channel, error) {
 	ch, err := s.store.GetChannel(ctx, channelID)
 	if err != nil {
-		return domainlink.Channel{}, err
+		return Channel{}, err
 	}
 	if err := core.EnsureOwnership(ch.AccountID, accountID, "channel", channelID); err != nil {
-		return domainlink.Channel{}, err
+		return Channel{}, err
 	}
 	return ch, nil
 }
 
 // ListChannels lists account channels.
-func (s *Service) ListChannels(ctx context.Context, accountID string) ([]domainlink.Channel, error) {
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
+func (s *Service) ListChannels(ctx context.Context, accountID string) ([]Channel, error) {
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
 		return nil, err
 	}
 	return s.store.ListChannels(ctx, accountID)
 }
 
 // CreateDelivery enqueues a delivery.
-func (s *Service) CreateDelivery(ctx context.Context, accountID, channelID string, payload map[string]any, metadata map[string]string) (domainlink.Delivery, error) {
+func (s *Service) CreateDelivery(ctx context.Context, accountID, channelID string, payload map[string]any, metadata map[string]string) (Delivery, error) {
 	ch, err := s.GetChannel(ctx, accountID, channelID)
 	if err != nil {
-		return domainlink.Delivery{}, err
+		return Delivery{}, err
 	}
-	del := domainlink.Delivery{
+	del := Delivery{
 		AccountID: accountID,
 		ChannelID: channelID,
 		Payload:   payload,
 		Metadata:  core.NormalizeMetadata(metadata),
-		Status:    domainlink.DeliveryStatusPending,
+		Status:    DeliveryStatusPending,
 	}
 	created, err := s.store.CreateDelivery(ctx, del)
 	if err != nil {
-		return domainlink.Delivery{}, err
+		return Delivery{}, err
 	}
 	attrs := map[string]string{"delivery_id": created.ID, "channel_id": ch.ID}
 	if err := s.dispatch.Run(ctx, "datalink.dispatch", attrs, func(spanCtx context.Context) error {
@@ -235,27 +246,27 @@ func (s *Service) CreateDelivery(ctx context.Context, accountID, channelID strin
 }
 
 // GetDelivery fetches a delivery.
-func (s *Service) GetDelivery(ctx context.Context, accountID, deliveryID string) (domainlink.Delivery, error) {
+func (s *Service) GetDelivery(ctx context.Context, accountID, deliveryID string) (Delivery, error) {
 	del, err := s.store.GetDelivery(ctx, deliveryID)
 	if err != nil {
-		return domainlink.Delivery{}, err
+		return Delivery{}, err
 	}
 	if err := core.EnsureOwnership(del.AccountID, accountID, "delivery", deliveryID); err != nil {
-		return domainlink.Delivery{}, err
+		return Delivery{}, err
 	}
 	return del, nil
 }
 
 // ListDeliveries lists account deliveries.
-func (s *Service) ListDeliveries(ctx context.Context, accountID string, limit int) ([]domainlink.Delivery, error) {
-	if err := s.base.EnsureAccount(ctx, accountID); err != nil {
+func (s *Service) ListDeliveries(ctx context.Context, accountID string, limit int) ([]Delivery, error) {
+	if err := s.accounts.AccountExists(ctx, accountID); err != nil {
 		return nil, err
 	}
 	clamped := core.ClampLimit(limit, core.DefaultListLimit, core.MaxListLimit)
 	return s.store.ListDeliveries(ctx, accountID, clamped)
 }
 
-func (s *Service) normalizeChannel(ch *domainlink.Channel) error {
+func (s *Service) normalizeChannel(ch *Channel) error {
 	ch.Name = strings.TrimSpace(ch.Name)
 	ch.Endpoint = strings.TrimSpace(ch.Endpoint)
 	ch.AuthToken = strings.TrimSpace(ch.AuthToken)
@@ -270,12 +281,12 @@ func (s *Service) normalizeChannel(ch *domainlink.Channel) error {
 	if len(ch.SignerSet) == 0 {
 		return core.RequiredError("signer_set")
 	}
-	status := domainlink.ChannelStatus(strings.ToLower(strings.TrimSpace(string(ch.Status))))
+	status := ChannelStatus(strings.ToLower(strings.TrimSpace(string(ch.Status))))
 	if status == "" {
-		status = domainlink.ChannelStatusInactive
+		status = ChannelStatusInactive
 	}
 	switch status {
-	case domainlink.ChannelStatusInactive, domainlink.ChannelStatusActive, domainlink.ChannelStatusSuspended:
+	case ChannelStatusInactive, ChannelStatusActive, ChannelStatusSuspended:
 		ch.Status = status
 	default:
 		return fmt.Errorf("invalid status %s", status)

@@ -6,8 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/R3E-Network/service_layer/pkg/storage"
-	"github.com/R3E-Network/service_layer/domain/gasbank"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	"github.com/R3E-Network/service_layer/system/framework"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
@@ -15,7 +13,7 @@ import (
 
 // WithdrawalResolver decides whether a pending withdrawal has been settled.
 type WithdrawalResolver interface {
-	Resolve(ctx context.Context, tx gasbank.Transaction) (done bool, success bool, message string, retryAfter time.Duration, err error)
+	Resolve(ctx context.Context, tx Transaction) (done bool, success bool, message string, retryAfter time.Duration, err error)
 }
 
 // TimeoutResolver marks pending transactions as failed after a timeout.
@@ -31,7 +29,7 @@ func NewTimeoutResolver(timeout time.Duration) *TimeoutResolver {
 	return &TimeoutResolver{timeout: timeout}
 }
 
-func (r *TimeoutResolver) Resolve(ctx context.Context, tx gasbank.Transaction) (bool, bool, string, time.Duration, error) {
+func (r *TimeoutResolver) Resolve(ctx context.Context, tx Transaction) (bool, bool, string, time.Duration, error) {
 	if value, ok := r.seen.Load(tx.ID); ok {
 		if time.Since(value.(time.Time)) >= r.timeout {
 			return true, false, "timeout waiting for blockchain confirmation", 0, nil
@@ -45,7 +43,7 @@ func (r *TimeoutResolver) Resolve(ctx context.Context, tx gasbank.Transaction) (
 // SettlementPoller watches pending withdrawals and settles them using the resolver.
 type SettlementPoller struct {
 	framework.ServiceBase
-	store       storage.GasBankStore
+	store       Store
 	service     *Service
 	resolver    WithdrawalResolver
 	interval    time.Duration
@@ -68,7 +66,7 @@ var _ interface {
 	Ready(context.Context) error
 } = (*SettlementPoller)(nil)
 
-func NewSettlementPoller(store storage.GasBankStore, service *Service, resolver WithdrawalResolver, log *logger.Logger) *SettlementPoller {
+func NewSettlementPoller(store Store, service *Service, resolver WithdrawalResolver, log *logger.Logger) *SettlementPoller {
 	if log == nil {
 		log = logger.NewDefault("gasbank-settlement")
 	}
@@ -349,9 +347,9 @@ func (p *SettlementPoller) clearSchedule(id string) {
 	p.mu.Unlock()
 }
 
-func (p *SettlementPoller) recordAttempt(ctx context.Context, tx gasbank.Transaction, status string, message string, started, completed time.Time, retryAfter time.Duration) (gasbank.Transaction, error) {
+func (p *SettlementPoller) recordAttempt(ctx context.Context, tx Transaction, status string, message string, started, completed time.Time, retryAfter time.Duration) (Transaction, error) {
 	attempt := tx.ResolverAttempt + 1
-	record := gasbank.SettlementAttempt{
+	record := SettlementAttempt{
 		TransactionID: tx.ID,
 		Attempt:       attempt,
 		StartedAt:     started.UTC(),
@@ -381,14 +379,14 @@ func (p *SettlementPoller) recordAttempt(ctx context.Context, tx gasbank.Transac
 	return updated, nil
 }
 
-func (p *SettlementPoller) shouldDeadLetter(tx gasbank.Transaction) bool {
+func (p *SettlementPoller) shouldDeadLetter(tx Transaction) bool {
 	p.mu.Lock()
 	max := p.maxAttempts
 	p.mu.Unlock()
 	return max > 0 && tx.ResolverAttempt >= max
 }
 
-func (p *SettlementPoller) promoteDeadLetter(ctx context.Context, tx gasbank.Transaction, reason, message string) {
+func (p *SettlementPoller) promoteDeadLetter(ctx context.Context, tx Transaction, reason, message string) {
 	if p.service == nil {
 		return
 	}

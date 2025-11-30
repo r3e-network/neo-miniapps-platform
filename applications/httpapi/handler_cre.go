@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	domaincre "github.com/R3E-Network/service_layer/domain/cre"
+	"github.com/R3E-Network/service_layer/packages/com.r3e.services.cre"
 )
 
 func (h *handler) accountCRE(w http.ResponseWriter, r *http.Request, accountID string, rest []string) {
@@ -38,13 +38,13 @@ func (h *handler) accountCREPlaybooks(w http.ResponseWriter, r *http.Request, ac
 				Description string            `json:"description"`
 				Tags        []string          `json:"tags"`
 				Metadata    map[string]string `json:"metadata"`
-				Steps       []domaincre.Step  `json:"steps"`
+				Steps       []cre.Step  `json:"steps"`
 			}
 			if err := decodeJSON(r.Body, &payload); err != nil {
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			pb := domaincre.Playbook{
+			pb := cre.Playbook{
 				AccountID:   accountID,
 				Name:        payload.Name,
 				Description: payload.Description,
@@ -106,13 +106,13 @@ func (h *handler) accountCREPlaybooks(w http.ResponseWriter, r *http.Request, ac
 				Description string            `json:"description"`
 				Tags        []string          `json:"tags"`
 				Metadata    map[string]string `json:"metadata"`
-				Steps       []domaincre.Step  `json:"steps"`
+				Steps       []cre.Step  `json:"steps"`
 			}
 			if err := decodeJSON(r.Body, &payload); err != nil {
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			pb := domaincre.Playbook{
+			pb := cre.Playbook{
 				ID:          playbookID,
 				AccountID:   accountID,
 				Name:        payload.Name,
@@ -207,7 +207,7 @@ func (h *handler) accountCREExecutors(w http.ResponseWriter, r *http.Request, ac
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			exec := domaincre.Executor{
+			exec := cre.Executor{
 				AccountID: accountID,
 				Name:      payload.Name,
 				Type:      payload.Type,
@@ -246,7 +246,7 @@ func (h *handler) accountCREExecutors(w http.ResponseWriter, r *http.Request, ac
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			exec := domaincre.Executor{
+			exec := cre.Executor{
 				ID:        execID,
 				AccountID: accountID,
 				Name:      payload.Name,

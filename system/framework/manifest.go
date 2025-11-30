@@ -426,3 +426,127 @@ type ManifestValidatorFunc func(*Manifest) error
 func (f ManifestValidatorFunc) ValidateManifest(m *Manifest) error {
 	return f(m)
 }
+
+// ManifestBuilder provides a fluent API for constructing service manifests.
+// This reduces boilerplate in service implementations.
+type ManifestBuilder struct {
+	manifest *Manifest
+}
+
+// NewManifestBuilder creates a builder for a service manifest.
+// The name is used as the default for domain and capabilities.
+func NewManifestBuilder(name, description string) *ManifestBuilder {
+	return &ManifestBuilder{
+		manifest: &Manifest{
+			Name:         strings.TrimSpace(name),
+			Domain:       strings.TrimSpace(name),
+			Description:  strings.TrimSpace(description),
+			Layer:        "service",
+			DependsOn:    []string{"store", "svc-accounts"},
+			RequiresAPIs: []engine.APISurface{engine.APISurfaceStore},
+			Capabilities: []string{strings.TrimSpace(name)},
+			Quotas:       make(map[string]string),
+			Tags:         make(map[string]string),
+		},
+	}
+}
+
+// Domain sets the service domain (defaults to name).
+func (b *ManifestBuilder) Domain(domain string) *ManifestBuilder {
+	b.manifest.Domain = strings.TrimSpace(domain)
+	return b
+}
+
+// Version sets the service version.
+func (b *ManifestBuilder) Version(version string) *ManifestBuilder {
+	b.manifest.Version = strings.TrimSpace(version)
+	return b
+}
+
+// Layer sets the service layer (service, runner, infra, platform).
+func (b *ManifestBuilder) Layer(layer string) *ManifestBuilder {
+	b.manifest.Layer = strings.TrimSpace(strings.ToLower(layer))
+	return b
+}
+
+// DependsOn sets the service dependencies (replaces defaults).
+func (b *ManifestBuilder) DependsOn(deps ...string) *ManifestBuilder {
+	b.manifest.DependsOn = deps
+	return b
+}
+
+// AddDependency adds a dependency to the existing list.
+func (b *ManifestBuilder) AddDependency(dep string) *ManifestBuilder {
+	b.manifest.DependsOn = append(b.manifest.DependsOn, strings.TrimSpace(dep))
+	return b
+}
+
+// RequiresAPIs sets the required API surfaces (replaces defaults).
+func (b *ManifestBuilder) RequiresAPIs(apis ...engine.APISurface) *ManifestBuilder {
+	b.manifest.RequiresAPIs = apis
+	return b
+}
+
+// AddAPI adds an API surface to the existing list.
+func (b *ManifestBuilder) AddAPI(api engine.APISurface) *ManifestBuilder {
+	b.manifest.RequiresAPIs = append(b.manifest.RequiresAPIs, api)
+	return b
+}
+
+// Capabilities sets the service capabilities (replaces defaults).
+func (b *ManifestBuilder) Capabilities(caps ...string) *ManifestBuilder {
+	b.manifest.Capabilities = caps
+	return b
+}
+
+// AddCapability adds a capability to the existing list.
+func (b *ManifestBuilder) AddCapability(cap string) *ManifestBuilder {
+	b.manifest.Capabilities = append(b.manifest.Capabilities, strings.TrimSpace(cap))
+	return b
+}
+
+// Quota sets a quota key-value pair.
+func (b *ManifestBuilder) Quota(key, value string) *ManifestBuilder {
+	b.manifest.Quotas[strings.TrimSpace(key)] = strings.TrimSpace(value)
+	return b
+}
+
+// Tag sets a tag key-value pair.
+func (b *ManifestBuilder) Tag(key, value string) *ManifestBuilder {
+	b.manifest.Tags[strings.TrimSpace(key)] = strings.TrimSpace(value)
+	return b
+}
+
+// Enabled sets whether the service is enabled.
+func (b *ManifestBuilder) Enabled(enabled bool) *ManifestBuilder {
+	b.manifest.Enabled = &enabled
+	return b
+}
+
+// Build returns the constructed manifest.
+// The manifest is normalized before being returned.
+func (b *ManifestBuilder) Build() *Manifest {
+	b.manifest.Normalize()
+	return b.manifest
+}
+
+// BuildClone returns a clone of the constructed manifest.
+// Useful when the builder will be reused.
+func (b *ManifestBuilder) BuildClone() *Manifest {
+	return b.Build().Clone()
+}
+
+// ServiceManifest is a convenience function to create a standard service manifest.
+// This is the most common pattern for service packages.
+func ServiceManifest(name, description string) *Manifest {
+	return NewManifestBuilder(name, description).Build()
+}
+
+// ServiceManifestWithAPIs creates a manifest with additional API requirements.
+func ServiceManifestWithAPIs(name, description string, apis ...engine.APISurface) *Manifest {
+	builder := NewManifestBuilder(name, description)
+	for _, api := range apis {
+		builder.AddAPI(api)
+	}
+	return builder.Build()
+}

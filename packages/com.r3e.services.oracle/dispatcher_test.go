@@ -27,7 +27,7 @@ func TestDispatcher_ResolveSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create account: %v", err)
 	}
-	svc := New(store, NewStoreAdapter(store), nil)
+	svc := New(NewMemoryAccountChecker(store), NewMemoryStoreAdapter(store, store), nil)
 	src, err := svc.CreateSource(context.Background(), acct.ID, "prices", "https://api.example.com", "GET", "", nil, "")
 	if err != nil {
 		t.Fatalf("create source: %v", err)
@@ -56,7 +56,7 @@ func TestDispatcher_ResolveSuccess(t *testing.T) {
 func TestDispatcher_ResolveFailure(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, NewStoreAdapter(store), nil)
+	svc := New(NewMemoryAccountChecker(store), NewMemoryStoreAdapter(store, store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "prices", "https://api.example.com", "GET", "", nil, "")
 	req, _ := svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
 
@@ -82,7 +82,7 @@ func TestDispatcher_ResolveFailure(t *testing.T) {
 func TestDispatcher_ExpiresTTL(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, NewStoreAdapter(store), nil)
+	svc := New(NewMemoryAccountChecker(store), NewMemoryStoreAdapter(store, store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "prices", "https://api.example.com", "GET", "", nil, "")
 	req, _ := svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
 
@@ -103,7 +103,7 @@ func TestDispatcher_ExpiresTTL(t *testing.T) {
 func TestDispatcher_MaxAttempts(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, NewStoreAdapter(store), nil)
+	svc := New(NewMemoryAccountChecker(store), NewMemoryStoreAdapter(store, store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "prices", "https://api.example.com", "GET", "", nil, "")
 	req, _ := svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
 
@@ -127,7 +127,7 @@ func TestDispatcher_MaxAttempts(t *testing.T) {
 func TestDispatcher_Lifecycle(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, NewStoreAdapter(store), nil)
+	svc := New(NewMemoryAccountChecker(store), NewMemoryStoreAdapter(store, store), nil)
 	svc.CreateSource(context.Background(), acct.ID, "src", "https://example.com", "GET", "", nil, "")
 
 	dispatcher := NewDispatcher(svc, nil)
@@ -178,7 +178,7 @@ func TestDispatcher_StartWithoutResolver(t *testing.T) {
 
 func TestDispatcher_DoubleStart(t *testing.T) {
 	store := memory.New()
-	svc := New(store, NewStoreAdapter(store), nil)
+	svc := New(NewMemoryAccountChecker(store), NewMemoryStoreAdapter(store, store), nil)
 
 	dispatcher := NewDispatcher(svc, nil)
 	dispatcher.WithResolver(stubResolver{done: true, success: true, result: "{}"})
@@ -239,7 +239,7 @@ func TestDispatcher_TickWithNilService(t *testing.T) {
 func TestDispatcher_RetryWithDelay(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, NewStoreAdapter(store), nil)
+	svc := New(NewMemoryAccountChecker(store), NewMemoryStoreAdapter(store, store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "retry-src", "https://example.com", "GET", "", nil, "")
 	req, _ := svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
 
@@ -266,7 +266,7 @@ func TestDispatcher_RetryWithDelay(t *testing.T) {
 func TestDispatcher_DeadLetterDisabled(t *testing.T) {
 	store := memory.New()
 	acct, _ := store.CreateAccount(context.Background(), account.Account{Owner: "owner"})
-	svc := New(store, NewStoreAdapter(store), nil)
+	svc := New(NewMemoryAccountChecker(store), NewMemoryStoreAdapter(store, store), nil)
 	src, _ := svc.CreateSource(context.Background(), acct.ID, "dl-src", "https://example.com", "GET", "", nil, "")
 	svc.CreateRequest(context.Background(), acct.ID, src.ID, "{}")
 

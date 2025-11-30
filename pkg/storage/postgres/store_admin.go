@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 
-	"github.com/R3E-Network/service_layer/domain/admin"
+	"github.com/R3E-Network/service_layer/pkg/admin"
 )
 
 // AdminConfigStore implementation
