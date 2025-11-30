@@ -91,16 +91,7 @@ func New(accounts storage.AccountStore, store storage.SecretStore, log *logger.L
 	return svc
 }
 
-// Start marks secrets service ready (no background loops).
-func (s *Service) Start(ctx context.Context) error { _ = ctx; s.MarkReady(true); return nil }
-
-// Stop clears readiness flag.
-func (s *Service) Stop(ctx context.Context) error { _ = ctx; s.MarkReady(false); return nil }
-
-// Ready reports readiness for engine probes.
-func (s *Service) Ready(ctx context.Context) error {
-	return s.ServiceBase.Ready(ctx)
-}
+// Start/Stop/Ready are inherited from framework.ServiceBase.
 
 // SetCipher overrides the encryption cipher used by the service.
 func (s *Service) SetCipher(cipher Cipher) {

@@ -46,16 +46,7 @@ func (s *Service) Manifest() *framework.Manifest {
 // Descriptor advertises the service for system discovery.
 func (s *Service) Descriptor() core.Descriptor { return s.Manifest().ToDescriptor() }
 
-// Start is a no-op lifecycle hook to satisfy the system.Service contract.
-func (s *Service) Start(ctx context.Context) error { _ = ctx; s.MarkReady(true); return nil }
-
-// Stop is a no-op lifecycle hook to satisfy the system.Service contract.
-func (s *Service) Stop(ctx context.Context) error { _ = ctx; s.MarkReady(false); return nil }
-
-// Ready reports readiness for engine probes.
-func (s *Service) Ready(ctx context.Context) error {
-	return s.ServiceBase.Ready(ctx)
-}
+// Start/Stop/Ready are inherited from framework.ServiceBase.
 
 const (
 	defaultAttestationLimit = 25

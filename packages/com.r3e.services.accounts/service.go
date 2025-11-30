@@ -50,16 +50,7 @@ func (s *Service) Manifest() *framework.Manifest {
 // Descriptor advertises the service for system discovery.
 func (s *Service) Descriptor() core.Descriptor { return s.Manifest().ToDescriptor() }
 
-// Start marks the service as ready.
-func (s *Service) Start(ctx context.Context) error { _ = ctx; s.MarkReady(true); return nil }
-
-// Stop marks the service as not ready.
-func (s *Service) Stop(ctx context.Context) error { _ = ctx; s.MarkReady(false); return nil }
-
-// Ready reports readiness for engine status.
-func (s *Service) Ready(ctx context.Context) error {
-	return s.ServiceBase.Ready(ctx)
-}
+// Start/Stop/Ready are inherited from framework.ServiceBase.
 
 // New creates an account service backed by the provided store.
 func New(store storage.AccountStore, log *logger.Logger) *Service {

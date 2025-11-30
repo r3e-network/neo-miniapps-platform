@@ -65,16 +65,7 @@ func New(accounts storage.AccountStore, store storage.DataStreamStore, log *logg
 	return svc
 }
 
-// Start marks hooks active.
-func (s *Service) Start(ctx context.Context) error { _ = ctx; s.MarkReady(true); return nil }
-
-// Stop disables hooks.
-func (s *Service) Stop(ctx context.Context) error { _ = ctx; s.MarkReady(false); return nil }
-
-// Ready reports readiness.
-func (s *Service) Ready(ctx context.Context) error {
-	return s.ServiceBase.Ready(ctx)
-}
+// Start/Stop/Ready are inherited from framework.ServiceBase.
 
 // Push implements DataEngine for the core engine: publish a frame.
 func (s *Service) Push(ctx context.Context, topic string, payload any) error {

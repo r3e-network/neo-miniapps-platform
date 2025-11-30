@@ -91,24 +91,7 @@ func New(accounts storage.AccountStore, store storage.GasBankStore, log *logger.
 	return svc
 }
 
-// Start marks the gasbank service ready for derived workers (settlement).
-func (s *Service) Start(ctx context.Context) error {
-	_ = ctx
-	s.MarkReady(true)
-	return nil
-}
-
-// Stop resets ready flag (no background work inside the service itself).
-func (s *Service) Stop(ctx context.Context) error {
-	_ = ctx
-	s.MarkReady(false)
-	return nil
-}
-
-// Ready reports whether the gas bank service is ready.
-func (s *Service) Ready(ctx context.Context) error {
-	return s.ServiceBase.Ready(ctx)
-}
+// Start/Stop/Ready are inherited from framework.ServiceBase.
 
 var (
 	errInvalidAmount     = errors.New("amount must be positive")

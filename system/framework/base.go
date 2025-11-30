@@ -253,3 +253,19 @@ func (b *ServiceBase) AllMetadata() map[string]string {
 	}
 	return result
 }
+
+// Start provides a default implementation that marks the service as ready.
+// Services with custom startup logic should override this method.
+func (b *ServiceBase) Start(ctx context.Context) error {
+	_ = ctx
+	b.MarkReady(true)
+	return nil
+}
+
+// Stop provides a default implementation that marks the service as not ready.
+// Services with custom shutdown logic should override this method.
+func (b *ServiceBase) Stop(ctx context.Context) error {
+	_ = ctx
+	b.MarkReady(false)
+	return nil
+}

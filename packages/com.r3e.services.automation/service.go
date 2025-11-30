@@ -61,15 +61,7 @@ func New(accounts storage.AccountStore, functions storage.FunctionStore, store s
 	return svc
 }
 
-// Start marks the automation service ready; background scheduler runs separately.
-func (s *Service) Start(ctx context.Context) error {
-	_ = ctx
-	s.MarkReady(true)
-	return nil
-}
-
-// Stop clears readiness flag.
-func (s *Service) Stop(ctx context.Context) error { _ = ctx; s.MarkReady(false); return nil }
+// Start/Stop/Ready are inherited from framework.ServiceBase.
 
 // CreateJob provisions a new automation job tied to a function.
 func (s *Service) CreateJob(ctx context.Context, accountID, functionID, name, schedule, description string) (automation.Job, error) {

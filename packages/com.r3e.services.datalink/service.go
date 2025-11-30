@@ -84,16 +84,7 @@ func New(accounts storage.AccountStore, store storage.DataLinkStore, log *logger
 	return svc
 }
 
-// Start marks the service ready for dispatch hooks.
-func (s *Service) Start(ctx context.Context) error { _ = ctx; s.MarkReady(true); return nil }
-
-// Stop clears readiness flag.
-func (s *Service) Stop(ctx context.Context) error { _ = ctx; s.MarkReady(false); return nil }
-
-// Ready reports readiness.
-func (s *Service) Ready(ctx context.Context) error {
-	return s.ServiceBase.Ready(ctx)
-}
+// Start/Stop/Ready are inherited from framework.ServiceBase.
 
 // Publish implements EventEngine for the core engine by enqueuing a delivery.
 func (s *Service) Publish(ctx context.Context, event string, payload any) error {

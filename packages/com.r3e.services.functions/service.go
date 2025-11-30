@@ -87,11 +87,7 @@ func New(accounts storage.AccountStore, store storage.FunctionStore, log *logger
 	return svc
 }
 
-// Start marks the functions service ready.
-func (s *Service) Start(ctx context.Context) error { _ = ctx; s.MarkReady(true); return nil }
-
-// Stop clears readiness.
-func (s *Service) Stop(ctx context.Context) error { _ = ctx; s.MarkReady(false); return nil }
+// Start/Stop are inherited from framework.ServiceBase.
 
 // AttachDependencies wires auxiliary services so function workflows can drive
 // cross-domain actions (automation, feeds, data streams, datalink, oracle, gas bank, vrf).
@@ -129,11 +125,6 @@ func (s *Service) AttachSecretResolver(resolver SecretResolver) {
 	if aware, ok := s.executor.(SecretAwareExecutor); ok {
 		aware.SetSecretResolver(resolver)
 	}
-}
-
-// Ready reports readiness.
-func (s *Service) Ready(ctx context.Context) error {
-	return s.ServiceBase.Ready(ctx)
 }
 
 // Invoke implements engine.ComputeEngine for the service engine by executing a function.
