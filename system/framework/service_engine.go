@@ -340,6 +340,102 @@ func (e *ServiceEngine) LedgerClient() any {
 	return e.env.LedgerClient
 }
 
+// --- Contract Interaction Methods ---
+
+// ContractClient returns the contract client for blockchain interactions.
+func (e *ServiceEngine) ContractClient() ContractClient {
+	if e.env.ContractClient == nil {
+		return NoopContractClient()
+	}
+	return e.env.ContractClient
+}
+
+// InvokeContract calls a smart contract method with state changes.
+// This is the primary method for services to interact with on-chain contracts.
+func (e *ServiceEngine) InvokeContract(ctx context.Context, req ContractInvokeRequest) (ContractInvokeResult, error) {
+	attrs := map[string]string{
+		"operation": "invoke_contract",
+		"network":   req.Network,
+		"method":    req.Method,
+	}
+	if req.ContractAddress != "" {
+		attrs["contract"] = req.ContractAddress
+	} else if req.ContractName != "" {
+		attrs["contract"] = req.ContractName
+	}
+
+	var result ContractInvokeResult
+	err := e.ObserveOperation(ctx, attrs, func(obsCtx context.Context) error {
+		var invokeErr error
+		result, invokeErr = e.env.ContractClient.InvokeContract(obsCtx, req)
+		return invokeErr
+	})
+
+	labels := map[string]string{
+		"service":  e.Name(),
+		"network":  req.Network,
+		"method":   req.Method,
+		"status":   "success",
+	}
+	if err != nil {
+		labels["status"] = "error"
+	}
+	e.IncrementCounter("service_contract_invocations_total", labels)
+
+	return result, err
+}
+
+// QueryContract calls a smart contract method without state changes (read-only).
+// Use this for queries that don't require gas.
+func (e *ServiceEngine) QueryContract(ctx context.Context, req ContractInvokeRequest) (ContractInvokeResult, error) {
+	attrs := map[string]string{
+		"operation": "query_contract",
+		"network":   req.Network,
+		"method":    req.Method,
+	}
+	if req.ContractAddress != "" {
+		attrs["contract"] = req.ContractAddress
+	} else if req.ContractName != "" {
+		attrs["contract"] = req.ContractName
+	}
+
+	var result ContractInvokeResult
+	err := e.ObserveOperation(ctx, attrs, func(obsCtx context.Context) error {
+		var queryErr error
+		result, queryErr = e.env.ContractClient.InvokeContractReadOnly(obsCtx, req)
+		return queryErr
+	})
+
+	labels := map[string]string{
+		"service": e.Name(),
+		"network": req.Network,
+		"method":  req.Method,
+		"status":  "success",
+	}
+	if err != nil {
+		labels["status"] = "error"
+	}
+	e.IncrementCounter("service_contract_queries_total", labels)
+
+	return result, err
+}
+
+// GetEngineContract returns the address of a registered engine contract.
+// Engine contracts are core infrastructure contracts like AccountManager, GasBank, etc.
+func (e *ServiceEngine) GetEngineContract(ctx context.Context, network, contractName string) (string, error) {
+	return e.env.ContractClient.GetContractAddress(ctx, network, contractName)
+}
+
+// WaitForTransaction waits for a transaction to be confirmed on-chain.
+func (e *ServiceEngine) WaitForTransaction(ctx context.Context, network, txHash string, timeout time.Duration) (TransactionStatus, error) {
+	return e.env.ContractClient.WaitForConfirmation(ctx, network, txHash, timeout)
+}
+
+// GetTransactionStatus checks the current status of a transaction.
+func (e *ServiceEngine) GetTransactionStatus(ctx context.Context, network, txHash string) (TransactionStatus, error) {
+	return e.env.ContractClient.GetTransactionStatus(ctx, network, txHash)
+}
+
 // Config provides access to the runtime/service configuration.
 func (e *ServiceEngine) Config() Config {
 	return e.env.Config

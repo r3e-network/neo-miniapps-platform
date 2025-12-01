@@ -85,14 +85,15 @@ func (c ConfigMap) All() map[string]string {
 // Environment describes the execution environment provided to services.
 // Runtimes populate this structure so ServiceEngine-backed services can access shared infrastructure.
 type Environment struct {
-	StoreProvider StoreProvider
-	Bus           BusClient
-	RPCClient     any
-	LedgerClient  any
-	Config        Config
-	Tracer        core.Tracer
-	Metrics       Metrics
-	Quota         QuotaEnforcer
+	StoreProvider  StoreProvider
+	Bus            BusClient
+	RPCClient      any
+	LedgerClient   any
+	ContractClient ContractClient // Smart contract interaction client
+	Config         Config
+	Tracer         core.Tracer
+	Metrics        Metrics
+	Quota          QuotaEnforcer
 }
 
 // EnvironmentAware modules accept an Environment after construction.
@@ -115,6 +116,9 @@ func normalizeEnvironment(env Environment) Environment {
 	}
 	if env.Quota == nil {
 		env.Quota = noopQuota{}
+	}
+	if env.ContractClient == nil {
+		env.ContractClient = NoopContractClient()
 	}
 	return env
 }
