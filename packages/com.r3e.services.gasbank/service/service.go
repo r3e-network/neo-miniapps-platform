@@ -1040,3 +1040,98 @@ type WithdrawOptions struct {
 	ScheduleAt     *time.Time
 	CronExpression string
 }
+
+// HTTP API Methods
+
+// HTTPGetAccounts handles GET /accounts - list gas accounts.
+func (s *Service) HTTPGetAccounts(ctx context.Context, req core.APIRequest) (any, error) {
+	return s.ListAccounts(ctx, req.AccountID)
+}
+
+// HTTPPostAccounts handles POST /accounts - ensure gas account exists.
+func (s *Service) HTTPPostAccounts(ctx context.Context, req core.APIRequest) (any, error) {
+	walletAddress, _ := req.Body["wallet_address"].(string)
+	return s.EnsureAccount(ctx, req.AccountID, walletAddress)
+}
+
+// HTTPGetAccountsById handles GET /accounts/{id} - get a specific gas account.
+func (s *Service) HTTPGetAccountsById(ctx context.Context, req core.APIRequest) (any, error) {
+	return s.GetAccount(ctx, req.PathParams["id"])
+}
+
+// HTTPGetSummary handles GET /summary - get account summary.
+func (s *Service) HTTPGetSummary(ctx context.Context, req core.APIRequest) (any, error) {
+	return s.Summary(ctx, req.AccountID)
+}
+
+// HTTPGetTransactions handles GET /transactions - list transactions.
+func (s *Service) HTTPGetTransactions(ctx context.Context, req core.APIRequest) (any, error) {
+	gasAccountID := req.Query["gas_account_id"]
+	txType := req.Query["type"]
+	status := req.Query["status"]
+	limit := core.ParseLimitFromQuery(req.Query)
+	return s.ListTransactionsFiltered(ctx, gasAccountID, txType, status, limit)
+}
+
+// HTTPPostWithdrawals handles POST /withdrawals - create withdrawal.
+func (s *Service) HTTPPostWithdrawals(ctx context.Context, req core.APIRequest) (any, error) {
+	gasAccountID, _ := req.Body["gas_account_id"].(string)
+	amount, _ := req.Body["amount"].(float64)
+	toAddress, _ := req.Body["to_address"].(string)
+
+	_, tx, err := s.Withdraw(ctx, req.AccountID, gasAccountID, amount, toAddress)
+	if err != nil {
+		return nil, err
+	}
+	return tx, nil
+}
+
+// HTTPGetWithdrawalsById handles GET /withdrawals/{id} - get withdrawal details.
+func (s *Service) HTTPGetWithdrawalsById(ctx context.Context, req core.APIRequest) (any, error) {
+	return s.GetWithdrawal(ctx, req.AccountID, req.PathParams["id"])
+}
+
+// HTTPPostWithdrawalsIdCancel handles POST /withdrawals/{id}/cancel - cancel withdrawal.
+func (s *Service) HTTPPostWithdrawalsIdCancel(ctx context.Context, req core.APIRequest) (any, error) {
+	reason, _ := req.Body["reason"].(string)
+	return s.CancelWithdrawal(ctx, req.AccountID, req.PathParams["id"], reason)
+}
+
+// HTTPGetWithdrawalsIdApprovals handles GET /withdrawals/{id}/approvals - list approvals.
+func (s *Service) HTTPGetWithdrawalsIdApprovals(ctx context.Context, req core.APIRequest) (any, error) {
+	return s.ListApprovals(ctx, req.PathParams["id"])
+}
+
+// HTTPPostWithdrawalsIdApprovals handles POST /withdrawals/{id}/approvals - submit approval.
+func (s *Service) HTTPPostWithdrawalsIdApprovals(ctx context.Context, req core.APIRequest) (any, error) {
+	approver, _ := req.Body["approver"].(string)
+	signature, _ := req.Body["signature"].(string)
+	note, _ := req.Body["note"].(string)
+	approve, _ := req.Body["approve"].(bool)
+
+	approval, tx, err := s.SubmitApproval(ctx, req.PathParams["id"], approver, signature, note, approve)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"approval": approval, "transaction": tx}, nil
+}
+
+// HTTPGetDeadletters handles GET /deadletters - list dead-lettered withdrawals.
+func (s *Service) HTTPGetDeadletters(ctx context.Context, req core.APIRequest) (any, error) {
+	limit := core.ParseLimitFromQuery(req.Query)
+	return s.ListDeadLetters(ctx, req.AccountID, limit)
+}
+
+// HTTPPostDeadlettersIdRetry handles POST /deadletters/{id}/retry - retry dead letter.
+func (s *Service) HTTPPostDeadlettersIdRetry(ctx context.Context, req core.APIRequest) (any, error) {
+	return s.RetryDeadLetter(ctx, req.AccountID, req.PathParams["id"])
+}
+
+// HTTPDeleteDeadlettersById handles DELETE /deadletters/{id} - delete dead letter.
+func (s *Service) HTTPDeleteDeadlettersById(ctx context.Context, req core.APIRequest) (any, error) {
+	err := s.DeleteDeadLetter(ctx, req.AccountID, req.PathParams["id"])
+	if err != nil {
+		return nil, err
+	}
+	return map[string]string{"status": "deleted"}, nil
+}

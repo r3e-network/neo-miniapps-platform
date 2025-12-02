@@ -13,7 +13,7 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/R3E-Network/service_layer/system/enclave/sdk"
+	"github.com/R3E-Network/service_layer/system/tee/sdk"
 )
 
 // EnclaveGasBank handles all gas bank operations within the TEE enclave.

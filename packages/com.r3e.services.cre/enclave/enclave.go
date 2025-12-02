@@ -12,7 +12,7 @@ import (
 	"encoding/hex"
 	"errors"
 
-	"github.com/R3E-Network/service_layer/system/enclave/sdk"
+	"github.com/R3E-Network/service_layer/system/tee/sdk"
 )
 
 // EnclaveCRE handles all CRE operations within the TEE enclave.

@@ -34,6 +34,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -501,13 +502,71 @@ func (sp *SecurityPolicy) matchRule(rule *PolicyRule, subject, object, action st
 		matchPattern(rule.Action, action)
 }
 
-// matchPattern performs simple wildcard matching.
+// matchPattern performs glob-style pattern matching with variable substitution.
+// Supports:
+//   - "*" matches any sequence of characters
+//   - "?" matches any single character
+//   - Exact string matching
+//
+// Variable substitution (e.g., ${service}) should be performed before calling this function.
 func matchPattern(pattern, value string) bool {
 	if pattern == "*" {
 		return true
 	}
-	// TODO: Implement proper glob matching with ${service} substitution
-	return pattern == value
+	if pattern == "" {
+		return value == ""
+	}
+
+	// Use simple glob matching algorithm
+	return globMatch(pattern, value)
+}
+
+// globMatch implements glob-style pattern matching.
+// Supports * (match any sequence) and ? (match single character).
+func globMatch(pattern, value string) bool {
+	px, vx := 0, 0
+	nextPx, nextVx := 0, -1
+
+	for vx < len(value) || px < len(pattern) {
+		if px < len(pattern) {
+			switch pattern[px] {
+			case '*':
+				// Try to match at current position, remember fallback
+				nextPx = px
+				nextVx = vx + 1
+				px++
+				continue
+			case '?':
+				// Match any single character
+				if vx < len(value) {
+					px++
+					vx++
+					continue
+				}
+			default:
+				// Match exact character
+				if vx < len(value) && pattern[px] == value[vx] {
+					px++
+					vx++
+					continue
+				}
+			}
+		}
+		// Mismatch - try fallback if we have a * to backtrack to
+		if nextVx > 0 && nextVx <= len(value) {
+			px = nextPx + 1
+			vx = nextVx
+			nextVx++
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+// substituteServiceVar replaces ${service} placeholders in a pattern.
+func substituteServiceVar(pattern, serviceID string) string {
+	return strings.ReplaceAll(pattern, "${service}", serviceID)
 }
 
 // =============================================================================

@@ -16,7 +16,7 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/R3E-Network/service_layer/system/enclave/sdk"
+	"github.com/R3E-Network/service_layer/system/tee/sdk"
 )
 
 // EnclaveMixer handles all mixer operations within the TEE enclave.

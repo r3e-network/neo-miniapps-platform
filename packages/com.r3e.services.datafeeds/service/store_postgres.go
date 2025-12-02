@@ -159,7 +159,7 @@ func (s *PostgresStore) CreateDataFeedUpdate(ctx context.Context, upd Update) (U
 			(id, feed_id, account_id, round_id, price, signer, ts, signature, status, error, metadata, tenant, created_at, updated_at)
 		VALUES
 			($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-	`, upd.ID, upd.FeedID, upd.AccountID, upd.RoundID, upd.Price, upd.Signer, upd.Timestamp, upd.Signature, upd.Status, upd.Error, metaJSON, tenant, upd.CreatedAt, upd.UpdatedAt)
+	`, upd.ID, upd.FeedID, upd.AccountID, upd.RoundID, upd.Value, upd.Signer, upd.Timestamp, upd.Signature, upd.Status, upd.Error, metaJSON, tenant, upd.CreatedAt, upd.UpdatedAt)
 	if err != nil {
 		return Update{}, err
 	}
@@ -253,7 +253,7 @@ func scanDataFeedUpdate(scanner core.RowScanner) (Update, error) {
 		metaRaw []byte
 		ts      time.Time
 	)
-	if err := scanner.Scan(&upd.ID, &upd.FeedID, &upd.AccountID, &upd.RoundID, &upd.Price, &upd.Signer, &ts, &upd.Signature, &upd.Status, &upd.Error, &metaRaw, &upd.CreatedAt, &upd.UpdatedAt); err != nil {
+	if err := scanner.Scan(&upd.ID, &upd.FeedID, &upd.AccountID, &upd.RoundID, &upd.Value, &upd.Signer, &ts, &upd.Signature, &upd.Status, &upd.Error, &metaRaw, &upd.CreatedAt, &upd.UpdatedAt); err != nil {
 		return Update{}, err
 	}
 	upd.Timestamp = ts.UTC()

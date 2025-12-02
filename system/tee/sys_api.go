@@ -44,6 +44,42 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/R3E-Network/service_layer/system/tee/types"
+)
+
+// Type aliases for backward compatibility - use types from shared package
+type (
+	HTTPRequest      = types.HTTPRequest
+	HTTPResponse     = types.HTTPResponse
+	ChainCallRequest  = types.ChainCallRequest
+	ChainCallResponse = types.ChainCallResponse
+	ChainTxRequest    = types.ChainTxRequest
+	ChainTxResponse   = types.ChainTxResponse
+	ChainBlock        = types.ChainBlock
+	ChainTransaction  = types.ChainTransaction
+	ExecutionProof    = types.ExecutionProof
+	OCALLType         = types.OCALLType
+	OCALLRequest      = types.OCALLRequest
+	OCALLResponse     = types.OCALLResponse
+	ECALLType         = types.ECALLType
+	ECALLRequest      = types.ECALLRequest
+	ECALLResponse     = types.ECALLResponse
+)
+
+// Re-export constants from types package
+const (
+	OCALLTypeHTTP     = types.OCALLTypeHTTP
+	OCALLTypeChainRPC = types.OCALLTypeChainRPC
+	OCALLTypeChainTx  = types.OCALLTypeChainTx
+	OCALLTypeStorage  = types.OCALLTypeStorage
+	OCALLTypeLog      = types.OCALLTypeLog
+
+	ECALLTypeExecute     = types.ECALLTypeExecute
+	ECALLTypeGetSecret   = types.ECALLTypeGetSecret
+	ECALLTypeSetSecret   = types.ECALLTypeSetSecret
+	ECALLTypeAttestation = types.ECALLTypeAttestation
+	ECALLTypeHealth      = types.ECALLTypeHealth
 )
 
 // SysAPI defines the secure system APIs available to JavaScript in the enclave.
@@ -83,22 +119,6 @@ type SysHTTP interface {
 
 	// Post is a convenience method for POST requests.
 	Post(ctx context.Context, url string, body []byte, headers map[string]string) (*HTTPResponse, error)
-}
-
-// HTTPRequest represents an HTTP request from the enclave.
-type HTTPRequest struct {
-	Method  string            `json:"method"`
-	URL     string            `json:"url"`
-	Headers map[string]string `json:"headers,omitempty"`
-	Body    []byte            `json:"body,omitempty"`
-	Timeout time.Duration     `json:"timeout,omitempty"`
-}
-
-// HTTPResponse represents an HTTP response to the enclave.
-type HTTPResponse struct {
-	StatusCode int               `json:"status_code"`
-	Headers    map[string]string `json:"headers,omitempty"`
-	Body       []byte            `json:"body,omitempty"`
 }
 
 // SysSecrets provides access to encrypted secrets.
@@ -143,13 +163,8 @@ type SysCrypto interface {
 	RandomBytes(length int) ([]byte, error)
 }
 
-// KeyPair represents a cryptographic key pair.
-type KeyPair struct {
-	KeyID     string `json:"key_id"`
-	KeyType   string `json:"key_type"`
-	PublicKey []byte `json:"public_key"`
-	// Private key never leaves the enclave
-}
+// KeyPair is an alias to types.KeyPair
+type KeyPair = types.KeyPair
 
 // SysProof provides proof generation and verification.
 type SysProof interface {
@@ -163,29 +178,6 @@ type SysProof interface {
 	GetAttestation(ctx context.Context) (*AttestationReport, error)
 }
 
-// ExecutionProof represents a proof of execution in the TEE.
-type ExecutionProof struct {
-	// ProofID is a unique identifier for this proof.
-	ProofID string `json:"proof_id"`
-
-	// EnclaveID identifies the enclave that generated the proof.
-	EnclaveID string `json:"enclave_id"`
-
-	// InputHash is the hash of the input data.
-	InputHash string `json:"input_hash"`
-
-	// OutputHash is the hash of the output data.
-	OutputHash string `json:"output_hash"`
-
-	// Timestamp when the proof was generated.
-	Timestamp time.Time `json:"timestamp"`
-
-	// Signature over the proof data.
-	Signature []byte `json:"signature"`
-
-	// AttestationQuote is the SGX quote (optional).
-	AttestationQuote []byte `json:"attestation_quote,omitempty"`
-}
 
 // SysStorage provides sealed persistent storage.
 type SysStorage interface {
@@ -217,55 +209,6 @@ type SysChain interface {
 	GetTransaction(ctx context.Context, chain string, txHash string) (*ChainTransaction, error)
 }
 
-// ChainCallRequest represents a contract call request.
-type ChainCallRequest struct {
-	Chain    string         `json:"chain"`
-	Contract string         `json:"contract"`
-	Method   string         `json:"method"`
-	Args     []any          `json:"args,omitempty"`
-	ABI      json.RawMessage `json:"abi,omitempty"`
-}
-
-// ChainCallResponse represents a contract call response.
-type ChainCallResponse struct {
-	Result json.RawMessage `json:"result"`
-	Error  string          `json:"error,omitempty"`
-}
-
-// ChainTxRequest represents a transaction request.
-type ChainTxRequest struct {
-	Chain    string         `json:"chain"`
-	To       string         `json:"to"`
-	Value    string         `json:"value,omitempty"`
-	Data     []byte         `json:"data,omitempty"`
-	GasLimit uint64         `json:"gas_limit,omitempty"`
-	Nonce    uint64         `json:"nonce,omitempty"`
-}
-
-// ChainTxResponse represents a transaction response.
-type ChainTxResponse struct {
-	TxHash string `json:"tx_hash"`
-	Status string `json:"status"`
-	Error  string `json:"error,omitempty"`
-}
-
-// ChainBlock represents block information.
-type ChainBlock struct {
-	Number    int64  `json:"number"`
-	Hash      string `json:"hash"`
-	Timestamp int64  `json:"timestamp"`
-	TxCount   int    `json:"tx_count"`
-}
-
-// ChainTransaction represents transaction information.
-type ChainTransaction struct {
-	Hash        string `json:"hash"`
-	BlockNumber int64  `json:"block_number"`
-	From        string `json:"from"`
-	To          string `json:"to"`
-	Value       string `json:"value"`
-	Status      string `json:"status"`
-}
 
 // SysLog provides secure logging.
 type SysLog interface {
@@ -283,62 +226,8 @@ type SysLog interface {
 }
 
 // =============================================================================
-// ECALL/OCALL Bridge Types
+// ECALL/OCALL Bridge Types - defined in types/ package, re-exported above
 // =============================================================================
-
-// OCALLType defines the type of OCALL (outbound call from enclave).
-type OCALLType string
-
-const (
-	OCALLTypeHTTP      OCALLType = "http"
-	OCALLTypeChainRPC  OCALLType = "chain_rpc"
-	OCALLTypeChainTx   OCALLType = "chain_tx"
-	OCALLTypeStorage   OCALLType = "storage"
-	OCALLTypeLog       OCALLType = "log"
-)
-
-// OCALLRequest represents an outbound call from the enclave.
-type OCALLRequest struct {
-	Type      OCALLType       `json:"type"`
-	RequestID string          `json:"request_id"`
-	Payload   json.RawMessage `json:"payload"`
-	Timeout   time.Duration   `json:"timeout,omitempty"`
-}
-
-// OCALLResponse represents the response to an OCALL.
-type OCALLResponse struct {
-	RequestID string          `json:"request_id"`
-	Success   bool            `json:"success"`
-	Payload   json.RawMessage `json:"payload,omitempty"`
-	Error     string          `json:"error,omitempty"`
-}
-
-// ECALLType defines the type of ECALL (inbound call to enclave).
-type ECALLType string
-
-const (
-	ECALLTypeExecute     ECALLType = "execute"
-	ECALLTypeGetSecret   ECALLType = "get_secret"
-	ECALLTypeSetSecret   ECALLType = "set_secret"
-	ECALLTypeAttestation ECALLType = "attestation"
-	ECALLTypeHealth      ECALLType = "health"
-)
-
-// ECALLRequest represents an inbound call to the enclave.
-type ECALLRequest struct {
-	Type      ECALLType       `json:"type"`
-	RequestID string          `json:"request_id"`
-	Payload   json.RawMessage `json:"payload"`
-}
-
-// ECALLResponse represents the response from an ECALL.
-type ECALLResponse struct {
-	RequestID string          `json:"request_id"`
-	Success   bool            `json:"success"`
-	Payload   json.RawMessage `json:"payload,omitempty"`
-	Error     string          `json:"error,omitempty"`
-	Proof     *ExecutionProof `json:"proof,omitempty"`
-}
 
 // =============================================================================
 // OCALL Handler Interface

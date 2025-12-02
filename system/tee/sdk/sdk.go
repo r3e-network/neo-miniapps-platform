@@ -11,6 +11,50 @@ import (
 	"errors"
 	"net/http"
 	"time"
+
+	"github.com/R3E-Network/service_layer/system/tee/types"
+)
+
+// Type aliases for backward compatibility - use types from shared package
+type (
+	Secret            = types.Secret
+	SecretType        = types.SecretType
+	Permission        = types.Permission
+	Role              = types.Role
+	KeyType           = types.KeyType
+	KeyCurve          = types.KeyCurve
+	KeyInfo           = types.KeyInfo
+	HTTPRequest       = types.HTTPRequest
+	HTTPResponse      = types.HTTPResponse
+	AttestationReport = types.AttestationReport
+	EnclaveInfo       = types.EnclaveInfo
+)
+
+// Re-export constants from types package
+const (
+	SecretTypeGeneric     = types.SecretTypeGeneric
+	SecretTypeAPIKey      = types.SecretTypeAPIKey
+	SecretTypePrivateKey  = types.SecretTypePrivateKey
+	SecretTypeCertificate = types.SecretTypeCertificate
+	SecretTypePassword    = types.SecretTypePassword
+	SecretTypeToken       = types.SecretTypeToken
+
+	KeyTypeECDSA   = types.KeyTypeECDSA
+	KeyTypeEd25519 = types.KeyTypeEd25519
+	KeyTypeRSA     = types.KeyTypeRSA
+	KeyTypeAES     = types.KeyTypeAES
+
+	KeyCurveP256      = types.KeyCurveP256
+	KeyCurveP384      = types.KeyCurveP384
+	KeyCurveSecp256k1 = types.KeyCurveSecp256k1
+
+	RoleAdmin            = types.RoleAdmin
+	RoleScheduler        = types.RoleScheduler
+	RoleOracleRunner     = types.RoleOracleRunner
+	RoleRandomnessRunner = types.RoleRandomnessRunner
+	RoleJamRunner        = types.RoleJamRunner
+	RoleDataFeedSigner   = types.RoleDataFeedSigner
+	RoleServiceRunner    = types.RoleServiceRunner
 )
 
 // ============================================================
@@ -106,32 +150,6 @@ type SecretsManager interface {
 	Exists(ctx context.Context, secretID string) (bool, error)
 }
 
-// Secret represents a secret stored in the enclave.
-type Secret struct {
-	ID          string            `json:"id"`
-	Name        string            `json:"name"`
-	Value       []byte            `json:"-"` // Never serialized
-	Type        SecretType        `json:"type"`
-	Version     int               `json:"version"`
-	CreatedAt   time.Time         `json:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at"`
-	ExpiresAt   *time.Time        `json:"expires_at,omitempty"`
-	Metadata    map[string]string `json:"metadata,omitempty"`
-	Permissions []Permission      `json:"permissions"`
-}
-
-// SecretType defines the type of secret.
-type SecretType string
-
-const (
-	SecretTypeGeneric    SecretType = "generic"
-	SecretTypeAPIKey     SecretType = "api_key"
-	SecretTypePrivateKey SecretType = "private_key"
-	SecretTypeCertificate SecretType = "certificate"
-	SecretTypePassword   SecretType = "password"
-	SecretTypeToken      SecretType = "token"
-)
-
 // AddSecretRequest is the request to add a new secret.
 type AddSecretRequest struct {
 	Name        string            `json:"name"`
@@ -222,36 +240,6 @@ type KeyManager interface {
 	DeriveKey(ctx context.Context, req *DeriveKeyRequest) (*DeriveKeyResponse, error)
 }
 
-// KeyType defines the type of cryptographic key.
-type KeyType string
-
-const (
-	KeyTypeECDSA   KeyType = "ecdsa"
-	KeyTypeEd25519 KeyType = "ed25519"
-	KeyTypeRSA     KeyType = "rsa"
-	KeyTypeAES     KeyType = "aes"
-)
-
-// KeyCurve defines the elliptic curve for ECDSA keys.
-type KeyCurve string
-
-const (
-	KeyCurveP256      KeyCurve = "P-256"
-	KeyCurveP384      KeyCurve = "P-384"
-	KeyCurveSecp256k1 KeyCurve = "secp256k1"
-)
-
-// KeyInfo contains metadata about a key.
-type KeyInfo struct {
-	ID        string    `json:"id"`
-	Type      KeyType   `json:"type"`
-	Curve     KeyCurve  `json:"curve,omitempty"`
-	PublicKey []byte    `json:"public_key"`
-	CreatedAt time.Time `json:"created_at"`
-	ParentID  string    `json:"parent_id,omitempty"` // For derived keys
-	Path      string    `json:"path,omitempty"`      // HD derivation path
-}
-
 // GenerateKeyRequest is the request to generate a new key.
 type GenerateKeyRequest struct {
 	Type  KeyType  `json:"type"`
@@ -320,26 +308,6 @@ type PermissionManager interface {
 	// GetCallerRoles returns all roles for the current caller.
 	GetCallerRoles(ctx context.Context) ([]Role, error)
 }
-
-// Permission represents a permission grant.
-type Permission struct {
-	Resource string   `json:"resource"`
-	Actions  []string `json:"actions"`
-	Scope    string   `json:"scope,omitempty"`
-}
-
-// Role represents a role assignment.
-type Role string
-
-const (
-	RoleAdmin           Role = "admin"
-	RoleScheduler       Role = "scheduler"
-	RoleOracleRunner    Role = "oracle_runner"
-	RoleRandomnessRunner Role = "randomness_runner"
-	RoleJamRunner       Role = "jam_runner"
-	RoleDataFeedSigner  Role = "data_feed_signer"
-	RoleServiceRunner   Role = "service_runner"
-)
 
 // ============================================================
 // Transaction Signer Interface
@@ -442,22 +410,6 @@ type SecureHTTPClient interface {
 	AddTrustedCert(cert []byte) error
 }
 
-// HTTPRequest represents an HTTP request.
-type HTTPRequest struct {
-	Method  string            `json:"method"`
-	URL     string            `json:"url"`
-	Headers map[string]string `json:"headers,omitempty"`
-	Body    []byte            `json:"body,omitempty"`
-	Timeout time.Duration     `json:"timeout,omitempty"`
-}
-
-// HTTPResponse represents an HTTP response.
-type HTTPResponse struct {
-	StatusCode int               `json:"status_code"`
-	Headers    map[string]string `json:"headers"`
-	Body       []byte            `json:"body"`
-}
-
 // HTTPOption is a functional option for HTTP requests.
 type HTTPOption func(*httpOptions)
 
@@ -531,30 +483,6 @@ type AttestationProvider interface {
 
 	// GetQuote generates a quote for remote attestation.
 	GetQuote(ctx context.Context, reportData []byte) ([]byte, error)
-}
-
-// AttestationReport represents a TEE attestation report.
-type AttestationReport struct {
-	EnclaveID   string    `json:"enclave_id"`
-	ReportData  []byte    `json:"report_data"`
-	Signature   []byte    `json:"signature"`
-	PublicKey   []byte    `json:"public_key"`
-	Timestamp   time.Time `json:"timestamp"`
-	MrEnclave   []byte    `json:"mr_enclave"`   // Measurement of enclave
-	MrSigner    []byte    `json:"mr_signer"`    // Measurement of signer
-	ProductID   uint16    `json:"product_id"`
-	SecurityVer uint16    `json:"security_ver"`
-}
-
-// EnclaveInfo contains information about the enclave.
-type EnclaveInfo struct {
-	EnclaveID   string `json:"enclave_id"`
-	Version     string `json:"version"`
-	MrEnclave   []byte `json:"mr_enclave"`
-	MrSigner    []byte `json:"mr_signer"`
-	ProductID   uint16 `json:"product_id"`
-	SecurityVer uint16 `json:"security_ver"`
-	Debug       bool   `json:"debug"`
 }
 
 // ============================================================

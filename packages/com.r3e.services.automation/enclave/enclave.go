@@ -11,7 +11,7 @@ import (
 	"crypto/sha256"
 	"errors"
 
-	"github.com/R3E-Network/service_layer/system/enclave/sdk"
+	"github.com/R3E-Network/service_layer/system/tee/sdk"
 )
 
 // EnclaveAutomation handles automation operations within the TEE.

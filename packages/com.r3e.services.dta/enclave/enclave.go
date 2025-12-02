@@ -9,7 +9,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 
-	"github.com/R3E-Network/service_layer/system/enclave/sdk"
+	"github.com/R3E-Network/service_layer/system/tee/sdk"
 )
 
 // EnclaveDTA handles DTA operations within the TEE.

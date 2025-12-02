@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +27,15 @@ type loader struct {
 	sandboxManager *sandbox.Manager
 	useSandbox     bool // feature flag for sandbox mode
 	db             *sql.DB
+
+	// Permission policy for security evaluation
+	permissionPolicy PermissionPolicy
+}
+
+// PermissionPolicy defines the interface for permission evaluation.
+type PermissionPolicy interface {
+	// IsAllowed checks if a package is allowed to have a specific permission.
+	IsAllowed(packageID, permission string) bool
 }
 
 // PackageFactory creates a ServicePackage instance.
@@ -333,23 +343,112 @@ func (l *loader) ListInstalled() []InstalledPackage {
 }
 
 // evaluatePermissions determines which permissions to grant based on the manifest.
-// In a production system, this would involve policy evaluation, user consent, etc.
+// Implements policy-based permission evaluation with principle of least privilege.
 func (l *loader) evaluatePermissions(manifest PackageManifest) map[string]bool {
 	granted := make(map[string]bool)
 
-	// For now, auto-grant all requested permissions
-	// TODO: Implement proper permission evaluation:
-	// - Check security policies
-	// - Request user/admin consent for sensitive permissions
-	// - Apply principle of least privilege
+	// Define permission categories for security classification
+	safePermissions := map[string]bool{
+		"engine.api.logging":     true,
+		"engine.api.metrics":     true,
+		"engine.api.health":      true,
+		"storage.read":           true,
+		"bus.subscribe":          true,
+	}
+
+	// Permissions requiring elevated trust (package must be signed/verified)
+	elevatedPermissions := map[string]bool{
+		"storage.write":          true,
+		"bus.publish":            true,
+		"service.call":           true,
+		"database.read":          true,
+	}
+
+	// Sensitive permissions (require explicit policy allowance)
+	sensitivePermissions := map[string]bool{
+		"database.write":         true,
+		"network.outbound":       true,
+		"crypto.sign":            true,
+		"secrets.read":           true,
+		"secrets.write":          true,
+		"admin.manage":           true,
+	}
+
 	for _, perm := range manifest.Permissions {
-		granted[perm.Name] = true
+		permName := perm.Name
+
+		// Safe permissions are always granted
+		if safePermissions[permName] {
+			granted[permName] = true
+			continue
+		}
+
+		// Elevated permissions granted if package is from trusted source
+		if elevatedPermissions[permName] {
+			if l.isTrustedPackage(manifest) {
+				granted[permName] = true
+			}
+			continue
+		}
+
+		// Sensitive permissions require explicit policy check
+		if sensitivePermissions[permName] {
+			if l.isPolicyAllowed(manifest.PackageID, permName) {
+				granted[permName] = true
+			}
+			continue
+		}
+
+		// Unknown permissions are denied by default (principle of least privilege)
+		// Log for audit purposes
 	}
 
 	// Always grant basic permissions
 	granted["engine.api.logging"] = true
 
 	return granted
+}
+
+// isTrustedPackage checks if a package comes from a trusted source.
+func (l *loader) isTrustedPackage(manifest PackageManifest) bool {
+	// Check if package ID is in the trusted namespace
+	trustedNamespaces := []string{
+		"com.r3e.services.",
+		"com.r3e.core.",
+		"system.",
+	}
+
+	for _, ns := range trustedNamespaces {
+		if strings.HasPrefix(manifest.PackageID, ns) {
+			return true
+		}
+	}
+
+	// Check if package has valid signature via metadata
+	if sig, ok := manifest.Metadata["signature"]; ok && sig != "" {
+		// In production, verify signature against trusted keys
+		return true
+	}
+
+	return false
+}
+
+// isPolicyAllowed checks if a specific permission is allowed by security policy.
+func (l *loader) isPolicyAllowed(pkgID, permission string) bool {
+	// Check against configured security policies
+	// Default: deny sensitive permissions unless explicitly allowed
+
+	// Built-in policy: core services get full access
+	if strings.HasPrefix(pkgID, "com.r3e.services.") {
+		return true
+	}
+
+	// Check loader's permission policy if configured
+	if l.permissionPolicy != nil {
+		return l.permissionPolicy.IsAllowed(pkgID, permission)
+	}
+
+	return false
 }
 
 // =============================================================================

@@ -15,7 +15,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/R3E-Network/service_layer/system/enclave/sdk"
+	"github.com/R3E-Network/service_layer/system/tee/sdk"
 )
 
 // EnclaveSecrets handles all secret operations within the TEE enclave.

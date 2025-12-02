@@ -415,28 +415,158 @@ func validateKey(key string) error {
 	return nil
 }
 
-// extractTableNames extracts table names from a SQL query (simplified).
+// extractTableNames extracts table names from a SQL query with improved security.
+// Handles common SQL patterns including subqueries, aliases, and schema prefixes.
 func extractTableNames(query string) []string {
-	// This is a simplified implementation
-	// Production would use a proper SQL parser
 	var tables []string
+	seen := make(map[string]bool)
 
+	// Normalize query: lowercase and collapse whitespace
 	query = strings.ToLower(query)
+	query = normalizeWhitespace(query)
+
+	// Remove string literals to avoid false positives (e.g., 'from' in strings)
+	query = removeStringLiterals(query)
+
+	// Remove comments
+	query = removeSQLComments(query)
+
 	words := strings.Fields(query)
 
+	// Keywords that precede table names
+	tableKeywords := map[string]bool{
+		"from":   true,
+		"join":   true,
+		"into":   true,
+		"update": true,
+		"table":  true, // CREATE TABLE, DROP TABLE, ALTER TABLE
+	}
+
 	for i, word := range words {
-		if word == "from" || word == "join" || word == "into" || word == "update" {
+		if tableKeywords[word] {
 			if i+1 < len(words) {
-				table := strings.TrimSuffix(words[i+1], ",")
-				table = strings.TrimSuffix(table, ";")
-				if table != "" && table != "(" {
+				table := extractTableName(words[i+1])
+				if table != "" && !seen[table] {
 					tables = append(tables, table)
+					seen[table] = true
 				}
 			}
 		}
 	}
 
 	return tables
+}
+
+// normalizeWhitespace collapses multiple whitespace characters into single spaces.
+func normalizeWhitespace(s string) string {
+	var result strings.Builder
+	prevSpace := false
+	for _, r := range s {
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			if !prevSpace {
+				result.WriteRune(' ')
+				prevSpace = true
+			}
+		} else {
+			result.WriteRune(r)
+			prevSpace = false
+		}
+	}
+	return result.String()
+}
+
+// removeStringLiterals removes single and double quoted strings from SQL.
+func removeStringLiterals(query string) string {
+	var result strings.Builder
+	inSingle := false
+	inDouble := false
+	prev := rune(0)
+
+	for _, r := range query {
+		if r == '\'' && !inDouble && prev != '\\' {
+			inSingle = !inSingle
+			continue
+		}
+		if r == '"' && !inSingle && prev != '\\' {
+			inDouble = !inDouble
+			continue
+		}
+		if !inSingle && !inDouble {
+			result.WriteRune(r)
+		}
+		prev = r
+	}
+	return result.String()
+}
+
+// removeSQLComments removes SQL comments (-- and /* */).
+func removeSQLComments(query string) string {
+	// Remove single-line comments
+	lines := strings.Split(query, "\n")
+	var cleaned []string
+	for _, line := range lines {
+		if idx := strings.Index(line, "--"); idx >= 0 {
+			line = line[:idx]
+		}
+		cleaned = append(cleaned, line)
+	}
+	query = strings.Join(cleaned, " ")
+
+	// Remove multi-line comments
+	for {
+		start := strings.Index(query, "/*")
+		if start < 0 {
+			break
+		}
+		end := strings.Index(query[start:], "*/")
+		if end < 0 {
+			query = query[:start]
+			break
+		}
+		query = query[:start] + " " + query[start+end+2:]
+	}
+
+	return query
+}
+
+// extractTableName cleans and validates a potential table name.
+func extractTableName(word string) string {
+	// Remove common suffixes and prefixes
+	word = strings.TrimSuffix(word, ",")
+	word = strings.TrimSuffix(word, ";")
+	word = strings.TrimSuffix(word, ")")
+	word = strings.TrimPrefix(word, "(")
+
+	// Skip SQL keywords and special characters
+	if word == "" || word == "(" || word == ")" || word == "select" || word == "as" {
+		return ""
+	}
+
+	// Handle schema.table format - extract just the table name
+	if idx := strings.LastIndex(word, "."); idx >= 0 {
+		word = word[idx+1:]
+	}
+
+	// Validate: table names should be alphanumeric with underscores
+	for _, r := range word {
+		if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_') {
+			return ""
+		}
+	}
+
+	// Reject if it looks like a SQL keyword
+	sqlKeywords := map[string]bool{
+		"select": true, "where": true, "and": true, "or": true,
+		"order": true, "by": true, "group": true, "having": true,
+		"limit": true, "offset": true, "set": true, "values": true,
+		"inner": true, "outer": true, "left": true, "right": true,
+		"cross": true, "natural": true, "on": true, "using": true,
+	}
+	if sqlKeywords[word] {
+		return ""
+	}
+
+	return word
 }
 
 // scanRows converts sql.Rows to a slice of maps.

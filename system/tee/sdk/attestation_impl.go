@@ -79,8 +79,6 @@ func (p *attestationProviderImpl) GenerateReport(ctx context.Context, userData [
 		Signature:   signature,
 		PublicKey:   publicKey,
 		Timestamp:   time.Now(),
-		MrEnclave:   p.mrEnclave,
-		MrSigner:    p.mrSigner,
 		ProductID:   p.productID,
 		SecurityVer: p.securityVer,
 	}, nil
@@ -121,8 +119,8 @@ func (p *attestationProviderImpl) GetEnclaveInfo(ctx context.Context) (*EnclaveI
 	return &EnclaveInfo{
 		EnclaveID:   p.enclaveID,
 		Version:     "1.0.0",
-		MrEnclave:   p.mrEnclave,
-		MrSigner:    p.mrSigner,
+		MREnclave:   p.mrEnclave,
+		MRSigner:    p.mrSigner,
 		ProductID:   p.productID,
 		SecurityVer: p.securityVer,
 		Debug:       p.debug,

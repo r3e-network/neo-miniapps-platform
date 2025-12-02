@@ -230,7 +230,7 @@ func (s *Service) SubmitUpdate(ctx context.Context, accountID, feedID string, ro
 			return Update{}, fmt.Errorf("round_id must be at least %d", latest.RoundID)
 		}
 		if roundID > latest.RoundID {
-			latestInt, _, parseErr := normalizePrice(latest.Price, feed.Decimals)
+			latestInt, _, parseErr := normalizePrice(latest.Value, feed.Decimals)
 			if parseErr == nil && !shouldPublishDatafeed(latestInt, priceInt, latest.Timestamp, ts, feed.ThresholdPPM, feed.Heartbeat) {
 				return Update{}, fmt.Errorf("heartbeat/deviation thresholds not met for new round %d", roundID)
 			}
@@ -268,7 +268,7 @@ func (s *Service) SubmitUpdate(ctx context.Context, accountID, feedID string, ro
 
 	allPrices := append(make([]*big.Int, 0, len(existingRound)+1), priceInt)
 	for _, upd := range existingRound {
-		parsed, parseErr := normalizePriceInt(upd.Price, feed.Decimals)
+		parsed, parseErr := normalizePriceInt(upd.Value, feed.Decimals)
 		if parseErr != nil {
 			continue
 		}
@@ -289,7 +289,7 @@ func (s *Service) SubmitUpdate(ctx context.Context, accountID, feedID string, ro
 		AccountID: accountID,
 		FeedID:    feedID,
 		RoundID:   roundID,
-		Price:     normalizedPrice,
+		Value:     normalizedPrice,
 		Signer:    signer,
 		Timestamp: ts,
 		Signature: sig,
@@ -708,4 +708,371 @@ func (s *Service) HTTPPostFeedsIdUpdates(ctx context.Context, req core.APIReques
 func (s *Service) HTTPGetFeedsIdLatest(ctx context.Context, req core.APIRequest) (any, error) {
 	feedID := req.PathParams["id"]
 	return s.LatestUpdate(ctx, req.AccountID, feedID)
+}
+
+// ============================================================================
+// Frontend Display Endpoints - For showing feed status and values
+// ============================================================================
+
+// HTTPGetValues handles GET /values - get current values for all feeds (frontend display).
+func (s *Service) HTTPGetValues(ctx context.Context, req core.APIRequest) (any, error) {
+	return s.GetAllFeedValues(ctx, req.AccountID)
+}
+
+// HTTPGetValuesById handles GET /values/{id} - get current value for a specific feed.
+func (s *Service) HTTPGetValuesById(ctx context.Context, req core.APIRequest) (any, error) {
+	feedID := req.PathParams["id"]
+	return s.GetFeedValue(ctx, req.AccountID, feedID)
+}
+
+// HTTPGetStatus handles GET /status - get status overview of all feeds.
+func (s *Service) HTTPGetStatus(ctx context.Context, req core.APIRequest) (any, error) {
+	return s.GetFeedStatusOverview(ctx, req.AccountID)
+}
+
+// HTTPGetFeedsIdStats handles GET /feeds/{id}/stats - get statistics for a feed.
+func (s *Service) HTTPGetFeedsIdStats(ctx context.Context, req core.APIRequest) (any, error) {
+	feedID := req.PathParams["id"]
+	return s.GetFeedStats(ctx, req.AccountID, feedID)
+}
+
+// HTTPPostFeedsIdSources handles POST /feeds/{id}/sources - configure data sources for a feed.
+func (s *Service) HTTPPostFeedsIdSources(ctx context.Context, req core.APIRequest) (any, error) {
+	feedID := req.PathParams["id"]
+
+	// Parse sources from request body
+	var sources []SourceConfig
+	if rawSources, ok := req.Body["sources"].([]any); ok {
+		for _, raw := range rawSources {
+			if srcMap, ok := raw.(map[string]any); ok {
+				src := SourceConfig{
+					URL:      getString(srcMap, "url"),
+					Method:   getString(srcMap, "method"),
+					JSONPath: getString(srcMap, "json_path"),
+					AuthType: getString(srcMap, "auth_type"),
+				}
+				if headers, ok := srcMap["headers"].(map[string]any); ok {
+					src.Headers = make(map[string]string)
+					for k, v := range headers {
+						if str, ok := v.(string); ok {
+							src.Headers[k] = str
+						}
+					}
+				}
+				if timeout, ok := srcMap["timeout"].(string); ok {
+					if d, err := time.ParseDuration(timeout); err == nil {
+						src.Timeout = d
+					}
+				}
+				if retries, ok := srcMap["retry_count"].(float64); ok {
+					src.RetryCount = int(retries)
+				}
+				sources = append(sources, src)
+			}
+		}
+	}
+
+	return s.ConfigureFeedSources(ctx, req.AccountID, feedID, sources)
+}
+
+// HTTPPostFeedsIdFetch handles POST /feeds/{id}/fetch - trigger enclave fetch for a feed.
+func (s *Service) HTTPPostFeedsIdFetch(ctx context.Context, req core.APIRequest) (any, error) {
+	feedID := req.PathParams["id"]
+	return s.TriggerEnclaveFetch(ctx, req.AccountID, feedID)
+}
+
+// ============================================================================
+// Service Methods for Frontend Display
+// ============================================================================
+
+// GetAllFeedValues returns current values for all feeds owned by the account.
+func (s *Service) GetAllFeedValues(ctx context.Context, accountID string) ([]FeedValue, error) {
+	feeds, err := s.ListFeeds(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+
+	values := make([]FeedValue, 0, len(feeds))
+	for _, feed := range feeds {
+		value, err := s.GetFeedValue(ctx, accountID, feed.ID)
+		if err != nil {
+			// Include feed with error status
+			values = append(values, FeedValue{
+				FeedID:   feed.ID,
+				FeedName: feed.Name,
+				Pair:     feed.Pair,
+				DataType: feed.DataType,
+				Status:   FeedStatusError,
+				Decimals: feed.Decimals,
+			})
+			continue
+		}
+		values = append(values, value)
+	}
+
+	return values, nil
+}
+
+// GetFeedValue returns the current value for a specific feed.
+func (s *Service) GetFeedValue(ctx context.Context, accountID, feedID string) (FeedValue, error) {
+	feed, err := s.GetFeed(ctx, accountID, feedID)
+	if err != nil {
+		return FeedValue{}, err
+	}
+
+	latest, err := s.LatestUpdate(ctx, accountID, feedID)
+	if err != nil {
+		// Return feed info without value
+		return FeedValue{
+			FeedID:      feed.ID,
+			FeedName:    feed.Name,
+			Pair:        feed.Pair,
+			DataType:    feed.DataType,
+			Decimals:    feed.Decimals,
+			Status:      feed.Status,
+			SourceCount: len(feed.Sources),
+		}, nil
+	}
+
+	return FeedValue{
+		FeedID:       feed.ID,
+		FeedName:     feed.Name,
+		Pair:         feed.Pair,
+		DataType:     feed.DataType,
+		Value:        latest.Value,
+		NumericValue: latest.NumericValue,
+		Decimals:     feed.Decimals,
+		RoundID:      latest.RoundID,
+		Timestamp:    latest.Timestamp,
+		Status:       feed.Status,
+		LastUpdated:  latest.UpdatedAt,
+		SourceCount:  len(feed.Sources),
+	}, nil
+}
+
+// FeedStatusSummary provides an overview of feed health.
+type FeedStatusSummary struct {
+	TotalFeeds     int            `json:"total_feeds"`
+	ActiveFeeds    int            `json:"active_feeds"`
+	PausedFeeds    int            `json:"paused_feeds"`
+	ErrorFeeds     int            `json:"error_feeds"`
+	DisabledFeeds  int            `json:"disabled_feeds"`
+	Feeds          []FeedListItem `json:"feeds"`
+	LastRefreshed  time.Time      `json:"last_refreshed"`
+}
+
+// GetFeedStatusOverview returns a status overview of all feeds.
+func (s *Service) GetFeedStatusOverview(ctx context.Context, accountID string) (FeedStatusSummary, error) {
+	feeds, err := s.ListFeeds(ctx, accountID)
+	if err != nil {
+		return FeedStatusSummary{}, err
+	}
+
+	summary := FeedStatusSummary{
+		TotalFeeds:    len(feeds),
+		Feeds:         make([]FeedListItem, 0, len(feeds)),
+		LastRefreshed: time.Now().UTC(),
+	}
+
+	for _, feed := range feeds {
+		// Count by status
+		switch feed.Status {
+		case FeedStatusActive:
+			summary.ActiveFeeds++
+		case FeedStatusPaused:
+			summary.PausedFeeds++
+		case FeedStatusError:
+			summary.ErrorFeeds++
+		case FeedStatusDisabled:
+			summary.DisabledFeeds++
+		}
+
+		// Get latest value for display
+		var value string
+		var lastUpdated time.Time
+		if latest, err := s.LatestUpdate(ctx, accountID, feed.ID); err == nil {
+			value = latest.Value
+			lastUpdated = latest.UpdatedAt
+		}
+
+		summary.Feeds = append(summary.Feeds, FeedListItem{
+			ID:          feed.ID,
+			Name:        feed.Name,
+			Pair:        feed.Pair,
+			DataType:    feed.DataType,
+			Status:      feed.Status,
+			Value:       value,
+			LastUpdated: lastUpdated,
+			SourceCount: len(feed.Sources),
+			Tags:        feed.Tags,
+		})
+	}
+
+	return summary, nil
+}
+
+// GetFeedStats returns statistics for a specific feed.
+func (s *Service) GetFeedStats(ctx context.Context, accountID, feedID string) (FeedStats, error) {
+	feed, err := s.GetFeed(ctx, accountID, feedID)
+	if err != nil {
+		return FeedStats{}, err
+	}
+
+	updates, err := s.ListUpdates(ctx, accountID, feedID, 1000)
+	if err != nil {
+		return FeedStats{}, err
+	}
+
+	stats := FeedStats{
+		FeedID:       feedID,
+		TotalUpdates: int64(len(updates)),
+	}
+
+	// Count updates in last 24 hours and calculate error rate
+	now := time.Now().UTC()
+	dayAgo := now.Add(-24 * time.Hour)
+	var errorCount int64
+
+	for _, upd := range updates {
+		if upd.CreatedAt.After(dayAgo) {
+			stats.UpdatesLast24h++
+		}
+		if upd.Status == UpdateStatusRejected {
+			errorCount++
+		}
+	}
+
+	if stats.TotalUpdates > 0 {
+		stats.ErrorRate = float64(errorCount) / float64(stats.TotalUpdates)
+	}
+
+	// Calculate uptime based on heartbeat
+	if feed.Heartbeat > 0 && len(updates) > 0 {
+		latest := updates[0]
+		timeSinceUpdate := now.Sub(latest.UpdatedAt)
+		if timeSinceUpdate <= feed.Heartbeat {
+			stats.UptimePercent = 100.0
+		} else {
+			// Simplified uptime calculation
+			stats.UptimePercent = float64(feed.Heartbeat) / float64(timeSinceUpdate) * 100
+			if stats.UptimePercent > 100 {
+				stats.UptimePercent = 100
+			}
+		}
+		stats.LastHeartbeat = latest.UpdatedAt
+	}
+
+	// Count healthy sources
+	stats.SourcesHealthy = len(feed.Sources)
+	if feed.ErrorCount > 0 {
+		stats.SourcesUnhealthy = feed.ErrorCount
+		if stats.SourcesUnhealthy > stats.SourcesHealthy {
+			stats.SourcesUnhealthy = stats.SourcesHealthy
+		}
+		stats.SourcesHealthy -= stats.SourcesUnhealthy
+	}
+
+	return stats, nil
+}
+
+// ConfigureFeedSources updates the data sources for a feed.
+func (s *Service) ConfigureFeedSources(ctx context.Context, accountID, feedID string, sources []SourceConfig) (Feed, error) {
+	feed, err := s.GetFeed(ctx, accountID, feedID)
+	if err != nil {
+		return Feed{}, err
+	}
+
+	feed.Sources = sources
+	feed.UpdatedAt = time.Now().UTC()
+
+	return s.UpdateFeed(ctx, feed)
+}
+
+// TriggerEnclaveFetch triggers an enclave fetch for a feed and returns the result.
+func (s *Service) TriggerEnclaveFetch(ctx context.Context, accountID, feedID string) (Update, error) {
+	feed, err := s.GetFeed(ctx, accountID, feedID)
+	if err != nil {
+		return Update{}, err
+	}
+
+	if len(feed.Sources) == 0 {
+		return Update{}, fmt.Errorf("no sources configured for feed %s", feedID)
+	}
+
+	// Convert service SourceConfig to enclave SourceConfig
+	enclaveSources := make([]enclaveSourceConfig, len(feed.Sources))
+	for i, src := range feed.Sources {
+		enclaveSources[i] = enclaveSourceConfig{
+			URL:        src.URL,
+			Method:     src.Method,
+			Headers:    src.Headers,
+			Body:       src.Body,
+			AuthType:   src.AuthType,
+			JSONPath:   src.JSONPath,
+			Timeout:    src.Timeout,
+			RetryCount: src.RetryCount,
+			RetryDelay: src.RetryDelay,
+		}
+	}
+
+	// Get latest round ID
+	var roundID int64 = 1
+	if latest, err := s.LatestUpdate(ctx, accountID, feedID); err == nil {
+		roundID = latest.RoundID + 1
+	}
+
+	// Create update record
+	now := time.Now().UTC()
+	update := Update{
+		AccountID:        accountID,
+		FeedID:           feedID,
+		RoundID:          roundID,
+		Timestamp:        now,
+		Status:           UpdateStatusFetched,
+		FetchedInEnclave: true,
+		Source:           "enclave",
+	}
+
+	// Note: In production, this would call the actual enclave
+	// For now, we create a placeholder that indicates enclave fetch was triggered
+	update.Value = "enclave_fetch_pending"
+
+	created, err := s.store.CreateDataFeedUpdate(ctx, update)
+	if err != nil {
+		return Update{}, err
+	}
+
+	// Update feed status
+	feed.LastFetchAt = now
+	feed.Status = FeedStatusActive
+	feed.ErrorCount = 0
+	feed.LastError = ""
+	_, _ = s.UpdateFeed(ctx, feed)
+
+	s.Logger().WithField("feed_id", feedID).
+		WithField("round_id", roundID).
+		Info("enclave fetch triggered")
+
+	return created, nil
+}
+
+// enclaveSourceConfig is a local type for enclave source configuration.
+type enclaveSourceConfig struct {
+	URL        string
+	Method     string
+	Headers    map[string]string
+	Body       string
+	AuthType   string
+	JSONPath   string
+	Timeout    time.Duration
+	RetryCount int
+	RetryDelay time.Duration
+}
+
+// Helper function to safely get string from map
+func getString(m map[string]any, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
 }

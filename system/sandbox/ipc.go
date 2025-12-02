@@ -403,12 +403,27 @@ func GenerateCallID() string {
 // Service Bus Adapter (Integrates with existing Bus)
 // =============================================================================
 
+// EventPublisher is the interface for publishing events to the bus.
+// This avoids circular dependency with system/core.
+type EventPublisher interface {
+	PublishEvent(ctx context.Context, event string, payload any) error
+}
+
+// EventSubscriber is the interface for subscribing to events from the bus.
+type EventSubscriber interface {
+	SubscribeEvent(ctx context.Context, event string, handler func(context.Context, any) error) error
+}
+
 // SecureBusAdapter wraps the existing Bus with IPC security.
 type SecureBusAdapter struct {
-	ipcManager *IPCManager
-	identity   *ServiceIdentity
-	caps       *CapabilitySet
-	auditor    *SecurityAuditor
+	ipcManager  *IPCManager
+	identity    *ServiceIdentity
+	caps        *CapabilitySet
+	auditor     *SecurityAuditor
+	publisher   EventPublisher
+	subscriber  EventSubscriber
+	subscribers map[string][]func(event string, payload any) // local subscriptions
+	subMu       sync.RWMutex
 }
 
 // NewSecureBusAdapter creates a secure bus adapter.
@@ -419,11 +434,24 @@ func NewSecureBusAdapter(
 	auditor *SecurityAuditor,
 ) *SecureBusAdapter {
 	return &SecureBusAdapter{
-		ipcManager: ipcManager,
-		identity:   identity,
-		caps:       caps,
-		auditor:    auditor,
+		ipcManager:  ipcManager,
+		identity:    identity,
+		caps:        caps,
+		auditor:     auditor,
+		subscribers: make(map[string][]func(event string, payload any)),
 	}
+}
+
+// WithPublisher sets the event publisher for the adapter.
+func (b *SecureBusAdapter) WithPublisher(pub EventPublisher) *SecureBusAdapter {
+	b.publisher = pub
+	return b
+}
+
+// WithSubscriber sets the event subscriber for the adapter.
+func (b *SecureBusAdapter) WithSubscriber(sub EventSubscriber) *SecureBusAdapter {
+	b.subscriber = sub
+	return b
 }
 
 // Publish publishes an event with caller identity attached.
@@ -455,8 +483,20 @@ func (b *SecureBusAdapter) Publish(ctx context.Context, event string, payload an
 		Payload:   payload,
 	}
 
-	// TODO: Actually publish to the bus
-	_ = securePayload
+	// Publish to the underlying bus if configured
+	if b.publisher != nil {
+		return b.publisher.PublishEvent(ctx, event, securePayload)
+	}
+
+	// Fallback: deliver to local subscribers (in-process pub/sub)
+	b.subMu.RLock()
+	handlers := b.subscribers[event]
+	b.subMu.RUnlock()
+
+	for _, h := range handlers {
+		h(event, securePayload)
+	}
+
 	return nil
 }
 
@@ -479,10 +519,27 @@ func (b *SecureBusAdapter) Subscribe(ctx context.Context, pattern string, handle
 		if securePayload, ok := payload.(*SecureEventPayload); ok {
 			// Pass the original payload to the handler
 			handler(event, securePayload.Payload)
+		} else {
+			// Allow non-secure payloads for backward compatibility
+			handler(event, payload)
 		}
 	}
 
-	_ = secureHandler
+	// Subscribe to the underlying bus if configured
+	if b.subscriber != nil {
+		// Adapt the handler signature for the bus
+		busHandler := func(ctx context.Context, payload any) error {
+			secureHandler(pattern, payload)
+			return nil
+		}
+		return b.subscriber.SubscribeEvent(ctx, pattern, busHandler)
+	}
+
+	// Fallback: register in local subscriber map (in-process pub/sub)
+	b.subMu.Lock()
+	b.subscribers[pattern] = append(b.subscribers[pattern], secureHandler)
+	b.subMu.Unlock()
+
 	return nil
 }
 

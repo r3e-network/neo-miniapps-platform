@@ -12,7 +12,7 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/R3E-Network/service_layer/system/enclave/sdk"
+	"github.com/R3E-Network/service_layer/system/tee/sdk"
 )
 
 // EnclaveAccounts handles account operations within the TEE.

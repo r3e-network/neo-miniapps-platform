@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 
 	engine "github.com/R3E-Network/service_layer/system/core"
 	"github.com/R3E-Network/service_layer/system/framework"
@@ -310,6 +311,12 @@ func (a *sandboxBusAdapter) InvokeCompute(ctx context.Context, payload any) ([]f
 type sandboxQuotaEnforcer struct {
 	sandbox *sandbox.ServiceSandbox
 	quotas  ResourceQuotas
+
+	// Quota tracking state
+	mu           sync.Mutex
+	storageUsed  int64
+	databaseUsed int64
+	networkUsed  int64
 }
 
 func newSandboxQuotaEnforcer(sb *sandbox.ServiceSandbox, quotas ResourceQuotas) *sandboxQuotaEnforcer {
@@ -320,25 +327,102 @@ func newSandboxQuotaEnforcer(sb *sandbox.ServiceSandbox, quotas ResourceQuotas) 
 }
 
 func (e *sandboxQuotaEnforcer) Enforce(resource string, amount int64) error {
-	// Map resource to capability check
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// Map resource to capability check and quota enforcement
 	switch resource {
 	case "storage":
 		if !e.sandbox.Caps.Has(sandbox.CapStorageWrite) {
 			return fmt.Errorf("storage write not permitted")
 		}
+		// Check storage quota
+		if e.quotas.MaxStorageBytes > 0 {
+			if e.storageUsed+amount > e.quotas.MaxStorageBytes {
+				return &QuotaExceededError{
+					Resource: "storage",
+					Used:     e.storageUsed,
+					Limit:    e.quotas.MaxStorageBytes,
+					Requested: amount,
+				}
+			}
+			e.storageUsed += amount
+		}
+
 	case "database":
 		if !e.sandbox.Caps.Has(sandbox.CapDatabaseWrite) {
 			return fmt.Errorf("database write not permitted")
 		}
+		// Check database quota (using storage bytes as proxy)
+		if e.quotas.MaxStorageBytes > 0 {
+			if e.databaseUsed+amount > e.quotas.MaxStorageBytes {
+				return &QuotaExceededError{
+					Resource: "database",
+					Used:     e.databaseUsed,
+					Limit:    e.quotas.MaxStorageBytes,
+					Requested: amount,
+				}
+			}
+			e.databaseUsed += amount
+		}
+
 	case "network":
 		if !e.sandbox.Caps.Has(sandbox.CapNetworkOutbound) {
 			return fmt.Errorf("network access not permitted")
 		}
+		// Track network usage (no hard limit, but track for monitoring)
+		e.networkUsed += amount
 	}
 
-	// TODO: Add actual quota tracking
-	_ = amount
 	return nil
+}
+
+// Release releases previously allocated quota (e.g., when data is deleted).
+func (e *sandboxQuotaEnforcer) Release(resource string, amount int64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	switch resource {
+	case "storage":
+		e.storageUsed -= amount
+		if e.storageUsed < 0 {
+			e.storageUsed = 0
+		}
+	case "database":
+		e.databaseUsed -= amount
+		if e.databaseUsed < 0 {
+			e.databaseUsed = 0
+		}
+	}
+}
+
+// Usage returns current quota usage for a resource.
+func (e *sandboxQuotaEnforcer) Usage(resource string) (used, limit int64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	switch resource {
+	case "storage":
+		return e.storageUsed, e.quotas.MaxStorageBytes
+	case "database":
+		return e.databaseUsed, e.quotas.MaxStorageBytes
+	case "network":
+		return e.networkUsed, 0 // No hard limit for network
+	}
+	return 0, 0
+}
+
+// QuotaExceededError is returned when a resource quota is exceeded.
+type QuotaExceededError struct {
+	Resource  string
+	Used      int64
+	Limit     int64
+	Requested int64
+}
+
+func (e *QuotaExceededError) Error() string {
+	return fmt.Sprintf("quota exceeded for %s: used %d + requested %d > limit %d",
+		e.Resource, e.Used, e.Requested, e.Limit)
 }
 
 // =============================================================================

@@ -28,6 +28,27 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/R3E-Network/service_layer/system/tee/types"
+)
+
+// Type aliases for backward compatibility - use types from shared package
+type (
+	AttestationReport = types.AttestationReport
+	EnclaveMode       = types.EnclaveMode
+	ExecutionStatus   = types.ExecutionStatus
+)
+
+// Re-export constants from types package
+const (
+	EnclaveModeSimulation = types.EnclaveModeSimulation
+	EnclaveModeHardware   = types.EnclaveModeHardware
+
+	ExecutionStatusPending   = types.ExecutionStatusPending
+	ExecutionStatusRunning   = types.ExecutionStatusRunning
+	ExecutionStatusSucceeded = types.ExecutionStatusSucceeded
+	ExecutionStatusFailed    = types.ExecutionStatusFailed
+	ExecutionStatusTimeout   = types.ExecutionStatusTimeout
 )
 
 // Engine is the main TEE execution engine interface.
@@ -112,17 +133,6 @@ type ExecutionResult struct {
 	AttestationHash string `json:"attestation_hash,omitempty"`
 }
 
-// ExecutionStatus represents the status of an execution.
-type ExecutionStatus string
-
-const (
-	ExecutionStatusPending   ExecutionStatus = "pending"
-	ExecutionStatusRunning   ExecutionStatus = "running"
-	ExecutionStatusSucceeded ExecutionStatus = "succeeded"
-	ExecutionStatusFailed    ExecutionStatus = "failed"
-	ExecutionStatusTimeout   ExecutionStatus = "timeout"
-)
-
 // SecretResolver provides access to secrets within the TEE.
 // Each service gets its own resolver with isolated namespace.
 type SecretResolver interface {
@@ -155,38 +165,6 @@ type ServiceRegistration struct {
 	// Metadata for the service
 	Metadata map[string]string `json:"metadata"`
 }
-
-// AttestationReport contains TEE attestation information.
-type AttestationReport struct {
-	// EnclaveID is the unique identifier of this enclave instance
-	EnclaveID string `json:"enclave_id"`
-
-	// Quote is the SGX quote (or simulation placeholder)
-	Quote []byte `json:"quote"`
-
-	// MRENCLAVE measurement
-	MREnclave string `json:"mr_enclave"`
-
-	// MRSIGNER measurement
-	MRSigner string `json:"mr_signer"`
-
-	// Mode indicates if running in simulation or hardware mode
-	Mode EnclaveMode `json:"mode"`
-
-	// Timestamp when the attestation was generated
-	Timestamp time.Time `json:"timestamp"`
-
-	// Signature over the report
-	Signature []byte `json:"signature"`
-}
-
-// EnclaveMode indicates the TEE operation mode.
-type EnclaveMode string
-
-const (
-	EnclaveModeSimulation EnclaveMode = "simulation"
-	EnclaveModeHardware   EnclaveMode = "hardware"
-)
 
 // Errors
 var (

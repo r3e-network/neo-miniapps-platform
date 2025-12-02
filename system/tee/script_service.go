@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	core "github.com/R3E-Network/service_layer/system/framework/core"
 )
 
 // ScriptService manages script definitions and executions within the TEE.
@@ -14,12 +16,7 @@ type ScriptService struct {
 	store           ScriptStore
 	secretManager   *SecretManager
 	actionProcessor ActionProcessor
-	accountChecker  AccountChecker
-}
-
-// AccountChecker validates account existence.
-type AccountChecker interface {
-	AccountExists(ctx context.Context, accountID string) error
+	accountChecker  core.AccountChecker
 }
 
 // ScriptServiceConfig configures the script service.
@@ -28,7 +25,7 @@ type ScriptServiceConfig struct {
 	Store           ScriptStore
 	SecretManager   *SecretManager
 	ActionProcessor ActionProcessor
-	AccountChecker  AccountChecker
+	AccountChecker  core.AccountChecker
 }
 
 // NewScriptService creates a new script service.

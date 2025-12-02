@@ -381,16 +381,37 @@ func (a *sgxHardwareAttestor) GenerateReport(ctx context.Context) (*AttestationR
 }
 
 func (a *sgxHardwareAttestor) VerifyReport(ctx context.Context, report *AttestationReport) (bool, error) {
-	// In production, this would verify the quote with Intel Attestation Service (IAS)
-	// or use DCAP for local verification
 	if report == nil {
 		return false, fmt.Errorf("report is nil")
 	}
 	if len(report.Quote) == 0 {
 		return false, fmt.Errorf("quote is empty")
 	}
-	// For now, just verify the quote is not empty
-	return true, nil
+
+	// Verify quote structure and signature using SGX bridge
+	if len(report.Quote) < 432 { // Minimum SGX quote size
+		return false, fmt.Errorf("quote too short: expected at least 432 bytes, got %d", len(report.Quote))
+	}
+
+	// Extract and verify quote header
+	version := uint16(report.Quote[0]) | uint16(report.Quote[1])<<8
+	if version != 2 && version != 3 { // SGX quote version 2 or 3
+		return false, fmt.Errorf("unsupported quote version: %d", version)
+	}
+
+	// Verify quote signature using SGX bridge
+	var valid C.int
+	status := C.sgx_bridge_verify_quote(
+		(*C.uint8_t)(unsafe.Pointer(&report.Quote[0])),
+		C.size_t(len(report.Quote)),
+		&valid,
+	)
+
+	if status != 0 {
+		return false, fmt.Errorf("SGX quote verification failed: status %d", status)
+	}
+
+	return valid == 1, nil
 }
 
 func (a *sgxHardwareAttestor) HashExecution(ctx context.Context, req ExecutionRequest, result *ExecutionResult) (string, error) {

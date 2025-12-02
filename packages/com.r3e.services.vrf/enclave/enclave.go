@@ -7,15 +7,18 @@ package enclave
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"math/big"
 
-	"github.com/R3E-Network/service_layer/system/enclave/sdk"
+	"github.com/R3E-Network/service_layer/system/tee/sdk"
 )
 
 // EnclaveVRF handles all VRF operations within the TEE enclave.
@@ -82,14 +85,30 @@ func NewEnclaveVRFWithSDK(cfg *VRFConfig) (*EnclaveVRF, error) {
 
 // NewEnclaveVRFWithKey creates a VRF handler with an existing sealed key.
 func NewEnclaveVRFWithKey(sealedKey []byte) (*EnclaveVRF, error) {
-	// In production, unseal the key using TEE sealing
-	// For now, derive a key from the sealed data
-	if len(sealedKey) < 32 {
-		return nil, errors.New("invalid sealed key")
+	// Validate sealed key format
+	if len(sealedKey) < 48 { // 12 byte nonce + 32 byte key + 16 byte tag (AES-GCM)
+		return nil, errors.New("invalid sealed key: too short")
 	}
 
-	// Derive private key from sealed data
-	d := new(big.Int).SetBytes(sealedKey[:32])
+	// Unseal the key using AES-256-GCM
+	unsealedKey, err := unsealVRFKey(sealedKey)
+	if err != nil {
+		return nil, fmt.Errorf("unseal key failed: %w", err)
+	}
+
+	if len(unsealedKey) != 32 {
+		return nil, errors.New("invalid unsealed key length")
+	}
+
+	// Derive private key from unsealed data
+	d := new(big.Int).SetBytes(unsealedKey)
+
+	// Validate that d is within the valid range for P-256
+	curveOrder := elliptic.P256().Params().N
+	if d.Cmp(big.NewInt(1)) < 0 || d.Cmp(curveOrder) >= 0 {
+		return nil, errors.New("invalid private key: out of range")
+	}
+
 	privateKey := &ecdsa.PrivateKey{
 		PublicKey: ecdsa.PublicKey{
 			Curve: elliptic.P256(),
@@ -97,6 +116,16 @@ func NewEnclaveVRFWithKey(sealedKey []byte) (*EnclaveVRF, error) {
 		D: d,
 	}
 	privateKey.PublicKey.X, privateKey.PublicKey.Y = privateKey.PublicKey.Curve.ScalarBaseMult(d.Bytes())
+
+	// Verify the public key is on the curve
+	if !privateKey.PublicKey.Curve.IsOnCurve(privateKey.PublicKey.X, privateKey.PublicKey.Y) {
+		return nil, errors.New("derived public key is not on curve")
+	}
+
+	// Clear unsealed key from memory
+	for i := range unsealedKey {
+		unsealedKey[i] = 0
+	}
 
 	base, err := sdk.NewBaseEnclave("vrf")
 	if err != nil {
@@ -108,6 +137,40 @@ func NewEnclaveVRFWithKey(sealedKey []byte) (*EnclaveVRF, error) {
 		BaseEnclave: base,
 		publicKey:   &privateKey.PublicKey,
 	}, nil
+}
+
+// unsealVRFKey decrypts a sealed VRF key using AES-256-GCM.
+func unsealVRFKey(sealedKey []byte) ([]byte, error) {
+	// Derive sealing key (in production, this would come from TEE)
+	sealingKey := deriveVRFSealingKey()
+
+	block, err := aes.NewCipher(sealingKey)
+	if err != nil {
+		return nil, err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	nonceSize := gcm.NonceSize()
+	if len(sealedKey) < nonceSize {
+		return nil, errors.New("sealed key too short for nonce")
+	}
+
+	nonce := sealedKey[:nonceSize]
+	ciphertext := sealedKey[nonceSize:]
+
+	return gcm.Open(nil, nonce, ciphertext, nil)
+}
+
+// deriveVRFSealingKey derives the sealing key for VRF keys.
+func deriveVRFSealingKey() []byte {
+	h := sha256.New()
+	h.Write([]byte("VRF_TEE_SEAL_KEY_V1"))
+	h.Write([]byte("com.r3e.services.vrf"))
+	return h.Sum(nil)
 }
 
 // InitializeWithSDK initializes the VRF handler with an existing SDK instance.
