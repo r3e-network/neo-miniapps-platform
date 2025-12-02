@@ -9,7 +9,7 @@ import (
 
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	"github.com/R3E-Network/service_layer/system/sandbox"
-	engine "github.com/R3E-Network/service_layer/system/core"
+	
 	"github.com/R3E-Network/service_layer/system/framework"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 )
@@ -43,7 +43,7 @@ func New(accounts AccountChecker, store Store, tee TEEManager, master MasterKeyP
 				Domain:       "mixer",
 				Description:  "Privacy-preserving transaction mixing service with HD 1/2 multi-sig",
 				DependsOn:    []string{"store", "svc-accounts", "svc-confidential"},
-				RequiresAPIs: []engine.APISurface{engine.APISurfaceStore},
+				RequiresAPIs: []framework.APISurface{framework.APISurfaceStore},
 				Capabilities: []string{"mixer.request", "mixer.withdraw"},
 				Quotas:       map[string]string{"mixer": "request-limits"},
 				Accounts:     accounts,

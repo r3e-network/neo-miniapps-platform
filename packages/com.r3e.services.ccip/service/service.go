@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/R3E-Network/service_layer/pkg/logger"
-	engine "github.com/R3E-Network/service_layer/system/core"
+	
 	"github.com/R3E-Network/service_layer/system/framework"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 	"github.com/R3E-Network/service_layer/system/sandbox"
@@ -45,7 +45,7 @@ func New(accounts AccountChecker, store Store, log *logger.Logger) *Service {
 				Description:  "CCIP lanes and messages",
 				Domain:       "ccip",
 				DependsOn:    []string{"store", "svc-accounts"},
-				RequiresAPIs: []engine.APISurface{engine.APISurfaceStore, engine.APISurfaceEvent},
+				RequiresAPIs: []framework.APISurface{framework.APISurfaceStore, framework.APISurfaceEvent},
 				Capabilities: []string{"ccip"},
 				Accounts:     accounts,
 				Logger:       log,

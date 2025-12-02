@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/R3E-Network/service_layer/pkg/logger"
-	engine "github.com/R3E-Network/service_layer/system/core"
+	
 	"github.com/R3E-Network/service_layer/system/framework"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 	"github.com/R3E-Network/service_layer/system/sandbox"
@@ -48,7 +48,7 @@ func New(accounts AccountChecker, store Store, log *logger.Logger) *Service {
 				Domain:       "datalink",
 				Description:  "DataLink channels and deliveries",
 				DependsOn:    []string{"store", "svc-accounts"},
-				RequiresAPIs: []engine.APISurface{engine.APISurfaceStore, engine.APISurfaceData, engine.APISurfaceEvent},
+				RequiresAPIs: []framework.APISurface{framework.APISurfaceStore, framework.APISurfaceData, framework.APISurfaceEvent},
 				Capabilities: []string{"datalink"},
 				Accounts:     accounts,
 				Logger:       log,

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/pkg/logger"
-	engine "github.com/R3E-Network/service_layer/system/core"
+	
 	"github.com/R3E-Network/service_layer/system/framework"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 	"github.com/R3E-Network/service_layer/system/sandbox"
@@ -35,7 +35,7 @@ func New(accounts AccountChecker, store Store, log *logger.Logger) *Service {
 				Name:         "datastreams",
 				Description:  "Data stream definitions and frames",
 				DependsOn:    []string{"store", "svc-accounts"},
-				RequiresAPIs: []engine.APISurface{engine.APISurfaceStore, engine.APISurfaceData},
+				RequiresAPIs: []framework.APISurface{framework.APISurfaceStore, framework.APISurfaceData},
 				Capabilities: []string{"datastreams"},
 				Accounts:     accounts,
 				Logger:       log,

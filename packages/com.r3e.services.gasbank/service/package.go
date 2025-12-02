@@ -10,7 +10,7 @@ package gasbank
 import (
 	"context"
 
-	engine "github.com/R3E-Network/service_layer/system/core"
+	"github.com/R3E-Network/service_layer/system/framework"
 	pkg "github.com/R3E-Network/service_layer/system/runtime"
 )
 
@@ -33,7 +33,7 @@ func init() {
 	})
 }
 
-func (p *Package) CreateServices(ctx context.Context, runtime pkg.PackageRuntime) ([]engine.ServiceModule, error) {
+func (p *Package) CreateServices(ctx context.Context, runtime pkg.PackageRuntime) ([]framework.ServiceModule, error) {
 	_ = ctx
 
 	db, err := pkg.GetDatabase(runtime)
@@ -55,5 +55,5 @@ func (p *Package) CreateServices(ctx context.Context, runtime pkg.PackageRuntime
 	// - HTTPPostDeposit: POST /deposit
 	// - HTTPPostWithdraw: POST /withdraw
 
-	return []engine.ServiceModule{svc}, nil
+	return []framework.ServiceModule{svc}, nil
 }

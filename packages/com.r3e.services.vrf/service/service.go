@@ -8,7 +8,7 @@ import (
 
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	"github.com/R3E-Network/service_layer/system/sandbox"
-	engine "github.com/R3E-Network/service_layer/system/core"
+	
 	"github.com/R3E-Network/service_layer/system/framework"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 )
@@ -45,7 +45,7 @@ func New(accounts AccountChecker, store Store, log *logger.Logger) *Service {
 				Domain:       "vrf",
 				Description:  "VRF key and request management",
 				DependsOn:    []string{"store", "svc-accounts"},
-				RequiresAPIs: []engine.APISurface{engine.APISurfaceStore, engine.APISurfaceEvent},
+				RequiresAPIs: []framework.APISurface{framework.APISurfaceStore, framework.APISurfaceEvent},
 				Capabilities: []string{"vrf"},
 				Accounts:     accounts,
 				Logger:       log,

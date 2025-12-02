@@ -13,7 +13,7 @@ import (
 
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	"github.com/R3E-Network/service_layer/system/sandbox"
-	engine "github.com/R3E-Network/service_layer/system/core"
+	
 	"github.com/R3E-Network/service_layer/system/framework"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 )
@@ -35,7 +35,7 @@ func New(accounts framework.AccountChecker, store Store, log *logger.Logger) *Se
 				Domain:       "lottery",
 				Description:  "Mega Millions style lottery with VRF and automation",
 				DependsOn:    []string{"store", "svc-accounts", "svc-vrf", "svc-automation"},
-				RequiresAPIs: []engine.APISurface{engine.APISurfaceStore, engine.APISurfaceEvent},
+				RequiresAPIs: []framework.APISurface{framework.APISurfaceStore, framework.APISurfaceEvent},
 				Capabilities: []string{"lottery"},
 				Accounts:     accounts,
 				Logger:       log,

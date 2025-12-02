@@ -9,7 +9,7 @@ import (
 
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	"github.com/R3E-Network/service_layer/system/sandbox"
-	engine "github.com/R3E-Network/service_layer/system/core"
+	
 	"github.com/R3E-Network/service_layer/system/framework"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 )
@@ -22,7 +22,7 @@ var _ core.EventPublisher = (*Service)(nil)
 type Service struct {
 	*framework.SandboxedServiceEngine
 	store        Store
-	feeCollector engine.FeeCollector // Use engine-level interface for decoupling
+	feeCollector framework.FeeCollector // Use engine-level interface for decoupling
 	defaultFee   int64               // default fee per request in smallest unit
 }
 
@@ -31,8 +31,8 @@ type Option func(*Service)
 
 // WithFeeCollector sets a fee collector for charging oracle request fees.
 // Aligned with OracleHub.cs contract fee model.
-// Uses engine.FeeCollector interface for service decoupling.
-func WithFeeCollector(fc engine.FeeCollector) Option {
+// Uses framework.FeeCollector interface for service decoupling.
+func WithFeeCollector(fc framework.FeeCollector) Option {
 	return func(s *Service) { s.feeCollector = fc }
 }
 
@@ -50,7 +50,7 @@ func New(accounts AccountChecker, store Store, log *logger.Logger, opts ...Optio
 				Domain:       "oracle",
 				Description:  "Oracle sources and request lifecycle",
 				DependsOn:    []string{"store", "svc-accounts"},
-				RequiresAPIs: []engine.APISurface{engine.APISurfaceStore, engine.APISurfaceData, engine.APISurfaceEvent},
+				RequiresAPIs: []framework.APISurface{framework.APISurfaceStore, framework.APISurfaceData, framework.APISurfaceEvent},
 				Capabilities: []string{"oracle"},
 				Quotas:       map[string]string{"rpc": "oracle-callbacks"},
 				Accounts:     accounts,

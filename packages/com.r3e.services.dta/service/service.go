@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/R3E-Network/service_layer/pkg/logger"
-	engine "github.com/R3E-Network/service_layer/system/core"
+	
 	"github.com/R3E-Network/service_layer/system/framework"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 	"github.com/R3E-Network/service_layer/system/sandbox"
@@ -28,7 +28,7 @@ func New(accounts AccountChecker, store Store, log *logger.Logger) *Service {
 				Name:         "dta",
 				Description:  "DTA products and orders",
 				DependsOn:    []string{"store", "svc-accounts"},
-				RequiresAPIs: []engine.APISurface{engine.APISurfaceStore},
+				RequiresAPIs: []framework.APISurface{framework.APISurfaceStore},
 				Capabilities: []string{"dta"},
 				Accounts:     accounts,
 				Logger:       log,

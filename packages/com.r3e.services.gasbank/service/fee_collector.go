@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	engine "github.com/R3E-Network/service_layer/system/core"
+	"github.com/R3E-Network/service_layer/system/framework"
 )
 
-// Compile-time check: FeeCollector implements engine.FeeCollector.
-var _ engine.FeeCollector = (*FeeCollector)(nil)
+// Compile-time check: FeeCollector implements framework.FeeCollector.
+var _ framework.FeeCollector = (*FeeCollector)(nil)
 
-// FeeCollector implements engine.FeeCollector using the gasbank service.
+// FeeCollector implements framework.FeeCollector using the gasbank service.
 // This adapter allows oracle requests to be charged against gas accounts.
 // Aligned with OracleHub.cs contract fee model.
 type FeeCollector struct {

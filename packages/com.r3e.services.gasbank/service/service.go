@@ -11,7 +11,7 @@ import (
 	accountsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.accounts/service"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	"github.com/R3E-Network/service_layer/system/sandbox"
-	engine "github.com/R3E-Network/service_layer/system/core"
+	
 	"github.com/R3E-Network/service_layer/system/framework"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 )
@@ -32,8 +32,8 @@ func New(accounts AccountChecker, store Store, log *logger.Logger) *Service {
 				Domain:      "gasbank",
 				Description: "Service-owned gas accounts and settlements",
 				DependsOn:   []string{"store", "svc-accounts"},
-				RequiresAPIs: []engine.APISurface{
-					engine.APISurfaceStore,
+				RequiresAPIs: []framework.APISurface{
+					framework.APISurfaceStore,
 				},
 				Capabilities: []string{"gasbank"},
 				Quotas:       map[string]string{"gas": "account-balances"},

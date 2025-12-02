@@ -6,7 +6,7 @@ import (
 
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	"github.com/R3E-Network/service_layer/system/sandbox"
-	engine "github.com/R3E-Network/service_layer/system/core"
+	
 	"github.com/R3E-Network/service_layer/system/framework"
 	core "github.com/R3E-Network/service_layer/system/framework/core"
 )
@@ -36,7 +36,7 @@ func New(accounts framework.AccountChecker, store Store, log *logger.Logger) *Se
 				Domain:       "accounts",
 				Description:  "Account registry and metadata",
 				DependsOn:    []string{"store"},
-				RequiresAPIs: []engine.APISurface{engine.APISurfaceStore, engine.APISurfaceAccount},
+				RequiresAPIs: []framework.APISurface{framework.APISurfaceStore, framework.APISurfaceAccount},
 				Capabilities: []string{"accounts"},
 				Accounts:     accounts,
 				Logger:       log,
@@ -137,7 +137,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// CreateAccount implements engine.AccountEngine for the core engine.
+// CreateAccount implements framework.AccountEngine for the core engine.
 func (s *Service) CreateAccount(ctx context.Context, owner string, metadata map[string]string) (string, error) {
 	acct, err := s.Create(ctx, owner, metadata)
 	if err != nil {
@@ -146,7 +146,7 @@ func (s *Service) CreateAccount(ctx context.Context, owner string, metadata map[
 	return acct.ID, nil
 }
 
-// ListAccounts implements engine.AccountEngine for the core engine.
+// ListAccounts implements framework.AccountEngine for the core engine.
 func (s *Service) ListAccounts(ctx context.Context) ([]any, error) {
 	accts, err := s.List(ctx)
 	if err != nil {
