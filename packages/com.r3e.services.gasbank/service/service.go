@@ -10,10 +10,10 @@ import (
 
 	accountsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.accounts/service"
 	"github.com/R3E-Network/service_layer/pkg/logger"
-	"github.com/R3E-Network/service_layer/system/sandbox"
+	"github.com/R3E-Network/service_layer/system/os/sandbox"
 	
-	"github.com/R3E-Network/service_layer/system/framework"
-	core "github.com/R3E-Network/service_layer/system/framework/core"
+	"github.com/R3E-Network/service_layer/system/os/framework"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 )
 
 // Service wraps business logic for the gas bank module.

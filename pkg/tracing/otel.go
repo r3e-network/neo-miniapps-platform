@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	core "github.com/R3E-Network/service_layer/system/framework/core"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"

@@ -12,10 +12,10 @@ import (
 	"fmt"
 	"log"
 
-	engine "github.com/R3E-Network/service_layer/system/core"
-	"github.com/R3E-Network/service_layer/system/framework"
-	core "github.com/R3E-Network/service_layer/system/framework/core"
-	pkg "github.com/R3E-Network/service_layer/system/runtime"
+	engine "github.com/R3E-Network/service_layer/system/engine/core"
+	"github.com/R3E-Network/service_layer/system/os/framework"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
+	pkg "github.com/R3E-Network/service_layer/system/os/runtime"
 )
 
 // Config holds bootstrap configuration.

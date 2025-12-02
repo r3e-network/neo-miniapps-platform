@@ -10,8 +10,8 @@ package gasbank
 import (
 	"context"
 
-	"github.com/R3E-Network/service_layer/system/framework"
-	pkg "github.com/R3E-Network/service_layer/system/runtime"
+	"github.com/R3E-Network/service_layer/system/os/framework"
+	pkg "github.com/R3E-Network/service_layer/system/os/runtime"
 )
 
 // Package implements the ServicePackage interface using PackageTemplate.

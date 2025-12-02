@@ -16,7 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/R3E-Network/service_layer/system/tee"
+	"github.com/R3E-Network/service_layer/system/os/tee"
 )
 
 // TEE Manager Implementation for Double-Blind HD 1/2 Multi-sig Architecture

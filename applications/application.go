@@ -29,7 +29,7 @@ import (
 	vrfsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.vrf/service"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	"github.com/R3E-Network/service_layer/pkg/metrics"
-	core "github.com/R3E-Network/service_layer/system/framework/core"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 )
 
 // Stores encapsulates persistence dependencies.

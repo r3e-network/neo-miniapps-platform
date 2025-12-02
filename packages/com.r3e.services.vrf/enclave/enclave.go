@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/R3E-Network/service_layer/system/tee/sdk"
+	"github.com/R3E-Network/service_layer/system/os/tee/sdk"
 )
 
 // EnclaveVRF handles all VRF operations within the TEE enclave.

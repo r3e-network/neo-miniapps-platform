@@ -16,7 +16,7 @@ import (
 	"github.com/R3E-Network/service_layer/applications/system"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	"github.com/R3E-Network/service_layer/pkg/storage/postgres"
-	engine "github.com/R3E-Network/service_layer/system/core"
+	engine "github.com/R3E-Network/service_layer/system/engine/core"
 )
 
 // BusPublisher dispatches an event to all EventEngine implementations.

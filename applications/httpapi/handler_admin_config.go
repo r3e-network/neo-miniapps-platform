@@ -9,7 +9,7 @@ import (
 
 	"github.com/R3E-Network/service_layer/pkg/admin"
 	"github.com/R3E-Network/service_layer/pkg/storage"
-	core "github.com/R3E-Network/service_layer/system/framework/core"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 )
 
 // adminConfigStore provides access to admin config storage.

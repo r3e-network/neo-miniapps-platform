@@ -10,7 +10,7 @@ import (
 	"crypto/sha256"
 	"math/big"
 
-	"github.com/R3E-Network/service_layer/system/tee/sdk"
+	"github.com/R3E-Network/service_layer/system/os/tee/sdk"
 )
 
 // EnclaveCCIP handles CCIP operations within the TEE.

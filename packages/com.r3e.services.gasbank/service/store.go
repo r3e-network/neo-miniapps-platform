@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/R3E-Network/service_layer/system/framework"
+	"github.com/R3E-Network/service_layer/system/os/framework"
 )
 
 // Store defines the data access interface for the Gas Bank service.

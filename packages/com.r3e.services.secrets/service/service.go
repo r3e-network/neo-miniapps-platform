@@ -9,9 +9,9 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/R3E-Network/service_layer/pkg/logger"
-	"github.com/R3E-Network/service_layer/system/framework"
-	core "github.com/R3E-Network/service_layer/system/framework/core"
-	"github.com/R3E-Network/service_layer/system/sandbox"
+	"github.com/R3E-Network/service_layer/system/os/framework"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
+	"github.com/R3E-Network/service_layer/system/os/sandbox"
 )
 
 // CallerService identifies which service is requesting secret access.

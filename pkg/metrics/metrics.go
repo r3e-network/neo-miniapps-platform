@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	core "github.com/R3E-Network/service_layer/system/framework/core"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"

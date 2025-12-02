@@ -8,7 +8,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/R3E-Network/service_layer/system/framework"
+	"github.com/R3E-Network/service_layer/system/os/framework"
 )
 
 const (

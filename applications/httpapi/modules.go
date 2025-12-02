@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	engine "github.com/R3E-Network/service_layer/system/core"
+	engine "github.com/R3E-Network/service_layer/system/engine/core"
 )
 
 // ModuleStatus is exposed on /system/status to describe active modules and their domains.

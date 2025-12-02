@@ -4,7 +4,7 @@ package datalink
 import (
 	"context"
 
-	"github.com/R3E-Network/service_layer/system/framework"
+	"github.com/R3E-Network/service_layer/system/os/framework"
 )
 
 // Store defines the persistence interface for datalink channels and deliveries.

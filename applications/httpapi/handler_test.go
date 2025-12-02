@@ -22,7 +22,7 @@ import (
 	"github.com/R3E-Network/service_layer/packages/com.r3e.services.dta/service"
 	"github.com/R3E-Network/service_layer/packages/com.r3e.services.vrf/service"
 	"github.com/R3E-Network/service_layer/pkg/logger"
-	engine "github.com/R3E-Network/service_layer/system/core"
+	engine "github.com/R3E-Network/service_layer/system/engine/core"
 )
 
 const testAuthToken = "test-token"

@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	core "github.com/R3E-Network/service_layer/system/framework/core"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 )
 
 // CollectDescriptors extracts service descriptors, skipping nil entries, and

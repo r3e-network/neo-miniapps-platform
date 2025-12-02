@@ -16,7 +16,7 @@ import (
 	oraclesvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.oracle/service"
 	"github.com/R3E-Network/service_layer/packages/com.r3e.services.secrets/service"
 	vrfsvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.vrf/service"
-	core "github.com/R3E-Network/service_layer/system/framework/core"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 )
 
 // ServiceProvider exposes service pointers required by transport layers.

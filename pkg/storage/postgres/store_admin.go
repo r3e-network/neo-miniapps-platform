@@ -10,7 +10,7 @@ import (
 	"github.com/lib/pq"
 
 	"github.com/R3E-Network/service_layer/pkg/admin"
-	core "github.com/R3E-Network/service_layer/system/framework/core"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 )
 
 // Store implements the AdminConfigStore interface backed by PostgreSQL.

@@ -8,9 +8,9 @@ import (
 
 	"github.com/R3E-Network/service_layer/pkg/logger"
 	
-	"github.com/R3E-Network/service_layer/system/framework"
-	core "github.com/R3E-Network/service_layer/system/framework/core"
-	"github.com/R3E-Network/service_layer/system/sandbox"
+	"github.com/R3E-Network/service_layer/system/os/framework"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
+	"github.com/R3E-Network/service_layer/system/os/sandbox"
 )
 
 // Compile-time check: Service exposes Publish for the core engine adapter.

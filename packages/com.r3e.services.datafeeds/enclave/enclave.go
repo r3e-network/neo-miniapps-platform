@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/R3E-Network/service_layer/system/tee/sdk"
+	"github.com/R3E-Network/service_layer/system/os/tee/sdk"
 )
 
 // DataFeedsEnclave handles data feed operations within the TEE.

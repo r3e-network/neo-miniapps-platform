@@ -16,7 +16,7 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/R3E-Network/service_layer/system/tee/sdk"
+	"github.com/R3E-Network/service_layer/system/os/tee/sdk"
 )
 
 // EnclaveOracle handles all oracle operations within the TEE enclave.

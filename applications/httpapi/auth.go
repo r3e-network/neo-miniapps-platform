@@ -9,7 +9,7 @@ import (
 
 	"github.com/R3E-Network/service_layer/applications/auth"
 	"github.com/R3E-Network/service_layer/pkg/logger"
-	core "github.com/R3E-Network/service_layer/system/framework/core"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 	"github.com/golang-jwt/jwt/v5"
 )
 

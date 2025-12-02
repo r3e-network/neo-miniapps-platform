@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/R3E-Network/service_layer/pkg/logger"
-	"github.com/R3E-Network/service_layer/system/events"
+	"github.com/R3E-Network/service_layer/system/engine/events"
 )
 
 // HTTPHandler provides HTTP endpoints for the user service.

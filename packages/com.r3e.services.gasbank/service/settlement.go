@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/pkg/logger"
-	"github.com/R3E-Network/service_layer/system/framework"
-	core "github.com/R3E-Network/service_layer/system/framework/core"
+	"github.com/R3E-Network/service_layer/system/os/framework"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 )
 
 // WithdrawalResolver decides whether a pending withdrawal has been settled.

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/R3E-Network/service_layer/applications/system"
-	core "github.com/R3E-Network/service_layer/system/framework/core"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 )
 
 func templateEscape(value string) string {

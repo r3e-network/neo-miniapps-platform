@@ -9,7 +9,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 
-	"github.com/R3E-Network/service_layer/system/tee/sdk"
+	"github.com/R3E-Network/service_layer/system/os/tee/sdk"
 )
 
 // EnclaveDataLink handles data link operations within the TEE.

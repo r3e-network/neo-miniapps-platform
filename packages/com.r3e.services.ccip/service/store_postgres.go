@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	core "github.com/R3E-Network/service_layer/system/framework/core"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 )
 
 // CCIPStore implementation

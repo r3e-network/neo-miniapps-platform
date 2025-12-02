@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/pkg/logger"
-	"github.com/R3E-Network/service_layer/system/sandbox"
+	"github.com/R3E-Network/service_layer/system/os/sandbox"
 	
-	"github.com/R3E-Network/service_layer/system/framework"
-	core "github.com/R3E-Network/service_layer/system/framework/core"
+	"github.com/R3E-Network/service_layer/system/os/framework"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 )
 
 // Service provides lottery management with VRF randomness and automated draws.

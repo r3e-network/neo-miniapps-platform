@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	core "github.com/R3E-Network/service_layer/system/framework/core"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 )
 
 type manifest struct {

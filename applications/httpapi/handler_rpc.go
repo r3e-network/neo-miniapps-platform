@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/pkg/metrics"
-	engine "github.com/R3E-Network/service_layer/system/core"
-	core "github.com/R3E-Network/service_layer/system/framework/core"
+	engine "github.com/R3E-Network/service_layer/system/engine/core"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 )
 
 type rpcRequest struct {

@@ -29,8 +29,8 @@ import (
 	"context"
 
 	"github.com/R3E-Network/service_layer/pkg/storage"
-	engine "github.com/R3E-Network/service_layer/system/core"
-	pkg "github.com/R3E-Network/service_layer/system/runtime"
+	engine "github.com/R3E-Network/service_layer/system/engine/core"
+	pkg "github.com/R3E-Network/service_layer/system/os/runtime"
 	"github.com/R3E-Network/service_layer/pkg/logger"
 )
 

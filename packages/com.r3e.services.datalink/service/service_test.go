@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	core "github.com/R3E-Network/service_layer/system/framework/core"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 )
 
 const testChannelSigner = "0xdddd111122223333444455556666777788889999"

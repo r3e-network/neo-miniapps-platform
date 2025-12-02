@@ -17,7 +17,7 @@ import (
 
 	mixer "github.com/R3E-Network/service_layer/packages/com.r3e.services.mixer/service"
 	"github.com/R3E-Network/service_layer/pkg/logger"
-	"github.com/R3E-Network/service_layer/system/tee"
+	"github.com/R3E-Network/service_layer/system/os/tee"
 )
 
 // SmokeTestSuite holds the smoke test environment.

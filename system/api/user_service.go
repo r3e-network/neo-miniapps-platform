@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/pkg/logger"
-	"github.com/R3E-Network/service_layer/system/events"
+	"github.com/R3E-Network/service_layer/system/engine/events"
 )
 
 // UserService provides direct user interaction with the service layer.

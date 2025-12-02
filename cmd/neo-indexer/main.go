@@ -15,7 +15,7 @@ import (
 
 	_ "github.com/lib/pq"
 
-	core "github.com/R3E-Network/service_layer/system/framework/core"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 )
 
 // Config controls the indexer polling loop.

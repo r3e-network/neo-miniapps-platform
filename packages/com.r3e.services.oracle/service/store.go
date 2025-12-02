@@ -7,7 +7,7 @@ package oracle
 import (
 	"context"
 
-	"github.com/R3E-Network/service_layer/system/framework"
+	"github.com/R3E-Network/service_layer/system/os/framework"
 )
 
 // Store defines the persistence contract for oracle data sources and requests.

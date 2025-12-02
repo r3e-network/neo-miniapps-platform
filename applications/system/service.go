@@ -3,7 +3,7 @@ package system
 import (
 	"context"
 
-	core "github.com/R3E-Network/service_layer/system/framework/core"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 )
 
 // Service represents a lifecycle-managed component. All application modules

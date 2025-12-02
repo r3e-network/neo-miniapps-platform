@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/R3E-Network/service_layer/system/framework"
-	core "github.com/R3E-Network/service_layer/system/framework/core"
+	"github.com/R3E-Network/service_layer/system/os/framework"
+	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 )
 
 type stubTracer struct {
