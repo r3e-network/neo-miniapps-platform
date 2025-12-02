@@ -20,7 +20,7 @@ import (
 	"github.com/R3E-Network/service_layer/pkg/metrics"
 	"github.com/R3E-Network/service_layer/packages/com.r3e.services.accounts/service"
 	oraclesvc "github.com/R3E-Network/service_layer/packages/com.r3e.services.oracle/service"
-	engine "github.com/R3E-Network/service_layer/system/engine/core"
+	engine "github.com/R3E-Network/service_layer/system/os/core"
 	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 )
 

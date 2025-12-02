@@ -10,7 +10,7 @@
 package framework
 
 import (
-	engine "github.com/R3E-Network/service_layer/system/engine/core"
+	engine "github.com/R3E-Network/service_layer/system/os/core"
 	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 )
 

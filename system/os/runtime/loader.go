@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	engine "github.com/R3E-Network/service_layer/system/engine/core"
+	engine "github.com/R3E-Network/service_layer/system/os/core"
 	"github.com/R3E-Network/service_layer/system/os/framework"
 	core "github.com/R3E-Network/service_layer/system/os/framework/core"
 	"github.com/R3E-Network/service_layer/system/os/sandbox"

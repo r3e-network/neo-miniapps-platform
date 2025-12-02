@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/R3E-Network/service_layer/system/engine/events"
+	"github.com/R3E-Network/service_layer/system/os/events"
 )
 
 // Unit tests for wiring configuration and component creation.

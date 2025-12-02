@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	engine "github.com/R3E-Network/service_layer/system/engine/core"
+	engine "github.com/R3E-Network/service_layer/system/os/core"
 	service "github.com/R3E-Network/service_layer/system/os/framework/core"
 )
 

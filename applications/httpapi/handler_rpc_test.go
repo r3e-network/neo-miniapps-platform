@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	engine "github.com/R3E-Network/service_layer/system/engine/core"
+	engine "github.com/R3E-Network/service_layer/system/os/core"
 )
 
 type stubRPCEngine struct {
