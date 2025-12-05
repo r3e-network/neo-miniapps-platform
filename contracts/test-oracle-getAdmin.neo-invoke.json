@@ -1,0 +1,7 @@
+[
+  {
+    "contract": "OracleService",
+    "operation": "getAdmin",
+    "args": []
+  }
+]

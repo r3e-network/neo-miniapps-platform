@@ -1,236 +1,302 @@
-# Documentation Index
+# Neo Service Layer Documentation
 
-This repository treats the [Neo Service Layer Specification](requirements.md)
-as the single source of truth for the platform.
+Production-grade confidential computing platform for Neo N3 blockchain.
+
+**Stack**: MarbleRun + EGo + Supabase + Netlify + Neo N3
+
+---
 
 ## Quick Navigation
 
 | Category | Document | Description |
 |----------|----------|-------------|
-| **Start Here** | [Quickstart Tutorial](quickstart-tutorial.md) | End-to-end tutorial: zero to running in 15 minutes |
-| **Services** | [Service Catalog](service-catalog.md) | Complete reference for all 17 services |
-| **Development** | [Developer Guide](developer-guide.md) | Building and extending the Service Layer |
-| **Architecture** | [Architecture Layers](architecture-layers.md) | 4-layer design (Platform → Framework → Engine → Services) |
-| **Supabase** | [Supabase Setup](supabase-setup.md) | Self-hosted Supabase Postgres + GoTrue profile and env matrix |
-| **Deep Dives** | [Framework Guide](framework-guide.md) | ServiceBase, Builder, Manifest, Testing |
-| **Deep Dives** | [Engine Guide](engine-guide.md) | Registry, Lifecycle, Bus, Health monitoring |
-| **Deep Dives** | [Service Engine](service-engine.md) | Automated service invocation and callbacks |
-| **Deployment** | [Deployment Guide](deployment-guide.md) | Production deployment with Docker/Kubernetes |
-| **Specification** | [Requirements](requirements.md) | Single source of truth |
-
-### SDKs
-- [TypeScript Client](../sdk/typescript/client/README.md) — typed API surface with Supabase refresh token support
-- [Go Client](../sdk/go/client/README.md) — typed client with Supabase refresh token support
+| **Start Here** | [README](../README.md) | Project overview and quick start |
+| **Architecture** | [MarbleRun Architecture](architecture/MARBLERUN_ARCHITECTURE.md) | Complete system architecture |
+| **Deployment** | [Deployment Guide](DEPLOYMENT.md) | Production deployment |
+| **Services** | [Service Documentation](services/README.md) | All 14 services |
 
 ---
 
-## Service Tutorials
+## Architecture
 
-### Core Services
-| Service | Tutorial | Description |
-|---------|----------|-------------|
-| Accounts | [API Examples](examples/services.md#accounts) | Account management |
-| Functions | [API Examples](examples/services.md#functions) | Serverless function execution |
-| Automation | [Automation Guide](examples/automation.md) | Cron-style job scheduling |
-| Triggers | [Automation Guide](examples/automation.md) | Event/webhook routing |
-| Secrets | [Secrets Guide](examples/secrets.md) | Encrypted secret storage |
+### Core Architecture Documents
 
-### Oracle & Data Services
-| Service | Tutorial | Description |
-|---------|----------|-------------|
-| Oracle | [API Examples](examples/services.md#oracle-http-adapter) | HTTP data adapters |
-| DataFeeds | [DataFeeds Quickstart](examples/datafeeds.md) | Chainlink-style signed feeds |
-| PriceFeeds | [API Examples](examples/services.md#pricefeeds) | Deviation-based price aggregation |
-| DataStreams | [API Examples](examples/services.md#data-streams) | Real-time data streams |
-| DataLink | [DataLink Quickstart](examples/datalink.md) | Data delivery channels |
+| Document | Description |
+|----------|-------------|
+| [MarbleRun Architecture](architecture/MARBLERUN_ARCHITECTURE.md) | **Primary**: Complete architecture with MarbleRun, EGo, Supabase |
+| [TEE Supabase Architecture](architecture/TEE_SUPABASE_ARCHITECTURE.md) | TEE integration with Supabase |
+| [TEE Trust Root](architecture/TEE_TRUST_ROOT_IMPLEMENTATION.md) | Trust root implementation details |
 
-### Randomness Services
-| Service | Tutorial | Description |
-|---------|----------|-------------|
-| Random | [API Examples](examples/services.md#randomness) | ED25519 signed random |
-| VRF | [API Examples](examples/services.md#randomness) | Verifiable random functions |
+### Architecture Diagram
 
-### Financial Services
-| Service | Tutorial | Description |
-|---------|----------|-------------|
-| GasBank | [GasBank Workflows](gasbank-workflows.md) | Gas account management |
-
-### Cross-Chain & Advanced
-| Service | Tutorial | Description |
-|---------|----------|-------------|
-| CCIP | [Cross-Chain Guide](examples/crosschain.md#ccip-service) | Cross-chain messaging |
-| CRE | [Cross-Chain Guide](examples/crosschain.md#cre-service) | Workflow orchestration |
-| Confidential | [Confidential Guide](examples/confidential.md#confidential-computing-service) | TEE enclave management |
-| DTA | [Confidential Guide](examples/confidential.md#dta-service) | Trading infrastructure |
-
-### Engine Integration
-| Topic | Tutorial | Description |
-|-------|----------|-------------|
-| Event Bus | [Bus Quickstart](examples/bus.md) | Pub/sub messaging |
-| System APIs | [API Examples](examples/services.md#discover-services-via-the-system-apis) | Module discovery |
-
----
-
-## Architecture Documentation
-
-### Getting Started
-- [Quickstart Tutorial](quickstart-tutorial.md) - **NEW**: End-to-end tutorial (15 minutes)
-- [Architecture Layers](architecture-layers.md) - **Start here**: 4-layer design guide
-
-### Core Architecture
-- [System Architecture](system-architecture.md) - Deployment topology and data flows
-- [Engine Guide](engine-guide.md) - Complete engine reference (Registry, Lifecycle, Bus, Health)
-- [Framework Guide](framework-guide.md) - ServiceBase, Builder, Manifest, Testing utilities
-- [Supabase Integration](supabase-integration.md) - Auth, Storage, Realtime integration
-
-### Code Layout
 ```
-system/
-├── core/         # Service Engine (Registry, Lifecycle, Bus)
-├── framework/    # Service SDK (ServiceBase, Builder, Manifest)
-├── platform/     # Platform services (database, migrations)
-├── runtime/      # Package runtime (loader, permissions)
-├── bootstrap/    # Application bootstrapping and component wiring
-├── events/       # Event dispatcher, request router, indexer bridge
-└── api/          # User API (accounts, secrets, contracts, functions)
-
-packages/         # Service packages (com.r3e.services.*)
-applications/     # HTTP API + composition (wiring, ServiceProvider)
-contracts/neo-n3/ # Neo N3 smart contracts (C#)
-pkg/              # Shared libraries (storage, supabase, pgnotify, blob)
+┌─────────────────────────────────────────────────────────────────┐
+│                    Frontend (React + Netlify)                   │
+│  • Supabase Auth • Realtime subscriptions • 14 service helpers  │
+└────────────────────────────┬────────────────────────────────────┘
+                             │ HTTPS
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Supabase (PostgreSQL)                        │
+│  • service_requests • RLS policies • Realtime notifications     │
+└────────────────────────────┬────────────────────────────────────┘
+                             │ Polling
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Service Layer (MarbleRun + EGo)                    │
+│  Coordinator → Oracle/VRF/Secrets/GasBank/... Marbles (SGX)     │
+└────────────────────────────┬────────────────────────────────────┘
+                             │ RPC
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       Neo N3 Blockchain                         │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Operations & Security
+## 14 Services
 
-### Deployment
-- [Deployment Guide](deployment-guide.md) - **NEW**: Production deployment with Docker/Kubernetes
-- [Operations Runbook](ops-runbook.md) - Start/stop, monitoring, troubleshooting
-- Supabase smoke: `make supabase-smoke` (or `./scripts/supabase_smoke.sh`) spins up the Supabase profile (GoTrue/PostgREST/Kong/Studio) and checks `/auth/refresh` + `/system/status` via the appserver.
+All services run as EGo SGX Marbles, activated by the MarbleRun Coordinator.
 
-### Dashboard
-- [Dashboard Smoke Checklist](dashboard-smoke.md) - Dashboard verification
-- [Dashboard E2E Testing](dashboard-e2e.md) - Playwright testing
-
-### Security
-- [Security & Production Hardening](security-hardening.md) - Production deployment
-- [Tenant Quickstart](tenant-quickstart.md) - Multi-tenancy setup
-
-### Auditing
-- `/admin/audit?limit=...&offset=...` (admin JWT) with filters
-- CLI helper: `slctl audit --limit 100 --user admin`
-
----
-
-## Integration References
-
-### NEO N3 Integration
-- [Contract System](contract-system.md) - **Complete architecture**: contracts, event system, user API
-- [NEO API Reference](neo-api.md) - Indexer and snapshot APIs
-- [NEO Operations](neo-ops.md) - Running NEO nodes
-- [Blockchain Contracts](blockchain-contracts.md) - Push Service Layer feeds into privnet contracts via SDK helpers
-- [NEO Layering Plan](neo-layering-summary.md) - Architecture roadmap
-- [NEO Contract Set](neo-n3-contract-set.md) - Smart contract layout
-- [Contract ↔ Service Alignment](neo-contracts-alignment.md) - Field mappings
-
-### TEE & Enclave Security
-- [Enclave Attestation](enclave-attestation.md) - SGX remote attestation and enclave verification
-- [Confidential Computing](examples/confidential.md) - TEE enclave management
-
-### Service Isolation & Security
-- [Sandbox Architecture](sandbox-architecture.md) - **NEW**: Android-style service isolation and IPC security
-
+| Service | Description | Documentation |
+|---------|-------------|---------------|
+| **oracle** | External data fetching | [Oracle Docs](services/oracle/README.md) |
+| **vrf** | Verifiable random functions | [VRF Docs](services/vrf/README.md) |
+| **secrets** | Encrypted secret storage | [Secrets Docs](services/secrets/README.md) |
+| **gasbank** | Gas fee management | [GasBank Docs](services/gasbank/README.md) |
+| **mixer** | Privacy mixing | [Mixer Docs](services/mixer/README.md) |
+| **datafeeds** | Price feed aggregation | [DataFeeds Docs](services/datafeeds/README.md) |
+| **accounts** | Account management | [Accounts Docs](services/accounts/README.md) |
+| **automation** | Task scheduling | [Automation Docs](services/automation/README.md) |
+| **ccip** | Cross-chain messaging | [CCIP Docs](services/ccip/README.md) |
+| **confidential** | Confidential compute | [Confidential Docs](services/confidential/README.md) |
+| **cre** | Chainlink runtime | [CRE Docs](services/cre/README.md) |
+| **datalink** | Data linking | [DataLink Docs](services/datalink/README.md) |
+| **datastreams** | Real-time streaming | [DataStreams Docs](services/datastreams/README.md) |
+| **dta** | Data trust authority | [DTA Docs](services/dta/README.md) |
 
 ---
 
-## API Quick Reference
+## Components
 
-### Core Bus Endpoints
+### MarbleRun Coordinator
+
+Manages SGX enclave lifecycle and secret provisioning.
+
+**Location**: `coordinator/`
+
+**Endpoints**:
+```
+POST /api/v2/marble/activate  - Marble activation
+POST /api/v2/marble/heartbeat - Health check
+GET  /api/v2/manifest         - Get manifest
+POST /api/v2/manifest         - Set manifest
+GET  /api/v2/status           - Coordinator status
+```
+
+### Marble SDK
+
+Go SDK for service Marbles.
+
+**Location**: `marble/sdk/`
+
+```go
+marble, _ := sdk.New(sdk.Config{
+    MarbleType:      "oracle",
+    CoordinatorAddr: "coordinator:4433",
+})
+marble.Activate(ctx)
+secret, _ := marble.GetSecret("api_key")
+```
+
+### EGo Runtime
+
+SGX enclave runtime with secure sealing.
+
+**Location**: `ego/`
+
+**Features**:
+- AES-256-GCM sealing (not mock XOR)
+- DCAP-compatible quote generation
+- Quote verification
+- Attestation info
+
+### Supabase Client
+
+Resilient PostgreSQL client.
+
+**Location**: `supabase/client/`
+
+**Features**:
+- Connection pooling (100 connections)
+- Retry with exponential backoff
+- Circuit breaker pattern
+- Request metrics
+
+---
+
+## Quick Start
+
+### Development
+
 ```bash
-# Publish events
-POST /system/events
-{"event": "my.event", "payload": {...}}
+# Start Supabase
+docker-compose up -d supabase
 
-# Push data
-POST /system/data
-{"topic": "my.topic", "payload": {...}}
+# Start Coordinator (simulation)
+SIMULATION_MODE=true go run ./cmd/coordinator
 
-# Invoke compute
-POST /system/compute
-{"payload": {...}}
+# Start Service Marble
+SIMULATION_MODE=true MARBLE_TYPE=oracle go run ./cmd/marble
 
-# CLI shortcuts
-slctl bus events --event my.event --payload '{}'
-slctl bus data --topic my.topic --payload '{}'
-slctl bus compute --payload '{}'
+# Start Frontend
+cd frontend && npm run dev
 ```
 
-### System Status
+### Production
+
 ```bash
-# Service status
-GET /system/status
+# Build EGo enclave
+ego-go build -o marble ./cmd/marble
+ego sign marble
 
-# Service descriptors
-GET /system/descriptors
+# Deploy to Kubernetes
+kubectl apply -f devops/kubernetes/
 
-# Health checks
-GET /readyz
-GET /livez
+# Deploy Frontend
+netlify deploy --prod
+```
+
+---
+
+## Configuration
+
+### Environment Variables
+
+**Coordinator**:
+```bash
+COORDINATOR_ADDR=0.0.0.0:4433
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_SERVICE_KEY=eyJ...
+SIMULATION_MODE=false
+```
+
+**Marble**:
+```bash
+MARBLE_TYPE=oracle
+COORDINATOR_ADDR=coordinator:4433
+SIMULATION_MODE=false
+```
+
+**Frontend**:
+```bash
+VITE_SUPABASE_URL=https://xxx.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJ...
+VITE_NEO_RPC_URL=https://mainnet1.neo.coz.io:443
+```
+
+---
+
+## Security Model
+
+### Trust Hierarchy
+
+```
+Intel SGX CPU (Hardware Root of Trust)
+        ↓
+    EGo Runtime (Enclave)
+        ↓
+    MarbleRun Coordinator (Quote Verification)
+        ↓
+    Service Marbles (Attested Enclaves)
+        ↓
+    Supabase (Encrypted at Rest, RLS)
+        ↓
+    Frontend (User Authentication)
+```
+
+### Key Security Features
+
+1. **SGX Attestation**: All Marbles prove genuine enclave execution
+2. **AES-256-GCM Sealing**: Secure data encryption with enclave keys
+3. **mTLS**: Encrypted Marble-to-Marble communication
+4. **RLS**: Row-Level Security for user isolation
+5. **Secret Provisioning**: Secrets only inside attested enclaves
+
+---
+
+## API Reference
+
+### Service Request Flow
+
+```
+1. Frontend → Supabase
+   INSERT INTO service_requests (service_type='oracle', operation='fetch')
+
+2. Marble polls Supabase
+   SELECT * FROM service_requests WHERE status='pending'
+
+3. Marble processes in SGX
+   Execute operation, sign result with TEE key
+
+4. Result stored
+   UPDATE service_requests SET status='completed', result=...
+
+5. Frontend receives via Realtime
+   WebSocket notification → UI update
+```
+
+### Health Endpoints
+
+```bash
+GET /health          # Service health
+GET /info            # Service info
+GET /attestation     # TEE attestation info
+GET /quote?data=...  # Generate SGX quote
 ```
 
 ---
 
 ## Testing
 
-### Unit Tests
 ```bash
+# Unit tests
 go test ./...
-go test ./packages/... -cover
-```
 
-### Integration Tests
-```bash
-# In-memory
-go test ./applications/httpapi -run IntegrationHTTPAPI
+# Integration tests
+go test -tags integration ./...
 
-# PostgreSQL
-go test -tags "integration postgres" ./applications/httpapi -run IntegrationPostgres
-```
-
-### Dashboard E2E
-```bash
-cd apps/dashboard
-API_URL=http://localhost:8080 API_TOKEN=dev-token npm run e2e
+# Frontend tests
+cd frontend && npm test
 ```
 
 ---
 
-## CLI Reference
+## Project Structure
 
-See [CLI Quick Reference](../README.md#cli-quick-reference) in main README.
-
----
-
-## Working With Documentation
-
-1. **Start with Specification**: Update [requirements.md](requirements.md) first
-2. **Add Examples**: Include curl/CLI snippets in relevant guides
-3. **Link Implementation**: Reference file paths with line numbers
-4. **Keep Realistic**: Use production-like payloads
+```
+service_layer/
+├── coordinator/       # MarbleRun Coordinator
+├── marble/sdk/        # Marble SDK
+├── ego/               # EGo Runtime
+├── services/          # 14 Service implementations
+├── supabase/          # Supabase client + migrations
+├── frontend/          # React + Netlify
+├── tee/               # TEE abstractions
+├── contracts/         # Neo N3 smart contracts
+└── docs/              # Documentation
+    ├── architecture/  # Architecture docs
+    └── services/      # Per-service docs
+```
 
 ---
 
 ## Document Status
 
-| Document | Status | Last Updated |
-|----------|--------|--------------|
-| Quickstart Tutorial | ✅ Complete | 2025-11 |
-| Service Catalog | ✅ Complete | 2025-11 |
-| Developer Guide | ✅ Complete | 2025-11 |
-| Framework Guide | ✅ Complete | 2025-11 |
-| Engine Guide | ✅ Complete | 2025-11 |
-| Deployment Guide | ✅ Complete | 2025-11 |
-| All Service Tutorials | ✅ Complete | 2025-11 |
-| Architecture Docs | ✅ Complete | 2025-11 |
-| Operations Docs | ✅ Complete | 2025-11 |
+| Document | Status | Updated |
+|----------|--------|---------|
+| MarbleRun Architecture | Current | 2025-12 |
+| Service Documentation | Current | 2025-12 |
+| Deployment Guide | Current | 2025-12 |
+| README | Current | 2025-12 |

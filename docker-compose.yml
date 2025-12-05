@@ -1,300 +1,60 @@
-# Service Layer - Local Development Docker Compose
-# Usage:
-#   docker compose up -d                    # Start core services
-#   docker compose --profile neo up -d       # Start with Neo N3 node
-#   docker compose --profile monitoring up -d # Start with Prometheus/Grafana
-#   docker compose --profile all up -d       # Start everything
+# Service Layer Docker Compose
+# Using Supabase Official Service (Pro)
+
+version: '3.8'
 
 services:
-  # ===========================================================================
+  # ==========================================================================
   # Core Services
-  # ===========================================================================
+  # ==========================================================================
 
-  service-layer:
+  server:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: service-layer
-    volumes:
-      - ./snapshots:/app/snapshots
-      - ./configs:/app/configs:ro
-    environment:
-      - CONFIG_FILE=/app/configs/config.yaml
-      - DATABASE_URL=${DATABASE_URL:-postgres://supabase_admin:supabase_pass@supabase-postgres:5432/service_layer?sslmode=disable}
-      - DATABASE_MIGRATE_ON_START=${DATABASE_MIGRATE_ON_START:-true}
-      - API_TOKENS=${API_TOKENS:-dev-token}
-      - SECRET_ENCRYPTION_KEY=${SECRET_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}
-      - AUTH_JWT_SECRET=${AUTH_JWT_SECRET:-change-me-jwt-secret}
-      - AUTH_USERS=${AUTH_USERS:-admin:changeme:admin}
-      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-super-secret-jwt}
-      - SUPABASE_JWT_AUD=${SUPABASE_JWT_AUD:-authenticated}
-      - SUPABASE_ADMIN_ROLES=${SUPABASE_ADMIN_ROLES:-service_role,admin}
-      - SUPABASE_TENANT_CLAIM=${SUPABASE_TENANT_CLAIM:-app_metadata.tenant}
-      - SUPABASE_ROLE_CLAIM=${SUPABASE_ROLE_CLAIM:-app_metadata.role}
-      - SUPABASE_GOTRUE_URL=${SUPABASE_GOTRUE_URL:-http://supabase-gotrue:9999}
-      - SUPABASE_HEALTH_URL=${SUPABASE_HEALTH_URL:-http://supabase-gotrue:9999/health}
-      - SUPABASE_HEALTH_GOTRUE=${SUPABASE_HEALTH_GOTRUE:-http://supabase-gotrue:9999/health}
-      - SUPABASE_HEALTH_POSTGREST=${SUPABASE_HEALTH_POSTGREST:-http://supabase-postgrest:3000}
-      - SUPABASE_HEALTH_KONG=${SUPABASE_HEALTH_KONG:-http://supabase-kong:8000/health}
-      - SUPABASE_HEALTH_STUDIO=${SUPABASE_HEALTH_STUDIO:-http://supabase-studio:3000}
-      - NEO_SNAPSHOT_DIR=${NEO_SNAPSHOT_DIR:-/app/snapshots}
-      - NEO_RPC_STATUS_URL=${NEO_RPC_STATUS_URL:-http://neo-mainnet:10332}
-      - NEO_STABLE_BUFFER=${NEO_STABLE_BUFFER:-12}
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - LOG_FORMAT=${LOG_FORMAT:-text}
+      dockerfile: docker/Dockerfile
+    container_name: service-layer-server
     ports:
-      - "8080:8080"
+      - "8080:8080"   # HTTP API
+      - "9090:9090"   # Metrics
+    env_file:
+      - .env
+    environment:
+      - TEE_MODE=simulation
+      - DEBUG=true
+    volumes:
+      - ./sealed_store:/app/sealed_store
+      - ./sealing.key:/app/sealing.key
     depends_on:
-      supabase-postgres:
-        condition: service_healthy
+      - redis
+    networks:
+      - service-layer-network
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz | grep -q ok || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 15s
-    restart: unless-stopped
-    networks:
-      - service-layer-net
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  supabase-postgres:
-    image: supabase/postgres:15.1.0
-    container_name: service-layer-supabase-db
-    ports:
-      - "5432:5432"
-    environment:
-      - POSTGRES_USER=supabase_admin
-      - POSTGRES_PASSWORD=supabase_pass
-      - POSTGRES_DB=service_layer
-    volumes:
-      - supabase-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U supabase_admin -h localhost"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    restart: unless-stopped
-    networks:
-      - service-layer-net
-
-  # ===========================================================================
-  # Supabase Services (profiles: supabase, all)
-  # ===========================================================================
-
-  supabase-gotrue:
-    image: supabase/gotrue:v2.153.0
-    container_name: service-layer-supabase-gotrue
-    depends_on:
-      supabase-postgres:
-        condition: service_healthy
-    environment:
-      - GOTRUE_DB_DRIVER=postgres
-      - GOTRUE_DB_DATABASE_URL=${DATABASE_URL:-postgres://supabase_admin:supabase_pass@supabase-postgres:5432/service_layer?sslmode=disable}
-      - GOTRUE_SITE_URL=${GOTRUE_SITE_URL:-http://localhost:8080}
-      - GOTRUE_JWT_SECRET=${SUPABASE_JWT_SECRET:-super-secret-jwt}
-      - GOTRUE_API_HOST=0.0.0.0
-      - GOTRUE_API_PORT=9999
-      - GOTRUE_DISABLE_SIGNUP=false
-      - GOTRUE_SMTP_ADMIN_EMAIL=${GOTRUE_ADMIN_EMAIL:-admin@local.dev}
-      - GOTRUE_SMTP_HOST=localhost
-      - GOTRUE_SMTP_PORT=25
-      - GOTRUE_SMTP_USER=
-      - GOTRUE_SMTP_PASS=
-      - GOTRUE_EXTERNAL_EMAIL_ENABLED=false
-    ports:
-      - "9999:9999"
-    profiles: ["supabase", "all"]
-    restart: unless-stopped
-    networks:
-      - service-layer-net
-
-  supabase-postgrest:
-    image: supabase/postgrest:v12.2.0
-    container_name: service-layer-supabase-postgrest
-    depends_on:
-      supabase-postgres:
-        condition: service_healthy
-    environment:
-      - PGRST_DB_URI=${DATABASE_URL:-postgres://supabase_admin:supabase_pass@supabase-postgres:5432/service_layer?sslmode=disable}
-      - PGRST_DB_SCHEMA=public
-      - PGRST_DB_ANON_ROLE=anon
-      - PGRST_JWT_SECRET=${SUPABASE_JWT_SECRET:-super-secret-jwt}
-    ports:
-      - "3004:3000"
-    profiles: ["supabase", "all"]
-    restart: unless-stopped
-    networks:
-      - service-layer-net
-
-  supabase-studio:
-    image: supabase/studio:20240223-66a1598
-    container_name: service-layer-supabase-studio
-    depends_on:
-      supabase-postgrest:
-        condition: service_started
-    environment:
-      - SUPABASE_URL=http://supabase-kong:8000
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-supabase-anon-key}
-      - STUDIO_PG_META_URL=http://supabase-postgrest:3000
-      - STUDIO_PG_META_PASSWORD=${SUPABASE_SERVICE_ROLE_KEY:-supabase-service-role-key}
-      - STUDIO_DEFAULT_ORGANIZATION="Self-Hosted"
-      - STUDIO_DEFAULT_PROJECT="Service Layer"
-    ports:
-      - "3001:3000"
-    profiles: ["supabase", "all"]
-    restart: unless-stopped
-    networks:
-      - service-layer-net
-
-  supabase-kong:
-    image: supabase/kong:2.8.1
-    container_name: service-layer-supabase-kong
-    depends_on:
-      supabase-postgrest:
-        condition: service_started
-      supabase-gotrue:
-        condition: service_started
-    environment:
-      - KONG_DATABASE=off
-      - KONG_DECLARATIVE_CONFIG=/var/lib/kong/kong.yml
-      - KONG_PROXY_LISTEN=0.0.0.0:8000, 0.0.0.0:8443 ssl
-      - KONG_ADMIN_LISTEN=off
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-supabase-anon-key}
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-supabase-service-role-key}
-      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-super-secret-jwt}
-    volumes:
-      - ./devops/supabase/kong.yml:/var/lib/kong/kong.yml:ro
-    ports:
-      - "8000:8000"
-    profiles: ["supabase", "all"]
-    restart: unless-stopped
-    networks:
-      - service-layer-net
-
-  # ===========================================================================
-  # Frontend Applications
-  # ===========================================================================
-
-  dashboard:
+  frontend:
     build:
-      context: ./apps/dashboard
+      context: ./frontend
       dockerfile: Dockerfile
-    container_name: service-layer-dashboard
+    container_name: service-layer-frontend
     ports:
-      - "8081:80"
+      - "3000:80"
     environment:
-      - API_URL=http://localhost:8080
+      - VITE_API_URL=http://localhost:8080/api
+      - VITE_SUPABASE_URL=https://dmonstzalbldzzdbbcdj.supabase.co
+      - VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtb25zdHphbGJsZHp6ZGJiY2RqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5NTE4NjIsImV4cCI6MjA3ODUyNzg2Mn0.fQwvIyMEwa_k51hJPn9qPrGfZ5z4i-zZ7LeoVwksCT8
     depends_on:
-      service-layer:
-        condition: service_healthy
-    restart: unless-stopped
+      - server
     networks:
-      - service-layer-net
-
-  site:
-    build:
-      context: ./apps/site
-      dockerfile: Dockerfile
-    container_name: service-layer-site
-    ports:
-      - "8082:80"
-    depends_on:
-      service-layer:
-        condition: service_healthy
+      - service-layer-network
     restart: unless-stopped
-    networks:
-      - service-layer-net
 
-  # ===========================================================================
-  # Neo N3 Services (profile: neo)
-  # ===========================================================================
-
-  # Neo-Go node (privnet for local development)
-  neo-node:
-    image: nspccdev/neo-go:0.114.0
-    container_name: service-layer-neo-node
-    command: node -p
-    volumes:
-      - neo-chain-data:/chain
-    ports:
-      - "20332:20332"  # RPC
-      - "20333:20333"  # P2P
-    profiles: ["neo", "all"]
-    restart: unless-stopped
-    networks:
-      - service-layer-net
-
-  # Neo indexer (optional - requires neo-node to be running and properly configured)
-  # Note: Requires DATABASE_URL env var to point to postgres container
-  neo-indexer:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: service-layer-neo-indexer
-    command: ["/app/neo-indexer"]
-    environment:
-      - NEO_RPC_URL=${NEO_RPC_URL:-http://neo-node:20332}
-      - NEO_NETWORK=${NEO_NETWORK:-privnet}
-      - DATABASE_URL=${DATABASE_URL:-postgres://supabase_admin:supabase_pass@supabase-postgres:5432/service_layer?sslmode=disable}
-      - NEO_POLL_INTERVAL=${NEO_POLL_INTERVAL:-5s}
-    depends_on:
-      supabase-postgres:
-        condition: service_healthy
-      neo-node:
-        condition: service_started
-    profiles: ["neo", "all"]
-    restart: unless-stopped
-    networks:
-      - service-layer-net
-
-  # ===========================================================================
-  # Monitoring Stack (profile: monitoring)
-  # ===========================================================================
-
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: service-layer-prometheus
-    volumes:
-      - ./devops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./devops/prometheus/rules:/etc/prometheus/rules:ro
-      - prometheus-data:/prometheus
-    ports:
-      - "9090:9090"
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--web.enable-lifecycle'
-    profiles: ["monitoring", "all"]
-    restart: unless-stopped
-    networks:
-      - service-layer-net
-
-  grafana:
-    image: grafana/grafana:latest
-    container_name: service-layer-grafana
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./devops/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./devops/grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - grafana-data:/var/lib/grafana
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_ROOT_URL=http://localhost:3000
-    depends_on:
-      - prometheus
-    profiles: ["monitoring", "all"]
-    restart: unless-stopped
-    networks:
-      - service-layer-net
-
-  # ===========================================================================
-  # Message Queue (profile: mq)
-  # ===========================================================================
+  # ==========================================================================
+  # Cache (Redis for local caching)
+  # ==========================================================================
 
   redis:
     image: redis:7-alpine
@@ -302,56 +62,64 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - redis-data:/data
+      - redis_data:/data
+    networks:
+      - service-layer-network
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
+      interval: 10s
+      timeout: 5s
       retries: 5
-    profiles: ["mq", "all"]
-    restart: unless-stopped
-    networks:
-      - service-layer-net
 
-  # ===========================================================================
-  # Development Tools (profile: dev)
-  # ===========================================================================
+  # ==========================================================================
+  # Monitoring
+  # ==========================================================================
 
-  # pgAdmin for database management
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: service-layer-pgadmin
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: service-layer-prometheus
     ports:
-      - "5050:80"
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@local.dev
-      - PGADMIN_DEFAULT_PASSWORD=admin
-      - PGADMIN_CONFIG_SERVER_MODE=False
+      - "9091:9090"
     volumes:
-      - pgadmin-data:/var/lib/pgadmin
-    depends_on:
-      - postgres
-    profiles: ["dev", "all"]
-    restart: unless-stopped
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
     networks:
-      - service-layer-net
+      - service-layer-network
+    restart: unless-stopped
 
-# ===========================================================================
-# Volumes
-# ===========================================================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: service-layer-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - service-layer-network
+    restart: unless-stopped
 
-volumes:
-  supabase-data:
-  neo-chain-data:
-  prometheus-data:
-  grafana-data:
-  redis-data:
-  pgadmin-data:
-
-# ===========================================================================
-# Networks
-# ===========================================================================
+# ==========================================================================
+# Networks & Volumes
+# ==========================================================================
 
 networks:
-  service-layer-net:
+  service-layer-network:
     driver: bridge
+
+volumes:
+  redis_data:
+  prometheus_data:
+  grafana_data:

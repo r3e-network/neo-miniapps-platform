@@ -1,0 +1,44 @@
+{
+    "exe": "marble",
+    "key": "private.pem",
+    "debug": false,
+    "heapSize": 512,
+    "productID": 1,
+    "securityVersion": 1,
+    "mounts": [
+        {
+            "source": "/app/config",
+            "target": "/app/config",
+            "type": "hostfs",
+            "readOnly": true
+        }
+    ],
+    "env": [
+        {
+            "name": "MARBLE_TYPE",
+            "fromHost": true
+        },
+        {
+            "name": "COORDINATOR_ADDR",
+            "fromHost": true
+        },
+        {
+            "name": "SERVICE_ADDR",
+            "fromHost": true
+        },
+        {
+            "name": "SUPABASE_URL",
+            "fromHost": true
+        },
+        {
+            "name": "SIMULATION_MODE",
+            "fromHost": true
+        }
+    ],
+    "files": [
+        {
+            "source": "/etc/ssl/certs/ca-certificates.crt",
+            "target": "/etc/ssl/certs/ca-certificates.crt"
+        }
+    ]
+}

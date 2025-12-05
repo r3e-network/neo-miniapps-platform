@@ -1,0 +1,63 @@
+# =============================================================================
+# Neo Service Layer - Netlify Deployment Configuration
+# =============================================================================
+# Architecture: MarbleRun + EGo + Supabase + Netlify + Neo N3
+
+[build]
+  # Build command
+  command = "npm run build"
+
+  # Output directory
+  publish = "dist"
+
+  # Node version
+  [build.environment]
+    NODE_VERSION = "20"
+
+# =============================================================================
+# Production Environment Variables
+# =============================================================================
+[context.production.environment]
+  VITE_SUPABASE_URL = "https://YOUR-SUPABASE-URL"
+  VITE_SUPABASE_ANON_KEY = "REPLACE_WITH_SUPABASE_ANON_KEY"
+  VITE_NEO_RPC_URL = "https://YOUR-NEO-RPC"
+  VITE_NEO_NETWORK = "mainnet"
+  VITE_NEO_NETWORK_MAGIC = "860833102"
+  VITE_ENABLE_WALLET_CONNECT = "true"
+  VITE_ENABLE_TEE_ATTESTATION = "true"
+
+# =============================================================================
+# Preview/Staging Environment
+# =============================================================================
+[context.deploy-preview.environment]
+  VITE_SUPABASE_URL = "https://YOUR-SUPABASE-URL"
+  VITE_SUPABASE_ANON_KEY = "REPLACE_WITH_SUPABASE_ANON_KEY"
+  VITE_NEO_RPC_URL = "https://YOUR-TESTNET-NEO-RPC"
+  VITE_NEO_NETWORK = "testnet"
+  VITE_NEO_NETWORK_MAGIC = "894710606"
+  VITE_ENABLE_DEMO_MODE = "true"
+
+# =============================================================================
+# Redirects for SPA
+# =============================================================================
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# =============================================================================
+# Headers
+# =============================================================================
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.neo.coz.io https://*.neo.org;"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

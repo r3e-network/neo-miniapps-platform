@@ -56,3 +56,37 @@ coverage.out
 
 # Snapshot files
 snapshots/
+
+# Environment secrets
+.env
+.env.*
+.env.local
+.env.*.local
+!.env.example
+frontend/.env
+frontend/.env.*
+frontend/.env.local
+!frontend/.env.example
+
+# Sensitive keys and certificates
+*.key
+*.pem
+*.p12
+*.pfx
+sealing.key
+*.crt
+!*.crt.example
+prod-ca-*.crt
+
+# Secrets and credentials
+secrets/
+credentials/
+*.secret
+*.credential
+
+# Database dumps
+*.sql.gz
+*.dump
+
+# Server binary
+server

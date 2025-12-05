@@ -1,0 +1,54 @@
+{
+    "exe": "coordinator",
+    "key": "private.pem",
+    "debug": false,
+    "heapSize": 1024,
+    "productID": 100,
+    "securityVersion": 1,
+    "mounts": [
+        {
+            "source": "/app/data",
+            "target": "/app/data",
+            "type": "hostfs",
+            "readOnly": false
+        },
+        {
+            "source": "/app/manifests",
+            "target": "/app/manifests",
+            "type": "hostfs",
+            "readOnly": true
+        }
+    ],
+    "env": [
+        {
+            "name": "COORDINATOR_ADDR",
+            "fromHost": true
+        },
+        {
+            "name": "MANIFEST_PATH",
+            "fromHost": true
+        },
+        {
+            "name": "SEAL_MODE",
+            "fromHost": true
+        },
+        {
+            "name": "SUPABASE_URL",
+            "fromHost": true
+        },
+        {
+            "name": "SUPABASE_KEY",
+            "fromHost": true
+        },
+        {
+            "name": "SIMULATION_MODE",
+            "fromHost": true
+        }
+    ],
+    "files": [
+        {
+            "source": "/etc/ssl/certs/ca-certificates.crt",
+            "target": "/etc/ssl/certs/ca-certificates.crt"
+        }
+    ]
+}

@@ -1,0 +1,12 @@
+{
+  "project_url": "http://localhost:8000",
+  "api_key_secret": "supabase_api_key",
+  "api_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaXNzIjoic3VwYWJhc2UiLCJpYXQiOjAsImV4cCI6NDEwMjQ0NDgwMH0.izGhsbqHmDR34aTILjmv295t3x1hs8y7t-QPVlqhPN0",
+  "allowed_hosts": [
+    "localhost"
+  ],
+  "default_headers": {
+    "x-client-info": "datafeeds-tee"
+  },
+  "table": "datafeed_prices"
+}

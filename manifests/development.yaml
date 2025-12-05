@@ -1,0 +1,188 @@
+# =============================================================================
+# Neo Service Layer - Development Manifest
+# =============================================================================
+# Development configuration with SGX simulation mode enabled.
+# Use this manifest for local development and testing.
+
+# =============================================================================
+# Packages - Debug Mode Enabled
+# =============================================================================
+Packages:
+  oracle-pkg:
+    Debug: true
+    ProductID: 1
+    SecurityVersion: 1
+
+  vrf-pkg:
+    Debug: true
+    ProductID: 2
+    SecurityVersion: 1
+
+  secrets-pkg:
+    Debug: true
+    ProductID: 3
+    SecurityVersion: 1
+
+  gasbank-pkg:
+    Debug: true
+    ProductID: 4
+    SecurityVersion: 1
+
+  datafeeds-pkg:
+    Debug: true
+    ProductID: 5
+    SecurityVersion: 1
+
+  automation-pkg:
+    Debug: true
+    ProductID: 6
+    SecurityVersion: 1
+
+# =============================================================================
+# Marbles - Development Configuration
+# =============================================================================
+Marbles:
+  oracle:
+    Package: oracle-pkg
+    MaxActivations: 0  # Unlimited for development
+    Parameters:
+      Env:
+        MARBLE_TYPE: oracle
+        SUPABASE_URL: "http://localhost:54321"
+        LOG_LEVEL: debug
+        SIMULATION_MODE: "true"
+
+  vrf:
+    Package: vrf-pkg
+    MaxActivations: 0
+    Parameters:
+      Env:
+        MARBLE_TYPE: vrf
+        SUPABASE_URL: "http://localhost:54321"
+        LOG_LEVEL: debug
+        SIMULATION_MODE: "true"
+
+  secrets:
+    Package: secrets-pkg
+    MaxActivations: 0
+    Parameters:
+      Env:
+        MARBLE_TYPE: secrets
+        SUPABASE_URL: "http://localhost:54321"
+        LOG_LEVEL: debug
+        SIMULATION_MODE: "true"
+
+  gasbank:
+    Package: gasbank-pkg
+    MaxActivations: 0
+    Parameters:
+      Env:
+        MARBLE_TYPE: gasbank
+        SUPABASE_URL: "http://localhost:54321"
+        LOG_LEVEL: debug
+        SIMULATION_MODE: "true"
+
+  datafeeds:
+    Package: datafeeds-pkg
+    MaxActivations: 0
+    Parameters:
+      Env:
+        MARBLE_TYPE: datafeeds
+        SUPABASE_URL: "http://localhost:54321"
+        LOG_LEVEL: debug
+        SIMULATION_MODE: "true"
+
+  automation:
+    Package: automation-pkg
+    MaxActivations: 0
+    Parameters:
+      Env:
+        MARBLE_TYPE: automation
+        SUPABASE_URL: "http://localhost:54321"
+        LOG_LEVEL: debug
+        SIMULATION_MODE: "true"
+
+# =============================================================================
+# Secrets - Development Keys
+# =============================================================================
+Secrets:
+  supabase_service_key:
+    Type: plain
+    UserDefined: true
+
+  master_encryption_key:
+    Type: symmetric-key
+    Size: 256
+    Shared: true
+
+  vrf_signing_key:
+    Type: cert-ecdsa
+    Cert:
+      Subject:
+        CommonName: "Neo VRF Signer (Dev)"
+      ValidityDays: 30
+
+  oracle-cert:
+    Type: cert-ecdsa
+    Cert:
+      Subject:
+        CommonName: "oracle.localhost"
+      DNSNames:
+        - oracle
+        - localhost
+        - "127.0.0.1"
+      ValidityDays: 30
+
+  vrf-cert:
+    Type: cert-ecdsa
+    Cert:
+      Subject:
+        CommonName: "vrf.localhost"
+      DNSNames:
+        - vrf
+        - localhost
+      ValidityDays: 30
+
+  secrets-cert:
+    Type: cert-ecdsa
+    Cert:
+      Subject:
+        CommonName: "secrets.localhost"
+      DNSNames:
+        - secrets
+        - localhost
+      ValidityDays: 30
+
+  gasbank-cert:
+    Type: cert-ecdsa
+    Cert:
+      Subject:
+        CommonName: "gasbank.localhost"
+      DNSNames:
+        - gasbank
+        - localhost
+      ValidityDays: 30
+
+  datafeeds-cert:
+    Type: cert-ecdsa
+    Cert:
+      Subject:
+        CommonName: "datafeeds.localhost"
+      DNSNames:
+        - datafeeds
+        - localhost
+      ValidityDays: 30
+
+  automation-cert:
+    Type: cert-ecdsa
+    Cert:
+      Subject:
+        CommonName: "automation.localhost"
+      DNSNames:
+        - automation
+        - localhost
+      ValidityDays: 30
+
+# =============================================================================
+# No Users/Roles/RecoveryKeys for Development
+# =============================================================================

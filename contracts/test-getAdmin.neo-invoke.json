@@ -1,0 +1,7 @@
+[
+  {
+    "contract": "ServiceLayerGateway",
+    "operation": "getAdmin",
+    "args": []
+  }
+]

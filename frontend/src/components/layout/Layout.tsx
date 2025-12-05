@@ -1,80 +1,30 @@
-import { useState, ReactNode } from 'react';
-import { Box, Drawer, useMediaQuery, useTheme } from '@mui/material';
-import Header from './Header';
-import Sidebar from './Sidebar';
+import React, { useState } from 'react';
+import { Outlet, Navigate } from 'react-router-dom';
+import { Header } from './Header';
+import { Sidebar } from './Sidebar';
+import { useAuthStore } from '@/stores/authStore';
 
-interface LayoutProps {
-  children: ReactNode;
-}
+export function Layout() {
+  const { isAuthenticated } = useAuthStore();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-const DRAWER_WIDTH = 260;
-
-export default function Layout({ children }: LayoutProps) {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
-  };
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      {/* Header */}
-      <Header onMenuClick={handleDrawerToggle} />
-
-      {/* Sidebar - Mobile Drawer */}
-      <Drawer
-        variant="temporary"
-        open={mobileOpen}
-        onClose={handleDrawerToggle}
-        ModalProps={{ keepMounted: true }}
-        sx={{
-          display: { xs: 'block', md: 'none' },
-          '& .MuiDrawer-paper': {
-            boxSizing: 'border-box',
-            width: DRAWER_WIDTH,
-            backgroundColor: 'background.paper',
-            borderRight: '1px solid rgba(255, 255, 255, 0.08)',
-          },
-        }}
+    <div className="min-h-screen bg-surface-50">
+      <Header onMenuClick={() => setSidebarCollapsed(!sidebarCollapsed)} />
+      <Sidebar collapsed={sidebarCollapsed} />
+      <main
+        className={`pt-16 transition-all duration-300 ${
+          sidebarCollapsed ? 'pl-16' : 'pl-64'
+        }`}
       >
-        <Sidebar onItemClick={() => setMobileOpen(false)} />
-      </Drawer>
-
-      {/* Sidebar - Desktop */}
-      <Drawer
-        variant="permanent"
-        sx={{
-          display: { xs: 'none', md: 'block' },
-          '& .MuiDrawer-paper': {
-            boxSizing: 'border-box',
-            width: DRAWER_WIDTH,
-            backgroundColor: 'background.paper',
-            borderRight: '1px solid rgba(255, 255, 255, 0.08)',
-            top: 64,
-            height: 'calc(100% - 64px)',
-          },
-        }}
-        open
-      >
-        <Sidebar />
-      </Drawer>
-
-      {/* Main Content */}
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          p: 3,
-          mt: 8,
-          ml: { md: `${DRAWER_WIDTH}px` },
-          minHeight: 'calc(100vh - 64px)',
-          backgroundColor: 'background.default',
-        }}
-      >
-        {children}
-      </Box>
-    </Box>
+        <div className="p-6">
+          <Outlet />
+        </div>
+      </main>
+    </div>
   );
 }

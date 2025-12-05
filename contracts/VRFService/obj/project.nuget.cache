@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "dgSpecHash": "fno3EjKbgJg=",
+  "success": true,
+  "projectFilePath": "/home/neo/git/service_layer/contracts/VRFService/VRFService.csproj",
+  "expectedPackageFiles": [
+    "/home/neo/.nuget/packages/neo.smartcontract.framework/3.8.1/neo.smartcontract.framework.3.8.1.nupkg.sha512",
+    "/home/neo/.nuget/packages/microsoft.netcore.app.ref/9.0.11/microsoft.netcore.app.ref.9.0.11.nupkg.sha512",
+    "/home/neo/.nuget/packages/microsoft.aspnetcore.app.ref/9.0.11/microsoft.aspnetcore.app.ref.9.0.11.nupkg.sha512"
+  ],
+  "logs": []
+}

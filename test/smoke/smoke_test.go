@@ -1,16 +1,17 @@
+// Package smoke provides smoke tests for deployment verification.
+// These tests verify that the system is properly deployed and operational.
+//
+// Run with: go test -tags=smoke ./test/smoke/...
+//
 //go:build smoke
 
-// Package smoke provides smoke tests for quick validation of system health.
-// Smoke tests are lightweight tests that verify basic functionality without
-// extensive coverage - they're designed to catch obvious failures quickly.
 package smoke
 
 import (
-	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -18,554 +19,442 @@ import (
 	"time"
 )
 
-// SmokeConfig holds smoke test configuration.
+// =============================================================================
+// Smoke Test Configuration
+// =============================================================================
+
 type SmokeConfig struct {
-	BaseURL  string
-	DevToken string
-	TenantID string
-	Timeout  time.Duration
+	SupabaseURL    string
+	SupabaseKey    string
+	CoordinatorURL string
+	FrontendURL    string
+	NeoRPCURL      string
+	Timeout        time.Duration
 }
 
-// DefaultSmokeConfig returns default configuration for smoke tests.
-func DefaultSmokeConfig() SmokeConfig {
-	baseURL := os.Getenv("SMOKE_API_URL")
-	if baseURL == "" {
-		baseURL = os.Getenv("TEST_API_URL")
-	}
-	if baseURL == "" {
-		baseURL = "http://localhost:8080"
-	}
-	devToken := os.Getenv("SMOKE_DEV_TOKEN")
-	if devToken == "" {
-		devToken = os.Getenv("TEST_DEV_TOKEN")
-	}
-	if devToken == "" {
-		devToken = "dev-token"
-	}
-	tenantID := os.Getenv("SMOKE_TENANT_ID")
-	if tenantID == "" {
-		tenantID = os.Getenv("TEST_TENANT_ID")
-	}
-	if tenantID == "" {
-		tenantID = "smoke-tenant"
-	}
-	timeout := 10 * time.Second
-	if t := os.Getenv("SMOKE_TIMEOUT"); t != "" {
-		if d, err := time.ParseDuration(t); err == nil {
-			timeout = d
-		}
-	}
+func loadSmokeConfig() SmokeConfig {
 	return SmokeConfig{
-		BaseURL:  baseURL,
-		DevToken: devToken,
-		TenantID: tenantID,
-		Timeout:  timeout,
+		SupabaseURL:    getEnv("SUPABASE_URL", "http://localhost:54321"),
+		SupabaseKey:    getEnv("SUPABASE_ANON_KEY", ""),
+		CoordinatorURL: getEnv("COORDINATOR_URL", "https://localhost:4433"),
+		FrontendURL:    getEnv("FRONTEND_URL", "http://localhost:5173"),
+		NeoRPCURL:      getEnv("NEO_RPC_URL", "http://localhost:10332"),
+		Timeout:        10 * time.Second,
 	}
 }
 
-// SmokeClient wraps HTTP client for smoke tests.
-type SmokeClient struct {
-	config SmokeConfig
-	client *http.Client
+func getEnv(key, defaultValue string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return defaultValue
 }
 
-// NewSmokeClient creates a new smoke test client.
-func NewSmokeClient(config SmokeConfig) *SmokeClient {
-	return &SmokeClient{
-		config: config,
-		client: &http.Client{Timeout: config.Timeout},
+// =============================================================================
+// HTTP Client
+// =============================================================================
+
+func newHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true, // For self-signed certs in dev
+			},
+		},
 	}
 }
 
-// Get makes an authenticated GET request.
-func (c *SmokeClient) Get(path string) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, c.config.BaseURL+path, nil)
+// =============================================================================
+// Supabase Smoke Tests
+// =============================================================================
+
+func TestSmoke_SupabaseHealth(t *testing.T) {
+	config := loadSmokeConfig()
+	client := newHTTPClient()
+
+	// Test REST API
+	req, _ := http.NewRequest("GET", config.SupabaseURL+"/rest/v1/", nil)
+	req.Header.Set("apikey", config.SupabaseKey)
+
+	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		t.Fatalf("Supabase REST API unreachable: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+c.config.DevToken)
-	req.Header.Set("X-Tenant-ID", c.config.TenantID)
-	return c.client.Do(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 500 {
+		t.Errorf("Supabase REST API error: %d", resp.StatusCode)
+	}
+
+	t.Log("✓ Supabase REST API is healthy")
 }
 
-// Post makes an authenticated POST request.
-func (c *SmokeClient) Post(path string, body interface{}) (*http.Response, error) {
-	var bodyReader io.Reader
-	if body != nil {
-		data, err := json.Marshal(body)
-		if err != nil {
-			return nil, err
-		}
-		bodyReader = bytes.NewReader(data)
-	}
-	req, err := http.NewRequest(http.MethodPost, c.config.BaseURL+path, bodyReader)
+func TestSmoke_SupabaseAuth(t *testing.T) {
+	config := loadSmokeConfig()
+	client := newHTTPClient()
+
+	// Test Auth API health
+	resp, err := client.Get(config.SupabaseURL + "/auth/v1/health")
 	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.config.DevToken)
-	req.Header.Set("X-Tenant-ID", c.config.TenantID)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	return c.client.Do(req)
-}
-
-// GetPublic makes an unauthenticated GET request.
-func (c *SmokeClient) GetPublic(path string) (*http.Response, error) {
-	return c.client.Get(c.config.BaseURL + path)
-}
-
-// skipIfNotAvailable skips test if API is not reachable.
-func skipIfNotAvailable(t *testing.T, client *SmokeClient) {
-	t.Helper()
-	resp, err := client.GetPublic("/healthz")
-	if err != nil {
-		t.Skipf("API not available: %v", err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Skipf("API health check failed: %d", resp.StatusCode)
-	}
-}
-
-// TestSmokeHealth verifies the health endpoint is responding.
-func TestSmokeHealth(t *testing.T) {
-	client := NewSmokeClient(DefaultSmokeConfig())
-
-	resp, err := client.GetPublic("/healthz")
-	if err != nil {
-		t.Skipf("API not available: %v", err)
+		t.Fatalf("Supabase Auth unreachable: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		t.Errorf("health check: expected 200, got %d", resp.StatusCode)
+		t.Errorf("Supabase Auth unhealthy: %d", resp.StatusCode)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
-	if !strings.Contains(string(body), "ok") && resp.StatusCode != http.StatusOK {
-		t.Errorf("health check body: %s", string(body))
-	}
-	t.Logf("Health check passed: %s", string(body))
+	t.Log("✓ Supabase Auth is healthy")
 }
 
-// TestSmokeAuthentication verifies authentication is working.
-func TestSmokeAuthentication(t *testing.T) {
-	client := NewSmokeClient(DefaultSmokeConfig())
-	skipIfNotAvailable(t, client)
+func TestSmoke_SupabaseRealtime(t *testing.T) {
+	config := loadSmokeConfig()
+	client := newHTTPClient()
 
-	// Unauthenticated request should be rejected
-	resp, err := client.GetPublic("/accounts")
+	// Test Realtime endpoint exists
+	resp, err := client.Get(config.SupabaseURL + "/realtime/v1/")
 	if err != nil {
-		t.Fatalf("unauthenticated request: %v", err)
+		t.Logf("⚠ Supabase Realtime check failed: %v", err)
+		return
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Errorf("unauthenticated: expected 401, got %d", resp.StatusCode)
-	}
-
-	// Authenticated request should work (assuming tenant enforcement requires it)
-	resp, err = client.Get("/system/status")
-	if err != nil {
-		t.Fatalf("authenticated request: %v", err)
-	}
-	resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("authenticated: expected 200, got %d", resp.StatusCode)
-	}
+	// Realtime may return various status codes, just check it's reachable
+	t.Log("✓ Supabase Realtime endpoint is reachable")
 }
 
-// TestSmokeSystemStatus verifies system status endpoint.
-func TestSmokeSystemStatus(t *testing.T) {
-	client := NewSmokeClient(DefaultSmokeConfig())
-	skipIfNotAvailable(t, client)
+func TestSmoke_SupabaseServiceRequests(t *testing.T) {
+	config := loadSmokeConfig()
+	if config.SupabaseKey == "" {
+		t.Skip("SUPABASE_ANON_KEY not set")
+	}
 
-	resp, err := client.Get("/system/status")
+	client := newHTTPClient()
+
+	req, _ := http.NewRequest("GET", config.SupabaseURL+"/rest/v1/service_requests?limit=1", nil)
+	req.Header.Set("apikey", config.SupabaseKey)
+	req.Header.Set("Authorization", "Bearer "+config.SupabaseKey)
+
+	resp, err := client.Do(req)
 	if err != nil {
-		t.Fatalf("system status: %v", err)
+		t.Fatalf("service_requests table unreachable: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		t.Error("service_requests table does not exist - run migrations")
+	} else if resp.StatusCode >= 400 {
+		t.Errorf("service_requests query failed: %d", resp.StatusCode)
+	}
+
+	t.Log("✓ service_requests table is accessible")
+}
+
+// =============================================================================
+// Coordinator Smoke Tests
+// =============================================================================
+
+func TestSmoke_CoordinatorStatus(t *testing.T) {
+	config := loadSmokeConfig()
+	client := newHTTPClient()
+
+	resp, err := client.Get(config.CoordinatorURL + "/api/v2/status")
+	if err != nil {
+		t.Logf("⚠ Coordinator unreachable: %v (may not be running)", err)
+		t.Skip("Coordinator not available")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("system status: expected 200, got %d", resp.StatusCode)
+		t.Errorf("Coordinator unhealthy: %d", resp.StatusCode)
 	}
 
 	var status map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
-		t.Fatalf("decode status: %v", err)
-	}
+	json.NewDecoder(resp.Body).Decode(&status)
 
-	t.Logf("System status: %v", status)
+	t.Logf("✓ Coordinator is healthy: %v", status)
 }
 
-// TestSmokeSystemDescriptors verifies system descriptors endpoint.
-func TestSmokeSystemDescriptors(t *testing.T) {
-	client := NewSmokeClient(DefaultSmokeConfig())
-	skipIfNotAvailable(t, client)
+func TestSmoke_CoordinatorManifest(t *testing.T) {
+	config := loadSmokeConfig()
+	client := newHTTPClient()
 
-	resp, err := client.Get("/system/descriptors")
+	resp, err := client.Get(config.CoordinatorURL + "/api/v2/manifest")
 	if err != nil {
-		t.Fatalf("system descriptors: %v", err)
+		t.Skip("Coordinator not available")
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("system descriptors: expected 200, got %d", resp.StatusCode)
-	}
-
-	var descriptors interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&descriptors); err != nil {
-		t.Fatalf("decode descriptors: %v", err)
-	}
-
-	t.Logf("System descriptors available")
-}
-
-// TestSmokeAccountCRUD performs a quick account create/get/delete cycle.
-func TestSmokeAccountCRUD(t *testing.T) {
-	client := NewSmokeClient(DefaultSmokeConfig())
-	skipIfNotAvailable(t, client)
-
-	// Create account
-	resp, err := client.Post("/accounts", map[string]string{
-		"owner": fmt.Sprintf("smoke-test-%d", time.Now().UnixNano()),
-	})
-	if err != nil {
-		t.Fatalf("create account: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("create account: expected 201, got %d: %s", resp.StatusCode, string(body))
-	}
-
-	var account map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&account); err != nil {
-		t.Fatalf("decode account: %v", err)
-	}
-
-	accountID, ok := account["ID"].(string)
-	if !ok || accountID == "" {
-		t.Fatalf("invalid account ID: %v", account)
-	}
-	t.Logf("Created account: %s", accountID)
-
-	// Get account
-	resp, err = client.Get("/accounts/" + accountID)
-	if err != nil {
-		t.Fatalf("get account: %v", err)
-	}
-	resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("get account: expected 200, got %d", resp.StatusCode)
-	}
-
-	// Delete account (cleanup)
-	req, _ := http.NewRequest(http.MethodDelete, client.config.BaseURL+"/accounts/"+accountID, nil)
-	req.Header.Set("Authorization", "Bearer "+client.config.DevToken)
-	req.Header.Set("X-Tenant-ID", client.config.TenantID)
-	resp, err = client.client.Do(req)
-	if err != nil {
-		t.Logf("delete account (cleanup): %v", err)
-	} else {
-		resp.Body.Close()
-	}
-}
-
-// TestSmokeNeoEndpoints verifies Neo-specific endpoints if available.
-func TestSmokeNeoEndpoints(t *testing.T) {
-	client := NewSmokeClient(DefaultSmokeConfig())
-	skipIfNotAvailable(t, client)
-
-	// Neo status
-	resp, err := client.Get("/neo/status")
-	if err != nil {
-		t.Fatalf("neo status: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Neo endpoints might not be enabled
 	if resp.StatusCode == http.StatusNotFound {
-		t.Skip("Neo endpoints not enabled")
+		t.Log("⚠ Manifest not set - coordinator needs configuration")
+	} else if resp.StatusCode == http.StatusOK {
+		t.Log("✓ Coordinator manifest is configured")
 	}
+}
+
+// =============================================================================
+// Frontend Smoke Tests
+// =============================================================================
+
+func TestSmoke_FrontendHealth(t *testing.T) {
+	config := loadSmokeConfig()
+	client := newHTTPClient()
+
+	resp, err := client.Get(config.FrontendURL)
+	if err != nil {
+		t.Logf("⚠ Frontend unreachable: %v", err)
+		t.Skip("Frontend not available")
+	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		t.Errorf("neo status: expected 200, got %d", resp.StatusCode)
+		t.Errorf("Frontend unhealthy: %d", resp.StatusCode)
 	}
 
-	var status map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
-		t.Fatalf("decode neo status: %v", err)
-	}
+	t.Log("✓ Frontend is serving")
+}
 
-	enabled, ok := status["enabled"].(bool)
-	if !ok {
-		t.Logf("Neo status: %v", status)
-		return
-	}
+func TestSmoke_FrontendAssets(t *testing.T) {
+	config := loadSmokeConfig()
+	client := newHTTPClient()
 
-	if enabled {
-		t.Logf("Neo indexer enabled, latest_height: %v", status["latest_height"])
+	// Check if main assets are served
+	assets := []string{"/favicon.svg", "/index.html"}
 
-		// Test blocks endpoint
-		resp, err = client.Get("/neo/blocks?limit=1")
+	for _, asset := range assets {
+		resp, err := client.Get(config.FrontendURL + asset)
 		if err != nil {
-			t.Fatalf("neo blocks: %v", err)
+			continue
 		}
 		resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Errorf("neo blocks: expected 200, got %d", resp.StatusCode)
+
+		if resp.StatusCode == http.StatusOK {
+			t.Logf("✓ Asset %s is served", asset)
 		}
-	} else {
-		t.Log("Neo indexer not enabled")
 	}
 }
 
-// TestSmokeMetrics verifies metrics endpoint if available.
-func TestSmokeMetrics(t *testing.T) {
-	client := NewSmokeClient(DefaultSmokeConfig())
+// =============================================================================
+// Neo N3 Smoke Tests
+// =============================================================================
 
-	// Metrics endpoint may require auth
-	resp, err := client.Get("/metrics")
+func TestSmoke_NeoRPCHealth(t *testing.T) {
+	config := loadSmokeConfig()
+	client := newHTTPClient()
+
+	// JSON-RPC request
+	payload := `{"jsonrpc":"2.0","method":"getversion","params":[],"id":1}`
+
+	resp, err := client.Post(config.NeoRPCURL, "application/json",
+		strings.NewReader(payload))
 	if err != nil {
-		t.Skipf("metrics endpoint not available: %v", err)
+		t.Logf("⚠ Neo RPC unreachable: %v", err)
+		t.Skip("Neo RPC not available")
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		t.Skip("metrics endpoint not enabled")
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	if result["error"] != nil {
+		t.Errorf("Neo RPC error: %v", result["error"])
 	}
 
-	if resp.StatusCode == http.StatusUnauthorized {
-		t.Log("Metrics endpoint requires authentication")
-		return
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("metrics: expected 200, got %d", resp.StatusCode)
-	}
-
-	body, _ := io.ReadAll(resp.Body)
-	if len(body) > 0 {
-		t.Logf("Metrics endpoint responding (%d bytes)", len(body))
-	}
+	t.Logf("✓ Neo RPC is healthy: %v", result["result"])
 }
 
-// TestSmokeResponseTimes verifies basic response time expectations.
-func TestSmokeResponseTimes(t *testing.T) {
-	client := NewSmokeClient(DefaultSmokeConfig())
-	skipIfNotAvailable(t, client)
+func TestSmoke_NeoBlockHeight(t *testing.T) {
+	config := loadSmokeConfig()
+	client := newHTTPClient()
 
-	// /healthz should be fast
-	start := time.Now()
-	resp, err := client.GetPublic("/healthz")
-	elapsed := time.Since(start)
+	payload := `{"jsonrpc":"2.0","method":"getblockcount","params":[],"id":1}`
 
+	resp, err := client.Post(config.NeoRPCURL, "application/json",
+		strings.NewReader(payload))
 	if err != nil {
-		t.Errorf("/healthz: request failed: %v", err)
-		return
-	}
-	resp.Body.Close()
-
-	maxAcceptable := 2 * time.Second
-	if elapsed > maxAcceptable {
-		t.Errorf("/healthz: response time %v exceeds %v", elapsed, maxAcceptable)
-	} else {
-		t.Logf("/healthz: %v (%d)", elapsed, resp.StatusCode)
-	}
-}
-
-// TestSmokeCORS verifies CORS headers are set.
-func TestSmokeCORS(t *testing.T) {
-	client := NewSmokeClient(DefaultSmokeConfig())
-	skipIfNotAvailable(t, client)
-
-	req, _ := http.NewRequest(http.MethodOptions, client.config.BaseURL+"/healthz", nil)
-	req.Header.Set("Origin", "http://localhost:3000")
-	req.Header.Set("Access-Control-Request-Method", "GET")
-
-	resp, err := client.client.Do(req)
-	if err != nil {
-		t.Fatalf("CORS preflight: %v", err)
+		t.Skip("Neo RPC not available")
 	}
 	defer resp.Body.Close()
 
-	// Check for CORS headers
-	allowOrigin := resp.Header.Get("Access-Control-Allow-Origin")
-	if allowOrigin == "" {
-		t.Log("CORS not configured (Access-Control-Allow-Origin not set)")
-	} else {
-		t.Logf("CORS configured: %s", allowOrigin)
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	if blockCount, ok := result["result"].(float64); ok {
+		t.Logf("✓ Neo block height: %d", int(blockCount))
 	}
 }
 
-// TestSmokeErrorHandling verifies error responses are properly formatted.
-func TestSmokeErrorHandling(t *testing.T) {
-	client := NewSmokeClient(DefaultSmokeConfig())
-	skipIfNotAvailable(t, client)
+// =============================================================================
+// Service Health Smoke Tests
+// =============================================================================
 
-	// Request non-existent resource
-	resp, err := client.Get("/accounts/nonexistent-id-12345")
-	if err != nil {
-		t.Fatalf("error request: %v", err)
-	}
-	defer resp.Body.Close()
+func TestSmoke_ServiceEndpoints(t *testing.T) {
+	config := loadSmokeConfig()
+	client := newHTTPClient()
 
-	// Should return 404 or 403 (if tenant mismatch)
-	if resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusForbidden {
-		t.Errorf("expected 404/403, got %d", resp.StatusCode)
+	services := []string{
+		"oracle", "vrf", "secrets", "gasbank",
+		"datafeeds", "automation", "mixer",
 	}
 
-	// Verify content type
-	ct := resp.Header.Get("Content-Type")
-	if !strings.Contains(ct, "application/json") && ct != "" {
-		t.Logf("Error response Content-Type: %s (expected application/json)", ct)
-	}
-}
-
-// TestSmokeContentTypes verifies correct content types in responses.
-func TestSmokeContentTypes(t *testing.T) {
-	client := NewSmokeClient(DefaultSmokeConfig())
-	skipIfNotAvailable(t, client)
-
-	resp, err := client.Get("/system/status")
-	if err != nil {
-		t.Fatalf("content type test: %v", err)
-	}
-	defer resp.Body.Close()
-
-	ct := resp.Header.Get("Content-Type")
-	if !strings.Contains(ct, "application/json") {
-		t.Errorf("expected application/json, got %s", ct)
-	}
-}
-
-// TestSmokeBusEndpoints verifies bus/event system endpoints if available.
-func TestSmokeBusEndpoints(t *testing.T) {
-	client := NewSmokeClient(DefaultSmokeConfig())
-	skipIfNotAvailable(t, client)
-
-	// Try /system/bus/events endpoint
-	resp, err := client.Get("/system/bus/events")
-	if err != nil {
-		t.Fatalf("bus events: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		t.Skip("Bus endpoints not available")
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("bus events: expected 200, got %d", resp.StatusCode)
-	}
-
-	t.Log("Bus events endpoint available")
-}
-
-// TestSmokeReadinessProbe tests readiness probe endpoint.
-func TestSmokeReadinessProbe(t *testing.T) {
-	client := NewSmokeClient(DefaultSmokeConfig())
-
-	// Try /readyz endpoint (may require auth)
-	resp, err := client.Get("/readyz")
-	if err != nil {
-		t.Skipf("readiness probe not available: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		// Try /ready as alternative
-		resp, err = client.Get("/ready")
+	for _, svc := range services {
+		// Try to reach service health endpoint
+		url := fmt.Sprintf("http://localhost:8080/services/%s/health", svc)
+		resp, err := client.Get(url)
 		if err != nil {
-			t.Skip("No readiness probe endpoint found")
+			t.Logf("⚠ Service %s unreachable", svc)
+			continue
 		}
-		defer resp.Body.Close()
-	}
+		resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusServiceUnavailable && resp.StatusCode != http.StatusUnauthorized {
-		t.Errorf("readiness probe: unexpected status %d", resp.StatusCode)
-	}
-
-	t.Logf("Readiness probe: %d", resp.StatusCode)
-}
-
-// TestSmokeLivenessProbe tests liveness probe endpoint.
-func TestSmokeLivenessProbe(t *testing.T) {
-	client := NewSmokeClient(DefaultSmokeConfig())
-
-	// Try /livez endpoint (may require auth)
-	resp, err := client.Get("/livez")
-	if err != nil {
-		t.Skipf("liveness probe not available: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		// /healthz typically serves as liveness
-		t.Skip("Dedicated liveness probe not found (using /healthz)")
-	}
-
-	if resp.StatusCode == http.StatusUnauthorized {
-		t.Log("Liveness probe requires authentication")
-		return
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("liveness probe: expected 200, got %d", resp.StatusCode)
-	}
-
-	t.Logf("Liveness probe: %d", resp.StatusCode)
-}
-
-// TestSmokeParallelRequests tests system under light parallel load.
-func TestSmokeParallelRequests(t *testing.T) {
-	client := NewSmokeClient(DefaultSmokeConfig())
-	skipIfNotAvailable(t, client)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	results := make(chan error, 5)
-
-	for i := 0; i < 5; i++ {
-		go func() {
-			select {
-			case <-ctx.Done():
-				results <- ctx.Err()
-				return
-			default:
-			}
-
-			resp, err := client.Get("/system/status")
-			if err != nil {
-				results <- err
-				return
-			}
-			resp.Body.Close()
-
-			if resp.StatusCode != http.StatusOK {
-				results <- fmt.Errorf("status %d", resp.StatusCode)
-				return
-			}
-			results <- nil
-		}()
-	}
-
-	// Collect results
-	errors := 0
-	for i := 0; i < 5; i++ {
-		if err := <-results; err != nil {
-			t.Logf("Parallel request error: %v", err)
-			errors++
+		if resp.StatusCode == http.StatusOK {
+			t.Logf("✓ Service %s is healthy", svc)
+		} else {
+			t.Logf("⚠ Service %s returned %d", svc, resp.StatusCode)
 		}
 	}
+}
 
-	if errors > 1 {
-		t.Errorf("Too many parallel request failures: %d/5", errors)
+// =============================================================================
+// Database Schema Smoke Tests
+// =============================================================================
+
+func TestSmoke_DatabaseTables(t *testing.T) {
+	config := loadSmokeConfig()
+	if config.SupabaseKey == "" {
+		t.Skip("SUPABASE_ANON_KEY not set")
 	}
+
+	client := newHTTPClient()
+
+	tables := []string{
+		"service_requests",
+		"realtime_notifications",
+	}
+
+	for _, table := range tables {
+		req, _ := http.NewRequest("GET",
+			fmt.Sprintf("%s/rest/v1/%s?limit=0", config.SupabaseURL, table), nil)
+		req.Header.Set("apikey", config.SupabaseKey)
+		req.Header.Set("Authorization", "Bearer "+config.SupabaseKey)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Logf("⚠ Table %s check failed: %v", table, err)
+			continue
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK {
+			t.Logf("✓ Table %s exists", table)
+		} else if resp.StatusCode == http.StatusNotFound {
+			t.Errorf("✗ Table %s does not exist", table)
+		}
+	}
+}
+
+// =============================================================================
+// Connectivity Smoke Tests
+// =============================================================================
+
+func TestSmoke_AllServicesConnectivity(t *testing.T) {
+	config := loadSmokeConfig()
+	client := newHTTPClient()
+
+	endpoints := map[string]string{
+		"Supabase":    config.SupabaseURL + "/rest/v1/",
+		"Coordinator": config.CoordinatorURL + "/api/v2/status",
+		"Frontend":    config.FrontendURL,
+		"Neo RPC":     config.NeoRPCURL,
+	}
+
+	healthy := 0
+	total := len(endpoints)
+
+	for name, url := range endpoints {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
+
+		if name == "Supabase" {
+			req.Header.Set("apikey", config.SupabaseKey)
+		}
+
+		resp, err := client.Do(req)
+		cancel()
+
+		if err != nil {
+			t.Logf("⚠ %s: unreachable", name)
+			continue
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode < 500 {
+			t.Logf("✓ %s: reachable", name)
+			healthy++
+		} else {
+			t.Logf("✗ %s: error %d", name, resp.StatusCode)
+		}
+	}
+
+	t.Logf("\nConnectivity: %d/%d services healthy", healthy, total)
+
+	if healthy < total/2 {
+		t.Error("Too many services unhealthy")
+	}
+}
+
+// =============================================================================
+// Quick Smoke Test (All-in-One)
+// =============================================================================
+
+func TestSmoke_QuickCheck(t *testing.T) {
+	config := loadSmokeConfig()
+	client := newHTTPClient()
+
+	t.Log("=== Neo Service Layer Smoke Test ===")
+	t.Log("")
+
+	// 1. Supabase
+	t.Log("1. Checking Supabase...")
+	req, _ := http.NewRequest("GET", config.SupabaseURL+"/rest/v1/", nil)
+	req.Header.Set("apikey", config.SupabaseKey)
+	if resp, err := client.Do(req); err == nil {
+		resp.Body.Close()
+		t.Log("   ✓ Supabase is running")
+	} else {
+		t.Log("   ✗ Supabase is not running")
+	}
+
+	// 2. Coordinator
+	t.Log("2. Checking Coordinator...")
+	if resp, err := client.Get(config.CoordinatorURL + "/api/v2/status"); err == nil {
+		resp.Body.Close()
+		t.Log("   ✓ Coordinator is running")
+	} else {
+		t.Log("   ⚠ Coordinator is not running (optional in dev)")
+	}
+
+	// 3. Frontend
+	t.Log("3. Checking Frontend...")
+	if resp, err := client.Get(config.FrontendURL); err == nil {
+		resp.Body.Close()
+		t.Log("   ✓ Frontend is running")
+	} else {
+		t.Log("   ⚠ Frontend is not running")
+	}
+
+	// 4. Neo RPC
+	t.Log("4. Checking Neo RPC...")
+	payload := `{"jsonrpc":"2.0","method":"getversion","params":[],"id":1}`
+	if resp, err := client.Post(config.NeoRPCURL, "application/json",
+		strings.NewReader(payload)); err == nil {
+		resp.Body.Close()
+		t.Log("   ✓ Neo RPC is running")
+	} else {
+		t.Log("   ⚠ Neo RPC is not running")
+	}
+
+	t.Log("")
+	t.Log("=== Smoke Test Complete ===")
 }

@@ -1,184 +1,90 @@
-import { Box, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Typography, Divider, Chip } from '@mui/material';
-import { Link, useLocation } from 'react-router-dom';
-import HomeIcon from '@mui/icons-material/Home';
-import AppsIcon from '@mui/icons-material/Apps';
-import DescriptionIcon from '@mui/icons-material/Description';
-import PersonIcon from '@mui/icons-material/Person';
-import SettingsIcon from '@mui/icons-material/Settings';
-import { useServices } from '../../context/ServiceContext';
+import React from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
+import clsx from 'clsx';
+import {
+  FiHome,
+  FiDatabase,
+  FiKey,
+  FiLock,
+  FiDollarSign,
+  FiSettings,
+  FiActivity,
+  FiCpu,
+  FiCloud,
+  FiZap,
+  FiShuffle,
+  FiLink,
+} from 'react-icons/fi';
 
-interface SidebarProps {
-  onItemClick?: () => void;
+interface NavItem {
+  name: string;
+  href: string;
+  icon: React.ElementType;
+  badge?: string;
 }
 
-export default function Sidebar({ onItemClick }: SidebarProps) {
+const navigation: NavItem[] = [
+  { name: 'Dashboard', href: '/dashboard', icon: FiHome },
+  { name: 'Services', href: '/services', icon: FiCpu },
+  { name: 'Oracle', href: '/services/oracle', icon: FiCloud },
+  { name: 'VRF', href: '/services/vrf', icon: FiShuffle },
+  { name: 'DataFeeds', href: '/services/datafeeds', icon: FiActivity },
+  { name: 'Automation', href: '/services/automation', icon: FiZap },
+  { name: 'Secrets', href: '/secrets', icon: FiLock },
+  { name: 'GasBank', href: '/gasbank', icon: FiDollarSign },
+  { name: 'API Keys', href: '/apikeys', icon: FiKey },
+  { name: 'Integrations', href: '/integrations', icon: FiLink },
+  { name: 'Settings', href: '/settings', icon: FiSettings },
+];
+
+interface SidebarProps {
+  collapsed?: boolean;
+}
+
+export function Sidebar({ collapsed = false }: SidebarProps) {
   const location = useLocation();
-  const { services } = useServices();
-
-  const mainNavItems = [
-    { label: 'Home', path: '/', icon: <HomeIcon /> },
-    { label: 'Service Hub', path: '/services', icon: <AppsIcon /> },
-    { label: 'Documentation', path: '/docs', icon: <DescriptionIcon /> },
-    { label: 'Account', path: '/account', icon: <PersonIcon /> },
-  ];
-
-  const isActive = (path: string) => {
-    if (path === '/') return location.pathname === '/';
-    return location.pathname.startsWith(path);
-  };
-
-  // Group services by category
-  const servicesByCategory = services.reduce((acc, service) => {
-    if (!acc[service.category]) {
-      acc[service.category] = [];
-    }
-    acc[service.category].push(service);
-    return acc;
-  }, {} as Record<string, typeof services>);
-
-  const categoryLabels: Record<string, string> = {
-    oracle: 'Oracle Services',
-    compute: 'Compute Services',
-    data: 'Data Services',
-    security: 'Security Services',
-    privacy: 'Privacy Services',
-    'cross-chain': 'Cross-Chain',
-    utility: 'Utility Services',
-  };
 
   return (
-    <Box sx={{ pt: 2, pb: 2, height: '100%', overflow: 'auto' }}>
-      {/* Main Navigation */}
-      <List>
-        {mainNavItems.map((item) => (
-          <ListItem key={item.path} disablePadding>
-            <ListItemButton
-              component={Link}
-              to={item.path}
-              onClick={onItemClick}
-              selected={isActive(item.path)}
-              sx={{
-                mx: 1,
-                borderRadius: 2,
-                '&.Mui-selected': {
-                  backgroundColor: 'rgba(0, 229, 153, 0.1)',
-                  '&:hover': {
-                    backgroundColor: 'rgba(0, 229, 153, 0.15)',
-                  },
-                  '& .MuiListItemIcon-root': {
-                    color: 'primary.main',
-                  },
-                  '& .MuiListItemText-primary': {
-                    color: 'primary.main',
-                    fontWeight: 600,
-                  },
-                },
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 40, color: 'text.secondary' }}>
-                {item.icon}
-              </ListItemIcon>
-              <ListItemText primary={item.label} />
-            </ListItemButton>
-          </ListItem>
-        ))}
-      </List>
+    <aside
+      className={clsx(
+        'fixed left-0 top-16 bottom-0 bg-white border-r border-surface-200 transition-all duration-300 z-40',
+        collapsed ? 'w-16' : 'w-64'
+      )}
+    >
+      <nav className="h-full overflow-y-auto py-4">
+        <ul className="space-y-1 px-3">
+          {navigation.map((item) => {
+            const isActive = location.pathname === item.href ||
+              (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
 
-      <Divider sx={{ my: 2, borderColor: 'rgba(255, 255, 255, 0.08)' }} />
-
-      {/* Services by Category */}
-      <Box sx={{ px: 2, mb: 1 }}>
-        <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 600 }}>
-          Services
-        </Typography>
-      </Box>
-
-      {Object.entries(servicesByCategory).slice(0, 4).map(([category, categoryServices]) => (
-        <Box key={category} sx={{ mb: 2 }}>
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ px: 3, display: 'block', mb: 0.5 }}
-          >
-            {categoryLabels[category] || category}
-          </Typography>
-          <List dense>
-            {categoryServices.slice(0, 3).map((service) => (
-              <ListItem key={service.id} disablePadding>
-                <ListItemButton
-                  component={Link}
-                  to={`/services/${service.id}`}
-                  onClick={onItemClick}
-                  selected={location.pathname === `/services/${service.id}`}
-                  sx={{
-                    mx: 1,
-                    py: 0.5,
-                    borderRadius: 1,
-                    '&.Mui-selected': {
-                      backgroundColor: 'rgba(0, 229, 153, 0.1)',
-                    },
-                  }}
+            return (
+              <li key={item.name}>
+                <NavLink
+                  to={item.href}
+                  className={clsx(
+                    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-primary-50 text-primary-700'
+                      : 'text-surface-600 hover:bg-surface-50 hover:text-surface-900'
+                  )}
                 >
-                  <ListItemText
-                    primary={service.name.replace(' Service', '')}
-                    primaryTypographyProps={{ variant: 'body2' }}
-                  />
-                  <Chip
-                    label={service.status}
-                    size="small"
-                    sx={{
-                      height: 18,
-                      fontSize: '0.65rem',
-                      backgroundColor:
-                        service.status === 'online'
-                          ? 'rgba(0, 229, 153, 0.2)'
-                          : 'rgba(255, 71, 87, 0.2)',
-                      color:
-                        service.status === 'online' ? '#00e599' : '#ff4757',
-                    }}
-                  />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
-        </Box>
-      ))}
-
-      {/* View All Services Link */}
-      <Box sx={{ px: 2, mt: 2 }}>
-        <ListItemButton
-          component={Link}
-          to="/services"
-          onClick={onItemClick}
-          sx={{
-            borderRadius: 2,
-            border: '1px dashed rgba(255, 255, 255, 0.2)',
-            justifyContent: 'center',
-          }}
-        >
-          <Typography variant="body2" color="text.secondary">
-            View All Services →
-          </Typography>
-        </ListItemButton>
-      </Box>
-
-      {/* Footer */}
-      <Box sx={{ position: 'absolute', bottom: 16, left: 0, right: 0, px: 2 }}>
-        <Divider sx={{ mb: 2, borderColor: 'rgba(255, 255, 255, 0.08)' }} />
-        <ListItemButton
-          component={Link}
-          to="/settings"
-          sx={{ borderRadius: 2 }}
-        >
-          <ListItemIcon sx={{ minWidth: 40, color: 'text.secondary' }}>
-            <SettingsIcon />
-          </ListItemIcon>
-          <ListItemText
-            primary="Settings"
-            primaryTypographyProps={{ variant: 'body2' }}
-          />
-        </ListItemButton>
-      </Box>
-    </Box>
+                  <item.icon className={clsx('w-5 h-5 flex-shrink-0', isActive && 'text-primary-600')} />
+                  {!collapsed && (
+                    <>
+                      <span className="flex-1">{item.name}</span>
+                      {item.badge && (
+                        <span className="px-2 py-0.5 text-xs font-medium bg-primary-100 text-primary-700 rounded-full">
+                          {item.badge}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </NavLink>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+    </aside>
   );
 }

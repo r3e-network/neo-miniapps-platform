@@ -1,0 +1,141 @@
+services:
+  db:
+    image: supabase/postgres:15.1.0
+    container_name: supabase-db
+    restart: unless-stopped
+    ports:
+      - "54322:5432"
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-supabase}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-supabase_admin}
+      PGDATA: /var/lib/postgresql/data
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d
+
+  auth:
+    image: supabase/gotrue:v2.132.5
+    container_name: supabase-auth
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      GOTRUE_SITE_URL: ${SITE_URL:-http://localhost:8000}
+      API_EXTERNAL_URL: ${SITE_URL:-http://localhost:8000}
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      GOTRUE_LOG_LEVEL: info
+      GOTRUE_DB_DRIVER: postgres
+      DATABASE_URL: postgresql://${POSTGRES_USER:-supabase_admin}:${POSTGRES_PASSWORD:-supabase}@db:5432/${POSTGRES_DB:-postgres}
+      GOTRUE_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt}
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_DISABLE_SIGNUP: "true"
+    ports:
+      - "9999:9999"
+
+  rest:
+    image: postgrest/postgrest:v12.0.1
+    container_name: supabase-rest
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      PGRST_DB_URI: postgresql://${POSTGRES_USER:-supabase_admin}:${POSTGRES_PASSWORD:-supabase}@db:5432/${POSTGRES_DB:-postgres}
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt}
+      PGRST_DB_POOL: 10
+      PGRST_SERVER_PORT: 3000
+    ports:
+      - "3000:3000"
+
+  storage:
+    image: supabase/storage-api:v1.0.10
+    container_name: supabase-storage
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      ANON_KEY: ${ANON_KEY:-change-me}
+      SERVICE_KEY: ${SERVICE_ROLE_KEY:-change-me}
+      POSTGREST_URL: http://rest:3000
+      PGRST_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-supabase_admin}:${POSTGRES_PASSWORD:-supabase}@db:5432/${POSTGRES_DB:-postgres}
+      REGION: "local"
+      FILE_SIZE_LIMIT: 52428800
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+    ports:
+      - "5000:5000"
+    volumes:
+      - storage-data:/var/lib/storage
+
+  realtime:
+    image: supabase/realtime:v2.25.36
+    container_name: supabase-realtime
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      FLY_APP_NAME: realtime
+      CLUSTER_STRATEGIES: EPMD
+      DB_HOST: db
+      DB_USER: ${POSTGRES_USER:-supabase_admin}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-supabase}
+      DB_NAME: ${POSTGRES_DB:-postgres}
+      DB_PORT: 5432
+      PORT: 4000
+      JWT_SECRET: ${JWT_SECRET:-super-secret-jwt}
+      SECRET_KEY_BASE: ${JWT_SECRET:-super-secret-jwt}
+      REPLICATION_MODE: RLS
+      REPLICATION_POLL_INTERVAL: 100
+      SECURE_CHANNELS: "false"
+    ports:
+      - "4000:4000"
+
+  studio:
+    image: supabase/studio:20250301-65d10c0
+    container_name: supabase-studio
+    restart: unless-stopped
+    depends_on:
+      - db
+      - rest
+      - auth
+    environment:
+      SUPABASE_URL: http://localhost:8000
+      SUPABASE_REST_URL: http://rest:3000
+      SUPABASE_DB_URL: postgresql://${POSTGRES_USER:-supabase_admin}:${POSTGRES_PASSWORD:-supabase}@db:5432/${POSTGRES_DB:-postgres}
+      STUDIO_PG_META_URL: http://rest:3000
+      ANON_KEY: ${ANON_KEY:-change-me}
+      SERVICE_KEY: ${SERVICE_ROLE_KEY:-change-me}
+      JWT_SECRET: ${JWT_SECRET:-super-secret-jwt}
+    command: ["sh", "-c", "sleep infinity"]
+    ports:
+      - "54323:3000"
+
+  proxy:
+    image: supabase/kong:2.8.1
+    container_name: supabase-kong
+    restart: unless-stopped
+    depends_on:
+      - rest
+      - auth
+      - storage
+      - realtime
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
+      KONG_DNS_ORDER: LAST,SRV,A,CNAME
+      KONG_LOG_LEVEL: notice
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    volumes:
+      - ./kong/kong.yml:/var/lib/kong/kong.yml:ro
+
+volumes:
+  db-data:
+  storage-data:

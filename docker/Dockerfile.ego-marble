@@ -1,0 +1,43 @@
+# =============================================================================
+# Neo Service Layer - EGo Marble Dockerfile
+# =============================================================================
+# Builds Marble services as SGX enclaves using EGo runtime
+# https://github.com/edgelesssys/ego
+
+FROM ghcr.io/edgelesssys/ego-dev:latest AS builder
+
+WORKDIR /build
+
+# Copy go mod files
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build marble with EGo
+RUN ego-go build -o marble ./cmd/marble
+
+# Copy enclave config
+COPY ego/enclave.json enclave.json
+
+# Sign the enclave
+RUN ego sign marble
+
+# =============================================================================
+# Production Image with EGo Runtime
+# =============================================================================
+FROM ghcr.io/edgelesssys/ego-deploy:latest
+
+WORKDIR /app
+
+# Copy signed enclave
+COPY --from=builder /build/marble /app/marble
+
+# Create config directory
+RUN mkdir -p /app/config
+
+EXPOSE 8443
+
+# Run with EGo
+ENTRYPOINT ["ego", "run", "/app/marble"]

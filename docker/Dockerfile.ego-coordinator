@@ -1,0 +1,43 @@
+# =============================================================================
+# Neo Service Layer - EGo Coordinator Dockerfile
+# =============================================================================
+# Builds the Coordinator as an SGX enclave using EGo runtime
+# https://github.com/edgelesssys/ego
+
+FROM ghcr.io/edgelesssys/ego-dev:latest AS builder
+
+WORKDIR /build
+
+# Copy go mod files
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build coordinator with EGo
+RUN ego-go build -o coordinator ./cmd/coordinator
+
+# Copy enclave config
+COPY ego/coordinator-enclave.json enclave.json
+
+# Sign the enclave
+RUN ego sign coordinator
+
+# =============================================================================
+# Production Image with EGo Runtime
+# =============================================================================
+FROM ghcr.io/edgelesssys/ego-deploy:latest
+
+WORKDIR /app
+
+# Copy signed enclave
+COPY --from=builder /build/coordinator /app/coordinator
+
+# Create directories
+RUN mkdir -p /app/data /app/manifests
+
+EXPOSE 4433
+
+# Run with EGo
+ENTRYPOINT ["ego", "run", "/app/coordinator"]
