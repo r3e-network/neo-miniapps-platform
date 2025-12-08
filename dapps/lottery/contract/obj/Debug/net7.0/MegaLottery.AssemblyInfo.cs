@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("MegaLottery")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+97b1feda51c91f31fce6b23da7798d7c2898493f")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f8cdfa326b305fb4f1b486abff15a663cf380573")]
 [assembly: System.Reflection.AssemblyProductAttribute("MegaLottery")]
 [assembly: System.Reflection.AssemblyTitleAttribute("MegaLottery")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -50,8 +50,9 @@ func ContractAddressesFromEnv() ContractAddresses {
 // Service Request Types
 // =============================================================================
 
-// ServiceRequest represents a service request from the contract.
-type ServiceRequest struct {
+// ContractServiceRequest represents a service request from the on-chain contract.
+// Note: This is different from database.ServiceRequest which is for database storage.
+type ContractServiceRequest struct {
 	ID              *big.Int
 	UserContract    string
 	Payer           string
@@ -85,4 +86,58 @@ type MixerPool struct {
 	Denomination *big.Int
 	LeafCount    *big.Int
 	Active       bool
+}
+
+// =============================================================================
+// DataFeeds Types
+// =============================================================================
+
+// PriceData represents price data from the contract.
+type PriceData struct {
+	FeedID    string
+	Price     *big.Int
+	Decimals  *big.Int
+	Timestamp uint64
+	UpdatedBy string
+}
+
+// ContractFeedConfig represents on-chain price feed configuration from the smart contract.
+// Note: This is different from datafeeds.FeedConfig which is for service configuration.
+type ContractFeedConfig struct {
+	FeedID      string
+	Description string
+	Decimals    *big.Int
+	Active      bool
+	CreatedAt   uint64
+}
+
+// =============================================================================
+// Automation Types
+// =============================================================================
+
+// Trigger represents an automation trigger from the contract.
+type Trigger struct {
+	TriggerID      *big.Int
+	RequestID      *big.Int
+	Owner          string
+	TargetContract string
+	CallbackMethod string
+	TriggerType    uint8
+	Condition      string
+	CallbackData   []byte
+	MaxExecutions  *big.Int
+	ExecutionCount *big.Int
+	Status         uint8
+	CreatedAt      uint64
+	LastExecutedAt uint64
+	ExpiresAt      uint64
+}
+
+// ExecutionRecord represents an execution record from the contract.
+type ExecutionRecord struct {
+	TriggerID       *big.Int
+	ExecutionNumber *big.Int
+	Timestamp       uint64
+	Success         bool
+	ExecutedBy      string
 }

@@ -187,9 +187,9 @@ func TestParseInteger(t *testing.T) {
 		Value: json.RawMessage(`"12345"`),
 	}
 
-	result, err := parseInteger(item)
+	result, err := ParseInteger(item)
 	if err != nil {
-		t.Errorf("parseInteger() error = %v", err)
+		t.Errorf("ParseInteger() error = %v", err)
 	}
 	if result.Cmp(big.NewInt(12345)) != 0 {
 		t.Errorf("Expected 12345, got %s", result.String())
@@ -202,9 +202,9 @@ func TestParseBoolean(t *testing.T) {
 		Value: json.RawMessage(`true`),
 	}
 
-	result, err := parseBoolean(item)
+	result, err := ParseBoolean(item)
 	if err != nil {
-		t.Errorf("parseBoolean() error = %v", err)
+		t.Errorf("ParseBoolean() error = %v", err)
 	}
 	if !result {
 		t.Errorf("Expected true, got false")
@@ -217,9 +217,9 @@ func TestParseByteArray(t *testing.T) {
 		Value: json.RawMessage(`"48656c6c6f"`), // "Hello" in hex
 	}
 
-	result, err := parseByteArray(item)
+	result, err := ParseByteArray(item)
 	if err != nil {
-		t.Errorf("parseByteArray() error = %v", err)
+		t.Errorf("ParseByteArray() error = %v", err)
 	}
 	if string(result) != "Hello" {
 		t.Errorf("Expected 'Hello', got %q", string(result))
@@ -288,9 +288,9 @@ func TestParseByteArrayNull(t *testing.T) {
 		Value: nil,
 	}
 
-	result, err := parseByteArray(item)
+	result, err := ParseByteArray(item)
 	if err != nil {
-		t.Errorf("parseByteArray() error = %v", err)
+		t.Errorf("ParseByteArray() error = %v", err)
 	}
 	if result != nil {
 		t.Errorf("Expected nil, got %v", result)

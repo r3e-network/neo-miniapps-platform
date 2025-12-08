@@ -24,7 +24,7 @@ type Service struct {
 
 	// Dependencies
 	marble *Marble
-	db     *database.Repository
+	db     database.RepositoryInterface
 	router *mux.Router
 
 	// State
@@ -38,7 +38,7 @@ type ServiceConfig struct {
 	Name    string
 	Version string
 	Marble  *Marble
-	DB      *database.Repository
+	DB      database.RepositoryInterface
 }
 
 // NewService creates a new base service.
@@ -75,7 +75,7 @@ func (s *Service) Marble() *Marble {
 }
 
 // DB returns the database repository.
-func (s *Service) DB() *database.Repository {
+func (s *Service) DB() database.RepositoryInterface {
 	return s.db
 }
 

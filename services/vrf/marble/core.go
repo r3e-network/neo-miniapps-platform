@@ -1,0 +1,93 @@
+package vrfmarble
+
+import (
+	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"encoding/hex"
+	"fmt"
+	"time"
+
+	"github.com/R3E-Network/service_layer/internal/crypto"
+	"github.com/google/uuid"
+)
+
+// =============================================================================
+// Core Logic
+// =============================================================================
+
+// GenerateRandomness generates verifiable random numbers.
+func (s *Service) GenerateRandomness(ctx context.Context, seed string, numWords int) (*DirectRandomResponse, error) {
+	seedBytes, err := hex.DecodeString(seed)
+	if err != nil {
+		seedBytes = []byte(seed)
+	}
+
+	// Generate VRF proof
+	vrfProof, err := crypto.GenerateVRF(s.privateKey, seedBytes)
+	if err != nil {
+		return nil, fmt.Errorf("generate VRF: %w", err)
+	}
+
+	// Generate multiple random words from the VRF output
+	randomWords := make([]string, numWords)
+	for i := 0; i < numWords; i++ {
+		wordInput := append(vrfProof.Output, byte(i))
+		wordHash := crypto.Hash256(wordInput)
+		randomWords[i] = hex.EncodeToString(wordHash)
+	}
+
+	return &DirectRandomResponse{
+		RequestID:   uuid.New().String(),
+		Seed:        seed,
+		RandomWords: randomWords,
+		Proof:       hex.EncodeToString(vrfProof.Proof),
+		PublicKey:   hex.EncodeToString(vrfProof.PublicKey),
+		Timestamp:   time.Now().Format(time.RFC3339),
+	}, nil
+}
+
+// VerifyRandomness verifies a VRF proof.
+func (s *Service) VerifyRandomness(req *VerifyRequest) (bool, error) {
+	seedBytes, err := hex.DecodeString(req.Seed)
+	if err != nil {
+		seedBytes = []byte(req.Seed)
+	}
+
+	proofBytes, err := hex.DecodeString(req.Proof)
+	if err != nil {
+		return false, fmt.Errorf("invalid proof hex: %w", err)
+	}
+
+	pubKeyBytes, err := hex.DecodeString(req.PublicKey)
+	if err != nil {
+		return false, fmt.Errorf("invalid public key hex: %w", err)
+	}
+
+	// Parse public key
+	if len(pubKeyBytes) != 33 {
+		return false, fmt.Errorf("invalid public key length")
+	}
+
+	// Decompress public key
+	x, y := elliptic.UnmarshalCompressed(elliptic.P256(), pubKeyBytes)
+	if x == nil {
+		return false, fmt.Errorf("invalid compressed public key")
+	}
+
+	publicKey := &ecdsa.PublicKey{
+		Curve: elliptic.P256(),
+		X:     x,
+		Y:     y,
+	}
+
+	// Reconstruct VRF proof
+	outputHash := crypto.Hash256(proofBytes)
+	vrfProof := &crypto.VRFProof{
+		PublicKey: pubKeyBytes,
+		Proof:     proofBytes,
+		Output:    outputHash,
+	}
+
+	return crypto.VerifyVRF(publicKey, seedBytes, vrfProof), nil
+}

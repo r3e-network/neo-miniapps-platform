@@ -15,13 +15,20 @@ fi
 # Create build directory
 mkdir -p build
 
-# Build each contract
-contracts=(
+# Service contracts (split into multiple partial class files)
+# Format: "directory:ContractName"
+service_contracts=(
+    "../services/oracle/contract:OracleService"
+    "../services/vrf/contract:VRFService"
+    "../services/mixer/contract:MixerService"
+    "../services/datafeeds/contract:DataFeedsService"
+    "../services/automation/contract:AutomationService"
+    "../services/confidential/contract:ConfidentialService"
+)
+
+# Single-file contracts
+single_contracts=(
     "gateway/ServiceLayerGateway"
-    "vrf/VRFService"
-    "mixer/MixerService"
-    "datafeeds/DataFeedsService"
-    "automation/AutomationService"
 )
 
 # Example contracts
@@ -32,11 +39,9 @@ examples=(
     "examples/DeFiPriceConsumer"
 )
 
-echo "=== Building Core Contracts ==="
-for contract in "${contracts[@]}"; do
+echo "=== Building Gateway Contract ==="
+for contract in "${single_contracts[@]}"; do
     name=$(basename "$contract")
-    dir=$(dirname "$contract")
-
     echo "Building $name..."
 
     if [ -f "$contract.cs" ]; then
@@ -52,6 +57,38 @@ for contract in "${contracts[@]}"; do
         fi
     else
         echo "  ⚠ $contract.cs not found, skipping"
+    fi
+done
+
+echo ""
+echo "=== Building Service Contracts (Multi-file) ==="
+for entry in "${service_contracts[@]}"; do
+    dir="${entry%%:*}"
+    name="${entry##*:}"
+
+    echo "Building $name..."
+
+    if [ -d "$dir" ]; then
+        # Collect all .cs files in the contract directory
+        cs_files=$(find "$dir" -maxdepth 1 -name "${name}*.cs" -type f | sort)
+
+        if [ -n "$cs_files" ]; then
+            # Pass all .cs files to nccs
+            nccs $cs_files -o "build/${name}" 2>/dev/null || echo "  Warning: Build may have warnings"
+            if [ -f "build/${name}/${name}.nef" ]; then
+                mv "build/${name}/${name}.nef" "build/${name}.nef"
+                mv "build/${name}/${name}.manifest.json" "build/${name}.manifest.json"
+                rm -rf "build/${name}"
+                echo "  ✓ $name.nef"
+                echo "  ✓ $name.manifest.json"
+            else
+                echo "  ✗ Compilation failed for $name"
+            fi
+        else
+            echo "  ⚠ No .cs files found in $dir for $name"
+        fi
+    else
+        echo "  ⚠ Directory $dir not found, skipping"
     fi
 done
 

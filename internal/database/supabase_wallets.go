@@ -12,13 +12,20 @@ import (
 
 // CreateWallet creates a new wallet binding.
 func (r *Repository) CreateWallet(ctx context.Context, wallet *UserWallet) error {
+	if wallet == nil {
+		return fmt.Errorf("%w: wallet cannot be nil", ErrInvalidInput)
+	}
+	if err := ValidateUserID(wallet.UserID); err != nil {
+		return err
+	}
+
 	data, err := r.client.request(ctx, "POST", "user_wallets", wallet, "")
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: create wallet: %v", ErrDatabaseError, err)
 	}
 	var wallets []UserWallet
 	if err := json.Unmarshal(data, &wallets); err != nil {
-		return err
+		return fmt.Errorf("%w: unmarshal wallets: %v", ErrDatabaseError, err)
 	}
 	if len(wallets) > 0 {
 		wallet.ID = wallets[0].ID
@@ -28,50 +35,65 @@ func (r *Repository) CreateWallet(ctx context.Context, wallet *UserWallet) error
 
 // GetUserWallets retrieves all wallets for a user.
 func (r *Repository) GetUserWallets(ctx context.Context, userID string) ([]UserWallet, error) {
+	if err := ValidateUserID(userID); err != nil {
+		return nil, err
+	}
+
 	query := fmt.Sprintf("user_id=eq.%s&order=is_primary.desc,created_at.asc", userID)
 	data, err := r.client.request(ctx, "GET", "user_wallets", nil, query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: get user wallets: %v", ErrDatabaseError, err)
 	}
 
 	var wallets []UserWallet
 	if err := json.Unmarshal(data, &wallets); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: unmarshal wallets: %v", ErrDatabaseError, err)
 	}
 	return wallets, nil
 }
 
 // GetWalletByAddress retrieves a wallet by address.
 func (r *Repository) GetWalletByAddress(ctx context.Context, address string) (*UserWallet, error) {
+	if err := ValidateAddress(address); err != nil {
+		return nil, err
+	}
+
 	query := fmt.Sprintf("address=eq.%s&limit=1", address)
 	data, err := r.client.request(ctx, "GET", "user_wallets", nil, query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: get wallet by address: %v", ErrDatabaseError, err)
 	}
 
 	var wallets []UserWallet
 	if err := json.Unmarshal(data, &wallets); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: unmarshal wallets: %v", ErrDatabaseError, err)
 	}
 	if len(wallets) == 0 {
-		return nil, fmt.Errorf("wallet not found")
+		return nil, NewNotFoundError("wallet", address)
 	}
 	return &wallets[0], nil
 }
 
 // GetWallet retrieves a wallet by ID for a specific user.
 func (r *Repository) GetWallet(ctx context.Context, walletID, userID string) (*UserWallet, error) {
+	if err := ValidateID(walletID); err != nil {
+		return nil, err
+	}
+	if err := ValidateUserID(userID); err != nil {
+		return nil, err
+	}
+
 	query := fmt.Sprintf("id=eq.%s&user_id=eq.%s", walletID, userID)
 	resp, err := r.client.request(ctx, "GET", "user_wallets", nil, query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: get wallet: %v", ErrDatabaseError, err)
 	}
 	var wallets []UserWallet
 	if err := json.Unmarshal(resp, &wallets); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: unmarshal wallets: %v", ErrDatabaseError, err)
 	}
 	if len(wallets) == 0 {
-		return nil, fmt.Errorf("wallet not found")
+		return nil, NewNotFoundError("wallet", walletID)
 	}
 	return &wallets[0], nil
 }

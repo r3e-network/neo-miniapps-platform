@@ -277,7 +277,7 @@ DataFeeds 服务自动更新链上价格数据，无需用户请求：
 
 外部数据预言机服务：
 
-- 接收 HTTP 请求参数
+- 接收 HTTP 请求参数 (URL, Method, Headers, JSONPath)
 - 发出 `OracleRequest` 事件
 - TEE 执行 HTTP 请求并返回结果
 
@@ -542,22 +542,64 @@ txHash, err := fulfiller.FailRequest(ctx, requestID, "error reason")
 4. **费用预付**: 用户必须预存足够的 GAS
 5. **暂停机制**: Admin 可暂停合约应对紧急情况
 
+### ConfidentialService
+
+机密计算服务：
+
+- 接收加密的输入数据
+- TEE 解密、计算、加密输出
+- 支持私密拍卖、投票、数据聚合等场景
+
+**事件**:
+```csharp
+event ConfidentialRequest(requestId, userContract, computationType, encryptedInput, inputCommitment)
+event ConfidentialFulfilled(requestId, encryptedOutput, outputCommitment)
+```
+
+**计算类型**:
+| 类型 | 说明 |
+|------|------|
+| `aggregate` | 私密数据聚合 |
+| `compare` | 私密比较 |
+| `auction` | 密封拍卖 |
+| `vote` | 私密投票 |
+
 ## 目录结构
 
 ```
 contracts/
 ├── README.md                    # 本文档
+├── build.sh                     # 编译脚本
+├── common/
+│   └── ServiceContractBase.cs   # 服务合约基类 (Gateway 模式)
 ├── gateway/
 │   └── ServiceLayerGateway.cs   # 主入口合约
 ├── oracle/
-│   └── OracleService.cs         # Oracle 服务合约
+│   └── OracleService.cs         # Oracle 服务合约 (继承 ServiceContractBase)
 ├── vrf/
-│   └── VRFService.cs            # VRF 服务合约
+│   └── VRFService.cs            # VRF 服务合约 (继承 ServiceContractBase)
+├── confidential/
+│   └── ConfidentialService.cs   # Confidential 服务合约 (继承 ServiceContractBase)
 ├── mixer/
-│   └── MixerService.cs          # Mixer 服务合约
+│   └── MixerService.cs          # Mixer 服务合约 (独立架构)
+├── datafeeds/
+│   └── DataFeedsService.cs      # DataFeeds 服务合约 (独立架构)
+├── automation/
+│   └── AutomationService.cs     # Automation 服务合约 (混合架构)
 └── examples/
-    └── ExampleConsumer.cs       # 示例用户合约
+    ├── ExampleConsumer.cs       # 示例用户合约
+    ├── VRFLottery.cs            # VRF 彩票示例
+    ├── MixerClient.cs           # Mixer 客户端示例
+    └── DeFiPriceConsumer.cs     # DeFi 价格消费者示例
 ```
+
+### 合约架构分类
+
+| 架构类型 | 合约 | 说明 |
+|---------|------|------|
+| **Gateway 模式** | OracleService, VRFService, ConfidentialService | 继承 ServiceContractBase，通过 Gateway 路由请求 |
+| **独立架构** | MixerService, DataFeedsService | 有自己的 Admin/TEE 管理，不通过 Gateway |
+| **混合架构** | AutomationService | 有 Gateway 但 SetGateway 需要 Admin 权限 |
 
 ## 编译要求
 

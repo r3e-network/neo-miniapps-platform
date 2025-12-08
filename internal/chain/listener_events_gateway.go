@@ -25,27 +25,27 @@ func ParseServiceRequestEvent(event *ContractEvent) (*ServiceRequestEvent, error
 		return nil, fmt.Errorf("invalid event state: expected 5 items, got %d", len(event.State))
 	}
 
-	requestID, err := parseInteger(event.State[0])
+	requestID, err := ParseInteger(event.State[0])
 	if err != nil {
 		return nil, fmt.Errorf("parse requestId: %w", err)
 	}
 
-	userContract, err := parseHash160(event.State[1])
+	userContract, err := ParseHash160(event.State[1])
 	if err != nil {
 		return nil, fmt.Errorf("parse userContract: %w", err)
 	}
 
-	caller, err := parseHash160(event.State[2])
+	caller, err := ParseHash160(event.State[2])
 	if err != nil {
 		return nil, fmt.Errorf("parse caller: %w", err)
 	}
 
-	serviceType, err := parseStringFromItem(event.State[3])
+	serviceType, err := ParseStringFromItem(event.State[3])
 	if err != nil {
 		return nil, fmt.Errorf("parse serviceType: %w", err)
 	}
 
-	payload, err := parseByteArray(event.State[4])
+	payload, err := ParseByteArray(event.State[4])
 	if err != nil {
 		return nil, fmt.Errorf("parse payload: %w", err)
 	}
@@ -75,12 +75,12 @@ func ParseRequestFulfilledEvent(event *ContractEvent) (*RequestFulfilledEvent, e
 		return nil, fmt.Errorf("invalid event state")
 	}
 
-	requestID, err := parseInteger(event.State[0])
+	requestID, err := ParseInteger(event.State[0])
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := parseByteArray(event.State[1])
+	result, err := ParseByteArray(event.State[1])
 	if err != nil {
 		return nil, err
 	}
@@ -107,12 +107,12 @@ func ParseRequestFailedEvent(event *ContractEvent) (*RequestFailedEvent, error) 
 		return nil, fmt.Errorf("invalid event state")
 	}
 
-	requestID, err := parseInteger(event.State[0])
+	requestID, err := ParseInteger(event.State[0])
 	if err != nil {
 		return nil, err
 	}
 
-	reason, err := parseStringFromItem(event.State[1])
+	reason, err := ParseStringFromItem(event.State[1])
 	if err != nil {
 		return nil, err
 	}

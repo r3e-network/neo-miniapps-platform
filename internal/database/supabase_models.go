@@ -14,6 +14,7 @@ type User struct {
 	ID        string    `json:"id"`
 	Address   string    `json:"address"`
 	Email     string    `json:"email,omitempty"`
+	Nonce     string    `json:"nonce,omitempty"` // For signature verification
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -40,15 +41,6 @@ type Secret struct {
 	Version        int       `json:"version"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
-}
-
-// SecretPolicy represents an allowed service for a secret.
-type SecretPolicy struct {
-	ID         string    `json:"id"`
-	UserID     string    `json:"user_id"`
-	SecretName string    `json:"secret_name"`
-	ServiceID  string    `json:"service_id"`
-	CreatedAt  time.Time `json:"created_at"`
 }
 
 // ServiceRequest represents a service request.
@@ -160,20 +152,3 @@ type OAuthProvider struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-// VRFRequestRecord represents a VRF request row.
-type VRFRequestRecord struct {
-	ID               string    `json:"id"`
-	RequestID        string    `json:"request_id"`
-	UserID           string    `json:"user_id"`
-	RequesterAddress string    `json:"requester_address"`
-	Seed             string    `json:"seed"`
-	NumWords         int       `json:"num_words"`
-	CallbackGasLimit int64     `json:"callback_gas_limit"`
-	Status           string    `json:"status"`
-	RandomWords      []string  `json:"random_words,omitempty"`
-	Proof            string    `json:"proof,omitempty"`
-	FulfillTxHash    string    `json:"fulfill_tx_hash,omitempty"`
-	Error            string    `json:"error,omitempty"`
-	CreatedAt        time.Time `json:"created_at"`
-	FulfilledAt      time.Time `json:"fulfilled_at,omitempty"`
-}

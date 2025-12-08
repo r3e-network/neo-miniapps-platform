@@ -110,6 +110,43 @@ public static void fulfillRandomness(BigInteger requestId, byte[][] randomWords)
 - VRF proof is deterministic and verifiable
 - Requests are signed with TEE attestation
 
+## Data Layer
+
+The VRF service uses a service-specific Supabase repository for database operations.
+
+### Package Structure
+
+```
+services/vrf/
+├── supabase/
+│   ├── repository.go    # VRF-specific repository interface
+│   └── models.go        # VRF data models (Request, Response)
+├── vrf.go               # Service implementation
+└── README.md
+```
+
+### Repository Interface
+
+```go
+import vrfsupabase "github.com/R3E-Network/service_layer/services/vrf/supabase"
+
+// Create repository
+vrfRepo := vrfsupabase.NewRepository(baseRepo)
+
+// Operations
+err := vrfRepo.Create(ctx, &vrfsupabase.Request{...})
+req, err := vrfRepo.GetByRequestID(ctx, "vrf-123")
+requests, err := vrfRepo.ListByStatus(ctx, "pending")
+err := vrfRepo.UpdateStatus(ctx, id, "completed")
+```
+
+### Data Models
+
+| Model | Description |
+|-------|-------------|
+| `Request` | VRF request with seed, status, timestamps |
+| `Response` | VRF response with random words, proof |
+
 ## Testing
 
 ```bash

@@ -12,7 +12,7 @@ import (
 
 	"github.com/R3E-Network/service_layer/internal/crypto"
 	"github.com/R3E-Network/service_layer/internal/marble"
-	"github.com/R3E-Network/service_layer/services/accountpool"
+	accountpool "github.com/R3E-Network/service_layer/services/accountpool/marble"
 )
 
 func createTestAccountPoolService(t *testing.T) *accountpool.Service {

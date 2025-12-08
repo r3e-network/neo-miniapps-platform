@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/marble"
-	"github.com/R3E-Network/service_layer/services/accountpool"
-	"github.com/R3E-Network/service_layer/services/mixer"
-	"github.com/R3E-Network/service_layer/services/vrf"
+	accountpool "github.com/R3E-Network/service_layer/services/accountpool/marble"
+	mixer "github.com/R3E-Network/service_layer/services/mixer/marble"
+	vrf "github.com/R3E-Network/service_layer/services/vrf/marble"
 )
 
 // TestE2EFullMixingFlow tests a complete mixing flow from request to completion.
@@ -120,13 +120,13 @@ func TestE2EFullMixingFlow(t *testing.T) {
 			var input map[string]interface{}
 			json.NewDecoder(r.Body).Decode(&input)
 
-			accounts := []mixer.AccountInfo{
+			accounts := []accountpool.AccountInfo{
 				{ID: "e2e-acc-1", Address: "NAddr1", Balance: 1000000},
 				{ID: "e2e-acc-2", Address: "NAddr2", Balance: 1000000},
 				{ID: "e2e-acc-3", Address: "NAddr3", Balance: 1000000},
 			}
 
-			json.NewEncoder(w).Encode(mixer.RequestAccountsResponse{
+			json.NewEncoder(w).Encode(accountpool.RequestAccountsResponse{
 				Accounts: accounts,
 				LockID:   "e2e-lock-1",
 			})

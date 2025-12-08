@@ -149,6 +149,47 @@ Examples:
 |-----------|-----|
 | Per execution | 0.0005 GAS |
 
+## Data Layer
+
+The Automation service uses a service-specific Supabase repository for database operations.
+
+### Package Structure
+
+```
+services/automation/
+├── supabase/
+│   ├── repository.go    # Automation-specific repository interface
+│   └── models.go        # Automation data models (Trigger, Execution)
+├── automation_service.go    # Service implementation
+├── automation_handlers.go   # HTTP handlers
+├── automation_triggers.go   # Trigger logic
+├── automation_types.go      # Type definitions
+└── README.md
+```
+
+### Repository Interface
+
+```go
+import automationsupabase "github.com/R3E-Network/service_layer/services/automation/supabase"
+
+// Create repository
+automationRepo := automationsupabase.NewRepository(baseRepo)
+
+// Operations
+err := automationRepo.CreateTrigger(ctx, &automationsupabase.Trigger{...})
+triggers, err := automationRepo.GetTriggers(ctx, userID)
+err := automationRepo.UpdateTrigger(ctx, trigger)
+err := automationRepo.CreateExecution(ctx, &automationsupabase.Execution{...})
+executions, err := automationRepo.GetExecutions(ctx, triggerID, limit)
+```
+
+### Data Models
+
+| Model | Description |
+|-------|-------------|
+| `Trigger` | Automation trigger with type, condition, action |
+| `Execution` | Execution record with status, result, timestamps |
+
 ## Testing
 
 ```bash

@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/marble"
-	"github.com/R3E-Network/service_layer/services/accountpool"
-	"github.com/R3E-Network/service_layer/services/mixer"
-	"github.com/R3E-Network/service_layer/services/vrf"
+	accountpool "github.com/R3E-Network/service_layer/services/accountpool/marble"
+	mixer "github.com/R3E-Network/service_layer/services/mixer/marble"
+	vrf "github.com/R3E-Network/service_layer/services/vrf/marble"
 )
 
 // TestServiceContractIntegration tests the integration between services and contracts.

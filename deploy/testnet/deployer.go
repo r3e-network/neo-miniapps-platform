@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/R3E-Network/service_layer/internal/chain"
 	"github.com/nspcc-dev/neo-go/pkg/crypto/keys"
 	"github.com/nspcc-dev/neo-go/pkg/encoding/address"
 	"github.com/nspcc-dev/neo-go/pkg/smartcontract/manifest"
@@ -82,30 +83,13 @@ func (d *Deployer) GetAccountHash() util.Uint160 {
 	return d.privateKey.GetScriptHash()
 }
 
-type RPCRequest struct {
-	JSONRPC string        `json:"jsonrpc"`
-	Method  string        `json:"method"`
-	Params  []interface{} `json:"params"`
-	ID      int           `json:"id"`
-}
+// RPC types imported from internal/chain package
 
-type RPCResponse struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      int             `json:"id"`
-	Result  json.RawMessage `json:"result,omitempty"`
-	Error   *RPCError       `json:"error,omitempty"`
-}
-
-type RPCError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}
-
-func (d *Deployer) call(method string, params ...interface{}) (*RPCResponse, error) {
+func (d *Deployer) call(method string, params ...interface{}) (*chain.RPCResponse, error) {
 	if params == nil {
 		params = []interface{}{}
 	}
-	req := RPCRequest{
+	req := chain.RPCRequest{
 		JSONRPC: "2.0",
 		Method:  method,
 		Params:  params,
@@ -134,7 +118,7 @@ func (d *Deployer) call(method string, params ...interface{}) (*RPCResponse, err
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
-	var rpcResp RPCResponse
+	var rpcResp chain.RPCResponse
 	if err := json.Unmarshal(respBody, &rpcResp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
@@ -184,18 +168,7 @@ func (d *Deployer) GetGASBalanceFloat() (float64, error) {
 	return float64(amt) / 1e8, nil
 }
 
-type InvokeResult struct {
-	Script      string      `json:"script"`
-	State       string      `json:"state"`
-	GasConsumed string      `json:"gasconsumed"`
-	Exception   string      `json:"exception,omitempty"`
-	Stack       []StackItem `json:"stack"`
-}
-
-type StackItem struct {
-	Type  string      `json:"type"`
-	Value interface{} `json:"value"`
-}
+// InvokeResult and StackItem imported from internal/chain package
 
 func (d *Deployer) GetBlockCount() (int64, error) {
 	resp, err := d.call("getblockcount")
@@ -248,7 +221,7 @@ func (d *Deployer) DeployContract(nefPath, manifestPath string) (*DeployedContra
 		return nil, fmt.Errorf("invoke deploy: %w", err)
 	}
 
-	var invokeResult InvokeResult
+	var invokeResult chain.InvokeResult
 	if err := json.Unmarshal(resp.Result, &invokeResult); err != nil {
 		return nil, fmt.Errorf("parse result: %w", err)
 	}
@@ -314,7 +287,7 @@ func CalculateContractHash(sender util.Uint160, checksum uint32, name string) ut
 }
 
 // InvokeFunction invokes a contract function (read-only).
-func (d *Deployer) InvokeFunction(contractHash, method string, args []interface{}) (*InvokeResult, error) {
+func (d *Deployer) InvokeFunction(contractHash, method string, args []interface{}) (*chain.InvokeResult, error) {
 	if args == nil {
 		args = []interface{}{}
 	}
@@ -331,7 +304,7 @@ func (d *Deployer) InvokeFunction(contractHash, method string, args []interface{
 		return nil, err
 	}
 
-	var result InvokeResult
+	var result chain.InvokeResult
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		return nil, err
 	}

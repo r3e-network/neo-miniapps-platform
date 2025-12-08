@@ -11,7 +11,7 @@ import (
 // Stack Item Parsers
 // =============================================================================
 
-func parseHash160(item StackItem) (string, error) {
+func ParseHash160(item StackItem) (string, error) {
 	if item.Type == "ByteString" || item.Type == "Buffer" {
 		var value string
 		if err := json.Unmarshal(item.Value, &value); err != nil {
@@ -31,7 +31,7 @@ func parseHash160(item StackItem) (string, error) {
 	return "", fmt.Errorf("unexpected type: %s", item.Type)
 }
 
-func parseByteArray(item StackItem) ([]byte, error) {
+func ParseByteArray(item StackItem) ([]byte, error) {
 	if item.Type == "ByteString" || item.Type == "Buffer" {
 		var value string
 		if err := json.Unmarshal(item.Value, &value); err != nil {
@@ -45,7 +45,7 @@ func parseByteArray(item StackItem) ([]byte, error) {
 	return nil, fmt.Errorf("unexpected type: %s", item.Type)
 }
 
-func parseInteger(item StackItem) (*big.Int, error) {
+func ParseInteger(item StackItem) (*big.Int, error) {
 	if item.Type == "Integer" {
 		var value string
 		if err := json.Unmarshal(item.Value, &value); err != nil {
@@ -58,7 +58,7 @@ func parseInteger(item StackItem) (*big.Int, error) {
 	return nil, fmt.Errorf("unexpected type: %s", item.Type)
 }
 
-func parseBoolean(item StackItem) (bool, error) {
+func ParseBoolean(item StackItem) (bool, error) {
 	if item.Type == "Boolean" {
 		var value bool
 		if err := json.Unmarshal(item.Value, &value); err != nil {
@@ -69,7 +69,7 @@ func parseBoolean(item StackItem) (bool, error) {
 	return false, fmt.Errorf("unexpected type: %s", item.Type)
 }
 
-func parseStringFromItem(item StackItem) (string, error) {
+func ParseStringFromItem(item StackItem) (string, error) {
 	if item.Type == "ByteString" || item.Type == "Buffer" {
 		var value string
 		if err := json.Unmarshal(item.Value, &value); err != nil {
@@ -87,7 +87,7 @@ func parseStringFromItem(item StackItem) (string, error) {
 	return "", fmt.Errorf("unexpected type for string: %s", item.Type)
 }
 
-func parseServiceRequest(item StackItem) (*ServiceRequest, error) {
+func ParseServiceRequest(item StackItem) (*ContractServiceRequest, error) {
 	if item.Type != "Array" && item.Type != "Struct" {
 		return nil, fmt.Errorf("expected Array or Struct, got %s", item.Type)
 	}
@@ -101,28 +101,28 @@ func parseServiceRequest(item StackItem) (*ServiceRequest, error) {
 		return nil, fmt.Errorf("expected at least 12 items, got %d", len(items))
 	}
 
-	id, _ := parseInteger(items[0])
-	userContract, _ := parseHash160(items[1])
-	payer, _ := parseHash160(items[2])
-	serviceType, _ := parseStringFromItem(items[3])
-	serviceContract, _ := parseHash160(items[4])
-	payload, _ := parseByteArray(items[5])
-	callbackMethod, _ := parseStringFromItem(items[6])
-	status, _ := parseInteger(items[7])
-	fee, _ := parseInteger(items[8])
-	createdAt, _ := parseInteger(items[9])
-	result, _ := parseByteArray(items[10])
-	errorStr, _ := parseStringFromItem(items[11])
+	id, _ := ParseInteger(items[0])
+	userContract, _ := ParseHash160(items[1])
+	payer, _ := ParseHash160(items[2])
+	serviceType, _ := ParseStringFromItem(items[3])
+	serviceContract, _ := ParseHash160(items[4])
+	payload, _ := ParseByteArray(items[5])
+	callbackMethod, _ := ParseStringFromItem(items[6])
+	status, _ := ParseInteger(items[7])
+	fee, _ := ParseInteger(items[8])
+	createdAt, _ := ParseInteger(items[9])
+	result, _ := ParseByteArray(items[10])
+	errorStr, _ := ParseStringFromItem(items[11])
 
 	var completedAt uint64
 	if len(items) > 12 {
-		ca, _ := parseInteger(items[12])
+		ca, _ := ParseInteger(items[12])
 		if ca != nil {
 			completedAt = ca.Uint64()
 		}
 	}
 
-	return &ServiceRequest{
+	return &ContractServiceRequest{
 		ID:              id,
 		UserContract:    userContract,
 		Payer:           payer,
@@ -139,7 +139,7 @@ func parseServiceRequest(item StackItem) (*ServiceRequest, error) {
 	}, nil
 }
 
-func parseMixerPool(item StackItem) (*MixerPool, error) {
+func ParseMixerPool(item StackItem) (*MixerPool, error) {
 	if item.Type != "Array" && item.Type != "Struct" {
 		return nil, fmt.Errorf("expected Array or Struct, got %s", item.Type)
 	}
@@ -153,9 +153,9 @@ func parseMixerPool(item StackItem) (*MixerPool, error) {
 		return nil, fmt.Errorf("expected at least 3 items, got %d", len(items))
 	}
 
-	denomination, _ := parseInteger(items[0])
-	leafCount, _ := parseInteger(items[1])
-	active, _ := parseBoolean(items[2])
+	denomination, _ := ParseInteger(items[0])
+	leafCount, _ := ParseInteger(items[1])
+	active, _ := ParseBoolean(items[2])
 
 	return &MixerPool{
 		Denomination: denomination,
@@ -164,7 +164,7 @@ func parseMixerPool(item StackItem) (*MixerPool, error) {
 	}, nil
 }
 
-func parsePriceData(item StackItem) (*PriceData, error) {
+func ParsePriceData(item StackItem) (*PriceData, error) {
 	if item.Type != "Array" && item.Type != "Struct" {
 		return nil, fmt.Errorf("expected Array or Struct, got %s", item.Type)
 	}
@@ -178,11 +178,11 @@ func parsePriceData(item StackItem) (*PriceData, error) {
 		return nil, fmt.Errorf("expected at least 5 items, got %d", len(items))
 	}
 
-	feedID, _ := parseStringFromItem(items[0])
-	price, _ := parseInteger(items[1])
-	decimals, _ := parseInteger(items[2])
-	timestamp, _ := parseInteger(items[3])
-	updatedBy, _ := parseHash160(items[4])
+	feedID, _ := ParseStringFromItem(items[0])
+	price, _ := ParseInteger(items[1])
+	decimals, _ := ParseInteger(items[2])
+	timestamp, _ := ParseInteger(items[3])
+	updatedBy, _ := ParseHash160(items[4])
 
 	return &PriceData{
 		FeedID:    feedID,
@@ -193,7 +193,7 @@ func parsePriceData(item StackItem) (*PriceData, error) {
 	}, nil
 }
 
-func parseFeedConfig(item StackItem) (*FeedConfig, error) {
+func ParseFeedConfig(item StackItem) (*ContractFeedConfig, error) {
 	if item.Type != "Array" && item.Type != "Struct" {
 		return nil, fmt.Errorf("expected Array or Struct, got %s", item.Type)
 	}
@@ -207,13 +207,13 @@ func parseFeedConfig(item StackItem) (*FeedConfig, error) {
 		return nil, fmt.Errorf("expected at least 5 items, got %d", len(items))
 	}
 
-	feedID, _ := parseStringFromItem(items[0])
-	description, _ := parseStringFromItem(items[1])
-	decimals, _ := parseInteger(items[2])
-	active, _ := parseBoolean(items[3])
-	createdAt, _ := parseInteger(items[4])
+	feedID, _ := ParseStringFromItem(items[0])
+	description, _ := ParseStringFromItem(items[1])
+	decimals, _ := ParseInteger(items[2])
+	active, _ := ParseBoolean(items[3])
+	createdAt, _ := ParseInteger(items[4])
 
-	return &FeedConfig{
+	return &ContractFeedConfig{
 		FeedID:      feedID,
 		Description: description,
 		Decimals:    decimals,
@@ -222,7 +222,7 @@ func parseFeedConfig(item StackItem) (*FeedConfig, error) {
 	}, nil
 }
 
-func parseTrigger(item StackItem) (*Trigger, error) {
+func ParseTrigger(item StackItem) (*Trigger, error) {
 	if item.Type != "Array" && item.Type != "Struct" {
 		return nil, fmt.Errorf("expected Array or Struct, got %s", item.Type)
 	}
@@ -236,20 +236,20 @@ func parseTrigger(item StackItem) (*Trigger, error) {
 		return nil, fmt.Errorf("expected at least 14 items, got %d", len(items))
 	}
 
-	triggerID, _ := parseInteger(items[0])
-	requestID, _ := parseInteger(items[1])
-	owner, _ := parseHash160(items[2])
-	targetContract, _ := parseHash160(items[3])
-	callbackMethod, _ := parseStringFromItem(items[4])
-	triggerType, _ := parseInteger(items[5])
-	condition, _ := parseStringFromItem(items[6])
-	callbackData, _ := parseByteArray(items[7])
-	maxExecutions, _ := parseInteger(items[8])
-	executionCount, _ := parseInteger(items[9])
-	status, _ := parseInteger(items[10])
-	createdAt, _ := parseInteger(items[11])
-	lastExecutedAt, _ := parseInteger(items[12])
-	expiresAt, _ := parseInteger(items[13])
+	triggerID, _ := ParseInteger(items[0])
+	requestID, _ := ParseInteger(items[1])
+	owner, _ := ParseHash160(items[2])
+	targetContract, _ := ParseHash160(items[3])
+	callbackMethod, _ := ParseStringFromItem(items[4])
+	triggerType, _ := ParseInteger(items[5])
+	condition, _ := ParseStringFromItem(items[6])
+	callbackData, _ := ParseByteArray(items[7])
+	maxExecutions, _ := ParseInteger(items[8])
+	executionCount, _ := ParseInteger(items[9])
+	status, _ := ParseInteger(items[10])
+	createdAt, _ := ParseInteger(items[11])
+	lastExecutedAt, _ := ParseInteger(items[12])
+	expiresAt, _ := ParseInteger(items[13])
 
 	return &Trigger{
 		TriggerID:      triggerID,
@@ -269,7 +269,7 @@ func parseTrigger(item StackItem) (*Trigger, error) {
 	}, nil
 }
 
-func parseExecutionRecord(item StackItem) (*ExecutionRecord, error) {
+func ParseExecutionRecord(item StackItem) (*ExecutionRecord, error) {
 	if item.Type != "Array" && item.Type != "Struct" {
 		return nil, fmt.Errorf("expected Array or Struct, got %s", item.Type)
 	}
@@ -283,11 +283,11 @@ func parseExecutionRecord(item StackItem) (*ExecutionRecord, error) {
 		return nil, fmt.Errorf("expected at least 5 items, got %d", len(items))
 	}
 
-	triggerID, _ := parseInteger(items[0])
-	executionNumber, _ := parseInteger(items[1])
-	timestamp, _ := parseInteger(items[2])
-	success, _ := parseBoolean(items[3])
-	executedBy, _ := parseHash160(items[4])
+	triggerID, _ := ParseInteger(items[0])
+	executionNumber, _ := ParseInteger(items[1])
+	timestamp, _ := ParseInteger(items[2])
+	success, _ := ParseBoolean(items[3])
+	executedBy, _ := ParseHash160(items[4])
 
 	return &ExecutionRecord{
 		TriggerID:       triggerID,

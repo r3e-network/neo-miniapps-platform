@@ -38,7 +38,7 @@ func (g *GatewayContract) GetAdmin(ctx context.Context) (string, error) {
 	if len(result.Stack) == 0 {
 		return "", fmt.Errorf("no result")
 	}
-	return parseHash160(result.Stack[0])
+	return ParseHash160(result.Stack[0])
 }
 
 // IsTEEAccount checks if an account is a registered TEE account.
@@ -54,7 +54,7 @@ func (g *GatewayContract) IsTEEAccount(ctx context.Context, account string) (boo
 	if len(result.Stack) == 0 {
 		return false, fmt.Errorf("no result")
 	}
-	return parseBoolean(result.Stack[0])
+	return ParseBoolean(result.Stack[0])
 }
 
 // GetTEEPublicKey returns the TEE public key for a TEE account.
@@ -70,7 +70,7 @@ func (g *GatewayContract) GetTEEPublicKey(ctx context.Context, teeAccount string
 	if len(result.Stack) == 0 {
 		return nil, fmt.Errorf("no result")
 	}
-	return parseByteArray(result.Stack[0])
+	return ParseByteArray(result.Stack[0])
 }
 
 // GetServiceContract returns a registered service contract hash.
@@ -86,7 +86,7 @@ func (g *GatewayContract) GetServiceContract(ctx context.Context, serviceType st
 	if len(result.Stack) == 0 {
 		return "", fmt.Errorf("no result")
 	}
-	return parseHash160(result.Stack[0])
+	return ParseHash160(result.Stack[0])
 }
 
 // GetServiceFee returns the fee for a service type.
@@ -106,7 +106,7 @@ func (g *GatewayContract) GetServiceFee(ctx context.Context, serviceType string)
 	if len(result.Stack) == 0 {
 		return nil, fmt.Errorf("no result")
 	}
-	return parseInteger(result.Stack[0])
+	return ParseInteger(result.Stack[0])
 }
 
 // BalanceOf returns user balance in the gateway.
@@ -126,11 +126,11 @@ func (g *GatewayContract) BalanceOf(ctx context.Context, account string) (*big.I
 	if len(result.Stack) == 0 {
 		return nil, fmt.Errorf("no result")
 	}
-	return parseInteger(result.Stack[0])
+	return ParseInteger(result.Stack[0])
 }
 
 // GetRequest returns a service request by ID.
-func (g *GatewayContract) GetRequest(ctx context.Context, requestID *big.Int) (*ServiceRequest, error) {
+func (g *GatewayContract) GetRequest(ctx context.Context, requestID *big.Int) (*ContractServiceRequest, error) {
 	params := []ContractParam{NewIntegerParam(requestID)}
 	result, err := g.client.InvokeFunction(ctx, g.contractHash, "getRequest", params)
 	if err != nil {
@@ -142,7 +142,7 @@ func (g *GatewayContract) GetRequest(ctx context.Context, requestID *big.Int) (*
 	if len(result.Stack) == 0 {
 		return nil, fmt.Errorf("no result")
 	}
-	return parseServiceRequest(result.Stack[0])
+	return ParseServiceRequest(result.Stack[0])
 }
 
 // IsPaused returns whether the contract is paused.
@@ -157,5 +157,5 @@ func (g *GatewayContract) IsPaused(ctx context.Context) (bool, error) {
 	if len(result.Stack) == 0 {
 		return false, fmt.Errorf("no result")
 	}
-	return parseBoolean(result.Stack[0])
+	return ParseBoolean(result.Stack[0])
 }

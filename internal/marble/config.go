@@ -13,7 +13,7 @@ import (
 type CommonConfig struct {
 	// Core dependencies
 	Marble *Marble
-	DB     *database.Repository
+	DB     database.RepositoryInterface
 
 	// Chain dependencies (optional, for services that interact with chain)
 	ChainClient   *chain.Client

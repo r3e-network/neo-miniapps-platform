@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/marble"
-	"github.com/R3E-Network/service_layer/services/accountpool"
-	"github.com/R3E-Network/service_layer/services/mixer"
+	accountpool "github.com/R3E-Network/service_layer/services/accountpool/marble"
+	mixer "github.com/R3E-Network/service_layer/services/mixer/marble"
 )
 
 // TestMixerAccountPoolIntegration tests the integration between Mixer and AccountPool services.
@@ -101,9 +101,9 @@ func TestAccountPoolClientIntegration(t *testing.T) {
 			count = 1
 		}
 
-		accounts := make([]mixer.AccountInfo, count)
+		accounts := make([]accountpool.AccountInfo, count)
 		for i := 0; i < count; i++ {
-			accounts[i] = mixer.AccountInfo{
+			accounts[i] = accountpool.AccountInfo{
 				ID:         "mock-acc-" + string(rune('a'+i)),
 				Address:    "NMockAddress" + string(rune('A'+i)),
 				Balance:    1000000,
@@ -116,7 +116,7 @@ func TestAccountPoolClientIntegration(t *testing.T) {
 			}
 		}
 
-		resp := mixer.RequestAccountsResponse{
+		resp := accountpool.RequestAccountsResponse{
 			Accounts: accounts,
 			LockID:   "mock-lock-123",
 		}
@@ -348,11 +348,11 @@ func TestE2EServiceCoordination(t *testing.T) {
 		serviceID, _ := input["service_id"].(string)
 		count := int(input["count"].(float64))
 
-		accounts := make([]mixer.AccountInfo, count)
+		accounts := make([]accountpool.AccountInfo, count)
 		for i := 0; i < count; i++ {
 			accID := fmt.Sprintf("acc-%d", len(lockedAccounts)+i)
 			lockedAccounts[accID] = serviceID
-			accounts[i] = mixer.AccountInfo{
+			accounts[i] = accountpool.AccountInfo{
 				ID:       accID,
 				Address:  "NAddr" + accID,
 				Balance:  1000000,
@@ -360,7 +360,7 @@ func TestE2EServiceCoordination(t *testing.T) {
 			}
 		}
 
-		json.NewEncoder(w).Encode(mixer.RequestAccountsResponse{
+		json.NewEncoder(w).Encode(accountpool.RequestAccountsResponse{
 			Accounts: accounts,
 			LockID:   "lock-" + serviceID,
 		})

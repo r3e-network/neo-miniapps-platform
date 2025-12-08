@@ -276,35 +276,6 @@ func TestPriceFeedJSON(t *testing.T) {
 	}
 }
 
-func TestAutomationTriggerJSON(t *testing.T) {
-	trigger := AutomationTrigger{
-		ID:          "trigger-123",
-		UserID:      "user-456",
-		Name:        "Daily Report",
-		TriggerType: "cron",
-		Schedule:    "0 0 * * *",
-		Action:      json.RawMessage(`{"type":"webhook","url":"https://example.com"}`),
-		Enabled:     true,
-	}
-
-	data, err := json.Marshal(trigger)
-	if err != nil {
-		t.Fatalf("Marshal error: %v", err)
-	}
-
-	var decoded AutomationTrigger
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		t.Fatalf("Unmarshal error: %v", err)
-	}
-
-	if decoded.TriggerType != trigger.TriggerType {
-		t.Errorf("TriggerType = %s, want %s", decoded.TriggerType, trigger.TriggerType)
-	}
-	if decoded.Enabled != trigger.Enabled {
-		t.Errorf("Enabled = %v, want %v", decoded.Enabled, trigger.Enabled)
-	}
-}
-
 func TestGasBankAccountJSON(t *testing.T) {
 	account := GasBankAccount{
 		ID:       "account-123",
@@ -523,53 +494,6 @@ func TestRepositoryGetGasBankAccount(t *testing.T) {
 
 	if account.Balance != 1000000 {
 		t.Errorf("Balance = %d, want 1000000", account.Balance)
-	}
-}
-
-func TestRepositoryGetAutomationTriggers(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]AutomationTrigger{
-			{ID: "trigger-1", Name: "Daily Report"},
-			{ID: "trigger-2", Name: "Weekly Summary"},
-		})
-	}))
-	defer server.Close()
-
-	client, _ := NewClient(Config{URL: server.URL, ServiceKey: "test-key"})
-	repo := NewRepository(client)
-
-	ctx := context.Background()
-	triggers, err := repo.GetAutomationTriggers(ctx, "user-123")
-	if err != nil {
-		t.Fatalf("GetAutomationTriggers() error = %v", err)
-	}
-
-	if len(triggers) != 2 {
-		t.Errorf("len(triggers) = %d, want 2", len(triggers))
-	}
-}
-
-func TestRepositoryGetPendingTriggers(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]AutomationTrigger{
-			{ID: "trigger-1", Enabled: true},
-		})
-	}))
-	defer server.Close()
-
-	client, _ := NewClient(Config{URL: server.URL, ServiceKey: "test-key"})
-	repo := NewRepository(client)
-
-	ctx := context.Background()
-	triggers, err := repo.GetPendingTriggers(ctx)
-	if err != nil {
-		t.Fatalf("GetPendingTriggers() error = %v", err)
-	}
-
-	if len(triggers) != 1 {
-		t.Errorf("len(triggers) = %d, want 1", len(triggers))
 	}
 }
 

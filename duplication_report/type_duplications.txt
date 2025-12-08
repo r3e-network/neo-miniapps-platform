@@ -1,0 +1,102 @@
+=== STRUCT DUPLICATIONS ===
+
+[DUPLICATE] AccountInfo (2 occurrences):
+  ./services/accountpool/types.go:8
+  ./services/mixer/pool.go:40
+
+[DUPLICATE] Service (9 occurrences):
+  ./services/confidential/confidential.go:46
+  ./services/accountpool/service.go:38
+  ./services/automation/automation_service.go:46
+  ./services/secrets/service.go:35
+  ./services/vrf/vrf.go:104
+  ./services/datafeeds/datafeeds.go:46
+  ./services/oracle/service.go:65
+  ./services/mixer/service.go:99
+  ./internal/marble/service.go:17
+
+[DUPLICATE] PoolAccount (2 occurrences):
+  ./services/mixer/types.go:25
+  ./internal/database/supabase_accountpool.go:11
+
+[DUPLICATE] PriceFeed (2 occurrences):
+  ./test/contract/user_contract_test.go:317
+  ./internal/database/supabase_models.go:70
+
+[DUPLICATE] ListAccountsResponse (2 occurrences):
+  ./services/accountpool/types.go:108
+  ./services/mixer/pool.go:68
+
+[DUPLICATE] RPCResponse (3 occurrences):
+  ./deploy/testnet/deployer.go:92
+  ./test/fairy/fairy.go:48
+  ./internal/chain/client.go:69
+
+[DUPLICATE] DeploymentResult (2 occurrences):
+  ./deploy/testnet/deployer.go:43
+  ./cmd/deploy-fairy/main.go:31
+
+[DUPLICATE] RPCError (3 occurrences):
+  ./deploy/testnet/deployer.go:99
+  ./test/fairy/fairy.go:56
+  ./internal/chain/client.go:77
+
+[DUPLICATE] PoolInfoResponse (2 occurrences):
+  ./services/accountpool/types.go:93
+  ./services/mixer/pool.go:59
+
+[DUPLICATE] FeedConfig (2 occurrences):
+  ./services/datafeeds/config.go:34
+  ./internal/chain/contracts_datafeeds.go:40
+
+[DUPLICATE] Config (11 occurrences):
+  ./services/confidential/confidential.go:52
+  ./services/accountpool/service.go:53
+  ./services/automation/automation_service.go:69
+  ./services/secrets/service.go:50
+  ./services/vrf/vrf.go:125
+  ./services/datafeeds/datafeeds.go:74
+  ./services/oracle/service.go:74
+  ./services/mixer/service.go:147
+  ./internal/marble/marble.go:44
+  ./internal/database/supabase_client.go:25
+  ./internal/chain/client.go:30
+
+[DUPLICATE] RPCRequest (3 occurrences):
+  ./deploy/testnet/deployer.go:85
+  ./test/fairy/fairy.go:40
+  ./internal/chain/client.go:61
+
+[DUPLICATE] CreateRequestInput (2 occurrences):
+  ./services/vrf/vrf.go:428
+  ./services/mixer/types.go:83
+
+[DUPLICATE] StackItem (3 occurrences):
+  ./deploy/testnet/deployer.go:195
+  ./test/fairy/fairy.go:248
+  ./internal/chain/client.go:215
+
+[DUPLICATE] DeployedContract (3 occurrences):
+  ./deploy/testnet/deployer.go:35
+  ./cmd/deploy-fairy/main.go:24
+  ./test/contract/neoexpress.go:30
+
+[DUPLICATE] InvokeResult (3 occurrences):
+  ./deploy/testnet/deployer.go:187
+  ./test/fairy/fairy.go:239
+  ./internal/chain/client.go:205
+
+[DUPLICATE] ServiceRequest (2 occurrences):
+  ./internal/database/supabase_models.go:56
+  ./internal/chain/contracts_common.go:54
+
+[DUPLICATE] RequestAccountsResponse (2 occurrences):
+  ./services/accountpool/types.go:28
+  ./services/mixer/pool.go:53
+
+[DUPLICATE] Client (3 occurrences):
+  ./test/fairy/fairy.go:21
+  ./internal/database/supabase_client.go:17
+  ./internal/chain/client.go:22
+
+=== INTERFACE DUPLICATIONS ===

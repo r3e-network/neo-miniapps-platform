@@ -4,12 +4,32 @@ The `database` module provides Supabase (PostgreSQL) integration for the Service
 
 ## Overview
 
-This module handles all database operations including:
+This module handles **shared** database operations including:
 
 - Supabase REST API client
-- Data models for all services
+- Core data models (User, APIKey, Session, etc.)
 - Repository pattern for data access
 - OAuth and session management
+- GasBank operations
+
+**Note:** Service-specific database operations have been moved to each service's own `supabase/` subdirectory. See [Service-Specific Repositories](#service-specific-repositories) below.
+
+## Architecture
+
+```
+internal/database/           # Shared database infrastructure
+├── supabase_client.go       # Supabase HTTP client
+├── supabase_repository.go   # Base repository implementation
+├── repository_interface.go  # Interface definitions
+├── supabase_models.go       # Shared model definitions
+├── errors.go                # Error definitions
+├── supabase_*.go            # Shared operations (wallets, apikeys, sessions, oauth, gasbank, secrets)
+└── mock_*.go                # Test mocks
+
+services/*/supabase/         # Service-specific database operations
+├── repository.go            # Service-specific repository interface
+└── models.go                # Service-specific data models
+```
 
 ## Components
 
@@ -18,7 +38,7 @@ This module handles all database operations including:
 Main client for Supabase REST API communication.
 
 ```go
-client, err := database.NewSupabaseClient(database.SupabaseConfig{
+client, err := database.NewClient(database.Config{
     URL:        "https://your-project.supabase.co",
     ServiceKey: "your-service-key",
 })
@@ -42,66 +62,89 @@ user, err := repo.GetUserByAddress(ctx, "NAddr123...")
 
 ## Data Models (`supabase_models.go`)
 
-### Core Models
+### Core Models (Shared)
 
 | Model | Description |
 |-------|-------------|
 | `User` | User account information |
-| `Wallet` | User wallet addresses |
+| `UserWallet` | User wallet addresses |
 | `APIKey` | API key for authentication |
-| `Session` | User session data |
-
-### Service-Specific Models
-
-| Model | Service | Description |
-|-------|---------|-------------|
-| `VRFRequest` | VRF | Random number requests |
-| `MixerRequestRecord` | Mixer | Mix request data |
-| `AutomationTrigger` | Automation | Trigger definitions |
-| `AutomationExecution` | Automation | Execution history |
-| `GasBankAccount` | GasBank | Gas balance tracking |
-| `Secret` | Secrets | Encrypted secrets |
+| `UserSession` | User session data |
+| `Secret` | Encrypted secrets |
+| `GasBankAccount` | Gas balance tracking |
+| `GasBankTransaction` | Gas transaction history |
+| `DepositRequest` | Deposit request tracking |
+| `ServiceRequest` | Service request tracking |
+| `PriceFeed` | Price feed data |
+| `OAuthProvider` | OAuth provider data |
 
 ## Service-Specific Repositories
 
-### VRF (`supabase_vrf.go`)
+Service-specific database operations have been moved to each service's own `supabase/` package following the **Interface Segregation Principle (ISP)**.
+
+### VRF Service
 
 ```go
-// Create VRF request
-err := repo.CreateVRFRequest(ctx, &database.VRFRequest{...})
+import vrfsupabase "github.com/R3E-Network/service_layer/services/vrf/supabase"
 
-// Get pending requests
-requests, err := repo.GetPendingVRFRequests(ctx)
+// Create service-specific repository
+vrfRepo := vrfsupabase.NewRepository(baseRepo)
 
-// Update request status
-err := repo.UpdateVRFRequestStatus(ctx, requestID, "fulfilled")
+// Use service-specific methods
+err := vrfRepo.Create(ctx, &vrfsupabase.Request{...})
+req, err := vrfRepo.GetByRequestID(ctx, "vrf-123")
+requests, err := vrfRepo.ListByStatus(ctx, "pending")
 ```
 
-### Automation (`supabase_automation.go`)
+### Mixer Service
 
 ```go
-// Create trigger
-err := repo.CreateAutomationTrigger(ctx, &database.AutomationTrigger{...})
+import mixersupabase "github.com/R3E-Network/service_layer/services/mixer/supabase"
 
-// Get user triggers
-triggers, err := repo.GetAutomationTriggers(ctx, userID)
+mixerRepo := mixersupabase.NewRepository(baseRepo)
 
-// Log execution
-err := repo.CreateAutomationExecution(ctx, &database.AutomationExecution{...})
+err := mixerRepo.Create(ctx, &mixersupabase.Request{...})
+req, err := mixerRepo.GetByID(ctx, "mix-123")
+requests, err := mixerRepo.ListByStatus(ctx, "mixing")
 ```
 
-### Mixer (`mixer.go`)
+### Automation Service
 
 ```go
-// Create mix request
-err := repo.CreateMixerRequest(ctx, &database.MixerRequestRecord{...})
+import automationsupabase "github.com/R3E-Network/service_layer/services/automation/supabase"
 
-// Get request by ID
-request, err := repo.GetMixerRequest(ctx, requestID)
+automationRepo := automationsupabase.NewRepository(baseRepo)
 
-// List requests by status
-requests, err := repo.ListMixerRequestsByStatus(ctx, "mixing")
+err := automationRepo.CreateTrigger(ctx, &automationsupabase.Trigger{...})
+triggers, err := automationRepo.GetTriggers(ctx, userID)
+err := automationRepo.CreateExecution(ctx, &automationsupabase.Execution{...})
 ```
+
+### AccountPool Service
+
+```go
+import accountpoolsupabase "github.com/R3E-Network/service_layer/services/accountpool/supabase"
+
+poolRepo := accountpoolsupabase.NewRepository(baseRepo)
+
+err := poolRepo.Create(ctx, &accountpoolsupabase.Account{...})
+accounts, err := poolRepo.ListAvailable(ctx, 10)
+err := poolRepo.Update(ctx, account)
+```
+
+### Secrets Service
+
+```go
+import secretssupabase "github.com/R3E-Network/service_layer/services/secrets/supabase"
+
+secretsRepo := secretssupabase.NewRepository(baseRepo)
+
+err := secretsRepo.CreateSecret(ctx, &secretssupabase.Secret{...})
+secrets, err := secretsRepo.GetSecrets(ctx, userID)
+err := secretsRepo.SetAllowedServices(ctx, userID, secretName, []string{"vrf", "automation"})
+```
+
+## Shared Operations
 
 ### GasBank (`supabase_gasbank.go`)
 
@@ -110,58 +153,61 @@ requests, err := repo.ListMixerRequestsByStatus(ctx, "mixing")
 account, err := repo.GetOrCreateGasBankAccount(ctx, userID)
 
 // Update balance
-err := repo.UpdateGasBankBalance(ctx, userID, newBalance)
+err := repo.UpdateGasBankBalance(ctx, userID, newBalance, reserved)
+
+// Create transaction
+err := repo.CreateGasBankTransaction(ctx, &database.GasBankTransaction{...})
 ```
 
-### Account Pool (`accountpool.go`)
+### Authentication
+
+#### OAuth (`supabase_oauth.go`)
 
 ```go
-// Get pool accounts
-accounts, err := repo.GetPoolAccounts(ctx, serviceID)
+// Link OAuth provider
+err := repo.LinkOAuthProvider(ctx, &database.OAuthProvider{...})
 
-// Lock account
-err := repo.LockPoolAccount(ctx, accountID, serviceID)
-
-// Release account
-err := repo.ReleasePoolAccount(ctx, accountID)
+// Get linked providers
+providers, err := repo.GetOAuthProviders(ctx, userID)
 ```
 
-## Authentication
-
-### OAuth (`supabase_oauth.go`)
-
-```go
-// Get OAuth URL
-url := repo.GetOAuthURL("google", redirectURL)
-
-// Exchange code for session
-session, err := repo.ExchangeOAuthCode(ctx, code)
-```
-
-### Sessions (`supabase_sessions.go`)
+#### Sessions (`supabase_sessions.go`)
 
 ```go
 // Create session
-session, err := repo.CreateSession(ctx, userID)
+session, err := repo.CreateSession(ctx, &database.UserSession{...})
 
 // Validate session
-valid, err := repo.ValidateSession(ctx, sessionToken)
+session, err := repo.GetSessionByToken(ctx, tokenHash)
 
 // Revoke session
-err := repo.RevokeSession(ctx, sessionToken)
+err := repo.DeleteSession(ctx, sessionID)
 ```
 
-### API Keys (`supabase_apikeys.go`)
+#### API Keys (`supabase_apikeys.go`)
 
 ```go
 // Create API key
-apiKey, err := repo.CreateAPIKey(ctx, userID, name)
+err := repo.CreateAPIKey(ctx, &database.APIKey{...})
 
 // Validate API key
-user, err := repo.ValidateAPIKey(ctx, apiKeyHash)
+apiKey, err := repo.GetAPIKeyByHash(ctx, keyHash)
 
 // List user's API keys
-keys, err := repo.ListAPIKeys(ctx, userID)
+keys, err := repo.GetAPIKeys(ctx, userID)
+```
+
+### Wallets (`supabase_wallets.go`)
+
+```go
+// Add wallet
+err := repo.CreateWallet(ctx, &database.UserWallet{...})
+
+// Get user wallets
+wallets, err := repo.GetWallets(ctx, userID)
+
+// Set primary wallet
+err := repo.SetPrimaryWallet(ctx, userID, walletID)
 ```
 
 ## Testing
@@ -170,7 +216,18 @@ keys, err := repo.ListAPIKeys(ctx, userID)
 go test ./internal/database/... -v
 ```
 
-Current test coverage: **17.1%**
+### Mock Repository
+
+```go
+// Create mock for testing
+mockRepo := database.NewMockRepository()
+
+// Inject errors for testing error paths
+mockRepo.ErrorOnNextCall = errors.New("database error")
+
+// Reset mock state
+mockRepo.Reset()
+```
 
 ## Environment Variables
 
@@ -178,3 +235,20 @@ Current test coverage: **17.1%**
 |----------|-------------|
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_SERVICE_KEY` | Supabase service role key |
+
+## Migration Guide
+
+If you have code using the old service-specific methods from `database.RepositoryInterface`, migrate to the new service-specific packages:
+
+| Old (Deprecated) | New |
+|------------------|-----|
+| `repo.CreateVRFRequest()` | `vrfRepo.Create()` |
+| `repo.GetVRFRequest()` | `vrfRepo.GetByRequestID()` |
+| `repo.CreateMixerRequest()` | `mixerRepo.Create()` |
+| `repo.GetMixerRequest()` | `mixerRepo.GetByID()` |
+| `repo.CreateAutomationTrigger()` | `automationRepo.CreateTrigger()` |
+| `repo.GetAutomationTriggers()` | `automationRepo.GetTriggers()` |
+| `repo.CreatePoolAccount()` | `poolRepo.Create()` |
+| `repo.GetPoolAccount()` | `poolRepo.GetByID()` |
+| `repo.GetSecretPolicies()` | `secretsRepo.GetAllowedServices()` |
+| `repo.SetSecretPolicies()` | `secretsRepo.SetAllowedServices()` |

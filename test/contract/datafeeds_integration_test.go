@@ -13,8 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/R3E-Network/service_layer/internal/database"
 	"github.com/R3E-Network/service_layer/internal/marble"
-	"github.com/R3E-Network/service_layer/services/datafeeds"
+	datafeeds "github.com/R3E-Network/service_layer/services/datafeeds/marble"
 )
 
 // TestDataFeedsPriceFetching tests that datafeeds can fetch prices from Chainlink and Binance.
@@ -29,8 +30,10 @@ func TestDataFeedsPriceFetching(t *testing.T) {
 	}
 	m.SetTestSecret("DATAFEEDS_SIGNING_KEY", []byte("test-signing-key-32-bytes-long!!"))
 
+	mockDB := database.NewMockRepository()
 	svc, err := datafeeds.New(datafeeds.Config{
 		Marble:      m,
+		DB:          mockDB,
 		ArbitrumRPC: "https://arb1.arbitrum.io/rpc",
 	})
 	if err != nil {
@@ -125,7 +128,7 @@ func TestDataFeedsHTTPHandler(t *testing.T) {
 		},
 		UpdateInterval: 60 * time.Second,
 	}
-	svc, _ := datafeeds.New(datafeeds.Config{Marble: m, FeedsConfig: mockConfig})
+	svc, _ := datafeeds.New(datafeeds.Config{Marble: m, DB: database.NewMockRepository(), FeedsConfig: mockConfig})
 
 	t.Run("health endpoint", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/health", nil)
@@ -196,7 +199,7 @@ func TestDataFeedsSignatureVerification(t *testing.T) {
 		},
 		UpdateInterval: 60 * time.Second,
 	}
-	svc, _ := datafeeds.New(datafeeds.Config{Marble: m, FeedsConfig: mockConfig})
+	svc, _ := datafeeds.New(datafeeds.Config{Marble: m, DB: database.NewMockRepository(), FeedsConfig: mockConfig})
 
 	ctx := context.Background()
 	price, err := svc.GetPrice(ctx, "BTC/USD")
@@ -246,8 +249,10 @@ func TestDataFeedsMultiplePrices(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "datafeeds"})
 	m.SetTestSecret("DATAFEEDS_SIGNING_KEY", []byte("test-signing-key-32-bytes-long!!"))
 
+	mockDB2 := database.NewMockRepository()
 	svc, err := datafeeds.New(datafeeds.Config{
 		Marble:      m,
+		DB:          mockDB2,
 		ArbitrumRPC: "https://arb1.arbitrum.io/rpc",
 	})
 	if err != nil {
@@ -353,7 +358,7 @@ func TestChainlinkDirectFetch(t *testing.T) {
 // TestDataFeedsServiceInfo tests service info methods.
 func TestDataFeedsServiceInfo(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "datafeeds"})
-	svc, _ := datafeeds.New(datafeeds.Config{Marble: m})
+	svc, _ := datafeeds.New(datafeeds.Config{Marble: m, DB: database.NewMockRepository()})
 
 	if svc.ID() != "datafeeds" {
 		t.Errorf("expected ID 'datafeeds', got '%s'", svc.ID())
@@ -387,7 +392,7 @@ func BenchmarkPriceFetching(b *testing.B) {
 		},
 		UpdateInterval: 60 * time.Second,
 	}
-	svc, _ := datafeeds.New(datafeeds.Config{Marble: m, FeedsConfig: mockConfig})
+	svc, _ := datafeeds.New(datafeeds.Config{Marble: m, DB: database.NewMockRepository(), FeedsConfig: mockConfig})
 
 	ctx := context.Background()
 

@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/R3E-Network/service_layer/internal/chain"
 )
 
 const (
@@ -36,33 +38,13 @@ func NewClient(url string) *Client {
 	}
 }
 
-// RPCRequest represents a JSON-RPC request.
-type RPCRequest struct {
-	JSONRPC string        `json:"jsonrpc"`
-	Method  string        `json:"method"`
-	Params  []interface{} `json:"params"`
-	ID      int           `json:"id"`
-}
+// RPC types (RPCRequest, RPCResponse, RPCError) imported from internal/chain package
 
-// RPCResponse represents a JSON-RPC response.
-type RPCResponse struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      int             `json:"id"`
-	Result  json.RawMessage `json:"result,omitempty"`
-	Error   *RPCError       `json:"error,omitempty"`
-}
-
-// RPCError represents a JSON-RPC error.
-type RPCError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}
-
-func (c *Client) call(method string, params ...interface{}) (*RPCResponse, error) {
+func (c *Client) call(method string, params ...interface{}) (*chain.RPCResponse, error) {
 	if params == nil {
 		params = []interface{}{}
 	}
-	req := RPCRequest{
+	req := chain.RPCRequest{
 		JSONRPC: "2.0",
 		Method:  method,
 		Params:  params,
@@ -91,7 +73,7 @@ func (c *Client) call(method string, params ...interface{}) (*RPCResponse, error
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
-	var rpcResp RPCResponse
+	var rpcResp chain.RPCResponse
 	if err := json.Unmarshal(respBody, &rpcResp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
@@ -235,23 +217,10 @@ func (c *Client) VirtualDeploy(sessionID string, nefPath, manifestPath string) (
 	return &result, nil
 }
 
-// InvokeResult represents the result of a contract invocation.
-type InvokeResult struct {
-	Script      string `json:"script"`
-	State       string `json:"state"`
-	GasConsumed string `json:"gasconsumed"`
-	Exception   string `json:"exception,omitempty"`
-	Stack       []StackItem `json:"stack"`
-}
-
-// StackItem represents a stack item.
-type StackItem struct {
-	Type  string      `json:"type"`
-	Value interface{} `json:"value"`
-}
+// InvokeResult and StackItem imported from internal/chain package
 
 // InvokeFunctionWithSession invokes a contract method in a session.
-func (c *Client) InvokeFunctionWithSession(sessionID string, writeSnapshot bool, contractHash, method string, args []interface{}) (*InvokeResult, error) {
+func (c *Client) InvokeFunctionWithSession(sessionID string, writeSnapshot bool, contractHash, method string, args []interface{}) (*chain.InvokeResult, error) {
 	if args == nil {
 		args = []interface{}{}
 	}
@@ -268,7 +237,7 @@ func (c *Client) InvokeFunctionWithSession(sessionID string, writeSnapshot bool,
 		return nil, err
 	}
 
-	var result InvokeResult
+	var result chain.InvokeResult
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		return nil, err
 	}

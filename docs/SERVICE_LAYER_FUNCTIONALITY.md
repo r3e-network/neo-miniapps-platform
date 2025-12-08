@@ -170,6 +170,9 @@ type DirectRandomResponse struct {
 
 #### Workflow
 
+**Privacy-First Fee Model**: User NEVER connects to any known service layer account.
+Fee is deducted from delivery (user receives NetAmount = TotalAmount - ServiceFee).
+
 ```
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
 │    User      │     │ Mixer Service│     │ AccountPool  │     │  Blockchain  │
@@ -178,23 +181,24 @@ type DirectRandomResponse struct {
        │ Request Mix        │                    │                    │
        │ (amount, token)    │                    │                    │
        │───────────────────>│                    │                    │
-       │                    │                    │                    │
-       │ RequestProof       │                    │                    │
-       │<───────────────────│                    │                    │
-       │                    │                    │                    │
-       │ Deposit to GasBank │                    │                    │
-       │────────────────────────────────────────────────────────────>│
-       │                    │                    │                    │
        │                    │ Lock Pool Account  │                    │
        │                    │───────────────────>│                    │
+       │ RequestProof +     │                    │                    │
+       │ Deposit Address    │                    │                    │
+       │<───────────────────│                    │                    │
+       │                    │                    │                    │
+       │ Direct Deposit to Pool Account (NOT gasbank)                 │
+       │ (anonymous, no service layer link)                           │
+       │─────────────────────────────────────────────────────────────>│
        │                    │                    │                    │
        │                    │ Execute Mixing     │                    │
-       │                    │ (multiple hops)    │                    │
+       │                    │ (off-chain hops)   │                    │
        │                    │                    │                    │
        │                    │ Release Account    │                    │
        │                    │───────────────────>│                    │
        │                    │                    │                    │
-       │ Tokens Delivered   │                    │                    │
+       │ NetAmount Delivered│                    │                    │
+       │ (Fee Deducted)     │                    │                    │
        │<───────────────────│                    │                    │
        │                    │                    │                    │
        │ [DISPUTE ONLY]     │                    │                    │

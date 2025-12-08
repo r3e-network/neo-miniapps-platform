@@ -32,6 +32,7 @@ func NewTEEFulfiller(client *Client, gatewayHash string, wallet *Wallet) *TEEFul
 
 // FulfillRequest fulfills a service request via the Gateway contract.
 // This is called by TEE after processing a request.
+// Returns the transaction hash after waiting for execution (2 minute timeout).
 func (t *TEEFulfiller) FulfillRequest(ctx context.Context, requestID *big.Int, result []byte) (string, error) {
 	nonce := t.nextNonce()
 
@@ -50,19 +51,16 @@ func (t *TEEFulfiller) FulfillRequest(ctx context.Context, requestID *big.Int, r
 		NewByteArrayParam(signature),
 	}
 
-	invokeResult, err := t.client.InvokeFunction(ctx, t.gatewayHash, "fulfillRequest", params)
+	txResult, err := t.client.InvokeFunctionAndWait(ctx, t.gatewayHash, "fulfillRequest", params, true)
 	if err != nil {
-		return "", fmt.Errorf("invoke fulfillRequest: %w", err)
+		return "", err
 	}
 
-	if invokeResult.State != "HALT" {
-		return "", fmt.Errorf("fulfillRequest failed: %s", invokeResult.Exception)
-	}
-
-	return invokeResult.Tx, nil
+	return txResult.TxHash, nil
 }
 
 // FailRequest marks a request as failed via the Gateway contract.
+// Returns the transaction hash after waiting for execution (2 minute timeout).
 func (t *TEEFulfiller) FailRequest(ctx context.Context, requestID *big.Int, reason string) (string, error) {
 	nonce := t.nextNonce()
 
@@ -81,36 +79,42 @@ func (t *TEEFulfiller) FailRequest(ctx context.Context, requestID *big.Int, reas
 		NewByteArrayParam(signature),
 	}
 
-	invokeResult, err := t.client.InvokeFunction(ctx, t.gatewayHash, "failRequest", params)
+	txResult, err := t.client.InvokeFunctionAndWait(ctx, t.gatewayHash, "failRequest", params, true)
 	if err != nil {
-		return "", fmt.Errorf("invoke failRequest: %w", err)
+		return "", err
 	}
 
-	if invokeResult.State != "HALT" {
-		return "", fmt.Errorf("failRequest failed: %s", invokeResult.Exception)
-	}
-
-	return invokeResult.Tx, nil
+	return txResult.TxHash, nil
 }
 
-// UpdateMerkleRoot updates the Merkle root for a mixer pool.
-func (t *TEEFulfiller) UpdateMerkleRoot(ctx context.Context, mixerHash string, poolID, newRoot []byte, leafCount *big.Int) (string, error) {
-	params := []ContractParam{
-		NewByteArrayParam(poolID),
-		NewByteArrayParam(newRoot),
-		NewIntegerParam(leafCount),
-	}
+// ResolveDispute submits completion proof to resolve a mixer dispute on-chain.
+// This is called ONLY when a user disputes a mix request.
+// Normal flow has ZERO on-chain transactions.
+// Returns the transaction hash after waiting for execution (2 minute timeout).
+func (t *TEEFulfiller) ResolveDispute(ctx context.Context, mixerHash string, requestHash, outputsHash []byte) (string, error) {
+	nonce := t.nextNonce()
 
-	invokeResult, err := t.client.InvokeFunction(ctx, mixerHash, "updateMerkleRoot", params)
+	message := append(requestHash, outputsHash...)
+	message = append(message, nonce.Bytes()...)
+
+	signature, err := t.wallet.Sign(message)
 	if err != nil {
-		return "", fmt.Errorf("invoke updateMerkleRoot: %w", err)
+		return "", fmt.Errorf("sign dispute resolution: %w", err)
 	}
 
-	if invokeResult.State != "HALT" {
-		return "", fmt.Errorf("updateMerkleRoot failed: %s", invokeResult.Exception)
+	params := []ContractParam{
+		NewByteArrayParam(requestHash),
+		NewByteArrayParam(outputsHash),
+		NewIntegerParam(nonce),
+		NewByteArrayParam(signature),
 	}
 
-	return invokeResult.Tx, nil
+	txResult, err := t.client.InvokeFunctionAndWait(ctx, mixerHash, "resolveDispute", params, true)
+	if err != nil {
+		return "", err
+	}
+
+	return txResult.TxHash, nil
 }
 
 func (t *TEEFulfiller) nextNonce() *big.Int {
@@ -123,6 +127,7 @@ func (t *TEEFulfiller) nextNonce() *big.Int {
 // =============================================================================
 
 // UpdatePrice updates a price feed on-chain (DataFeeds push pattern).
+// Returns the transaction hash after waiting for execution (2 minute timeout).
 func (t *TEEFulfiller) UpdatePrice(ctx context.Context, dataFeedsHash, feedID string, price *big.Int, timestamp uint64) (string, error) {
 	nonce := t.nextNonce()
 
@@ -143,19 +148,16 @@ func (t *TEEFulfiller) UpdatePrice(ctx context.Context, dataFeedsHash, feedID st
 		NewByteArrayParam(signature),
 	}
 
-	invokeResult, err := t.client.InvokeFunction(ctx, dataFeedsHash, "updatePrice", params)
+	txResult, err := t.client.InvokeFunctionAndWait(ctx, dataFeedsHash, "updatePrice", params, true)
 	if err != nil {
-		return "", fmt.Errorf("invoke updatePrice: %w", err)
+		return "", err
 	}
 
-	if invokeResult.State != "HALT" {
-		return "", fmt.Errorf("updatePrice failed: %s", invokeResult.Exception)
-	}
-
-	return invokeResult.Tx, nil
+	return txResult.TxHash, nil
 }
 
 // UpdatePrices batch updates multiple price feeds (DataFeeds push pattern).
+// Returns the transaction hash after waiting for execution (2 minute timeout).
 func (t *TEEFulfiller) UpdatePrices(ctx context.Context, dataFeedsHash string, feedIDs []string, prices []*big.Int, timestamps []uint64) (string, error) {
 	if len(feedIDs) != len(prices) || len(feedIDs) != len(timestamps) {
 		return "", fmt.Errorf("array length mismatch")
@@ -194,19 +196,16 @@ func (t *TEEFulfiller) UpdatePrices(ctx context.Context, dataFeedsHash string, f
 		NewByteArrayParam(signature),
 	}
 
-	invokeResult, err := t.client.InvokeFunction(ctx, dataFeedsHash, "updatePrices", params)
+	txResult, err := t.client.InvokeFunctionAndWait(ctx, dataFeedsHash, "updatePrices", params, true)
 	if err != nil {
-		return "", fmt.Errorf("invoke updatePrices: %w", err)
+		return "", err
 	}
 
-	if invokeResult.State != "HALT" {
-		return "", fmt.Errorf("updatePrices failed: %s", invokeResult.Exception)
-	}
-
-	return invokeResult.Tx, nil
+	return txResult.TxHash, nil
 }
 
 // ExecuteTrigger executes an automation trigger (Automation trigger pattern).
+// Returns the transaction hash after waiting for execution (2 minute timeout).
 func (t *TEEFulfiller) ExecuteTrigger(ctx context.Context, automationHash string, triggerID *big.Int, executionData []byte) (string, error) {
 	nonce := t.nextNonce()
 
@@ -225,16 +224,12 @@ func (t *TEEFulfiller) ExecuteTrigger(ctx context.Context, automationHash string
 		NewByteArrayParam(signature),
 	}
 
-	invokeResult, err := t.client.InvokeFunction(ctx, automationHash, "executeTrigger", params)
+	txResult, err := t.client.InvokeFunctionAndWait(ctx, automationHash, "executeTrigger", params, true)
 	if err != nil {
-		return "", fmt.Errorf("invoke executeTrigger: %w", err)
+		return "", err
 	}
 
-	if invokeResult.State != "HALT" {
-		return "", fmt.Errorf("executeTrigger failed: %s", invokeResult.Exception)
-	}
-
-	return invokeResult.Tx, nil
+	return txResult.TxHash, nil
 }
 
 // =============================================================================

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/marble"
-	"github.com/R3E-Network/service_layer/services/datafeeds"
+	datafeeds "github.com/R3E-Network/service_layer/services/datafeeds/marble"
 )
 
 const (

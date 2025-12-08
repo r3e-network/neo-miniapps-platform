@@ -551,33 +551,43 @@ The Mixer implements an **Off-Chain Mixing with On-Chain Dispute** pattern:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    MIXER FLOW (Off-Chain First, Dispute Only On-Chain)       │
+│         MIXER FLOW (Privacy-First, Off-Chain First, Dispute Only On-Chain)   │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│  1. USER → CLI/API → MIXER SERVICE (direct, NO on-chain)                    │
-│     └── Returns: RequestProof (requestHash + TEE signature)                  │
+│  PRIVACY-FIRST FEE MODEL:                                                    │
+│  User NEVER connects to any known service layer account.                     │
+│  Fee is deducted from delivery (user receives NetAmount = TotalAmount - Fee) │
 │                                                                              │
-│  2. USER → GASBANK (off-chain deposit via Service Layer)                     │
-│     └── Confirm deposit to mixer service                                     │
+│  1. USER → CLI/API → MIXER SERVICE (direct, NO on-chain)                    │
+│     └── Returns: RequestProof + Deposit Address (anonymous pool account)     │
+│                                                                              │
+│  2. USER → DIRECT DEPOSIT to Pool Account on-chain                           │
+│     └── NOT gasbank, NOT any known service layer address                     │
+│     └── Anonymous pool account (no public association with service layer)    │
 │                                                                              │
 │  3. MIXER SERVICE (TEE) processes off-chain:                                 │
 │     ├── Split funds across AccountPool-managed HD-derived accounts           │
 │     ├── Random mixing transactions between pool accounts                     │
-│     └── Deliver to target addresses                                          │
+│     └── Deliver NetAmount to target addresses (fee deducted)                 │
 │                                                                              │
-│  4. MIXER SERVICE generates CompletionProof (stored, NOT submitted)          │
+│  4. FEE HANDLING: ServiceFee stays in pool accounts                          │
+│     └── No explicit fee transfer to any known address                        │
+│                                                                              │
+│  5. MIXER SERVICE generates CompletionProof (stored, NOT submitted)          │
 │     └── CompletionProof = outputsHash + outputTxIDs + TEE signature          │
 │                                                                              │
-│  5. NORMAL PATH: User happy, nothing on-chain, privacy preserved             │
+│  6. NORMAL PATH: User happy, ZERO on-chain link to service layer             │
 │                                                                              │
-│  6. DISPUTE PATH (if mix not done within 7 days):                            │
+│  7. DISPUTE PATH (if mix not done within 7 days):                            │
 │     └── User calls /dispute → Mixer submits CompletionProof on-chain         │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Key Design Principles:**
-- **Off-Chain First**: Normal flow has ZERO on-chain transactions
+- **Privacy-First**: User NEVER transacts with any known service layer account
+- **Implicit Fee**: Fee deducted from delivery, no separate fee transaction
+- **Off-Chain First**: Normal flow has ZERO on-chain link between user and service layer
 - **Proof System**: Both RequestProof (for user) and CompletionProof (for dispute)
 - **Privacy by Default**: On-chain data only exposed during dispute
 - **7-Day Deadline**: User can claim refund via dispute contract if not completed
@@ -631,6 +641,64 @@ listener.Start(ctx)
 4. **Rate limiting** per user/API key
 5. **WebSocket support** for real-time updates
 6. **Cross-chain support** via CCIP integration
+
+## Database Architecture
+
+The Service Layer uses Supabase (PostgreSQL) for persistent storage with a modular, service-specific repository pattern.
+
+### Repository Pattern
+
+Following the **Interface Segregation Principle (ISP)**, each service has its own database package:
+
+```
+internal/database/           # Shared database infrastructure
+├── supabase_client.go       # Supabase HTTP client
+├── supabase_repository.go   # Base repository implementation
+├── repository_interface.go  # Core interface definitions
+├── supabase_models.go       # Shared model definitions (User, APIKey, etc.)
+└── mock_repository.go       # Test mocks
+
+services/*/supabase/         # Service-specific database operations
+├── repository.go            # Service-specific repository interface
+└── models.go                # Service-specific data models
+```
+
+### Service-Specific Packages
+
+| Service | Package | Models |
+|---------|---------|--------|
+| VRF | `services/vrf/supabase` | `Request`, `Response` |
+| Mixer | `services/mixer/supabase` | `Request`, `MixOperation` |
+| Automation | `services/automation/supabase` | `Trigger`, `Execution` |
+| AccountPool | `services/accountpool/supabase` | `Account`, `Lock` |
+| Secrets | `services/secrets/supabase` | `Secret`, `AllowedService` |
+
+### Usage Pattern
+
+```go
+import (
+    "github.com/R3E-Network/service_layer/internal/database"
+    vrfsupabase "github.com/R3E-Network/service_layer/services/vrf/supabase"
+)
+
+// Create base repository
+client, _ := database.NewClient(config)
+baseRepo := database.NewRepository(client)
+
+// Create service-specific repository
+vrfRepo := vrfsupabase.NewRepository(baseRepo)
+
+// Use service-specific methods
+err := vrfRepo.Create(ctx, &vrfsupabase.Request{...})
+req, err := vrfRepo.GetByRequestID(ctx, "vrf-123")
+```
+
+### Design Benefits
+
+1. **Interface Segregation**: Services only depend on interfaces they use
+2. **Encapsulation**: Service-specific models stay within service boundaries
+3. **Testability**: Each service can mock its own repository interface
+4. **Maintainability**: Changes to one service don't affect others
 
 ## Off-Chain Fee Management
 

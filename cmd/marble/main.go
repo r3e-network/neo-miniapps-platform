@@ -14,11 +14,11 @@ import (
 
 	"github.com/R3E-Network/service_layer/internal/database"
 	"github.com/R3E-Network/service_layer/internal/marble"
-	"github.com/R3E-Network/service_layer/services/automation"
-	"github.com/R3E-Network/service_layer/services/confidential"
-	"github.com/R3E-Network/service_layer/services/datafeeds"
-	"github.com/R3E-Network/service_layer/services/mixer"
-	"github.com/R3E-Network/service_layer/services/vrf"
+	automation "github.com/R3E-Network/service_layer/services/automation/marble"
+	confidential "github.com/R3E-Network/service_layer/services/confidential/marble"
+	datafeeds "github.com/R3E-Network/service_layer/services/datafeeds/marble"
+	mixer "github.com/R3E-Network/service_layer/services/mixer/marble"
+	vrf "github.com/R3E-Network/service_layer/services/vrf/marble"
 )
 
 func main() {

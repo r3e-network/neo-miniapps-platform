@@ -1,0 +1,36 @@
+=== CONSTANT DUPLICATIONS ===
+
+[DUPLICATE] DefaultTimeout (3 occurrences):
+  ./services/confidential/confidential.go:36
+  ./deploy/testnet/deployer.go:25
+  ./test/fairy/fairy.go:17
+
+[DUPLICATE] ServiceID (8 occurrences):
+  ./services/confidential/confidential.go:31
+  ./services/accountpool/service.go:23
+  ./services/automation/automation_service.go:25
+  ./services/secrets/service.go:14
+  ./services/vrf/vrf.go:31
+  ./services/datafeeds/datafeeds.go:37
+  ./services/oracle/service.go:20
+  ./services/mixer/service.go:47
+
+[DUPLICATE] ServiceName (8 occurrences):
+  ./services/confidential/confidential.go:32
+  ./services/accountpool/service.go:24
+  ./services/automation/automation_service.go:26
+  ./services/secrets/service.go:15
+  ./services/vrf/vrf.go:32
+  ./services/datafeeds/datafeeds.go:38
+  ./services/oracle/service.go:21
+  ./services/mixer/service.go:48
+
+[DUPLICATE] Version (8 occurrences):
+  ./services/confidential/confidential.go:33
+  ./services/accountpool/service.go:25
+  ./services/automation/automation_service.go:27
+  ./services/secrets/service.go:16
+  ./services/vrf/vrf.go:33
+  ./services/datafeeds/datafeeds.go:39
+  ./services/oracle/service.go:22
+  ./services/mixer/service.go:49

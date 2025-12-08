@@ -173,6 +173,44 @@ This ensures:
 |--------|-------------|
 | `POOL_MASTER_KEY` | HD wallet master key (32 bytes) |
 
+## Data Layer
+
+The AccountPool service uses a service-specific Supabase repository for database operations.
+
+### Package Structure
+
+```
+services/accountpool/
+├── supabase/
+│   ├── repository.go    # AccountPool-specific repository interface
+│   └── models.go        # AccountPool data models (Account, Lock)
+├── accountpool.go       # Service implementation
+└── README.md
+```
+
+### Repository Interface
+
+```go
+import accountpoolsupabase "github.com/R3E-Network/service_layer/services/accountpool/supabase"
+
+// Create repository
+poolRepo := accountpoolsupabase.NewRepository(baseRepo)
+
+// Operations
+err := poolRepo.Create(ctx, &accountpoolsupabase.Account{...})
+accounts, err := poolRepo.ListAvailable(ctx, 10)
+err := poolRepo.Update(ctx, account)
+err := poolRepo.Lock(ctx, accountID, serviceID)
+err := poolRepo.Unlock(ctx, accountID)
+```
+
+### Data Models
+
+| Model | Description |
+|-------|-------------|
+| `Account` | Pool account with address, balance, status |
+| `Lock` | Account lock record with service ID, timestamp |
+
 ## Testing
 
 ```bash
