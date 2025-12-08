@@ -3,41 +3,463 @@
 @tailwind utilities;
 
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color: #213547;
-  background-color: #ffffff;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  color: #ffffff;
+  min-height: 100vh;
 }
 
 body {
   margin: 0;
-  min-width: 320px;
   min-height: 100vh;
+  background: #0a0a1a;
+  background-image:
+    radial-gradient(ellipse at 20% 20%, rgba(120, 80, 200, 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(255, 180, 0, 0.1) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(30, 60, 120, 0.2) 0%, transparent 70%);
+  background-attachment: fixed;
 }
 
 #root {
   min-height: 100vh;
 }
 
-@layer components {
-  .btn-primary {
-    @apply bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold py-3 px-6 rounded-lg shadow-lg hover:from-purple-700 hover:to-pink-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
-  }
+/* ============================================
+   Lottery Ball Styles
+   ============================================ */
+.lottery-ball {
+  @apply w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold;
+  background: linear-gradient(145deg, #ffd700 0%, #f0a500 50%, #d4920a 100%);
+  color: #1a1a2e;
+  box-shadow:
+    0 4px 15px rgba(255, 215, 0, 0.4),
+    inset 0 2px 4px rgba(255, 255, 255, 0.4),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.2);
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.3);
+  transition: all 0.3s ease;
+}
 
-  .btn-secondary {
-    @apply bg-white text-purple-600 font-semibold py-3 px-6 rounded-lg shadow border border-purple-200 hover:bg-purple-50 transition-all duration-200;
-  }
+.lottery-ball:hover {
+  transform: scale(1.05);
+  box-shadow:
+    0 6px 25px rgba(255, 215, 0, 0.5),
+    inset 0 2px 4px rgba(255, 255, 255, 0.4),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.2);
+}
 
-  .card {
-    @apply bg-white rounded-xl shadow-lg p-6;
-  }
+.lottery-ball.mega {
+  background: linear-gradient(145deg, #ff4d6d 0%, #e63950 50%, #c41e3a 100%);
+  color: white;
+  box-shadow:
+    0 4px 15px rgba(230, 57, 80, 0.4),
+    inset 0 2px 4px rgba(255, 255, 255, 0.3),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.2);
+}
 
-  .card-gradient {
-    @apply bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl shadow-lg p-6 text-white;
+.lottery-ball.mega:hover {
+  box-shadow:
+    0 6px 25px rgba(230, 57, 80, 0.5),
+    inset 0 2px 4px rgba(255, 255, 255, 0.3),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.lottery-ball.selected {
+  @apply ring-4 ring-white/60;
+  transform: scale(1.1);
+  animation: ball-bounce 0.5s ease;
+}
+
+.lottery-ball.winning {
+  animation: winning-glow 1.5s ease-in-out infinite;
+}
+
+.lottery-ball.small {
+  @apply w-10 h-10 text-base;
+}
+
+.lottery-ball.large {
+  @apply w-16 h-16 text-2xl;
+}
+
+@keyframes ball-bounce {
+  0%, 100% { transform: scale(1.1); }
+  50% { transform: scale(1.2); }
+}
+
+@keyframes winning-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.6),
+                0 0 40px rgba(255, 215, 0, 0.4),
+                inset 0 2px 4px rgba(255, 255, 255, 0.4);
   }
+  50% {
+    box-shadow: 0 0 30px rgba(255, 215, 0, 0.8),
+                0 0 60px rgba(255, 215, 0, 0.6),
+                inset 0 2px 4px rgba(255, 255, 255, 0.4);
+  }
+}
+
+/* ============================================
+   Number Picker Grid
+   ============================================ */
+.number-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .number-grid {
+    grid-template-columns: repeat(7, 1fr);
+  }
+}
+
+.number-cell {
+  @apply aspect-square rounded-full flex items-center justify-center text-sm font-semibold cursor-pointer transition-all duration-200;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.number-cell:hover:not(.disabled) {
+  background: rgba(255, 215, 0, 0.15);
+  border-color: rgba(255, 215, 0, 0.4);
+  color: #ffd700;
+  transform: scale(1.05);
+}
+
+.number-cell.selected {
+  background: linear-gradient(145deg, #ffd700, #f0a500);
+  color: #1a1a2e;
+  font-weight: bold;
+  border-color: #ffd700;
+  box-shadow: 0 2px 10px rgba(255, 215, 0, 0.4);
+  transform: scale(1.05);
+}
+
+.number-cell.mega:hover:not(.disabled) {
+  background: rgba(230, 57, 80, 0.15);
+  border-color: rgba(230, 57, 80, 0.4);
+  color: #ff4d6d;
+}
+
+.number-cell.mega.selected {
+  background: linear-gradient(145deg, #ff4d6d, #e63950);
+  color: white;
+  border-color: #ff4d6d;
+  box-shadow: 0 2px 10px rgba(230, 57, 80, 0.4);
+}
+
+.number-cell.disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ============================================
+   Jackpot Display
+   ============================================ */
+.jackpot-display {
+  background: linear-gradient(135deg,
+    rgba(255, 215, 0, 0.08) 0%,
+    rgba(255, 170, 0, 0.04) 50%,
+    rgba(255, 215, 0, 0.08) 100%);
+  border: 2px solid rgba(255, 215, 0, 0.25);
+  position: relative;
+  overflow: hidden;
+}
+
+.jackpot-display::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    45deg,
+    transparent 40%,
+    rgba(255, 215, 0, 0.1) 50%,
+    transparent 60%
+  );
+  animation: jackpot-shine 3s ease-in-out infinite;
+}
+
+@keyframes jackpot-shine {
+  0% { transform: translateX(-100%) rotate(45deg); }
+  100% { transform: translateX(100%) rotate(45deg); }
+}
+
+.jackpot-amount {
+  background: linear-gradient(135deg, #ffd700, #ffaa00, #ffd700);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 2px 4px rgba(255, 215, 0, 0.3));
+}
+
+/* ============================================
+   Countdown Timer
+   ============================================ */
+.countdown-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.countdown-segment {
+  @apply flex flex-col items-center;
+  min-width: 70px;
+}
+
+.countdown-value {
+  @apply text-4xl md:text-5xl font-bold;
+  background: linear-gradient(180deg, #ffd700 0%, #ffaa00 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.4));
+}
+
+.countdown-label {
+  @apply text-xs text-gray-400 uppercase tracking-widest mt-1;
+}
+
+.countdown-separator {
+  @apply text-3xl md:text-4xl font-bold text-yellow-400/60;
+  animation: blink 1s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* ============================================
+   Ticket Card
+   ============================================ */
+.ticket-card {
+  background: linear-gradient(135deg,
+    rgba(107, 33, 168, 0.15) 0%,
+    rgba(30, 64, 175, 0.15) 100%);
+  border: 1px solid rgba(107, 33, 168, 0.25);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.ticket-card:hover {
+  border-color: rgba(107, 33, 168, 0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(107, 33, 168, 0.2);
+}
+
+.ticket-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #6b21a8, #1e40af, #6b21a8);
+}
+
+.ticket-card.winner {
+  border-color: rgba(255, 215, 0, 0.5);
+  background: linear-gradient(135deg,
+    rgba(255, 215, 0, 0.1) 0%,
+    rgba(255, 170, 0, 0.05) 100%);
+}
+
+.ticket-card.winner::before {
+  background: linear-gradient(90deg, #ffd700, #ffaa00, #ffd700);
+}
+
+/* ============================================
+   Glass Effect
+   ============================================ */
+.glass {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+}
+
+.glass-dark {
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ============================================
+   Buttons
+   ============================================ */
+.btn-primary {
+  @apply font-bold py-3 px-6 rounded-xl transition-all duration-300;
+  background: linear-gradient(135deg, #ffd700 0%, #f0a500 100%);
+  color: #1a1a2e;
+  box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 25px rgba(255, 215, 0, 0.4);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-primary:disabled {
+  background: #4a4a5a;
+  color: #8a8a9a;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  @apply font-medium py-3 px-6 rounded-xl transition-all duration-300;
+  background: linear-gradient(135deg, #6b21a8 0%, #7c3aed 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(107, 33, 168, 0.3);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 25px rgba(107, 33, 168, 0.4);
+}
+
+.btn-secondary:disabled {
+  background: #4a4a5a;
+  color: #8a8a9a;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+@keyframes float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-8px) rotate(2deg); }
+  75% { transform: translateY(-4px) rotate(-2deg); }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.5s ease-out;
+}
+
+/* ============================================
+   Scrollbar
+   ============================================ */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 215, 0, 0.2);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 215, 0, 0.4);
+}
+
+/* ============================================
+   Utility Classes
+   ============================================ */
+.text-gradient-gold {
+  background: linear-gradient(135deg, #ffd700, #ffaa00);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-purple {
+  background: linear-gradient(135deg, #a855f7, #6366f1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.border-gradient {
+  border: 2px solid transparent;
+  background: linear-gradient(#0a0a1a, #0a0a1a) padding-box,
+              linear-gradient(135deg, #ffd700, #6b21a8) border-box;
+}
+
+/* ============================================
+   Prize Tier Badges
+   ============================================ */
+.prize-badge {
+  @apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold;
+}
+
+.prize-badge.jackpot {
+  background: linear-gradient(135deg, #ffd700, #f0a500);
+  color: #1a1a2e;
+  box-shadow: 0 2px 10px rgba(255, 215, 0, 0.4);
+}
+
+.prize-badge.second {
+  background: linear-gradient(135deg, #c0c0c0, #a0a0a0);
+  color: #1a1a2e;
+}
+
+.prize-badge.third {
+  background: linear-gradient(135deg, #cd7f32, #b87333);
+  color: white;
+}
+
+.prize-badge.other {
+  background: rgba(107, 33, 168, 0.3);
+  color: #a855f7;
+}
+
+/* ============================================
+   Loading States
+   ============================================ */
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(255, 255, 255, 0.05) 25%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.05) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+@keyframes skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }

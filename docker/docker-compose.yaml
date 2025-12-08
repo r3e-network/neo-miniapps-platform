@@ -1,333 +1,191 @@
-# =============================================================================
-# Neo Service Layer - Docker Compose Configuration
-# =============================================================================
-# MarbleRun + Supabase based confidential microservices mesh
-#
-# Usage:
-#   Development: docker-compose up -d
-#   Production:  docker-compose -f docker-compose.yaml -f docker-compose.prod.yaml up -d
-
 version: '3.8'
 
 services:
-  # ===========================================================================
-  # Coordinator - MarbleRun Control Plane
-  # ===========================================================================
+  # =============================================================================
+  # MarbleRun Coordinator
+  # =============================================================================
   coordinator:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.coordinator
-    container_name: neo-coordinator
+    image: ghcr.io/edgelesssys/marblerun/coordinator:v1.7.0
+    container_name: marblerun-coordinator
     ports:
-      - "4433:4433"
+      - "4433:4433"   # Client API
+      - "9944:9944"   # Mesh API
     environment:
-      - COORDINATOR_ADDR=:4433
-      - MANIFEST_PATH=/app/manifests/development.yaml
-      - SEAL_MODE=Disabled
-      - SIMULATION_MODE=true
-      - SUPABASE_URL=http://supabase-kong:8000
-      - SUPABASE_KEY=${SUPABASE_SERVICE_KEY:-your-service-key}
+      - EDG_COORDINATOR_MESH_ADDR=coordinator:2001
+      - EDG_COORDINATOR_CLIENT_ADDR=coordinator:4433
+      - EDG_COORDINATOR_DNS_NAMES=localhost,coordinator
+      - EDG_COORDINATOR_SEAL_DIR=/coordinator/data
+      - OE_SIMULATION=${OE_SIMULATION:-1}
     volumes:
-      - ../manifests:/app/manifests:ro
-      - coordinator-data:/app/data
-    depends_on:
-      - supabase-db
+      - coordinator-data:/coordinator/data
+      - ./manifests:/manifests:ro
     networks:
-      - neo-network
+      - marblerun
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4433/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
 
-  # ===========================================================================
-  # Marbles - Confidential Services
-  # ===========================================================================
-
-  oracle:
+  # =============================================================================
+  # Gateway Marble (API Gateway)
+  # =============================================================================
+  gateway:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.marble
-    container_name: neo-oracle
+      dockerfile: docker/Dockerfile.gateway
+    container_name: service-gateway
     ports:
-      - "8443:8443"
+      - "8080:8080"
     environment:
-      - MARBLE_TYPE=oracle
-      - COORDINATOR_ADDR=coordinator:4433
-      - SERVICE_ADDR=:8443
-      - SIMULATION_MODE=true
+      - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
+      - EDG_MARBLE_TYPE=gateway
+      - EDG_MARBLE_DNS_NAMES=localhost,gateway
+      - EDG_MARBLE_UUID_FILE=/marble/uuid
+      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - PORT=8080
+    volumes:
+      - gateway-data:/marble
     depends_on:
-      coordinator:
-        condition: service_healthy
+      - coordinator
     networks:
-      - neo-network
+      - marblerun
     restart: unless-stopped
 
+  # =============================================================================
+  # VRF Service Marble
+  # =============================================================================
   vrf:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.marble
-    container_name: neo-vrf
-    ports:
-      - "8444:8443"
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: vrf
+    container_name: service-vrf
     environment:
-      - MARBLE_TYPE=vrf
-      - COORDINATOR_ADDR=coordinator:4433
-      - SERVICE_ADDR=:8443
-      - SIMULATION_MODE=true
+      - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
+      - EDG_MARBLE_TYPE=vrf
+      - EDG_MARBLE_DNS_NAMES=localhost,vrf
+      - SERVICE_TYPE=vrf
+      - OE_SIMULATION=${OE_SIMULATION:-1}
     depends_on:
-      coordinator:
-        condition: service_healthy
+      - coordinator
     networks:
-      - neo-network
+      - marblerun
     restart: unless-stopped
 
-  secrets:
+  # =============================================================================
+  # Mixer Service Marble
+  # =============================================================================
+  mixer:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.marble
-    container_name: neo-secrets
-    ports:
-      - "8445:8443"
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: mixer
+    container_name: service-mixer
     environment:
-      - MARBLE_TYPE=secrets
-      - COORDINATOR_ADDR=coordinator:4433
-      - SERVICE_ADDR=:8443
-      - SIMULATION_MODE=true
+      - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
+      - EDG_MARBLE_TYPE=mixer
+      - EDG_MARBLE_DNS_NAMES=localhost,mixer
+      - SERVICE_TYPE=mixer
+      - OE_SIMULATION=${OE_SIMULATION:-1}
     depends_on:
-      coordinator:
-        condition: service_healthy
+      - coordinator
+      - accountpool
     networks:
-      - neo-network
+      - marblerun
     restart: unless-stopped
 
-  gasbank:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.marble
-    container_name: neo-gasbank
-    ports:
-      - "8446:8443"
-    environment:
-      - MARBLE_TYPE=gasbank
-      - COORDINATOR_ADDR=coordinator:4433
-      - SERVICE_ADDR=:8443
-      - SIMULATION_MODE=true
-    depends_on:
-      coordinator:
-        condition: service_healthy
-    networks:
-      - neo-network
-    restart: unless-stopped
-
+  # =============================================================================
+  # DataFeeds Service Marble
+  # =============================================================================
   datafeeds:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.marble
-    container_name: neo-datafeeds
-    ports:
-      - "8447:8443"
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: datafeeds
+    container_name: service-datafeeds
     environment:
-      - MARBLE_TYPE=datafeeds
-      - COORDINATOR_ADDR=coordinator:4433
-      - SERVICE_ADDR=:8443
-      - SIMULATION_MODE=true
+      - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
+      - EDG_MARBLE_TYPE=datafeeds
+      - EDG_MARBLE_DNS_NAMES=localhost,datafeeds
+      - SERVICE_TYPE=datafeeds
+      - OE_SIMULATION=${OE_SIMULATION:-1}
     depends_on:
-      coordinator:
-        condition: service_healthy
+      - coordinator
     networks:
-      - neo-network
+      - marblerun
     restart: unless-stopped
 
+  # =============================================================================
+  # Automation Service Marble
+  # =============================================================================
   automation:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.marble
-    container_name: neo-automation
-    ports:
-      - "8448:8443"
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: automation
+    container_name: service-automation
     environment:
-      - MARBLE_TYPE=automation
-      - COORDINATOR_ADDR=coordinator:4433
-      - SERVICE_ADDR=:8443
-      - SIMULATION_MODE=true
+      - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
+      - EDG_MARBLE_TYPE=automation
+      - EDG_MARBLE_DNS_NAMES=localhost,automation
+      - SERVICE_TYPE=automation
+      - OE_SIMULATION=${OE_SIMULATION:-1}
     depends_on:
-      coordinator:
-        condition: service_healthy
-    networks:
-      - neo-network
-    restart: unless-stopped
-
-  # ===========================================================================
-  # Supabase Stack
-  # ===========================================================================
-
-  supabase-db:
-    image: supabase/postgres:15.1.0.147
-    container_name: neo-supabase-db
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: postgres
-    volumes:
-      - supabase-db-data:/var/lib/postgresql/data
-      - ../supabase/migrations:/docker-entrypoint-initdb.d:ro
-    networks:
-      - neo-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  supabase-auth:
-    image: supabase/gotrue:v2.132.3
-    container_name: neo-supabase-auth
-    environment:
-      GOTRUE_API_HOST: 0.0.0.0
-      GOTRUE_API_PORT: 9999
-      API_EXTERNAL_URL: ${API_EXTERNAL_URL:-http://localhost:8000}
-      GOTRUE_DB_DRIVER: postgres
-      GOTRUE_DB_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@supabase-db:5432/postgres?search_path=auth
-      GOTRUE_SITE_URL: ${SITE_URL:-http://localhost:3000}
-      GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS:-}
-      GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP:-false}
-      GOTRUE_JWT_ADMIN_ROLES: service_role
-      GOTRUE_JWT_AUD: authenticated
-      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
-      GOTRUE_JWT_EXP: ${JWT_EXPIRY:-3600}
-      GOTRUE_JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
-      GOTRUE_EXTERNAL_EMAIL_ENABLED: ${ENABLE_EMAIL_SIGNUP:-true}
-      GOTRUE_MAILER_AUTOCONFIRM: ${ENABLE_EMAIL_AUTOCONFIRM:-true}
-    depends_on:
-      supabase-db:
-        condition: service_healthy
-    networks:
-      - neo-network
-    restart: unless-stopped
-
-  supabase-rest:
-    image: postgrest/postgrest:v11.2.2
-    container_name: neo-supabase-rest
-    environment:
-      PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@supabase-db:5432/postgres
-      PGRST_DB_SCHEMAS: public,storage
-      PGRST_DB_ANON_ROLE: anon
-      PGRST_JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
-      PGRST_DB_USE_LEGACY_GUCS: "false"
-    depends_on:
-      supabase-db:
-        condition: service_healthy
-    networks:
-      - neo-network
-    restart: unless-stopped
-
-  supabase-realtime:
-    image: supabase/realtime:v2.25.50
-    container_name: neo-supabase-realtime
-    environment:
-      PORT: 4000
-      DB_HOST: supabase-db
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      DB_NAME: postgres
-      DB_AFTER_CONNECT_QUERY: 'SET search_path TO _realtime'
-      DB_ENC_KEY: supabaserealtime
-      API_JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
-      FLY_ALLOC_ID: fly123
-      FLY_APP_NAME: realtime
-      SECRET_KEY_BASE: UpNVntn3cDxHJpq99YMc1T1AQgQpc8kfYTuRgBiYa15BLrx8etQoXz3gZv1/u2oq
-      ERL_AFLAGS: -proto_dist inet_tcp
-      ENABLE_TAILSCALE: "false"
-      DNS_NODES: "''"
-    depends_on:
-      supabase-db:
-        condition: service_healthy
-    networks:
-      - neo-network
-    restart: unless-stopped
-
-  supabase-storage:
-    image: supabase/storage-api:v0.43.11
-    container_name: neo-supabase-storage
-    environment:
-      ANON_KEY: ${ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
-      SERVICE_KEY: ${SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU}
-      POSTGREST_URL: http://supabase-rest:3000
-      PGRST_JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
-      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@supabase-db:5432/postgres
-      FILE_SIZE_LIMIT: 52428800
-      STORAGE_BACKEND: file
-      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
-      TENANT_ID: stub
-      REGION: stub
-      GLOBAL_S3_BUCKET: stub
-    volumes:
-      - supabase-storage-data:/var/lib/storage
-    depends_on:
-      supabase-db:
-        condition: service_healthy
-      supabase-rest:
-        condition: service_started
-    networks:
-      - neo-network
-    restart: unless-stopped
-
-  supabase-kong:
-    image: kong:2.8.1
-    container_name: neo-supabase-kong
-    ports:
-      - "8000:8000"
-      - "8443:8443"
-    environment:
-      KONG_DATABASE: "off"
-      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
-      KONG_DNS_ORDER: LAST,A,CNAME
-      KONG_PLUGINS: request-transformer,cors,key-auth,acl
-      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
-      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
-    volumes:
-      - ./kong.yml:/var/lib/kong/kong.yml:ro
-    depends_on:
-      - supabase-auth
-      - supabase-rest
-      - supabase-realtime
-      - supabase-storage
-    networks:
-      - neo-network
-    restart: unless-stopped
-
-  # ===========================================================================
-  # Frontend
-  # ===========================================================================
-
-  frontend:
-    build:
-      context: ../frontend
-      dockerfile: Dockerfile
-    container_name: neo-frontend
-    ports:
-      - "3000:80"
-    environment:
-      - VITE_SUPABASE_URL=http://localhost:8000
-      - VITE_SUPABASE_ANON_KEY=${ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
-      - VITE_COORDINATOR_URL=http://localhost:4433
-    depends_on:
-      - supabase-kong
       - coordinator
     networks:
-      - neo-network
+      - marblerun
+    restart: unless-stopped
+
+  # =============================================================================
+  # AccountPool Service Marble (Internal - Shared Account Management)
+  # Not exposed externally, used by other services (mixer, etc.)
+  # =============================================================================
+  accountpool:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: accountpool
+    container_name: service-accountpool
+    environment:
+      - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
+      - EDG_MARBLE_TYPE=accountpool
+      - EDG_MARBLE_DNS_NAMES=localhost,accountpool
+      - SERVICE_TYPE=accountpool
+      - OE_SIMULATION=${OE_SIMULATION:-1}
+    depends_on:
+      - coordinator
+    networks:
+      - marblerun
+    restart: unless-stopped
+
+  # =============================================================================
+  # Confidential Compute Service Marble (Planned)
+  # =============================================================================
+  confidential:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: confidential
+    container_name: service-confidential
+    environment:
+      - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
+      - EDG_MARBLE_TYPE=confidential
+      - EDG_MARBLE_DNS_NAMES=localhost,confidential
+      - SERVICE_TYPE=confidential
+      - OE_SIMULATION=${OE_SIMULATION:-1}
+    depends_on:
+      - coordinator
+    networks:
+      - marblerun
     restart: unless-stopped
 
 networks:
-  neo-network:
+  marblerun:
     driver: bridge
 
 volumes:
   coordinator-data:
-  supabase-db-data:
-  supabase-storage-data:
+  gateway-data:

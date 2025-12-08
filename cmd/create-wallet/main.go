@@ -1,0 +1,64 @@
+// Command create-wallet creates a Neo N3 wallet from WIF.
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+
+	"github.com/nspcc-dev/neo-go/pkg/crypto/keys"
+	"github.com/nspcc-dev/neo-go/pkg/wallet"
+)
+
+func main() {
+	wif := os.Getenv("NEO_TESTNET_WIF")
+	if wif == "" {
+		log.Fatal("NEO_TESTNET_WIF not set")
+	}
+
+	privateKey, err := keys.NewPrivateKeyFromWIF(wif)
+	if err != nil {
+		log.Fatalf("Invalid WIF: %v", err)
+	}
+
+	walletPath := "deploy/testnet/wallets/testnet.json"
+	if len(os.Args) > 1 {
+		walletPath = os.Args[1]
+	}
+
+	if err := os.MkdirAll(filepath.Dir(walletPath), 0755); err != nil {
+		log.Fatalf("Failed to create wallet directory: %v", err)
+	}
+
+	w, err := wallet.NewWallet(walletPath)
+	if err != nil {
+		log.Fatalf("Failed to create wallet: %v", err)
+	}
+
+	password := "testnetpassword"
+	acc, err := wallet.NewAccountFromWIF(wif)
+	if err != nil {
+		log.Fatalf("Failed to create account: %v", err)
+	}
+	acc.Label = "deployer"
+
+	if err := acc.Encrypt(password, w.Scrypt); err != nil {
+		log.Fatalf("Failed to encrypt account: %v", err)
+	}
+
+	w.AddAccount(acc)
+	if err := w.Save(); err != nil {
+		log.Fatalf("Failed to save wallet: %v", err)
+	}
+
+	fmt.Println("Wallet created successfully!")
+	fmt.Printf("Path: %s\n", walletPath)
+	fmt.Printf("Address: %s\n", acc.Address)
+	fmt.Printf("Script Hash: %s\n", acc.ScriptHash())
+	fmt.Printf("Public Key: %s\n", privateKey.PublicKey().String())
+	fmt.Println("\nWallet JSON:")
+	data, _ := json.MarshalIndent(w, "", "  ")
+	fmt.Println(string(data))
+}

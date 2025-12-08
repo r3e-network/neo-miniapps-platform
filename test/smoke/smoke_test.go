@@ -1,460 +1,332 @@
-// Package smoke provides smoke tests for deployment verification.
-// These tests verify that the system is properly deployed and operational.
-//
-// Run with: go test -tags=smoke ./test/smoke/...
-//
-//go:build smoke
-
+// Package smoke provides smoke tests for quick verification of service health.
+// Smoke tests are designed to quickly verify that services can start and respond
+// to basic health checks without requiring external dependencies.
 package smoke
 
 import (
 	"context"
-	"crypto/tls"
-	"encoding/json"
-	"fmt"
 	"net/http"
-	"os"
-	"strings"
+	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/R3E-Network/service_layer/internal/marble"
+	"github.com/R3E-Network/service_layer/services/accountpool"
+	"github.com/R3E-Network/service_layer/services/mixer"
+	"github.com/R3E-Network/service_layer/services/vrf"
 )
 
-// =============================================================================
-// Smoke Test Configuration
-// =============================================================================
-
-type SmokeConfig struct {
-	SupabaseURL    string
-	SupabaseKey    string
-	CoordinatorURL string
-	FrontendURL    string
-	NeoRPCURL      string
-	Timeout        time.Duration
-}
-
-func loadSmokeConfig() SmokeConfig {
-	return SmokeConfig{
-		SupabaseURL:    getEnv("SUPABASE_URL", "http://localhost:54321"),
-		SupabaseKey:    getEnv("SUPABASE_ANON_KEY", ""),
-		CoordinatorURL: getEnv("COORDINATOR_URL", "https://localhost:4433"),
-		FrontendURL:    getEnv("FRONTEND_URL", "http://localhost:5173"),
-		NeoRPCURL:      getEnv("NEO_RPC_URL", "http://localhost:10332"),
-		Timeout:        10 * time.Second,
-	}
-}
-
-func getEnv(key, defaultValue string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return defaultValue
-}
-
-// =============================================================================
-// HTTP Client
-// =============================================================================
-
-func newHTTPClient() *http.Client {
-	return &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true, // For self-signed certs in dev
-			},
-		},
-	}
-}
-
-// =============================================================================
-// Supabase Smoke Tests
-// =============================================================================
-
-func TestSmoke_SupabaseHealth(t *testing.T) {
-	config := loadSmokeConfig()
-	client := newHTTPClient()
-
-	// Test REST API
-	req, _ := http.NewRequest("GET", config.SupabaseURL+"/rest/v1/", nil)
-	req.Header.Set("apikey", config.SupabaseKey)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("Supabase REST API unreachable: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 500 {
-		t.Errorf("Supabase REST API error: %d", resp.StatusCode)
-	}
-
-	t.Log("✓ Supabase REST API is healthy")
-}
-
-func TestSmoke_SupabaseAuth(t *testing.T) {
-	config := loadSmokeConfig()
-	client := newHTTPClient()
-
-	// Test Auth API health
-	resp, err := client.Get(config.SupabaseURL + "/auth/v1/health")
-	if err != nil {
-		t.Fatalf("Supabase Auth unreachable: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Supabase Auth unhealthy: %d", resp.StatusCode)
-	}
-
-	t.Log("✓ Supabase Auth is healthy")
-}
-
-func TestSmoke_SupabaseRealtime(t *testing.T) {
-	config := loadSmokeConfig()
-	client := newHTTPClient()
-
-	// Test Realtime endpoint exists
-	resp, err := client.Get(config.SupabaseURL + "/realtime/v1/")
-	if err != nil {
-		t.Logf("⚠ Supabase Realtime check failed: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	// Realtime may return various status codes, just check it's reachable
-	t.Log("✓ Supabase Realtime endpoint is reachable")
-}
-
-func TestSmoke_SupabaseServiceRequests(t *testing.T) {
-	config := loadSmokeConfig()
-	if config.SupabaseKey == "" {
-		t.Skip("SUPABASE_ANON_KEY not set")
-	}
-
-	client := newHTTPClient()
-
-	req, _ := http.NewRequest("GET", config.SupabaseURL+"/rest/v1/service_requests?limit=1", nil)
-	req.Header.Set("apikey", config.SupabaseKey)
-	req.Header.Set("Authorization", "Bearer "+config.SupabaseKey)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("service_requests table unreachable: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		t.Error("service_requests table does not exist - run migrations")
-	} else if resp.StatusCode >= 400 {
-		t.Errorf("service_requests query failed: %d", resp.StatusCode)
-	}
-
-	t.Log("✓ service_requests table is accessible")
-}
-
-// =============================================================================
-// Coordinator Smoke Tests
-// =============================================================================
-
-func TestSmoke_CoordinatorStatus(t *testing.T) {
-	config := loadSmokeConfig()
-	client := newHTTPClient()
-
-	resp, err := client.Get(config.CoordinatorURL + "/api/v2/status")
-	if err != nil {
-		t.Logf("⚠ Coordinator unreachable: %v (may not be running)", err)
-		t.Skip("Coordinator not available")
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Coordinator unhealthy: %d", resp.StatusCode)
-	}
-
-	var status map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&status)
-
-	t.Logf("✓ Coordinator is healthy: %v", status)
-}
-
-func TestSmoke_CoordinatorManifest(t *testing.T) {
-	config := loadSmokeConfig()
-	client := newHTTPClient()
-
-	resp, err := client.Get(config.CoordinatorURL + "/api/v2/manifest")
-	if err != nil {
-		t.Skip("Coordinator not available")
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		t.Log("⚠ Manifest not set - coordinator needs configuration")
-	} else if resp.StatusCode == http.StatusOK {
-		t.Log("✓ Coordinator manifest is configured")
-	}
-}
-
-// =============================================================================
-// Frontend Smoke Tests
-// =============================================================================
-
-func TestSmoke_FrontendHealth(t *testing.T) {
-	config := loadSmokeConfig()
-	client := newHTTPClient()
-
-	resp, err := client.Get(config.FrontendURL)
-	if err != nil {
-		t.Logf("⚠ Frontend unreachable: %v", err)
-		t.Skip("Frontend not available")
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Frontend unhealthy: %d", resp.StatusCode)
-	}
-
-	t.Log("✓ Frontend is serving")
-}
-
-func TestSmoke_FrontendAssets(t *testing.T) {
-	config := loadSmokeConfig()
-	client := newHTTPClient()
-
-	// Check if main assets are served
-	assets := []string{"/favicon.svg", "/index.html"}
-
-	for _, asset := range assets {
-		resp, err := client.Get(config.FrontendURL + asset)
+// TestAccountPoolSmoke performs basic smoke tests on the AccountPool service.
+func TestAccountPoolSmoke(t *testing.T) {
+	t.Run("service creates successfully", func(t *testing.T) {
+		m, err := marble.New(marble.Config{MarbleType: "accountpool"})
 		if err != nil {
-			continue
+			t.Fatalf("marble.New: %v", err)
 		}
-		resp.Body.Close()
+		m.SetTestSecret("POOL_MASTER_KEY", []byte("smoke-test-pool-key-32-bytes!!!!"))
 
-		if resp.StatusCode == http.StatusOK {
-			t.Logf("✓ Asset %s is served", asset)
-		}
-	}
-}
-
-// =============================================================================
-// Neo N3 Smoke Tests
-// =============================================================================
-
-func TestSmoke_NeoRPCHealth(t *testing.T) {
-	config := loadSmokeConfig()
-	client := newHTTPClient()
-
-	// JSON-RPC request
-	payload := `{"jsonrpc":"2.0","method":"getversion","params":[],"id":1}`
-
-	resp, err := client.Post(config.NeoRPCURL, "application/json",
-		strings.NewReader(payload))
-	if err != nil {
-		t.Logf("⚠ Neo RPC unreachable: %v", err)
-		t.Skip("Neo RPC not available")
-	}
-	defer resp.Body.Close()
-
-	var result map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&result)
-
-	if result["error"] != nil {
-		t.Errorf("Neo RPC error: %v", result["error"])
-	}
-
-	t.Logf("✓ Neo RPC is healthy: %v", result["result"])
-}
-
-func TestSmoke_NeoBlockHeight(t *testing.T) {
-	config := loadSmokeConfig()
-	client := newHTTPClient()
-
-	payload := `{"jsonrpc":"2.0","method":"getblockcount","params":[],"id":1}`
-
-	resp, err := client.Post(config.NeoRPCURL, "application/json",
-		strings.NewReader(payload))
-	if err != nil {
-		t.Skip("Neo RPC not available")
-	}
-	defer resp.Body.Close()
-
-	var result map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&result)
-
-	if blockCount, ok := result["result"].(float64); ok {
-		t.Logf("✓ Neo block height: %d", int(blockCount))
-	}
-}
-
-// =============================================================================
-// Service Health Smoke Tests
-// =============================================================================
-
-func TestSmoke_ServiceEndpoints(t *testing.T) {
-	config := loadSmokeConfig()
-	client := newHTTPClient()
-
-	services := []string{
-		"oracle", "vrf", "secrets", "gasbank",
-		"datafeeds", "automation", "mixer",
-	}
-
-	for _, svc := range services {
-		// Try to reach service health endpoint
-		url := fmt.Sprintf("http://localhost:8080/services/%s/health", svc)
-		resp, err := client.Get(url)
+		svc, err := accountpool.New(accountpool.Config{Marble: m})
 		if err != nil {
-			t.Logf("⚠ Service %s unreachable", svc)
-			continue
+			t.Fatalf("accountpool.New: %v", err)
 		}
-		resp.Body.Close()
+		if svc == nil {
+			t.Fatal("service should not be nil")
+		}
+	})
 
-		if resp.StatusCode == http.StatusOK {
-			t.Logf("✓ Service %s is healthy", svc)
-		} else {
-			t.Logf("⚠ Service %s returned %d", svc, resp.StatusCode)
+	t.Run("health endpoint responds", func(t *testing.T) {
+		m, _ := marble.New(marble.Config{MarbleType: "accountpool"})
+		m.SetTestSecret("POOL_MASTER_KEY", []byte("smoke-test-pool-key-32-bytes!!!!"))
+		svc, _ := accountpool.New(accountpool.Config{Marble: m})
+
+		req := httptest.NewRequest("GET", "/health", nil)
+		w := httptest.NewRecorder()
+		svc.Router().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("health check failed: status %d", w.Code)
 		}
-	}
+	})
+
+	t.Run("info endpoint responds", func(t *testing.T) {
+		t.Skip("requires database connection")
+	})
+
+	t.Run("service metadata correct", func(t *testing.T) {
+		m, _ := marble.New(marble.Config{MarbleType: "accountpool"})
+		m.SetTestSecret("POOL_MASTER_KEY", []byte("smoke-test-pool-key-32-bytes!!!!"))
+		svc, _ := accountpool.New(accountpool.Config{Marble: m})
+
+		if svc.ID() != "accountpool" {
+			t.Errorf("expected ID 'accountpool', got '%s'", svc.ID())
+		}
+		if svc.Name() != "Account Pool Service" {
+			t.Errorf("expected name 'Account Pool Service', got '%s'", svc.Name())
+		}
+	})
 }
 
-// =============================================================================
-// Database Schema Smoke Tests
-// =============================================================================
-
-func TestSmoke_DatabaseTables(t *testing.T) {
-	config := loadSmokeConfig()
-	if config.SupabaseKey == "" {
-		t.Skip("SUPABASE_ANON_KEY not set")
-	}
-
-	client := newHTTPClient()
-
-	tables := []string{
-		"service_requests",
-		"realtime_notifications",
-	}
-
-	for _, table := range tables {
-		req, _ := http.NewRequest("GET",
-			fmt.Sprintf("%s/rest/v1/%s?limit=0", config.SupabaseURL, table), nil)
-		req.Header.Set("apikey", config.SupabaseKey)
-		req.Header.Set("Authorization", "Bearer "+config.SupabaseKey)
-
-		resp, err := client.Do(req)
+// TestMixerSmoke performs basic smoke tests on the Mixer service.
+func TestMixerSmoke(t *testing.T) {
+	t.Run("service creates successfully", func(t *testing.T) {
+		m, err := marble.New(marble.Config{MarbleType: "mixer"})
 		if err != nil {
-			t.Logf("⚠ Table %s check failed: %v", table, err)
-			continue
+			t.Fatalf("marble.New: %v", err)
 		}
-		resp.Body.Close()
+		m.SetTestSecret("MIXER_MASTER_KEY", []byte("smoke-test-mixer-key-32-bytes!!!"))
 
-		if resp.StatusCode == http.StatusOK {
-			t.Logf("✓ Table %s exists", table)
-		} else if resp.StatusCode == http.StatusNotFound {
-			t.Errorf("✗ Table %s does not exist", table)
-		}
-	}
-}
-
-// =============================================================================
-// Connectivity Smoke Tests
-// =============================================================================
-
-func TestSmoke_AllServicesConnectivity(t *testing.T) {
-	config := loadSmokeConfig()
-	client := newHTTPClient()
-
-	endpoints := map[string]string{
-		"Supabase":    config.SupabaseURL + "/rest/v1/",
-		"Coordinator": config.CoordinatorURL + "/api/v2/status",
-		"Frontend":    config.FrontendURL,
-		"Neo RPC":     config.NeoRPCURL,
-	}
-
-	healthy := 0
-	total := len(endpoints)
-
-	for name, url := range endpoints {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
-
-		if name == "Supabase" {
-			req.Header.Set("apikey", config.SupabaseKey)
-		}
-
-		resp, err := client.Do(req)
-		cancel()
-
+		svc, err := mixer.New(mixer.Config{
+			Marble:         m,
+			AccountPoolURL: "http://localhost:8081",
+		})
 		if err != nil {
-			t.Logf("⚠ %s: unreachable", name)
-			continue
+			t.Fatalf("mixer.New: %v", err)
 		}
-		resp.Body.Close()
+		if svc == nil {
+			t.Fatal("service should not be nil")
+		}
+	})
 
-		if resp.StatusCode < 500 {
-			t.Logf("✓ %s: reachable", name)
-			healthy++
-		} else {
-			t.Logf("✗ %s: error %d", name, resp.StatusCode)
+	t.Run("health endpoint responds", func(t *testing.T) {
+		m, _ := marble.New(marble.Config{MarbleType: "mixer"})
+		m.SetTestSecret("MIXER_MASTER_KEY", []byte("smoke-test-mixer-key-32-bytes!!!"))
+		svc, _ := mixer.New(mixer.Config{
+			Marble:         m,
+			AccountPoolURL: "http://localhost:8081",
+		})
+
+		req := httptest.NewRequest("GET", "/health", nil)
+		w := httptest.NewRecorder()
+		svc.Router().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("health check failed: status %d", w.Code)
+		}
+	})
+
+	t.Run("service metadata correct", func(t *testing.T) {
+		m, _ := marble.New(marble.Config{MarbleType: "mixer"})
+		m.SetTestSecret("MIXER_MASTER_KEY", []byte("smoke-test-mixer-key-32-bytes!!!"))
+		svc, _ := mixer.New(mixer.Config{
+			Marble:         m,
+			AccountPoolURL: "http://localhost:8081",
+		})
+
+		if svc.ID() != "mixer" {
+			t.Errorf("expected ID 'mixer', got '%s'", svc.ID())
+		}
+		if svc.Name() != "Mixer Service" {
+			t.Errorf("expected name 'Mixer Service', got '%s'", svc.Name())
+		}
+	})
+
+	t.Run("supported tokens available", func(t *testing.T) {
+		m, _ := marble.New(marble.Config{MarbleType: "mixer"})
+		m.SetTestSecret("MIXER_MASTER_KEY", []byte("smoke-test-mixer-key-32-bytes!!!"))
+		svc, _ := mixer.New(mixer.Config{
+			Marble:         m,
+			AccountPoolURL: "http://localhost:8081",
+		})
+
+		tokens := svc.GetSupportedTokens()
+		if len(tokens) == 0 {
+			t.Error("no supported tokens configured")
+		}
+
+		gasConfig := svc.GetTokenConfig("GAS")
+		if gasConfig == nil {
+			t.Error("GAS token config should exist")
+		}
+	})
+}
+
+// TestVRFSmoke performs basic smoke tests on the VRF service.
+func TestVRFSmoke(t *testing.T) {
+	t.Run("service creates successfully", func(t *testing.T) {
+		m, err := marble.New(marble.Config{MarbleType: "vrf"})
+		if err != nil {
+			t.Fatalf("marble.New: %v", err)
+		}
+		m.SetTestSecret("VRF_PRIVATE_KEY", []byte("smoke-test-vrf-key-32-bytes!!!!!"))
+
+		svc, err := vrf.New(vrf.Config{Marble: m})
+		if err != nil {
+			t.Fatalf("vrf.New: %v", err)
+		}
+		if svc == nil {
+			t.Fatal("service should not be nil")
+		}
+	})
+
+	t.Run("health endpoint responds", func(t *testing.T) {
+		m, _ := marble.New(marble.Config{MarbleType: "vrf"})
+		m.SetTestSecret("VRF_PRIVATE_KEY", []byte("smoke-test-vrf-key-32-bytes!!!!!"))
+		svc, _ := vrf.New(vrf.Config{Marble: m})
+
+		req := httptest.NewRequest("GET", "/health", nil)
+		w := httptest.NewRecorder()
+		svc.Router().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("health check failed: status %d", w.Code)
+		}
+	})
+
+	t.Run("service metadata correct", func(t *testing.T) {
+		m, _ := marble.New(marble.Config{MarbleType: "vrf"})
+		m.SetTestSecret("VRF_PRIVATE_KEY", []byte("smoke-test-vrf-key-32-bytes!!!!!"))
+		svc, _ := vrf.New(vrf.Config{Marble: m})
+
+		if svc.ID() != "vrf" {
+			t.Errorf("expected ID 'vrf', got '%s'", svc.ID())
+		}
+	})
+}
+
+// TestMarbleSmoke performs basic smoke tests on the Marble framework.
+func TestMarbleSmoke(t *testing.T) {
+	t.Run("marble creates successfully", func(t *testing.T) {
+		m, err := marble.New(marble.Config{MarbleType: "test"})
+		if err != nil {
+			t.Fatalf("marble.New: %v", err)
+		}
+		if m == nil {
+			t.Fatal("marble should not be nil")
+		}
+	})
+
+	t.Run("marble type correct", func(t *testing.T) {
+		m, _ := marble.New(marble.Config{MarbleType: "test-type"})
+		if m.MarbleType() != "test-type" {
+			t.Errorf("expected type 'test-type', got '%s'", m.MarbleType())
+		}
+	})
+
+	t.Run("secrets can be set and retrieved", func(t *testing.T) {
+		m, _ := marble.New(marble.Config{MarbleType: "test"})
+		m.SetTestSecret("TEST_KEY", []byte("test-value"))
+
+		val, ok := m.Secret("TEST_KEY")
+		if !ok {
+			t.Error("secret should be retrievable")
+		}
+		if string(val) != "test-value" {
+			t.Errorf("expected 'test-value', got '%s'", string(val))
+		}
+	})
+
+	t.Run("missing secret returns false", func(t *testing.T) {
+		m, _ := marble.New(marble.Config{MarbleType: "test"})
+		_, ok := m.Secret("NONEXISTENT")
+		if ok {
+			t.Error("missing secret should return false")
+		}
+	})
+}
+
+// TestServiceFrameworkSmoke tests the service framework.
+func TestServiceFrameworkSmoke(t *testing.T) {
+	t.Run("service lifecycle", func(t *testing.T) {
+		m, _ := marble.New(marble.Config{MarbleType: "test"})
+		svc := marble.NewService(marble.ServiceConfig{
+			ID:      "smoke-test",
+			Name:    "Smoke Test Service",
+			Version: "1.0.0",
+			Marble:  m,
+			DB:      nil,
+		})
+
+		if svc.ID() != "smoke-test" {
+			t.Errorf("expected ID 'smoke-test', got '%s'", svc.ID())
+		}
+
+		ctx := context.Background()
+		if err := svc.Start(ctx); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+
+		if !svc.IsRunning() {
+			t.Error("service should be running after Start")
+		}
+
+		if err := svc.Stop(); err != nil {
+			t.Fatalf("Stop: %v", err)
+		}
+
+		if svc.IsRunning() {
+			t.Error("service should not be running after Stop")
+		}
+	})
+
+	t.Run("router available", func(t *testing.T) {
+		m, _ := marble.New(marble.Config{MarbleType: "test"})
+		svc := marble.NewService(marble.ServiceConfig{
+			ID:      "smoke-test",
+			Name:    "Smoke Test Service",
+			Version: "1.0.0",
+			Marble:  m,
+			DB:      nil,
+		})
+
+		router := svc.Router()
+		if router == nil {
+			t.Error("router should not be nil")
+		}
+	})
+}
+
+// TestConcurrencySmoke tests basic concurrent access.
+func TestConcurrencySmoke(t *testing.T) {
+	m, _ := marble.New(marble.Config{MarbleType: "accountpool"})
+	m.SetTestSecret("POOL_MASTER_KEY", []byte("smoke-test-pool-key-32-bytes!!!!"))
+	svc, _ := accountpool.New(accountpool.Config{Marble: m})
+
+	done := make(chan bool, 20)
+
+	for i := 0; i < 20; i++ {
+		go func() {
+			req := httptest.NewRequest("GET", "/health", nil)
+			w := httptest.NewRecorder()
+			svc.Router().ServeHTTP(w, req)
+			done <- (w.Code == http.StatusOK)
+		}()
+	}
+
+	timeout := time.After(5 * time.Second)
+	success := 0
+	for i := 0; i < 20; i++ {
+		select {
+		case ok := <-done:
+			if ok {
+				success++
+			}
+		case <-timeout:
+			t.Fatal("concurrent requests timed out")
 		}
 	}
 
-	t.Logf("\nConnectivity: %d/%d services healthy", healthy, total)
-
-	if healthy < total/2 {
-		t.Error("Too many services unhealthy")
+	if success != 20 {
+		t.Errorf("expected 20 successful requests, got %d", success)
 	}
 }
 
-// =============================================================================
-// Quick Smoke Test (All-in-One)
-// =============================================================================
+// TestEndpointResponsivenessSmoke tests that endpoints respond within expected time.
+func TestEndpointResponsivenessSmoke(t *testing.T) {
+	m, _ := marble.New(marble.Config{MarbleType: "accountpool"})
+	m.SetTestSecret("POOL_MASTER_KEY", []byte("smoke-test-pool-key-32-bytes!!!!"))
+	svc, _ := accountpool.New(accountpool.Config{Marble: m})
 
-func TestSmoke_QuickCheck(t *testing.T) {
-	config := loadSmokeConfig()
-	client := newHTTPClient()
+	maxDuration := 100 * time.Millisecond
 
-	t.Log("=== Neo Service Layer Smoke Test ===")
-	t.Log("")
+	t.Run("health endpoint responsive", func(t *testing.T) {
+		start := time.Now()
+		req := httptest.NewRequest("GET", "/health", nil)
+		w := httptest.NewRecorder()
+		svc.Router().ServeHTTP(w, req)
+		duration := time.Since(start)
 
-	// 1. Supabase
-	t.Log("1. Checking Supabase...")
-	req, _ := http.NewRequest("GET", config.SupabaseURL+"/rest/v1/", nil)
-	req.Header.Set("apikey", config.SupabaseKey)
-	if resp, err := client.Do(req); err == nil {
-		resp.Body.Close()
-		t.Log("   ✓ Supabase is running")
-	} else {
-		t.Log("   ✗ Supabase is not running")
-	}
-
-	// 2. Coordinator
-	t.Log("2. Checking Coordinator...")
-	if resp, err := client.Get(config.CoordinatorURL + "/api/v2/status"); err == nil {
-		resp.Body.Close()
-		t.Log("   ✓ Coordinator is running")
-	} else {
-		t.Log("   ⚠ Coordinator is not running (optional in dev)")
-	}
-
-	// 3. Frontend
-	t.Log("3. Checking Frontend...")
-	if resp, err := client.Get(config.FrontendURL); err == nil {
-		resp.Body.Close()
-		t.Log("   ✓ Frontend is running")
-	} else {
-		t.Log("   ⚠ Frontend is not running")
-	}
-
-	// 4. Neo RPC
-	t.Log("4. Checking Neo RPC...")
-	payload := `{"jsonrpc":"2.0","method":"getversion","params":[],"id":1}`
-	if resp, err := client.Post(config.NeoRPCURL, "application/json",
-		strings.NewReader(payload)); err == nil {
-		resp.Body.Close()
-		t.Log("   ✓ Neo RPC is running")
-	} else {
-		t.Log("   ⚠ Neo RPC is not running")
-	}
-
-	t.Log("")
-	t.Log("=== Smoke Test Complete ===")
+		if duration > maxDuration {
+			t.Errorf("health endpoint too slow: %v > %v", duration, maxDuration)
+		}
+	})
 }

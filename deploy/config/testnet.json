@@ -1,0 +1,49 @@
+{
+  "network": "testnet",
+  "rpc_endpoints": [
+    "https://testnet1.neo.coz.io:443",
+    "https://testnet2.neo.coz.io:443",
+    "https://rpc.t5.n3.nspcc.ru:20331"
+  ],
+  "network_magic": 877933390,
+  "contracts": {
+    "ServiceLayerGateway": null,
+    "VRFService": null,
+    "MixerService": null,
+    "DataFeedsService": null,
+    "AutomationService": null
+  },
+  "wallets": {
+    "owner": {
+      "path": "${TESTNET_OWNER_WALLET}",
+      "account": "${TESTNET_OWNER_ADDRESS}"
+    },
+    "tee": {
+      "path": "${TESTNET_TEE_WALLET}",
+      "account": "${TESTNET_TEE_ADDRESS}",
+      "pubkey": "${TESTNET_TEE_PUBKEY}"
+    }
+  },
+  "service_fees": {
+    "oracle": 10000000,
+    "vrf": 10000000,
+    "mixer": 50000000,
+    "datafeeds": 5000000,
+    "automation": 20000000,
+    "confidential": 100000000
+  },
+  "notes": [
+    "Set environment variables before deployment:",
+    "  export TESTNET_OWNER_WALLET=/path/to/owner.json",
+    "  export TESTNET_OWNER_ADDRESS=NOwnerAddressXXX",
+    "  export TESTNET_TEE_WALLET=/path/to/tee.json",
+    "  export TESTNET_TEE_ADDRESS=NTeeAddressXXX",
+    "  export TESTNET_TEE_PUBKEY=03xxx",
+    "",
+    "Deployment steps:",
+    "  1. Ensure wallets have sufficient GAS for deployment",
+    "  2. Run: python3 deploy/scripts/deploy_testnet.py",
+    "  3. Update contract hashes in this file",
+    "  4. Run: python3 deploy/scripts/initialize.py testnet"
+  ]
+}

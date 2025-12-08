@@ -1,7 +1,0 @@
-[
-  {
-    "contract": "VRFService",
-    "operation": "getAdmin",
-    "args": []
-  }
-]

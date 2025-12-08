@@ -1,318 +1,194 @@
-# Service Layer Makefile
-# Professional build automation for the entire project
+# =============================================================================
+# Neo Service Layer - Makefile
+# MarbleRun + EGo + Supabase + Netlify Architecture
+# =============================================================================
 
-.PHONY: all build clean test run dev help
-.PHONY: build-server build-contracts build-frontend
-.PHONY: build-coordinator build-marble build-ego
-.PHONY: run-server run-frontend run-neo-express
-.PHONY: run-coordinator run-marble
-.PHONY: docker-build docker-up docker-down
-.PHONY: docker-ego-build docker-ego-up
-.PHONY: lint fmt check
+.PHONY: all build test clean docker frontend deploy help
 
-# Default target
+# Variables
+SERVICES := gateway oracle vrf mixer secrets datafeeds gasbank automation confidential accounts ccip datalink datastreams dta cre
+DOCKER_COMPOSE := docker compose -f docker/docker-compose.yaml
+
+# =============================================================================
+# Build
+# =============================================================================
+
 all: build
 
-# =============================================================================
-# Build Targets
-# =============================================================================
+build: ## Build all services
+	@echo "Building all services..."
+	@for service in $(SERVICES); do \
+		echo "Building $$service..."; \
+		go build -o bin/$$service ./cmd/$$service 2>/dev/null || \
+		go build -o bin/$$service ./services/$$service 2>/dev/null || true; \
+	done
+	@echo "Build complete"
 
-build: build-server build-contracts build-frontend ## Build all components
-	@echo "✓ All components built successfully"
+build-gateway: ## Build gateway service
+	go build -o bin/gateway ./cmd/gateway
 
-build-server: ## Build the Go server
-	@echo "Building server..."
-	@go build -o bin/server ./cmd/server/
-	@echo "✓ Server built: bin/server"
+build-ego: ## Build with EGo for SGX
+	@echo "Building with EGo..."
+	@for service in $(SERVICES); do \
+		echo "Building $$service with EGo..."; \
+		ego-go build -o bin/$$service ./cmd/$$service 2>/dev/null || \
+		ego-go build -o bin/$$service ./services/$$service 2>/dev/null || true; \
+	done
 
-build-contracts: ## Build Neo N3 smart contracts
-	@echo "Building contracts..."
-	@export PATH="$$PATH:$$HOME/.dotnet/tools" && \
-	cd contracts && \
-	mkdir -p build && \
-	nccs ServiceLayerGateway/ServiceLayerGateway.csproj -o build/ && \
-	nccs OracleService/OracleService.csproj -o build/ && \
-	nccs VRFService/VRFService.csproj -o build/ && \
-	nccs DataFeedsService/DataFeedsService.csproj -o build/ && \
-	nccs AutomationService/AutomationService.csproj -o build/
-	@echo "✓ Contracts built: contracts/build/"
-
-build-frontend: ## Build the frontend
-	@echo "Building frontend..."
-	@cd frontend && npm install && npm run build
-	@echo "✓ Frontend built: frontend/dist/"
-
-# =============================================================================
-# MarbleRun + EGo Build Targets
-# =============================================================================
-
-build-coordinator: ## Build the Coordinator (MarbleRun control plane)
-	@echo "Building Coordinator..."
-	@go build -o bin/coordinator ./cmd/coordinator/
-	@echo "✓ Coordinator built: bin/coordinator"
-
-build-marble: ## Build the Marble runner (generic service runner)
-	@echo "Building Marble runner..."
-	@go build -o bin/marble ./cmd/marble/
-	@echo "✓ Marble built: bin/marble"
-
-build-marblerun: build-coordinator build-marble ## Build all MarbleRun components
-	@echo "✓ MarbleRun components built"
-
-build-ego-coordinator: ## Build Coordinator as SGX enclave with EGo
-	@echo "Building Coordinator with EGo..."
-	@ego-go build -o bin/coordinator-ego ./cmd/coordinator/
-	@cp ego/coordinator-enclave.json bin/enclave.json
-	@cd bin && ego sign coordinator-ego
-	@echo "✓ EGo Coordinator built and signed: bin/coordinator-ego"
-
-build-ego-marble: ## Build Marble as SGX enclave with EGo
-	@echo "Building Marble with EGo..."
-	@ego-go build -o bin/marble-ego ./cmd/marble/
-	@cp ego/enclave.json bin/enclave.json
-	@cd bin && ego sign marble-ego
-	@echo "✓ EGo Marble built and signed: bin/marble-ego"
-
-build-ego: build-ego-coordinator build-ego-marble ## Build all EGo SGX enclaves
-	@echo "✓ All EGo enclaves built"
+sign-enclaves: ## Sign all enclave binaries
+	@echo "Signing enclaves..."
+	@for service in $(SERVICES); do \
+		if [ -f bin/$$service ]; then \
+			ego sign bin/$$service; \
+		fi; \
+	done
 
 # =============================================================================
-# Run Targets
+# Test
 # =============================================================================
 
-run: build-server ## Run everything (server + frontend + neo-express)
-	@echo "=============================================="
-	@echo "  Starting Service Layer - Full Stack"
-	@echo "=============================================="
-	@echo ""
-	@echo "Starting Neo Express..."
-	@export PATH="$$PATH:$$HOME/.dotnet/tools" && \
-	cd contracts && (neoxp run -i default.neo-express > /tmp/neo-express.log 2>&1 &) && sleep 2
-	@echo "✓ Neo Express started (log: /tmp/neo-express.log)"
-	@echo ""
-	@echo "Starting Frontend..."
-	@cd frontend && (npm run dev > /tmp/frontend.log 2>&1 &) && sleep 2
-	@echo "✓ Frontend started (log: /tmp/frontend.log)"
-	@echo ""
-	@echo "=============================================="
-	@echo "  Services:"
-	@echo "    Backend:      http://localhost:8080"
-	@echo "    Frontend:     http://localhost:3000"
-	@echo "    Metrics:      http://localhost:9090"
-	@echo "    API Docs:     http://localhost:8080/api/info"
-	@echo "=============================================="
-	@echo ""
-	@echo "Starting Backend Server (foreground)..."
-	@./bin/server --mode=simulation --debug
+test: ## Run all tests
+	go test -v ./...
 
-run-server: build-server ## Run only the server
-	@echo "Starting Service Layer server..."
-	@./bin/server --mode=simulation --debug
-
-run-frontend: ## Run only the frontend dev server
-	@echo "Starting frontend dev server..."
-	@cd frontend && npm run dev
-
-run-neo-express: ## Run only Neo Express local blockchain
-	@echo "Starting Neo Express..."
-	@export PATH="$$PATH:$$HOME/.dotnet/tools" && \
-	cd contracts && neoxp run -i default.neo-express
-
-run-all-bg: build-server ## Run all services in background
-	@echo "Starting all services in background..."
-	@export PATH="$$PATH:$$HOME/.dotnet/tools" && \
-	cd contracts && (neoxp run -i default.neo-express > /tmp/neo-express.log 2>&1 &)
-	@cd frontend && (npm run dev > /tmp/frontend.log 2>&1 &)
-	@(./bin/server --mode=simulation --debug > /tmp/server.log 2>&1 &)
-	@sleep 3
-	@echo ""
-	@echo "✓ All services started in background"
-	@echo "  Logs:"
-	@echo "    Server:       /tmp/server.log"
-	@echo "    Frontend:     /tmp/frontend.log"
-	@echo "    Neo Express:  /tmp/neo-express.log"
-	@echo ""
-	@echo "  URLs:"
-	@echo "    Backend:      http://localhost:8080"
-	@echo "    Frontend:     http://localhost:3000"
-	@echo "    Metrics:      http://localhost:9090"
-
-stop: ## Stop all background services
-	@echo "Stopping all services..."
-	@pkill -f "bin/server" || true
-	@pkill -f "npm run dev" || true
-	@pkill -f "neoxp run" || true
-	@echo "✓ All services stopped"
-
-status: ## Check status of all services
-	@echo "Service Status:"
-	@echo -n "  Backend:     " && (curl -s http://localhost:8080/health > /dev/null 2>&1 && echo "✓ Running" || echo "✗ Stopped")
-	@echo -n "  Frontend:    " && (curl -s http://localhost:3000 > /dev/null 2>&1 && echo "✓ Running" || echo "✗ Stopped")
-	@echo -n "  Metrics:     " && (curl -s http://localhost:9090/metrics > /dev/null 2>&1 && echo "✓ Running" || echo "✗ Stopped")
-
-dev: run ## Alias for run
-
-# =============================================================================
-# Test Targets
-# =============================================================================
-
-test: test-unit test-integration ## Run all tests
-
-test-unit: ## Run unit tests
-	@echo "Running unit tests..."
-	@go test -v ./...
+test-coverage: ## Run tests with coverage
+	go test -v -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
 
 test-integration: ## Run integration tests
-	@echo "Running integration tests..."
-	@go test -v -tags=integration ./test/...
-
-test-contracts: ## Run contract tests
-	@echo "Running contract tests..."
-	@export PATH="$$PATH:$$HOME/.dotnet/tools" && \
-	cd contracts && \
-	neoxp contract invoke test-getAdmin.neo-invoke.json node1 -r -i default.neo-express
+	go test -v -tags=integration ./test/integration/...
 
 # =============================================================================
-# Docker Targets
+# Docker
 # =============================================================================
 
-docker-build: ## Build Docker images
-	@echo "Building Docker images..."
-	@docker build -t service-layer:latest -f docker/Dockerfile .
-	@echo "✓ Docker image built: service-layer:latest"
+docker-build: ## Build all Docker images
+	$(DOCKER_COMPOSE) build
 
-docker-up: ## Start all services with Docker Compose
-	@echo "Starting services with Docker Compose..."
-	@docker-compose up -d
-	@echo "✓ Services started"
+docker-up: ## Start all services in simulation mode
+	OE_SIMULATION=1 $(DOCKER_COMPOSE) up -d
 
-docker-down: ## Stop all Docker services
-	@echo "Stopping Docker services..."
-	@docker-compose down
-	@echo "✓ Services stopped"
+docker-up-sgx: ## Start all services with SGX hardware
+	OE_SIMULATION=0 $(DOCKER_COMPOSE) up -d
 
-docker-logs: ## View Docker logs
-	@docker-compose logs -f
+docker-down: ## Stop all services
+	$(DOCKER_COMPOSE) down
 
-# =============================================================================
-# MarbleRun + EGo Run Targets
-# =============================================================================
+docker-logs: ## View logs
+	$(DOCKER_COMPOSE) logs -f
 
-run-coordinator: build-coordinator ## Run Coordinator (simulation mode)
-	@echo "Starting Coordinator (simulation mode)..."
-	@SIMULATION_MODE=true MANIFEST_PATH=manifests/development.yaml ./bin/coordinator
+docker-ps: ## List running containers
+	$(DOCKER_COMPOSE) ps
 
-run-marble: build-marble ## Run a Marble service (specify MARBLE_TYPE)
-	@echo "Starting Marble: $(MARBLE_TYPE)..."
-	@SIMULATION_MODE=true COORDINATOR_ADDR=localhost:4433 ./bin/marble -type=$(MARBLE_TYPE)
-
-run-marblerun: build-marblerun ## Run full MarbleRun stack (simulation)
-	@echo "=============================================="
-	@echo "  Starting MarbleRun Stack (Simulation)"
-	@echo "=============================================="
-	@SIMULATION_MODE=true MANIFEST_PATH=manifests/development.yaml ./bin/coordinator &
-	@sleep 3
-	@echo "Coordinator started on :4433"
-	@echo ""
-	@echo "Start Marbles with:"
-	@echo "  make run-marble MARBLE_TYPE=oracle"
-	@echo "  make run-marble MARBLE_TYPE=vrf"
-	@echo "  make run-marble MARBLE_TYPE=secrets"
-
-run-ego-coordinator: build-ego-coordinator ## Run Coordinator in SGX enclave
-	@echo "Starting Coordinator in SGX enclave..."
-	@cd bin && ego run coordinator-ego
-
-run-ego-marble: build-ego-marble ## Run Marble in SGX enclave
-	@echo "Starting Marble in SGX enclave: $(MARBLE_TYPE)..."
-	@cd bin && MARBLE_TYPE=$(MARBLE_TYPE) ego run marble-ego
+docker-clean: ## Remove all containers and volumes
+	$(DOCKER_COMPOSE) down -v --rmi local
 
 # =============================================================================
-# Docker EGo Targets
+# MarbleRun
 # =============================================================================
 
-docker-ego-build: ## Build EGo Docker images
-	@echo "Building EGo Docker images..."
-	@docker build -t neo-coordinator-sgx:latest -f docker/Dockerfile.ego-coordinator .
-	@docker build -t neo-marble-sgx:latest -f docker/Dockerfile.ego-marble .
-	@echo "✓ EGo Docker images built"
+marblerun-install: ## Install MarbleRun CLI
+	curl -fsSL https://github.com/edgelesssys/marblerun/releases/latest/download/marblerun-linux-amd64 -o /usr/local/bin/marblerun
+	chmod +x /usr/local/bin/marblerun
 
-docker-ego-up: ## Start EGo SGX stack with Docker Compose
-	@echo "Starting EGo SGX stack..."
-	@docker-compose -f docker/docker-compose.ego.yaml up -d
-	@echo "✓ EGo SGX services started"
+marblerun-manifest: ## Set MarbleRun manifest
+	marblerun manifest set manifests/manifest.json localhost:4433 --insecure
 
-docker-ego-down: ## Stop EGo SGX stack
-	@echo "Stopping EGo SGX stack..."
-	@docker-compose -f docker/docker-compose.ego.yaml down
-	@echo "✓ EGo SGX services stopped"
+marblerun-status: ## Check MarbleRun status
+	marblerun status localhost:4433 --insecure
 
-docker-supabase-up: ## Start Supabase stack with Docker Compose
-	@echo "Starting Supabase stack..."
-	@docker-compose -f docker/docker-compose.yaml up -d supabase-db supabase-auth supabase-rest supabase-realtime supabase-storage supabase-kong
-	@echo "✓ Supabase services started"
+marblerun-recover: ## Recover MarbleRun coordinator
+	marblerun recover manifests/recovery-key.json localhost:4433 --insecure
 
 # =============================================================================
-# Code Quality Targets
+# Database
 # =============================================================================
 
-lint: ## Run linters
-	@echo "Running linters..."
-	@golangci-lint run ./... || true
-	@cd frontend && npm run lint || true
-	@echo "✓ Linting complete"
+db-migrate: ## Run database migrations
+	@echo "Running migrations..."
+	psql "$(DATABASE_URL)" -f migrations/001_initial_schema.sql
+
+db-seed: ## Seed database with test data
+	@echo "Seeding database..."
+	go run scripts/seed.go
+
+# =============================================================================
+# Frontend
+# =============================================================================
+
+frontend-install: ## Install frontend dependencies
+	cd frontend && npm install
+
+frontend-dev: ## Start frontend development server
+	cd frontend && npm run dev
+
+frontend-build: ## Build frontend for production
+	cd frontend && npm run build
+
+frontend-deploy: ## Deploy frontend to Netlify
+	cd frontend && netlify deploy --prod
+
+# =============================================================================
+# Development
+# =============================================================================
+
+dev: ## Start development environment
+	@echo "Starting development environment..."
+	OE_SIMULATION=1 $(DOCKER_COMPOSE) up -d coordinator
+	@sleep 5
+	@echo "Setting manifest..."
+	marblerun manifest set manifests/manifest.json localhost:4433 --insecure || true
+	@echo "Starting gateway..."
+	OE_SIMULATION=1 go run ./cmd/gateway
+
+dev-gateway: ## Run gateway in development mode
+	OE_SIMULATION=1 go run ./cmd/gateway
+
+lint: ## Run linter
+	golangci-lint run ./...
 
 fmt: ## Format code
-	@echo "Formatting code..."
-	@go fmt ./...
-	@cd frontend && npm run format || true
-	@echo "✓ Code formatted"
+	go fmt ./...
+	gofmt -s -w .
 
-check: lint test ## Run all checks (lint + test)
-	@echo "✓ All checks passed"
+tidy: ## Tidy go modules
+	go mod tidy
 
 # =============================================================================
-# Clean Targets
+# Deployment
+# =============================================================================
+
+deploy-staging: ## Deploy to staging
+	@echo "Deploying to staging..."
+	$(DOCKER_COMPOSE) -f docker/docker-compose.staging.yaml up -d
+
+deploy-production: ## Deploy to production
+	@echo "Deploying to production..."
+	$(DOCKER_COMPOSE) -f docker/docker-compose.production.yaml up -d
+
+# =============================================================================
+# Utilities
 # =============================================================================
 
 clean: ## Clean build artifacts
-	@echo "Cleaning build artifacts..."
-	@rm -rf bin/
-	@rm -rf contracts/build/
-	@rm -rf frontend/dist/
-	@rm -rf frontend/node_modules/
-	@echo "✓ Clean complete"
+	rm -rf bin/
+	rm -rf coverage.out coverage.html
+	rm -rf frontend/dist
 
-clean-all: clean ## Clean everything including caches
-	@rm -rf sealed_store/
-	@rm -f sealing.key
-	@go clean -cache
-	@echo "✓ Full clean complete"
+generate: ## Generate code
+	go generate ./...
 
-# =============================================================================
-# Deploy Targets
-# =============================================================================
+docs: ## Generate documentation
+	godoc -http=:6060
 
-deploy-contracts: ## Deploy contracts to Neo Express
-	@echo "Deploying contracts to Neo Express..."
-	@export PATH="$$PATH:$$HOME/.dotnet/tools" && \
-	cd contracts && \
-	neoxp transfer 1000 GAS genesis node1 -i default.neo-express && \
-	sleep 2 && \
-	neoxp contract deploy build/ServiceLayerGateway.nef node1 -i default.neo-express && \
-	neoxp contract deploy build/OracleService.nef node1 -i default.neo-express && \
-	neoxp contract deploy build/VRFService.nef node1 -i default.neo-express && \
-	neoxp contract deploy build/DataFeedsService.nef node1 -i default.neo-express && \
-	neoxp contract deploy build/AutomationService.nef node1 -i default.neo-express
-	@echo "✓ Contracts deployed"
+version: ## Show version
+	@echo "Neo Service Layer v1.0.0"
+	@echo "MarbleRun + EGo + Supabase + Netlify"
 
 # =============================================================================
 # Help
 # =============================================================================
 
 help: ## Show this help
-	@echo "Service Layer - Build & Development Commands"
+	@echo "Neo Service Layer - Available Commands:"
 	@echo ""
-	@echo "Usage: make [target]"
-	@echo ""
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'

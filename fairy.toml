@@ -1,0 +1,126 @@
+# Neo Fairy Test Configuration for Service Layer
+# https://github.com/r3e-network/neo-fairy-test
+
+[project]
+name = "ServiceLayer"
+version = "1.0.0"
+description = "Service Layer contracts for Neo N3"
+
+[network.neoexpress]
+# Neo Express local development network
+rpc_url = "http://127.0.0.1:50012"
+network_magic = 1234512345
+genesis_wallet = "deploy/wallets/owner.json"
+genesis_password = "test"
+
+[network.testnet]
+# Neo N3 TestNet
+rpc_url = "https://testnet1.neo.coz.io:443"
+network_magic = 877933390
+# Wallet should be set via environment variable or CLI
+# wallet = "${TESTNET_WALLET_PATH}"
+
+[network.mainnet]
+# Neo N3 MainNet (production - use with caution)
+rpc_url = "https://mainnet1.neo.coz.io:443"
+network_magic = 860833102
+
+[compiler]
+# Neo Contract Compiler settings
+command = "nccs"
+output_dir = "contracts/build"
+
+# ============================================================================
+# Contract Definitions
+# ============================================================================
+
+[[contracts]]
+name = "ServiceLayerGateway"
+source = "contracts/gateway/ServiceLayerGateway.cs"
+output = "contracts/build/ServiceLayerGateway"
+# Deploy order: 1 (first)
+order = 1
+
+[[contracts]]
+name = "VRFService"
+source = "contracts/vrf/VRFService.cs"
+output = "contracts/build/VRFService"
+order = 2
+
+[[contracts]]
+name = "MixerService"
+source = "contracts/mixer/MixerService.cs"
+output = "contracts/build/MixerService"
+order = 3
+
+[[contracts]]
+name = "DataFeedsService"
+source = "contracts/datafeeds/DataFeedsService.cs"
+output = "contracts/build/DataFeedsService"
+order = 4
+
+[[contracts]]
+name = "AutomationService"
+source = "contracts/automation/AutomationService.cs"
+output = "contracts/build/AutomationService"
+order = 5
+
+# Example contracts (user contracts that consume services)
+[[contracts]]
+name = "ExampleConsumer"
+source = "contracts/examples/ExampleConsumer.cs"
+output = "contracts/build/ExampleConsumer"
+order = 10
+
+[[contracts]]
+name = "VRFLottery"
+source = "contracts/examples/VRFLottery.cs"
+output = "contracts/build/VRFLottery"
+order = 11
+
+[[contracts]]
+name = "MixerClient"
+source = "contracts/examples/MixerClient.cs"
+output = "contracts/build/MixerClient"
+order = 12
+
+[[contracts]]
+name = "DeFiPriceConsumer"
+source = "contracts/examples/DeFiPriceConsumer.cs"
+output = "contracts/build/DeFiPriceConsumer"
+order = 13
+
+# ============================================================================
+# Test Wallets
+# ============================================================================
+
+[wallets]
+# Owner wallet - admin account for contract deployment and configuration
+owner = { path = "deploy/wallets/owner.json", password = "test" }
+# TEE wallet - simulates TEE account for callbacks
+tee = { path = "deploy/wallets/tee.json", password = "test" }
+# User wallet - simulates user interactions
+user = { path = "deploy/wallets/user.json", password = "test" }
+
+# ============================================================================
+# Service Configuration
+# ============================================================================
+
+[services]
+# Service fees in GAS (8 decimals, so 10000000 = 0.1 GAS)
+[services.fees]
+oracle = 10000000      # 0.1 GAS
+vrf = 10000000         # 0.1 GAS
+mixer = 50000000       # 0.5 GAS
+datafeeds = 5000000    # 0.05 GAS
+automation = 20000000  # 0.2 GAS
+confidential = 100000000  # 1.0 GAS
+
+# ============================================================================
+# Deployment Scripts
+# ============================================================================
+
+[scripts]
+deploy = "deploy/scripts/deploy_all.py"
+init = "deploy/scripts/initialize.py"
+test = "deploy/scripts/run_tests.py"

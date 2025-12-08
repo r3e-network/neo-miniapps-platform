@@ -1,0 +1,41 @@
+{
+  "contracts": [
+    {
+      "name": "ServiceLayerGateway",
+      "hash": "",
+      "tx_hash": "",
+      "gas_consumed": "1000482890",
+      "deployed_at": "2025-12-07T17:07:49Z"
+    },
+    {
+      "name": "DataFeedsService",
+      "hash": "",
+      "tx_hash": "",
+      "gas_consumed": "1000979200",
+      "deployed_at": "2025-12-07T17:07:50Z"
+    },
+    {
+      "name": "VRFService",
+      "hash": "",
+      "tx_hash": "",
+      "gas_consumed": "1000035927",
+      "deployed_at": "2025-12-07T17:07:50Z"
+    },
+    {
+      "name": "MixerService",
+      "hash": "",
+      "tx_hash": "",
+      "gas_consumed": "1000098010",
+      "deployed_at": "2025-12-07T17:07:52Z"
+    },
+    {
+      "name": "AutomationService",
+      "hash": "",
+      "tx_hash": "",
+      "gas_consumed": "1000097988",
+      "deployed_at": "2025-12-07T17:07:52Z"
+    }
+  ],
+  "network": "testnet",
+  "deployer": "NLtL2v28d7TyMEaXcPqtekunkFRksJ7wxu"
+}

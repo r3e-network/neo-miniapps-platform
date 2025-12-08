@@ -1,0 +1,16 @@
+{
+  "PluginConfiguration": {
+    "Network": 860833102,
+    "BindAddress": "127.0.0.1",
+    "Port": 16868,
+    "SslCert": "",
+    "SslCertPassword": "",
+    "MaxGasInvoke": 500,
+    "MaxFee": 0.1,
+    "MaxConcurrentConnections": 40,
+    "SessionEnabled": true,
+    "SessionExpirationTime": 60,
+    "EnableDebugger": true,
+    "EnableCoverage": true
+  }
+}

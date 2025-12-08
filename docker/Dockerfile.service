@@ -1,0 +1,75 @@
+# =============================================================================
+# Service Marble Dockerfile (Generic)
+# Uses EGo for SGX enclave execution
+# =============================================================================
+
+ARG SERVICE=oracle
+
+FROM ghcr.io/edgelesssys/ego-deploy:v1.5.3 AS runtime
+
+# Build stage
+FROM ghcr.io/edgelesssys/ego-dev:v1.5.3 AS builder
+
+ARG SERVICE
+
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build service binary with ego-go
+RUN ego-go build -o ${SERVICE} ./cmd/marble
+
+# Create enclave configuration
+RUN cat > enclave.json << EOF
+{
+    "exe": "${SERVICE}",
+    "key": "private.pem",
+    "debug": false,
+    "heapSize": 512,
+    "executableHeap": false,
+    "productID": 1,
+    "securityVersion": 1,
+    "mounts": [
+        {
+            "target": "/tmp",
+            "type": "memfs"
+        }
+    ],
+    "env": [
+        {"name": "EDG_MARBLE_COORDINATOR_ADDR", "fromHost": true},
+        {"name": "EDG_MARBLE_TYPE", "fromHost": true},
+        {"name": "EDG_MARBLE_DNS_NAMES", "fromHost": true},
+        {"name": "OE_SIMULATION", "fromHost": true},
+        {"name": "SERVICE_TYPE", "value": "${SERVICE}"}
+    ],
+    "files": [
+        {
+            "source": "/etc/ssl/certs/ca-certificates.crt",
+            "target": "/etc/ssl/certs/ca-certificates.crt"
+        }
+    ]
+}
+EOF
+
+# Sign the enclave
+RUN ego sign enclave.json
+
+# Final stage
+FROM runtime
+
+ARG SERVICE
+
+WORKDIR /app
+
+# Copy signed enclave
+COPY --from=builder /app/${SERVICE} /app/service
+COPY --from=builder /app/private.pem /app/
+COPY --from=builder /app/public.pem /app/
+
+# Run with ego
+ENTRYPOINT ["ego", "run", "service"]
