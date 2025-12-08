@@ -1,0 +1,326 @@
+{
+  "Packages": {
+    "gateway": {
+      "UniqueID": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "SignerID": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "ProductID": 1,
+      "SecurityVersion": 1,
+      "Debug": false
+    },
+    "vrf": {
+      "UniqueID": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e21",
+      "SignerID": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "ProductID": 2,
+      "SecurityVersion": 1,
+      "Debug": false
+    },
+    "mixer": {
+      "UniqueID": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e22",
+      "SignerID": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "ProductID": 3,
+      "SecurityVersion": 1,
+      "Debug": false
+    },
+    "datafeeds": {
+      "UniqueID": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e24",
+      "SignerID": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "ProductID": 4,
+      "SecurityVersion": 1,
+      "Debug": false
+    },
+    "automation": {
+      "UniqueID": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e26",
+      "SignerID": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "ProductID": 5,
+      "SecurityVersion": 1,
+      "Debug": false
+    },
+    "confidential": {
+      "UniqueID": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e27",
+      "SignerID": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "ProductID": 6,
+      "SecurityVersion": 1,
+      "Debug": false
+    },
+    "accountpool": {
+      "UniqueID": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e28",
+      "SignerID": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "ProductID": 7,
+      "SecurityVersion": 1,
+      "Debug": false
+    },
+    "secrets": {
+      "UniqueID": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e29",
+      "SignerID": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "ProductID": 8,
+      "SecurityVersion": 1,
+      "Debug": false
+    },
+    "oracle": {
+      "UniqueID": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e2a",
+      "SignerID": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "ProductID": 9,
+      "SecurityVersion": 1,
+      "Debug": false
+    }
+  },
+  "Marbles": {
+    "gateway": {
+      "Package": "gateway",
+      "MaxActivations": 3,
+      "Parameters": {
+        "Files": {
+          "/etc/ssl/certs/ca-certificates.crt": "{{ pem .MarbleRun.RootCA }}"
+        },
+        "Env": {
+          "MARBLE_CERT": "{{ pem .MarbleRun.MarbleCert.Cert }}",
+          "MARBLE_KEY": "{{ pem .MarbleRun.MarbleCert.Private }}",
+          "MARBLE_ROOT_CA": "{{ pem .MarbleRun.RootCA }}",
+          "MARBLE_UUID": "{{ .MarbleRun.UUID }}",
+          "MARBLE_TYPE": "gateway",
+          "MARBLE_SECRETS": "{{ raw .Secrets.gateway_secrets }}",
+          "SUPABASE_URL": "{{ raw .Secrets.supabase_url }}",
+          "SUPABASE_SERVICE_KEY": "{{ raw .Secrets.supabase_service_key }}",
+          "NEO_RPC_URL": "{{ raw .Secrets.neo_rpc_url }}",
+          "JWT_SECRET": "{{ raw .Secrets.jwt_secret }}"
+        },
+        "Argv": ["./gateway", "--port", "8080"]
+      }
+    },
+    "vrf": {
+      "Package": "vrf",
+      "MaxActivations": 5,
+      "Parameters": {
+        "Env": {
+          "MARBLE_CERT": "{{ pem .MarbleRun.MarbleCert.Cert }}",
+          "MARBLE_KEY": "{{ pem .MarbleRun.MarbleCert.Private }}",
+          "MARBLE_ROOT_CA": "{{ pem .MarbleRun.RootCA }}",
+          "MARBLE_UUID": "{{ .MarbleRun.UUID }}",
+          "MARBLE_TYPE": "vrf",
+          "VRF_PRIVATE_KEY": "{{ raw .Secrets.vrf_private_key }}",
+          "SUPABASE_URL": "{{ raw .Secrets.supabase_url }}",
+          "SUPABASE_SERVICE_KEY": "{{ raw .Secrets.supabase_service_key }}"
+        },
+        "Argv": ["./marble"]
+      }
+    },
+    "mixer": {
+      "Package": "mixer",
+      "MaxActivations": 3,
+      "Parameters": {
+        "Env": {
+          "MARBLE_CERT": "{{ pem .MarbleRun.MarbleCert.Cert }}",
+          "MARBLE_KEY": "{{ pem .MarbleRun.MarbleCert.Private }}",
+          "MARBLE_ROOT_CA": "{{ pem .MarbleRun.RootCA }}",
+          "MARBLE_UUID": "{{ .MarbleRun.UUID }}",
+          "MARBLE_TYPE": "mixer",
+          "MIXER_MASTER_KEY": "{{ raw .Secrets.mixer_master_key }}",
+          "ACCOUNTPOOL_URL": "http://accountpool:8081",
+          "SUPABASE_URL": "{{ raw .Secrets.supabase_url }}",
+          "SUPABASE_SERVICE_KEY": "{{ raw .Secrets.supabase_service_key }}",
+          "NEO_RPC_URL": "{{ raw .Secrets.neo_rpc_url }}"
+        },
+        "Argv": ["./marble"]
+      }
+    },
+    "datafeeds": {
+      "Package": "datafeeds",
+      "MaxActivations": 5,
+      "Parameters": {
+        "Files": {
+          "/etc/ssl/certs/ca-certificates.crt": "{{ pem .MarbleRun.RootCA }}"
+        },
+        "Env": {
+          "MARBLE_CERT": "{{ pem .MarbleRun.MarbleCert.Cert }}",
+          "MARBLE_KEY": "{{ pem .MarbleRun.MarbleCert.Private }}",
+          "MARBLE_ROOT_CA": "{{ pem .MarbleRun.RootCA }}",
+          "MARBLE_UUID": "{{ .MarbleRun.UUID }}",
+          "MARBLE_TYPE": "datafeeds",
+          "DATAFEEDS_SIGNING_KEY": "{{ raw .Secrets.datafeeds_signing_key }}",
+          "SUPABASE_URL": "{{ raw .Secrets.supabase_url }}",
+          "SUPABASE_SERVICE_KEY": "{{ raw .Secrets.supabase_service_key }}"
+        },
+        "Argv": ["./marble"]
+      }
+    },
+    "automation": {
+      "Package": "automation",
+      "MaxActivations": 5,
+      "Parameters": {
+        "Env": {
+          "MARBLE_CERT": "{{ pem .MarbleRun.MarbleCert.Cert }}",
+          "MARBLE_KEY": "{{ pem .MarbleRun.MarbleCert.Private }}",
+          "MARBLE_ROOT_CA": "{{ pem .MarbleRun.RootCA }}",
+          "MARBLE_UUID": "{{ .MarbleRun.UUID }}",
+          "MARBLE_TYPE": "automation",
+          "SUPABASE_URL": "{{ raw .Secrets.supabase_url }}",
+          "SUPABASE_SERVICE_KEY": "{{ raw .Secrets.supabase_service_key }}"
+        },
+        "Argv": ["./marble"]
+      }
+    },
+    "confidential": {
+      "Package": "confidential",
+      "MaxActivations": 5,
+      "Parameters": {
+        "Env": {
+          "MARBLE_CERT": "{{ pem .MarbleRun.MarbleCert.Cert }}",
+          "MARBLE_KEY": "{{ pem .MarbleRun.MarbleCert.Private }}",
+          "MARBLE_ROOT_CA": "{{ pem .MarbleRun.RootCA }}",
+          "MARBLE_UUID": "{{ .MarbleRun.UUID }}",
+          "MARBLE_TYPE": "confidential",
+          "COMPUTE_MASTER_KEY": "{{ raw .Secrets.compute_master_key }}",
+          "SUPABASE_URL": "{{ raw .Secrets.supabase_url }}",
+          "SUPABASE_SERVICE_KEY": "{{ raw .Secrets.supabase_service_key }}"
+        },
+        "Argv": ["./marble"]
+      }
+    },
+    "accountpool": {
+      "Package": "accountpool",
+      "MaxActivations": 3,
+      "Parameters": {
+        "Env": {
+          "MARBLE_CERT": "{{ pem .MarbleRun.MarbleCert.Cert }}",
+          "MARBLE_KEY": "{{ pem .MarbleRun.MarbleCert.Private }}",
+          "MARBLE_ROOT_CA": "{{ pem .MarbleRun.RootCA }}",
+          "MARBLE_UUID": "{{ .MarbleRun.UUID }}",
+          "MARBLE_TYPE": "accountpool",
+          "POOL_MASTER_KEY": "{{ raw .Secrets.pool_master_key }}",
+          "SUPABASE_URL": "{{ raw .Secrets.supabase_url }}",
+          "SUPABASE_SERVICE_KEY": "{{ raw .Secrets.supabase_service_key }}",
+          "NEO_RPC_URL": "{{ raw .Secrets.neo_rpc_url }}"
+        },
+        "Argv": ["./marble"]
+      }
+    },
+    "secrets": {
+      "Package": "secrets",
+      "MaxActivations": 3,
+      "Parameters": {
+        "Env": {
+          "MARBLE_CERT": "{{ pem .MarbleRun.MarbleCert.Cert }}",
+          "MARBLE_KEY": "{{ pem .MarbleRun.MarbleCert.Private }}",
+          "MARBLE_ROOT_CA": "{{ pem .MarbleRun.RootCA }}",
+          "MARBLE_UUID": "{{ .MarbleRun.UUID }}",
+          "MARBLE_TYPE": "secrets",
+          "SECRETS_MASTER_KEY": "{{ raw .Secrets.secrets_master_key }}",
+          "SUPABASE_URL": "{{ raw .Secrets.supabase_url }}",
+          "SUPABASE_SERVICE_KEY": "{{ raw .Secrets.supabase_service_key }}"
+        },
+        "Argv": ["./marble"]
+      }
+    },
+    "oracle": {
+      "Package": "oracle",
+      "MaxActivations": 5,
+      "Parameters": {
+        "Env": {
+          "MARBLE_CERT": "{{ pem .MarbleRun.MarbleCert.Cert }}",
+          "MARBLE_KEY": "{{ pem .MarbleRun.MarbleCert.Private }}",
+          "MARBLE_ROOT_CA": "{{ pem .MarbleRun.RootCA }}",
+          "MARBLE_UUID": "{{ .MarbleRun.UUID }}",
+          "MARBLE_TYPE": "oracle",
+          "SUPABASE_URL": "{{ raw .Secrets.supabase_url }}",
+          "SUPABASE_SERVICE_KEY": "{{ raw .Secrets.supabase_service_key }}",
+          "SECRETS_BASE_URL": "{{ raw .Secrets.secrets_base_url }}",
+          "ORACLE_HTTP_ALLOWLIST": "{{ raw .Secrets.oracle_http_allowlist }}"
+        },
+        "Argv": ["./marble"]
+      }
+    }
+  },
+  "Secrets": {
+    "supabase_url": {
+      "Type": "plain",
+      "UserDefined": true
+    },
+    "supabase_service_key": {
+      "Type": "plain",
+      "UserDefined": true
+    },
+    "neo_rpc_url": {
+      "Type": "plain",
+      "UserDefined": true
+    },
+    "jwt_secret": {
+      "Type": "symmetric-key",
+      "Size": 256
+    },
+    "secrets_master_key": {
+      "Type": "symmetric-key",
+      "Size": 256
+    },
+    "gateway_secrets": {
+      "Type": "plain",
+      "UserDefined": true
+    },
+    "vrf_private_key": {
+      "Type": "symmetric-key",
+      "Size": 256
+    },
+    "mixer_master_key": {
+      "Type": "symmetric-key",
+      "Size": 256
+    },
+    "datafeeds_signing_key": {
+      "Type": "symmetric-key",
+      "Size": 256
+    },
+    "compute_master_key": {
+      "Type": "symmetric-key",
+      "Size": 256
+    },
+    "pool_master_key": {
+      "Type": "symmetric-key",
+      "Size": 256
+    },
+    "oracle_http_allowlist": {
+      "Type": "plain",
+      "UserDefined": true
+    },
+    "secrets_base_url": {
+      "Type": "plain",
+      "UserDefined": true
+    }
+  },
+  "Users": {
+    "admin": {
+      "Certificate": "-----BEGIN CERTIFICATE-----\nMIIBkTCB+wIJAKHBfpegPjMCMA0GCSqGSIb3DQEBCwUAMBExDzANBgNVBAMMBmFk\nbWluMB4XDTI0MDEwMTAwMDAwMFoXDTI1MDEwMTAwMDAwMFowETEPMA0GA1UEAwwG\nYWRtaW4wWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAQExample...\n-----END CERTIFICATE-----"
+    }
+  },
+  "Roles": {
+    "admin": {
+      "ResourceType": "Secrets",
+      "ResourceNames": ["*"],
+      "Actions": ["ReadSecret", "WriteSecret"]
+    },
+    "updateManifest": {
+      "ResourceType": "Manifest",
+      "Actions": ["UpdateSecurityVersion"]
+    }
+  },
+  "RecoveryKeys": {
+    "recoveryKey1": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAExample...\n-----END PUBLIC KEY-----"
+  },
+  "TLS": {
+    "Outgoing": [
+      {
+        "Port": "443",
+        "Addr": "*.supabase.co"
+      },
+      {
+        "Port": "443",
+        "Addr": "*.neo.coz.io"
+      },
+      {
+        "Port": "443",
+        "Addr": "api.binance.com"
+      },
+      {
+        "Port": "443",
+        "Addr": "api.coinbase.com"
+      }
+    ]
+  }
+}
