@@ -2,8 +2,13 @@ package chain
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"math/big"
+	"sync"
+
+	"github.com/nspcc-dev/neo-go/pkg/core/transaction"
+	"github.com/nspcc-dev/neo-go/pkg/wallet"
 
 	"github.com/R3E-Network/service_layer/internal/crypto"
 )
@@ -13,19 +18,53 @@ import (
 // =============================================================================
 
 // TEEFulfiller handles TEE callback transactions to the Gateway contract.
+// It properly builds, signs, and broadcasts transactions to the Neo N3 blockchain.
 type TEEFulfiller struct {
 	client       *Client
 	gatewayHash  string
-	wallet       *Wallet
+	account      *wallet.Account // neo-go wallet account for signing
+	legacyWallet *Wallet         // Legacy wallet for message signing (not tx signing)
 	nonceCounter *big.Int
+	nonceMu      sync.Mutex // Protects nonceCounter for concurrent access
 }
 
 // NewTEEFulfiller creates a new TEE fulfiller.
-func NewTEEFulfiller(client *Client, gatewayHash string, wallet *Wallet) *TEEFulfiller {
+// The privateKeyHex should be a hex-encoded private key (without 0x prefix).
+func NewTEEFulfiller(client *Client, gatewayHash string, privateKeyHex string) (*TEEFulfiller, error) {
+	// Create neo-go account for transaction signing
+	account, err := AccountFromPrivateKey(privateKeyHex)
+	if err != nil {
+		return nil, fmt.Errorf("create account: %w", err)
+	}
+
+	// Create legacy wallet for message signing (used in contract verification)
+	legacyWallet, err := NewWallet(privateKeyHex)
+	if err != nil {
+		return nil, fmt.Errorf("create legacy wallet: %w", err)
+	}
+
 	return &TEEFulfiller{
 		client:       client,
 		gatewayHash:  gatewayHash,
-		wallet:       wallet,
+		account:      account,
+		legacyWallet: legacyWallet,
+		nonceCounter: big.NewInt(0),
+	}, nil
+}
+
+// NewTEEFulfillerFromWallet creates a TEE fulfiller from an existing Wallet.
+// DEPRECATED: Use NewTEEFulfiller with private key hex instead.
+func NewTEEFulfillerFromWallet(client *Client, gatewayHash string, w *Wallet) *TEEFulfiller {
+	// Extract private key from wallet and create account
+	// Note: This is a compatibility shim - the wallet's private key bytes are needed
+	privateKeyHex := hex.EncodeToString(w.privateKey.D.Bytes())
+	account, _ := AccountFromPrivateKey(privateKeyHex)
+
+	return &TEEFulfiller{
+		client:       client,
+		gatewayHash:  gatewayHash,
+		account:      account,
+		legacyWallet: w,
 		nonceCounter: big.NewInt(0),
 	}
 }
@@ -39,7 +78,7 @@ func (t *TEEFulfiller) FulfillRequest(ctx context.Context, requestID *big.Int, r
 	message := append(requestID.Bytes(), result...)
 	message = append(message, nonce.Bytes()...)
 
-	signature, err := t.wallet.Sign(message)
+	signature, err := t.legacyWallet.Sign(message)
 	if err != nil {
 		return "", fmt.Errorf("sign fulfillment: %w", err)
 	}
@@ -51,7 +90,16 @@ func (t *TEEFulfiller) FulfillRequest(ctx context.Context, requestID *big.Int, r
 		NewByteArrayParam(signature),
 	}
 
-	txResult, err := t.client.InvokeFunctionAndWait(ctx, t.gatewayHash, "fulfillRequest", params, true)
+	// Use proper transaction building and broadcasting
+	txResult, err := t.client.InvokeFunctionWithSignerAndWait(
+		ctx,
+		t.gatewayHash,
+		"fulfillRequest",
+		params,
+		t.account,
+		transaction.CalledByEntry,
+		true,
+	)
 	if err != nil {
 		return "", err
 	}
@@ -67,7 +115,7 @@ func (t *TEEFulfiller) FailRequest(ctx context.Context, requestID *big.Int, reas
 	message := append(requestID.Bytes(), []byte(reason)...)
 	message = append(message, nonce.Bytes()...)
 
-	signature, err := t.wallet.Sign(message)
+	signature, err := t.legacyWallet.Sign(message)
 	if err != nil {
 		return "", fmt.Errorf("sign failure: %w", err)
 	}
@@ -79,7 +127,15 @@ func (t *TEEFulfiller) FailRequest(ctx context.Context, requestID *big.Int, reas
 		NewByteArrayParam(signature),
 	}
 
-	txResult, err := t.client.InvokeFunctionAndWait(ctx, t.gatewayHash, "failRequest", params, true)
+	txResult, err := t.client.InvokeFunctionWithSignerAndWait(
+		ctx,
+		t.gatewayHash,
+		"failRequest",
+		params,
+		t.account,
+		transaction.CalledByEntry,
+		true,
+	)
 	if err != nil {
 		return "", err
 	}
@@ -97,7 +153,7 @@ func (t *TEEFulfiller) ResolveDispute(ctx context.Context, mixerHash string, req
 	message := append(requestHash, outputsHash...)
 	message = append(message, nonce.Bytes()...)
 
-	signature, err := t.wallet.Sign(message)
+	signature, err := t.legacyWallet.Sign(message)
 	if err != nil {
 		return "", fmt.Errorf("sign dispute resolution: %w", err)
 	}
@@ -109,7 +165,15 @@ func (t *TEEFulfiller) ResolveDispute(ctx context.Context, mixerHash string, req
 		NewByteArrayParam(signature),
 	}
 
-	txResult, err := t.client.InvokeFunctionAndWait(ctx, mixerHash, "resolveDispute", params, true)
+	txResult, err := t.client.InvokeFunctionWithSignerAndWait(
+		ctx,
+		mixerHash,
+		"resolveDispute",
+		params,
+		t.account,
+		transaction.CalledByEntry,
+		true,
+	)
 	if err != nil {
 		return "", err
 	}
@@ -118,6 +182,8 @@ func (t *TEEFulfiller) ResolveDispute(ctx context.Context, mixerHash string, req
 }
 
 func (t *TEEFulfiller) nextNonce() *big.Int {
+	t.nonceMu.Lock()
+	defer t.nonceMu.Unlock()
 	t.nonceCounter.Add(t.nonceCounter, big.NewInt(1))
 	return new(big.Int).Set(t.nonceCounter)
 }
@@ -135,7 +201,7 @@ func (t *TEEFulfiller) UpdatePrice(ctx context.Context, dataFeedsHash, feedID st
 	message = append(message, big.NewInt(int64(timestamp)).Bytes()...)
 	message = append(message, nonce.Bytes()...)
 
-	signature, err := t.wallet.Sign(message)
+	signature, err := t.legacyWallet.Sign(message)
 	if err != nil {
 		return "", fmt.Errorf("sign price update: %w", err)
 	}
@@ -148,7 +214,15 @@ func (t *TEEFulfiller) UpdatePrice(ctx context.Context, dataFeedsHash, feedID st
 		NewByteArrayParam(signature),
 	}
 
-	txResult, err := t.client.InvokeFunctionAndWait(ctx, dataFeedsHash, "updatePrice", params, true)
+	txResult, err := t.client.InvokeFunctionWithSignerAndWait(
+		ctx,
+		dataFeedsHash,
+		"updatePrice",
+		params,
+		t.account,
+		transaction.CalledByEntry,
+		true,
+	)
 	if err != nil {
 		return "", err
 	}
@@ -173,7 +247,7 @@ func (t *TEEFulfiller) UpdatePrices(ctx context.Context, dataFeedsHash string, f
 	}
 	message = append(message, nonce.Bytes()...)
 
-	signature, err := t.wallet.Sign(message)
+	signature, err := t.legacyWallet.Sign(message)
 	if err != nil {
 		return "", fmt.Errorf("sign batch price update: %w", err)
 	}
@@ -196,7 +270,15 @@ func (t *TEEFulfiller) UpdatePrices(ctx context.Context, dataFeedsHash string, f
 		NewByteArrayParam(signature),
 	}
 
-	txResult, err := t.client.InvokeFunctionAndWait(ctx, dataFeedsHash, "updatePrices", params, true)
+	txResult, err := t.client.InvokeFunctionWithSignerAndWait(
+		ctx,
+		dataFeedsHash,
+		"updatePrices",
+		params,
+		t.account,
+		transaction.CalledByEntry,
+		true,
+	)
 	if err != nil {
 		return "", err
 	}
@@ -212,7 +294,7 @@ func (t *TEEFulfiller) ExecuteTrigger(ctx context.Context, automationHash string
 	message := append(triggerID.Bytes(), executionData...)
 	message = append(message, nonce.Bytes()...)
 
-	signature, err := t.wallet.Sign(message)
+	signature, err := t.legacyWallet.Sign(message)
 	if err != nil {
 		return "", fmt.Errorf("sign trigger execution: %w", err)
 	}
@@ -224,7 +306,15 @@ func (t *TEEFulfiller) ExecuteTrigger(ctx context.Context, automationHash string
 		NewByteArrayParam(signature),
 	}
 
-	txResult, err := t.client.InvokeFunctionAndWait(ctx, automationHash, "executeTrigger", params, true)
+	txResult, err := t.client.InvokeFunctionWithSignerAndWait(
+		ctx,
+		automationHash,
+		"executeTrigger",
+		params,
+		t.account,
+		transaction.CalledByEntry,
+		true,
+	)
 	if err != nil {
 		return "", err
 	}

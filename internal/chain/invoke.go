@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/nspcc-dev/neo-go/pkg/core/transaction"
+	"github.com/nspcc-dev/neo-go/pkg/wallet"
 )
 
 // =============================================================================
@@ -112,6 +115,8 @@ func (c *Client) SendRawTransactionAndWait(ctx context.Context, txHex string, po
 }
 
 // InvokeFunctionAndWait invokes a contract function and optionally waits for execution.
+// DEPRECATED: This method only simulates the transaction and does NOT broadcast it.
+// Use InvokeFunctionWithSignerAndWait for actual on-chain transactions.
 // If wait is true, it waits for the transaction to be included in a block and returns the application log.
 // If wait is false, it returns immediately after broadcasting with only the TxHash populated.
 // Uses DefaultTxWaitTimeout (2 minutes) and DefaultPollInterval (2 seconds).
@@ -151,4 +156,105 @@ func (c *Client) InvokeFunctionAndWait(ctx context.Context, contractHash, method
 	}
 
 	return result, nil
+}
+
+// =============================================================================
+// Proper Transaction Building and Broadcasting
+// =============================================================================
+
+// InvokeFunctionWithSignerAndWait properly builds, signs, and broadcasts a transaction.
+// This is the correct way to invoke contract functions that modify state.
+// Parameters:
+//   - ctx: context for RPC calls
+//   - contractHash: target contract script hash (hex string with or without 0x prefix)
+//   - method: contract method name
+//   - params: contract parameters
+//   - account: neo-go wallet account for signing
+//   - signerScopes: witness scope for the signer (use transaction.CalledByEntry for most cases)
+//   - wait: if true, waits for transaction confirmation
+//
+// Returns TxResult with transaction hash and application log (if wait=true).
+func (c *Client) InvokeFunctionWithSignerAndWait(
+	ctx context.Context,
+	contractHash, method string,
+	params []ContractParam,
+	account *wallet.Account,
+	signerScopes transaction.WitnessScope,
+	wait bool,
+) (*TxResult, error) {
+	// 1. Simulate the invocation to get script and gas estimate
+	invokeResult, err := c.InvokeFunctionWithSigners(ctx, contractHash, method, params, account.ScriptHash())
+	if err != nil {
+		return nil, fmt.Errorf("simulate %s: %w", method, err)
+	}
+
+	if invokeResult.State != "HALT" {
+		return nil, fmt.Errorf("%s simulation failed: %s", method, invokeResult.Exception)
+	}
+
+	// 2. Build and sign the transaction
+	txBuilder := NewTxBuilder(c, c.networkID)
+	tx, err := txBuilder.BuildAndSignTx(ctx, invokeResult, account, signerScopes)
+	if err != nil {
+		return nil, fmt.Errorf("build transaction for %s: %w", method, err)
+	}
+
+	// 3. Broadcast the transaction
+	txHash, err := txBuilder.BroadcastTx(ctx, tx)
+	if err != nil {
+		return nil, fmt.Errorf("broadcast %s: %w", method, err)
+	}
+
+	result := &TxResult{
+		TxHash:  "0x" + txHash.StringLE(),
+		VMState: invokeResult.State,
+	}
+
+	if !wait {
+		return result, nil
+	}
+
+	// 4. Wait for transaction confirmation
+	wctx, cancel := context.WithTimeout(ctx, DefaultTxWaitTimeout)
+	defer cancel()
+
+	appLog, err := c.WaitForApplicationLog(wctx, result.TxHash, DefaultPollInterval)
+	if err != nil {
+		return result, fmt.Errorf("wait for %s execution: %w", method, err)
+	}
+
+	result.AppLog = appLog
+
+	// Update VMState from actual execution
+	if len(appLog.Executions) > 0 {
+		result.VMState = appLog.Executions[0].VMState
+	}
+
+	return result, nil
+}
+
+// InvokeFunctionWithSigners simulates a contract invocation with signers.
+// This is used to get accurate gas estimates before building the actual transaction.
+func (c *Client) InvokeFunctionWithSigners(ctx context.Context, scriptHash, method string, params []ContractParam, signerHash interface{}) (*InvokeResult, error) {
+	// Build signers array for the RPC call
+	var signers []Signer
+	switch v := signerHash.(type) {
+	case string:
+		signers = []Signer{{Account: v, Scopes: ScopeCalledByEntry}}
+	default:
+		// Assume it's a util.Uint160 or similar
+		signers = []Signer{{Account: fmt.Sprintf("0x%s", v), Scopes: ScopeCalledByEntry}}
+	}
+
+	args := []interface{}{scriptHash, method, params, signers}
+	result, err := c.Call(ctx, "invokefunction", args)
+	if err != nil {
+		return nil, err
+	}
+
+	var invokeResult InvokeResult
+	if err := json.Unmarshal(result, &invokeResult); err != nil {
+		return nil, err
+	}
+	return &invokeResult, nil
 }

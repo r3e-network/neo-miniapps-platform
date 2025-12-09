@@ -318,10 +318,14 @@ func base58Encode(input []byte) string {
 }
 
 // =============================================================================
-// VRF (Verifiable Random Function)
+// VRF (Verifiable Random Function) - Legacy Wrappers
 // =============================================================================
+//
+// NOTE: The proper ECVRF implementation is in vrf.go.
+// These functions are kept for backward compatibility but delegate to the new implementation.
 
-// VRFProof represents a VRF proof.
+// VRFProof represents a VRF proof (legacy format).
+// For new code, use VRFOutput and VRFProofData from vrf.go.
 type VRFProof struct {
 	PublicKey []byte `json:"public_key"`
 	Proof     []byte `json:"proof"`
@@ -329,44 +333,42 @@ type VRFProof struct {
 }
 
 // GenerateVRF generates a VRF output and proof.
-// Uses ECVRF-P256-SHA256-TAI as per RFC 9381.
+// Uses proper ECVRF-P256-SHA256-TAI as per RFC 9381.
+// This is a wrapper around GenerateVRFProof for backward compatibility.
 func GenerateVRF(privateKey *ecdsa.PrivateKey, alpha []byte) (*VRFProof, error) {
-	// Hash the input
-	h := sha256.New()
-	h.Write(alpha)
-	hash := h.Sum(nil)
-
-	// Sign the hash (simplified VRF - production should use proper ECVRF)
-	signature, err := Sign(privateKey, hash)
+	// Use the proper ECVRF implementation
+	output, err := GenerateVRFProof(privateKey, alpha)
 	if err != nil {
 		return nil, err
 	}
 
-	// Generate output by hashing the proof
-	outputHash := sha256.Sum256(signature)
+	// Convert to legacy format
+	proofBytes := SerializeVRFProof(output.Pi)
 
 	return &VRFProof{
 		PublicKey: PublicKeyToBytes(&privateKey.PublicKey),
-		Proof:     signature,
-		Output:    outputHash[:],
+		Proof:     proofBytes,
+		Output:    output.Beta,
 	}, nil
 }
 
 // VerifyVRF verifies a VRF proof.
+// This is a wrapper around VerifyVRFProof for backward compatibility.
 func VerifyVRF(publicKey *ecdsa.PublicKey, alpha []byte, proof *VRFProof) bool {
-	// Hash the input
-	h := sha256.New()
-	h.Write(alpha)
-	hash := h.Sum(nil)
-
-	// Verify the signature
-	if !Verify(publicKey, hash, proof.Proof) {
+	// Deserialize the proof
+	proofData, err := DeserializeVRFProof(proof.Proof)
+	if err != nil {
 		return false
 	}
 
-	// Verify the output
-	outputHash := sha256.Sum256(proof.Proof)
-	return hex.EncodeToString(outputHash[:]) == hex.EncodeToString(proof.Output)
+	// Verify using proper ECVRF
+	beta, valid := VerifyVRFProof(publicKey, alpha, proofData)
+	if !valid {
+		return false
+	}
+
+	// Verify the output matches
+	return hex.EncodeToString(beta) == hex.EncodeToString(proof.Output)
 }
 
 // =============================================================================

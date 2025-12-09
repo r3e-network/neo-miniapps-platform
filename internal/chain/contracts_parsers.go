@@ -101,23 +101,54 @@ func ParseServiceRequest(item StackItem) (*ContractServiceRequest, error) {
 		return nil, fmt.Errorf("expected at least 12 items, got %d", len(items))
 	}
 
-	id, _ := ParseInteger(items[0])
-	userContract, _ := ParseHash160(items[1])
-	payer, _ := ParseHash160(items[2])
-	serviceType, _ := ParseStringFromItem(items[3])
-	serviceContract, _ := ParseHash160(items[4])
-	payload, _ := ParseByteArray(items[5])
-	callbackMethod, _ := ParseStringFromItem(items[6])
-	status, _ := ParseInteger(items[7])
-	fee, _ := ParseInteger(items[8])
-	createdAt, _ := ParseInteger(items[9])
+	id, err := ParseInteger(items[0])
+	if err != nil {
+		return nil, fmt.Errorf("parse id: %w", err)
+	}
+	userContract, err := ParseHash160(items[1])
+	if err != nil {
+		return nil, fmt.Errorf("parse userContract: %w", err)
+	}
+	payer, err := ParseHash160(items[2])
+	if err != nil {
+		return nil, fmt.Errorf("parse payer: %w", err)
+	}
+	serviceType, err := ParseStringFromItem(items[3])
+	if err != nil {
+		return nil, fmt.Errorf("parse serviceType: %w", err)
+	}
+	serviceContract, err := ParseHash160(items[4])
+	if err != nil {
+		return nil, fmt.Errorf("parse serviceContract: %w", err)
+	}
+	payload, err := ParseByteArray(items[5])
+	if err != nil {
+		return nil, fmt.Errorf("parse payload: %w", err)
+	}
+	callbackMethod, err := ParseStringFromItem(items[6])
+	if err != nil {
+		return nil, fmt.Errorf("parse callbackMethod: %w", err)
+	}
+	status, err := ParseInteger(items[7])
+	if err != nil {
+		return nil, fmt.Errorf("parse status: %w", err)
+	}
+	fee, err := ParseInteger(items[8])
+	if err != nil {
+		return nil, fmt.Errorf("parse fee: %w", err)
+	}
+	createdAt, err := ParseInteger(items[9])
+	if err != nil {
+		return nil, fmt.Errorf("parse createdAt: %w", err)
+	}
+	// result and error can be null, so we don't fail on parse errors
 	result, _ := ParseByteArray(items[10])
 	errorStr, _ := ParseStringFromItem(items[11])
 
 	var completedAt uint64
 	if len(items) > 12 {
-		ca, _ := ParseInteger(items[12])
-		if ca != nil {
+		ca, err := ParseInteger(items[12])
+		if err == nil && ca != nil {
 			completedAt = ca.Uint64()
 		}
 	}
@@ -153,9 +184,18 @@ func ParseMixerPool(item StackItem) (*MixerPool, error) {
 		return nil, fmt.Errorf("expected at least 3 items, got %d", len(items))
 	}
 
-	denomination, _ := ParseInteger(items[0])
-	leafCount, _ := ParseInteger(items[1])
-	active, _ := ParseBoolean(items[2])
+	denomination, err := ParseInteger(items[0])
+	if err != nil {
+		return nil, fmt.Errorf("parse denomination: %w", err)
+	}
+	leafCount, err := ParseInteger(items[1])
+	if err != nil {
+		return nil, fmt.Errorf("parse leafCount: %w", err)
+	}
+	active, err := ParseBoolean(items[2])
+	if err != nil {
+		return nil, fmt.Errorf("parse active: %w", err)
+	}
 
 	return &MixerPool{
 		Denomination: denomination,
@@ -178,11 +218,26 @@ func ParsePriceData(item StackItem) (*PriceData, error) {
 		return nil, fmt.Errorf("expected at least 5 items, got %d", len(items))
 	}
 
-	feedID, _ := ParseStringFromItem(items[0])
-	price, _ := ParseInteger(items[1])
-	decimals, _ := ParseInteger(items[2])
-	timestamp, _ := ParseInteger(items[3])
-	updatedBy, _ := ParseHash160(items[4])
+	feedID, err := ParseStringFromItem(items[0])
+	if err != nil {
+		return nil, fmt.Errorf("parse feedID: %w", err)
+	}
+	price, err := ParseInteger(items[1])
+	if err != nil {
+		return nil, fmt.Errorf("parse price: %w", err)
+	}
+	decimals, err := ParseInteger(items[2])
+	if err != nil {
+		return nil, fmt.Errorf("parse decimals: %w", err)
+	}
+	timestamp, err := ParseInteger(items[3])
+	if err != nil {
+		return nil, fmt.Errorf("parse timestamp: %w", err)
+	}
+	updatedBy, err := ParseHash160(items[4])
+	if err != nil {
+		return nil, fmt.Errorf("parse updatedBy: %w", err)
+	}
 
 	return &PriceData{
 		FeedID:    feedID,
@@ -207,11 +262,26 @@ func ParseFeedConfig(item StackItem) (*ContractFeedConfig, error) {
 		return nil, fmt.Errorf("expected at least 5 items, got %d", len(items))
 	}
 
-	feedID, _ := ParseStringFromItem(items[0])
-	description, _ := ParseStringFromItem(items[1])
-	decimals, _ := ParseInteger(items[2])
-	active, _ := ParseBoolean(items[3])
-	createdAt, _ := ParseInteger(items[4])
+	feedID, err := ParseStringFromItem(items[0])
+	if err != nil {
+		return nil, fmt.Errorf("parse feedID: %w", err)
+	}
+	description, err := ParseStringFromItem(items[1])
+	if err != nil {
+		return nil, fmt.Errorf("parse description: %w", err)
+	}
+	decimals, err := ParseInteger(items[2])
+	if err != nil {
+		return nil, fmt.Errorf("parse decimals: %w", err)
+	}
+	active, err := ParseBoolean(items[3])
+	if err != nil {
+		return nil, fmt.Errorf("parse active: %w", err)
+	}
+	createdAt, err := ParseInteger(items[4])
+	if err != nil {
+		return nil, fmt.Errorf("parse createdAt: %w", err)
+	}
 
 	return &ContractFeedConfig{
 		FeedID:      feedID,
@@ -236,20 +306,60 @@ func ParseTrigger(item StackItem) (*Trigger, error) {
 		return nil, fmt.Errorf("expected at least 14 items, got %d", len(items))
 	}
 
-	triggerID, _ := ParseInteger(items[0])
-	requestID, _ := ParseInteger(items[1])
-	owner, _ := ParseHash160(items[2])
-	targetContract, _ := ParseHash160(items[3])
-	callbackMethod, _ := ParseStringFromItem(items[4])
-	triggerType, _ := ParseInteger(items[5])
-	condition, _ := ParseStringFromItem(items[6])
+	triggerID, err := ParseInteger(items[0])
+	if err != nil {
+		return nil, fmt.Errorf("parse triggerID: %w", err)
+	}
+	requestID, err := ParseInteger(items[1])
+	if err != nil {
+		return nil, fmt.Errorf("parse requestID: %w", err)
+	}
+	owner, err := ParseHash160(items[2])
+	if err != nil {
+		return nil, fmt.Errorf("parse owner: %w", err)
+	}
+	targetContract, err := ParseHash160(items[3])
+	if err != nil {
+		return nil, fmt.Errorf("parse targetContract: %w", err)
+	}
+	callbackMethod, err := ParseStringFromItem(items[4])
+	if err != nil {
+		return nil, fmt.Errorf("parse callbackMethod: %w", err)
+	}
+	triggerType, err := ParseInteger(items[5])
+	if err != nil {
+		return nil, fmt.Errorf("parse triggerType: %w", err)
+	}
+	condition, err := ParseStringFromItem(items[6])
+	if err != nil {
+		return nil, fmt.Errorf("parse condition: %w", err)
+	}
+	// callbackData can be null
 	callbackData, _ := ParseByteArray(items[7])
-	maxExecutions, _ := ParseInteger(items[8])
-	executionCount, _ := ParseInteger(items[9])
-	status, _ := ParseInteger(items[10])
-	createdAt, _ := ParseInteger(items[11])
-	lastExecutedAt, _ := ParseInteger(items[12])
-	expiresAt, _ := ParseInteger(items[13])
+	maxExecutions, err := ParseInteger(items[8])
+	if err != nil {
+		return nil, fmt.Errorf("parse maxExecutions: %w", err)
+	}
+	executionCount, err := ParseInteger(items[9])
+	if err != nil {
+		return nil, fmt.Errorf("parse executionCount: %w", err)
+	}
+	status, err := ParseInteger(items[10])
+	if err != nil {
+		return nil, fmt.Errorf("parse status: %w", err)
+	}
+	createdAt, err := ParseInteger(items[11])
+	if err != nil {
+		return nil, fmt.Errorf("parse createdAt: %w", err)
+	}
+	lastExecutedAt, err := ParseInteger(items[12])
+	if err != nil {
+		return nil, fmt.Errorf("parse lastExecutedAt: %w", err)
+	}
+	expiresAt, err := ParseInteger(items[13])
+	if err != nil {
+		return nil, fmt.Errorf("parse expiresAt: %w", err)
+	}
 
 	return &Trigger{
 		TriggerID:      triggerID,
@@ -283,11 +393,26 @@ func ParseExecutionRecord(item StackItem) (*ExecutionRecord, error) {
 		return nil, fmt.Errorf("expected at least 5 items, got %d", len(items))
 	}
 
-	triggerID, _ := ParseInteger(items[0])
-	executionNumber, _ := ParseInteger(items[1])
-	timestamp, _ := ParseInteger(items[2])
-	success, _ := ParseBoolean(items[3])
-	executedBy, _ := ParseHash160(items[4])
+	triggerID, err := ParseInteger(items[0])
+	if err != nil {
+		return nil, fmt.Errorf("parse triggerID: %w", err)
+	}
+	executionNumber, err := ParseInteger(items[1])
+	if err != nil {
+		return nil, fmt.Errorf("parse executionNumber: %w", err)
+	}
+	timestamp, err := ParseInteger(items[2])
+	if err != nil {
+		return nil, fmt.Errorf("parse timestamp: %w", err)
+	}
+	success, err := ParseBoolean(items[3])
+	if err != nil {
+		return nil, fmt.Errorf("parse success: %w", err)
+	}
+	executedBy, err := ParseHash160(items[4])
+	if err != nil {
+		return nil, fmt.Errorf("parse executedBy: %w", err)
+	}
 
 	return &ExecutionRecord{
 		TriggerID:       triggerID,

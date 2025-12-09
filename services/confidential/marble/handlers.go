@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/R3E-Network/service_layer/internal/httputil"
+	"github.com/gorilla/mux"
 )
 
 // =============================================================================
@@ -41,9 +42,36 @@ func (s *Service) handleExecute(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleGetJob(w http.ResponseWriter, r *http.Request) {
-	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "not found"})
+	userID, ok := httputil.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+
+	jobID := mux.Vars(r)["id"]
+	if jobID == "" {
+		httputil.BadRequest(w, "job id required")
+		return
+	}
+
+	job := s.getJob(userID, jobID)
+	if job == nil {
+		httputil.NotFound(w, "job not found")
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, job)
 }
 
 func (s *Service) handleListJobs(w http.ResponseWriter, r *http.Request) {
-	httputil.WriteJSON(w, http.StatusOK, []interface{}{})
+	userID, ok := httputil.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+
+	jobs := s.listJobs(userID)
+	if jobs == nil {
+		jobs = []*ExecuteResponse{}
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, jobs)
 }

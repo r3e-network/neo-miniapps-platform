@@ -3,6 +3,9 @@ package confidentialmarble
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -16,7 +19,7 @@ import (
 // Core Logic
 // =============================================================================
 
-// Execute runs code inside the TEE enclave.
+// Execute runs code inside the TEE enclave and stores the result for later retrieval.
 func (s *Service) Execute(ctx context.Context, userID string, req *ExecuteRequest) (*ExecuteResponse, error) {
 	startTime := time.Now()
 	jobID := uuid.New().String()
@@ -32,6 +35,31 @@ func (s *Service) Execute(ctx context.Context, userID string, req *ExecuteReques
 	if req.Script == "" {
 		response.Status = "failed"
 		response.Error = "script cannot be empty"
+		return response, nil
+	}
+
+	// Validate input size
+	if req.Input != nil {
+		inputJSON, _ := json.Marshal(req.Input)
+		if len(inputJSON) > MaxInputSize {
+			response.Status = "failed"
+			response.Error = fmt.Sprintf("input exceeds maximum size of %d bytes", MaxInputSize)
+			return response, nil
+		}
+	}
+
+	// Validate secret refs count
+	if len(req.SecretRefs) > MaxSecretRefs {
+		response.Status = "failed"
+		response.Error = fmt.Sprintf("too many secret references (max %d)", MaxSecretRefs)
+		return response, nil
+	}
+
+	// Check concurrent jobs limit
+	runningJobs := s.countRunningJobs(userID)
+	if runningJobs >= MaxConcurrentJobs {
+		response.Status = "failed"
+		response.Error = fmt.Sprintf("too many concurrent jobs (max %d)", MaxConcurrentJobs)
 		return response, nil
 	}
 
@@ -90,16 +118,73 @@ func (s *Service) Execute(ctx context.Context, userID string, req *ExecuteReques
 		return response, nil
 	}
 
+	// Validate output size
+	if output != nil {
+		outputJSON, _ := json.Marshal(output)
+		if len(outputJSON) > MaxOutputSize {
+			response.Status = "failed"
+			response.Error = fmt.Sprintf("output exceeds maximum size of %d bytes", MaxOutputSize)
+			response.Duration = time.Since(startTime).String()
+			return response, nil
+		}
+	}
+
 	response.Status = "completed"
 	response.Output = output
 	response.GasUsed = int64(len(req.Script) * 10) // Simplified gas calculation
 	response.Duration = time.Since(startTime).String()
 
+	// Encrypt and sign the output if keys are available
+	if len(s.masterKey) > 0 && len(output) > 0 {
+		if err := s.protectOutput(response); err != nil {
+			response.Logs = append(response.Logs,
+				fmt.Sprintf("[%s] Warning: failed to protect output: %v", time.Now().Format(time.RFC3339), err),
+			)
+		}
+	}
+
 	response.Logs = append(response.Logs,
 		fmt.Sprintf("[%s] Execution completed successfully", time.Now().Format(time.RFC3339)),
 	)
 
+	// Store job for later retrieval
+	s.storeJob(userID, response)
+
 	return response, nil
+}
+
+// protectOutput encrypts the output and generates a signature to prove TEE origin.
+func (s *Service) protectOutput(response *ExecuteResponse) error {
+	if response.Output == nil || len(response.Output) == 0 {
+		return nil
+	}
+
+	// Serialize output to JSON
+	outputJSON, err := json.Marshal(response.Output)
+	if err != nil {
+		return fmt.Errorf("marshal output: %w", err)
+	}
+
+	// Compute hash of plaintext output
+	outputHash := crypto.Hash256(outputJSON)
+	response.OutputHash = hex.EncodeToString(outputHash)
+
+	// Encrypt the output using master key
+	if len(s.masterKey) >= 32 {
+		encrypted, err := crypto.Encrypt(s.masterKey[:32], outputJSON)
+		if err != nil {
+			return fmt.Errorf("encrypt output: %w", err)
+		}
+		response.EncryptedOutput = base64.StdEncoding.EncodeToString(encrypted)
+	}
+
+	// Sign the output hash using signing key (HMAC-SHA256)
+	if len(s.signingKey) > 0 {
+		signature := crypto.HMACSign(s.signingKey, outputHash)
+		response.Signature = hex.EncodeToString(signature)
+	}
+
+	return nil
 }
 
 // executeScript executes a JavaScript script inside the enclave using goja runtime.
@@ -146,15 +231,24 @@ func (s *Service) executeScript(ctx context.Context, script, entryPoint string, 
 		return nil, fmt.Errorf("failed to set secrets: %w", err)
 	}
 
-	// Provide console.log for debugging
+	// Provide console.log for debugging with limits
 	console := vm.NewObject()
-	logs := make([]string, 0)
+	logs := make([]string, 0, MaxLogEntries)
 	console.Set("log", func(call goja.FunctionCall) goja.Value {
+		// Enforce log entry limit
+		if len(logs) >= MaxLogEntries {
+			return goja.Undefined()
+		}
 		args := make([]interface{}, len(call.Arguments))
 		for i, arg := range call.Arguments {
 			args[i] = arg.Export()
 		}
-		logs = append(logs, fmt.Sprint(args...))
+		entry := fmt.Sprint(args...)
+		// Enforce log entry size limit
+		if len(entry) > MaxLogEntrySize {
+			entry = entry[:MaxLogEntrySize] + "...(truncated)"
+		}
+		logs = append(logs, entry)
 		return goja.Undefined()
 	})
 	vm.Set("console", console)
