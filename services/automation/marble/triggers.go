@@ -102,7 +102,18 @@ func (s *Service) dispatchAction(ctx context.Context, actionRaw json.RawMessage)
 			return err
 		}
 		req.Header.Set("Content-Type", "application/json")
-		resp, err := http.DefaultClient.Do(req)
+
+		// Use Marble mTLS client for secure inter-service communication
+		// Falls back to default client with timeout for external webhooks
+		var httpClient *http.Client
+		if s.Marble() != nil {
+			httpClient = s.Marble().HTTPClient()
+		}
+		if httpClient == nil {
+			httpClient = &http.Client{Timeout: 30 * time.Second}
+		}
+
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			return err
 		}
@@ -117,27 +128,120 @@ func (s *Service) dispatchAction(ctx context.Context, actionRaw json.RawMessage)
 }
 
 // parseNextCronExecution parses a cron expression and returns the next execution time.
+// Supports standard 5-field cron: minute hour day-of-month month day-of-week
+// Supports: specific values (5), wildcards (*), ranges (1-5), lists (1,3,5), steps (*/15)
 func (s *Service) parseNextCronExecution(cronExpr string) (time.Time, error) {
 	parts := strings.Fields(cronExpr)
 	if len(parts) != 5 {
 		return time.Time{}, fmt.Errorf("invalid cron expression: expected 5 fields")
 	}
 
+	// Parse each field into allowed values
+	minutes, err := parseCronField(parts[0], 0, 59)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid minute field: %w", err)
+	}
+	hours, err := parseCronField(parts[1], 0, 23)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid hour field: %w", err)
+	}
+	days, err := parseCronField(parts[2], 1, 31)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid day field: %w", err)
+	}
+	months, err := parseCronField(parts[3], 1, 12)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid month field: %w", err)
+	}
+	weekdays, err := parseCronField(parts[4], 0, 6)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid weekday field: %w", err)
+	}
+
+	// Find next matching time (search up to 1 year ahead)
 	now := time.Now()
+	candidate := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), now.Minute(), 0, 0, now.Location())
+	candidate = candidate.Add(time.Minute) // Start from next minute
 
-	// Simple implementation for common patterns
-	// Production would use a full cron parser
-	minute, _ := strconv.Atoi(parts[0])
-	if parts[0] == "*" {
-		minute = now.Minute() + 1
+	maxIterations := 525600 // 1 year in minutes
+	for i := 0; i < maxIterations; i++ {
+		if months[int(candidate.Month())] &&
+			days[candidate.Day()] &&
+			weekdays[int(candidate.Weekday())] &&
+			hours[candidate.Hour()] &&
+			minutes[candidate.Minute()] {
+			return candidate, nil
+		}
+		candidate = candidate.Add(time.Minute)
 	}
 
-	next := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), minute, 0, 0, now.Location())
-	if next.Before(now) {
-		next = next.Add(time.Hour)
+	return time.Time{}, fmt.Errorf("no matching time found within 1 year")
+}
+
+// parseCronField parses a single cron field and returns a map of allowed values.
+func parseCronField(field string, min, max int) (map[int]bool, error) {
+	allowed := make(map[int]bool)
+
+	// Handle wildcard
+	if field == "*" {
+		for i := min; i <= max; i++ {
+			allowed[i] = true
+		}
+		return allowed, nil
 	}
 
-	return next, nil
+	// Handle step with wildcard (*/n)
+	if strings.HasPrefix(field, "*/") {
+		step, err := strconv.Atoi(field[2:])
+		if err != nil || step <= 0 {
+			return nil, fmt.Errorf("invalid step: %s", field)
+		}
+		for i := min; i <= max; i += step {
+			allowed[i] = true
+		}
+		return allowed, nil
+	}
+
+	// Handle comma-separated list
+	for _, part := range strings.Split(field, ",") {
+		part = strings.TrimSpace(part)
+
+		// Handle range (n-m) or range with step (n-m/s)
+		if strings.Contains(part, "-") {
+			rangeParts := strings.Split(part, "/")
+			rangeStr := rangeParts[0]
+			step := 1
+			if len(rangeParts) == 2 {
+				var err error
+				step, err = strconv.Atoi(rangeParts[1])
+				if err != nil || step <= 0 {
+					return nil, fmt.Errorf("invalid step in range: %s", part)
+				}
+			}
+
+			bounds := strings.Split(rangeStr, "-")
+			if len(bounds) != 2 {
+				return nil, fmt.Errorf("invalid range: %s", part)
+			}
+			start, err1 := strconv.Atoi(bounds[0])
+			end, err2 := strconv.Atoi(bounds[1])
+			if err1 != nil || err2 != nil || start < min || end > max || start > end {
+				return nil, fmt.Errorf("invalid range values: %s", part)
+			}
+			for i := start; i <= end; i += step {
+				allowed[i] = true
+			}
+		} else {
+			// Single value
+			val, err := strconv.Atoi(part)
+			if err != nil || val < min || val > max {
+				return nil, fmt.Errorf("invalid value: %s", part)
+			}
+			allowed[val] = true
+		}
+	}
+
+	return allowed, nil
 }
 
 // RegisterChainTrigger registers an on-chain trigger for monitoring.
@@ -282,10 +386,84 @@ func (s *Service) evaluateThresholdTrigger(ctx context.Context, trigger *chain.T
 		return false, nil
 	}
 
-	// Query balance via automation contract helper if available
-	// Note: no direct GetBalance helper exists; threshold evaluation requires integration with a balance oracle or off-chain query.
-	// Leaving as no-op until balance source is available.
+	// Validate required fields
+	if condition.Address == "" || condition.Asset == "" || condition.Operator == "" {
+		return false, nil
+	}
+
+	// Query balance via chain client RPC
+	if s.chainClient == nil {
+		return false, nil
+	}
+
+	balance, err := s.queryNep17Balance(ctx, condition.Address, condition.Asset)
+	if err != nil {
+		return false, nil
+	}
+
+	// Compare balance against threshold
+	threshold := condition.Threshold
+	var shouldExecute bool
+	switch condition.Operator {
+	case "<":
+		shouldExecute = balance < threshold
+	case "<=":
+		shouldExecute = balance <= threshold
+	case ">":
+		shouldExecute = balance > threshold
+	case ">=":
+		shouldExecute = balance >= threshold
+	case "==":
+		shouldExecute = balance == threshold
+	default:
+		return false, nil
+	}
+
+	if shouldExecute {
+		// Return execution data with balance info
+		data, _ := json.Marshal(map[string]interface{}{
+			"address":   condition.Address,
+			"asset":     condition.Asset,
+			"balance":   balance,
+			"threshold": threshold,
+			"operator":  condition.Operator,
+		})
+		return true, data
+	}
 	return false, nil
+}
+
+// queryNep17Balance queries the NEP-17 token balance for an address.
+func (s *Service) queryNep17Balance(ctx context.Context, address, assetHash string) (int64, error) {
+	// Call getnep17balances RPC method
+	result, err := s.chainClient.Call(ctx, "getnep17balances", []interface{}{address})
+	if err != nil {
+		return 0, err
+	}
+
+	// Parse response
+	var response struct {
+		Balance []struct {
+			AssetHash        string `json:"assethash"`
+			Amount           string `json:"amount"`
+			LastUpdatedBlock int64  `json:"lastupdatedblock"`
+		} `json:"balance"`
+		Address string `json:"address"`
+	}
+	if err := json.Unmarshal(result, &response); err != nil {
+		return 0, err
+	}
+
+	// Find balance for the specified asset
+	for _, b := range response.Balance {
+		if strings.EqualFold(b.AssetHash, assetHash) {
+			balance, _ := strconv.ParseInt(b.Amount, 10, 64)
+			return balance, nil
+		}
+	}
+
+	// Asset not found means balance is 0
+	return 0, nil
 }
 
 // executeChainTrigger executes a trigger on-chain.

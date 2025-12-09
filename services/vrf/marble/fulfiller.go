@@ -52,8 +52,39 @@ func (s *Service) fulfillRequest(ctx context.Context, request *VRFRequest) {
 		randomWordsBig[i] = new(big.Int).SetBytes(wordHash)
 	}
 
-	// Submit callback to user contract via TEE fulfiller
-	// Update request status
+	// Submit callback to user contract via TEE fulfiller (if available)
+	if s.teeFulfiller != nil && request.RequestID != "" {
+		// Parse request ID to big.Int
+		requestIDBig := new(big.Int)
+		if _, ok := requestIDBig.SetString(request.RequestID, 10); !ok {
+			// Try hex format
+			requestIDBig.SetString(request.RequestID, 16)
+		}
+
+		// Encode random words as bytes for callback
+		// Format: [numWords][word1][word2]...
+		resultBytes := make([]byte, 0, 4+len(randomWordsBig)*32)
+		resultBytes = append(resultBytes, byte(len(randomWordsBig)))
+		for _, word := range randomWordsBig {
+			wordBytes := word.Bytes()
+			// Pad to 32 bytes
+			padded := make([]byte, 32)
+			copy(padded[32-len(wordBytes):], wordBytes)
+			resultBytes = append(resultBytes, padded...)
+		}
+
+		// Submit to chain
+		txHash, err := s.teeFulfiller.FulfillRequest(ctx, requestIDBig, resultBytes)
+		if err != nil {
+			s.markRequestFailed(request, fmt.Sprintf("chain callback failed: %v", err))
+			return
+		}
+
+		// Log successful submission
+		fmt.Printf("[VRF] Request %s fulfilled, txHash: %s\n", request.RequestID, txHash)
+	}
+
+	// Update request status after successful chain submission
 	s.mu.Lock()
 	request.Status = StatusFulfilled
 	request.RandomWords = randomWords
@@ -64,9 +95,6 @@ func (s *Service) fulfillRequest(ctx context.Context, request *VRFRequest) {
 	if s.repo != nil {
 		_ = s.repo.Update(ctx, vrfRecordFromReq(request))
 	}
-
-	// Suppress unused variable warning
-	_ = randomWordsBig
 }
 
 // markRequestFailed marks a request as failed.

@@ -9,13 +9,38 @@ import (
 	"fmt"
 	"log"
 	"math/big"
-	mrand "math/rand"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/crypto"
 )
+
+// =============================================================================
+// Secure Random Helpers (crypto/rand based)
+// =============================================================================
+
+// secureInt64n returns a cryptographically secure random int64 in [0, n).
+func secureInt64n(n int64) int64 {
+	if n <= 0 {
+		return 0
+	}
+	max := new(big.Int).SetInt64(n)
+	result, err := rand.Int(rand.Reader, max)
+	if err != nil {
+		// Fallback should never happen with crypto/rand
+		return 0
+	}
+	return result.Int64()
+}
+
+// secureShuffle shuffles a slice using crypto/rand (Fisher-Yates algorithm).
+func secureShuffle(n int, swap func(i, j int)) {
+	for i := n - 1; i > 0; i-- {
+		j := int(secureInt64n(int64(i + 1)))
+		swap(i, j)
+	}
+}
 
 // =============================================================================
 // Mixing Logic
@@ -80,7 +105,7 @@ func (s *Service) runMixingLoop(ctx context.Context) {
 			delayRange := maxDelay - minDelay
 			delay := minDelay
 			if delayRange > 0 {
-				delay += time.Duration(mrand.Int63n(int64(delayRange)))
+				delay += time.Duration(secureInt64n(int64(delayRange)))
 			}
 			time.Sleep(delay)
 
@@ -100,7 +125,7 @@ func (s *Service) executeMixingTransaction(ctx context.Context) {
 	// Use default token config for tx limits
 	cfg := s.GetTokenConfig(DefaultToken)
 
-	mrand.Shuffle(len(activeAccounts), func(i, j int) {
+	secureShuffle(len(activeAccounts), func(i, j int) {
 		activeAccounts[i], activeAccounts[j] = activeAccounts[j], activeAccounts[i]
 	})
 
@@ -115,7 +140,7 @@ func (s *Service) executeMixingTransaction(ctx context.Context) {
 		maxAmount = cfg.MaxTxAmount
 	}
 
-	amount := cfg.MinTxAmount + mrand.Int63n(maxAmount-cfg.MinTxAmount)
+	amount := cfg.MinTxAmount + secureInt64n(maxAmount-cfg.MinTxAmount)
 
 	// Update balances via accountpool service
 	if err := s.updateAccountBalance(ctx, source.ID, -amount); err != nil {
@@ -274,7 +299,7 @@ func (s *Service) collectFeeFromPool(ctx context.Context, request *MixRequest, p
 	}
 
 	// Shuffle pool accounts to select randomly
-	mrand.Shuffle(len(poolAccounts), func(i, j int) {
+	secureShuffle(len(poolAccounts), func(i, j int) {
 		poolAccounts[i], poolAccounts[j] = poolAccounts[j], poolAccounts[i]
 	})
 
@@ -417,16 +442,8 @@ func (s *Service) randomSplit(total int64, n int) []int64 {
 		if max < 1 {
 			max = 1
 		}
-		draw := int64(1)
-		b := make([]byte, 8)
-		if _, err := rand.Read(b); err == nil {
-			random := new(big.Int).SetBytes(b)
-			random.Mod(random, big.NewInt(max))
-			draw = 1 + random.Int64()
-		} else {
-			mrand.Seed(time.Now().UnixNano())
-			draw = 1 + mrand.Int63n(max)
-		}
+		// Use cryptographically secure random (no insecure fallback)
+		draw := int64(1) + secureInt64n(max)
 		if draw > max {
 			draw = max
 		}
