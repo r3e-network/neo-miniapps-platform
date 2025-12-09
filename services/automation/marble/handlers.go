@@ -2,12 +2,12 @@ package automationmarble
 
 import (
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/httputil"
 	automationsupabase "github.com/R3E-Network/service_layer/services/automation/supabase"
 	"github.com/google/uuid"
+	"github.com/gorilla/mux"
 )
 
 func (s *Service) handleInfo(w http.ResponseWriter, r *http.Request) {
@@ -132,7 +132,7 @@ func (s *Service) handleGetTrigger(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	id := strings.TrimPrefix(r.URL.Path, "/triggers/")
+	id := mux.Vars(r)["id"]
 	trigger, err := s.repo.GetTrigger(r.Context(), id, userID)
 	if err != nil {
 		httputil.NotFound(w, "trigger not found")
@@ -146,7 +146,7 @@ func (s *Service) handleUpdateTrigger(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	id := strings.TrimPrefix(r.URL.Path, "/triggers/")
+	id := mux.Vars(r)["id"]
 
 	var req TriggerRequest
 	if !httputil.DecodeJSON(w, r, &req) {
@@ -184,7 +184,7 @@ func (s *Service) handleDeleteTrigger(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	id := strings.TrimPrefix(r.URL.Path, "/triggers/")
+	id := mux.Vars(r)["id"]
 	if err := s.repo.DeleteTrigger(r.Context(), id, userID); err != nil {
 		httputil.NotFound(w, "trigger not found")
 		return
@@ -197,7 +197,7 @@ func (s *Service) handleEnableTrigger(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	id := strings.TrimPrefix(r.URL.Path, "/triggers/")
+	id := mux.Vars(r)["id"]
 	if err := s.repo.SetTriggerEnabled(r.Context(), id, userID, true); err != nil {
 		httputil.NotFound(w, "trigger not found")
 		return
@@ -210,7 +210,7 @@ func (s *Service) handleDisableTrigger(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	id := strings.TrimPrefix(r.URL.Path, "/triggers/")
+	id := mux.Vars(r)["id"]
 	if err := s.repo.SetTriggerEnabled(r.Context(), id, userID, false); err != nil {
 		httputil.NotFound(w, "trigger not found")
 		return
@@ -223,7 +223,7 @@ func (s *Service) handleListExecutions(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	id := strings.TrimPrefix(r.URL.Path, "/triggers/")
+	id := mux.Vars(r)["id"]
 	// Ensure trigger belongs to user
 	if _, err := s.repo.GetTrigger(r.Context(), id, userID); err != nil {
 		httputil.NotFound(w, "trigger not found")
@@ -247,7 +247,7 @@ func (s *Service) handleResumeTrigger(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	id := strings.TrimPrefix(r.URL.Path, "/triggers/")
+	id := mux.Vars(r)["id"]
 	trigger, err := s.repo.GetTrigger(r.Context(), id, userID)
 	if err != nil {
 		httputil.NotFound(w, "trigger not found")
