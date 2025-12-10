@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: service-layer
+
+resources:
+  - ../../base
+
+# Simulation mode patches
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env
+        value:
+          - name: EDG_MARBLE_COORDINATOR_ADDR
+            value: "marblerun-coordinator.marblerun:2001"
+          - name: EDG_MARBLE_TYPE
+            value: "$(MARBLE_TYPE)"
+          - name: OE_SIMULATION
+            value: "1"
+    target:
+      kind: Deployment
+      labelSelector: "marblerun/inject=true"
+
+commonLabels:
+  environment: simulation

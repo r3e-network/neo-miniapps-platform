@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: service-layer
+  labels:
+    app.kubernetes.io/name: service-layer
+    app.kubernetes.io/part-of: service-layer

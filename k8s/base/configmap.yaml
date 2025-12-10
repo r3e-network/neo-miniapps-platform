@@ -1,0 +1,34 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: service-layer-config
+  namespace: service-layer
+data:
+  # MarbleRun Coordinator address
+  COORDINATOR_ADDR: "marblerun-coordinator.marblerun:2001"
+  # Service ports
+  GATEWAY_PORT: "8080"
+  VRF_PORT: "8081"
+  MIXER_PORT: "8082"
+  DATAFEEDS_PORT: "8083"
+  AUTOMATION_PORT: "8084"
+  ACCOUNTPOOL_PORT: "8085"
+  CONFIDENTIAL_PORT: "8086"
+  SECRETS_PORT: "8087"
+  ORACLE_PORT: "8088"
+  # Supabase Configuration (UPDATE THESE WITH REAL VALUES)
+  SUPABASE_URL: "https://placeholder.supabase.co"
+  SUPABASE_SERVICE_KEY: "placeholder-key"
+  # Neo RPC
+  NEO_RPC_URL: "https://mainnet1.neo.coz.io:443"
+  # Service Secrets (DEV ONLY - generate real keys for production)
+  SECRETS_MASTER_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  POOL_MASTER_KEY: "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+  COORD_MASTER_SEED: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+  # Oracle config
+  ORACLE_HTTP_ALLOWLIST: "https://api.binance.com,https://api.coinbase.com,https://api.coingecko.com"
+  SECRETS_BASE_URL: "http://secrets:8087"
+  # MARBLE_SECRETS for accountpool (JSON format with base64-encoded raw bytes)
+  MARBLE_SECRETS_ACCOUNTPOOL: '{"POOL_MASTER_KEY":"/ty6mHZUMhD+3LqYdlQyEP7cuph2VDIQ/ty6mHZUMhA=","COORD_MASTER_SEED":"q83vASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4k="}'
+  # MARBLE_SECRETS for secrets service
+  MARBLE_SECRETS_SECRETS: '{"SECRETS_MASTER_KEY":"ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8="}'

@@ -1,0 +1,65 @@
+# Production overlay for MarbleRun + EGo with SGX hardware
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: service-layer
+
+resources:
+  - ../../base
+
+# Production-specific patches
+patches:
+  # Enable SGX hardware mode (disable simulation)
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env
+        value:
+          - name: EDG_MARBLE_COORDINATOR_ADDR
+            valueFrom:
+              configMapKeyRef:
+                name: service-layer-config
+                key: COORDINATOR_ADDR
+          - name: EDG_MARBLE_TYPE
+            value: "gateway"
+          - name: EDG_MARBLE_DNS_NAMES
+            value: "gateway,gateway.service-layer,gateway.service-layer.svc.cluster.local"
+          - name: OE_SIMULATION
+            value: "0"
+          - name: PORT
+            value: "8080"
+          - name: SUPABASE_URL
+            valueFrom:
+              configMapKeyRef:
+                name: service-layer-config
+                key: SUPABASE_URL
+          - name: SUPABASE_SERVICE_KEY
+            valueFrom:
+              secretKeyRef:
+                name: service-layer-secrets
+                key: SUPABASE_SERVICE_KEY
+          - name: NEO_RPC_URL
+            valueFrom:
+              configMapKeyRef:
+                name: service-layer-config
+                key: NEO_RPC_URL
+    target:
+      kind: Deployment
+      name: gateway
+
+# Production replicas
+replicas:
+  - name: gateway
+    count: 2
+  - name: vrf
+    count: 2
+  - name: mixer
+    count: 2
+  - name: oracle
+    count: 2
+
+# Production resource limits
+configMapGenerator:
+  - name: service-layer-config
+    behavior: merge
+    literals:
+      - COORDINATOR_ADDR=marblerun-coordinator.marblerun:4433

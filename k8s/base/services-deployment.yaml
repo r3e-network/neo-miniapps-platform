@@ -1,0 +1,590 @@
+# =============================================================================
+# VRF Service
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vrf
+  namespace: service-layer
+  labels:
+    app: vrf
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vrf
+  template:
+    metadata:
+      labels:
+        app: vrf
+        
+    spec:
+      containers:
+      - name: vrf
+        image: service-layer/vrf:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8081
+        env:
+        - name: EDG_MARBLE_COORDINATOR_ADDR
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: COORDINATOR_ADDR
+        - name: EDG_MARBLE_TYPE
+          value: "vrf"
+        - name: EDG_MARBLE_DNS_NAMES
+          value: "vrf,vrf.service-layer.svc.cluster.local"
+        - name: SUPABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: SUPABASE_URL
+        - name: SUPABASE_SERVICE_KEY
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: SUPABASE_SERVICE_KEY
+        - name: OE_SIMULATION
+          value: "1"
+        - name: SERVICE_TYPE
+          value: "vrf"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vrf
+  namespace: service-layer
+spec:
+  selector:
+    app: vrf
+  ports:
+  - port: 8081
+    targetPort: 8081
+---
+# =============================================================================
+# Mixer Service
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mixer
+  namespace: service-layer
+  labels:
+    app: mixer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mixer
+  template:
+    metadata:
+      labels:
+        app: mixer
+        
+    spec:
+      containers:
+      - name: mixer
+        image: service-layer/mixer:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8082
+        env:
+        - name: EDG_MARBLE_COORDINATOR_ADDR
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: COORDINATOR_ADDR
+        - name: EDG_MARBLE_TYPE
+          value: "mixer"
+        - name: EDG_MARBLE_DNS_NAMES
+          value: "mixer,mixer.service-layer.svc.cluster.local"
+        - name: SUPABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: SUPABASE_URL
+        - name: SUPABASE_SERVICE_KEY
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: SUPABASE_SERVICE_KEY
+        - name: OE_SIMULATION
+          value: "1"
+        - name: SERVICE_TYPE
+          value: "mixer"
+        - name: ACCOUNTPOOL_URL
+          value: "http://accountpool:8085"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mixer
+  namespace: service-layer
+spec:
+  selector:
+    app: mixer
+  ports:
+  - port: 8082
+    targetPort: 8082
+---
+# =============================================================================
+# DataFeeds Service
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: datafeeds
+  namespace: service-layer
+  labels:
+    app: datafeeds
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: datafeeds
+  template:
+    metadata:
+      labels:
+        app: datafeeds
+        
+    spec:
+      containers:
+      - name: datafeeds
+        image: service-layer/datafeeds:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8083
+        env:
+        - name: EDG_MARBLE_COORDINATOR_ADDR
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: COORDINATOR_ADDR
+        - name: EDG_MARBLE_TYPE
+          value: "datafeeds"
+        - name: EDG_MARBLE_DNS_NAMES
+          value: "datafeeds,datafeeds.service-layer.svc.cluster.local"
+        - name: SUPABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: SUPABASE_URL
+        - name: SUPABASE_SERVICE_KEY
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: SUPABASE_SERVICE_KEY
+        - name: OE_SIMULATION
+          value: "1"
+        - name: SERVICE_TYPE
+          value: "datafeeds"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: datafeeds
+  namespace: service-layer
+spec:
+  selector:
+    app: datafeeds
+  ports:
+  - port: 8083
+    targetPort: 8083
+---
+# =============================================================================
+# Automation Service
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: automation
+  namespace: service-layer
+  labels:
+    app: automation
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: automation
+  template:
+    metadata:
+      labels:
+        app: automation
+        
+    spec:
+      containers:
+      - name: automation
+        image: service-layer/automation:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8084
+        env:
+        - name: EDG_MARBLE_COORDINATOR_ADDR
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: COORDINATOR_ADDR
+        - name: EDG_MARBLE_TYPE
+          value: "automation"
+        - name: EDG_MARBLE_DNS_NAMES
+          value: "automation,automation.service-layer.svc.cluster.local"
+        - name: SUPABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: SUPABASE_URL
+        - name: SUPABASE_SERVICE_KEY
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: SUPABASE_SERVICE_KEY
+        - name: OE_SIMULATION
+          value: "1"
+        - name: SERVICE_TYPE
+          value: "automation"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: automation
+  namespace: service-layer
+spec:
+  selector:
+    app: automation
+  ports:
+  - port: 8084
+    targetPort: 8084
+---
+# =============================================================================
+# AccountPool Service
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: accountpool
+  namespace: service-layer
+  labels:
+    app: accountpool
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: accountpool
+  template:
+    metadata:
+      labels:
+        app: accountpool
+        
+    spec:
+      containers:
+      - name: accountpool
+        image: service-layer/accountpool:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8085
+        env:
+        - name: EDG_MARBLE_COORDINATOR_ADDR
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: COORDINATOR_ADDR
+        - name: EDG_MARBLE_TYPE
+          value: "accountpool"
+        - name: EDG_MARBLE_DNS_NAMES
+          value: "accountpool,accountpool.service-layer.svc.cluster.local"
+        - name: SUPABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: SUPABASE_URL
+        - name: SUPABASE_SERVICE_KEY
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: SUPABASE_SERVICE_KEY
+        - name: OE_SIMULATION
+          value: "1"
+        - name: SERVICE_TYPE
+          value: "accountpool"
+        - name: MARBLE_SECRETS
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: MARBLE_SECRETS_ACCOUNTPOOL
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: accountpool
+  namespace: service-layer
+spec:
+  selector:
+    app: accountpool
+  ports:
+  - port: 8085
+    targetPort: 8085
+---
+# =============================================================================
+# Confidential Service
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: confidential
+  namespace: service-layer
+  labels:
+    app: confidential
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: confidential
+  template:
+    metadata:
+      labels:
+        app: confidential
+        
+    spec:
+      containers:
+      - name: confidential
+        image: service-layer/confidential:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8086
+        env:
+        - name: EDG_MARBLE_COORDINATOR_ADDR
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: COORDINATOR_ADDR
+        - name: EDG_MARBLE_TYPE
+          value: "confidential"
+        - name: EDG_MARBLE_DNS_NAMES
+          value: "confidential,confidential.service-layer.svc.cluster.local"
+        - name: SUPABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: SUPABASE_URL
+        - name: SUPABASE_SERVICE_KEY
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: SUPABASE_SERVICE_KEY
+        - name: OE_SIMULATION
+          value: "1"
+        - name: SERVICE_TYPE
+          value: "confidential"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: confidential
+  namespace: service-layer
+spec:
+  selector:
+    app: confidential
+  ports:
+  - port: 8086
+    targetPort: 8086
+---
+# =============================================================================
+# Secrets Service
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secrets
+  namespace: service-layer
+  labels:
+    app: secrets
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: secrets
+  template:
+    metadata:
+      labels:
+        app: secrets
+        
+    spec:
+      containers:
+      - name: secrets
+        image: service-layer/secrets:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8087
+        env:
+        - name: EDG_MARBLE_COORDINATOR_ADDR
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: COORDINATOR_ADDR
+        - name: EDG_MARBLE_TYPE
+          value: "secrets"
+        - name: EDG_MARBLE_DNS_NAMES
+          value: "secrets,secrets.service-layer.svc.cluster.local"
+        - name: SUPABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: SUPABASE_URL
+        - name: SUPABASE_SERVICE_KEY
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: SUPABASE_SERVICE_KEY
+        - name: OE_SIMULATION
+          value: "1"
+        - name: SERVICE_TYPE
+          value: "secrets"
+        - name: MARBLE_SECRETS
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: MARBLE_SECRETS_SECRETS
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: secrets
+  namespace: service-layer
+spec:
+  selector:
+    app: secrets
+  ports:
+  - port: 8087
+    targetPort: 8087
+---
+# =============================================================================
+# Oracle Service
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oracle
+  namespace: service-layer
+  labels:
+    app: oracle
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oracle
+  template:
+    metadata:
+      labels:
+        app: oracle
+        
+    spec:
+      containers:
+      - name: oracle
+        image: service-layer/oracle:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8088
+        env:
+        - name: EDG_MARBLE_COORDINATOR_ADDR
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: COORDINATOR_ADDR
+        - name: EDG_MARBLE_TYPE
+          value: "oracle"
+        - name: EDG_MARBLE_DNS_NAMES
+          value: "oracle,oracle.service-layer.svc.cluster.local"
+        - name: SUPABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: SUPABASE_URL
+        - name: SUPABASE_SERVICE_KEY
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: SUPABASE_SERVICE_KEY
+        - name: OE_SIMULATION
+          value: "1"
+        - name: SERVICE_TYPE
+          value: "oracle"
+        - name: SECRETS_BASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: SECRETS_BASE_URL
+        - name: ORACLE_HTTP_ALLOWLIST
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: ORACLE_HTTP_ALLOWLIST
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oracle
+  namespace: service-layer
+spec:
+  selector:
+    app: oracle
+  ports:
+  - port: 8088
+    targetPort: 8088
+# Note: Environment variables for secrets are added via configmap references
