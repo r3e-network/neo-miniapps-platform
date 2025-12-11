@@ -14,6 +14,9 @@ import (
 
 // RequestAccounts locks and returns accounts for a service.
 func (s *Service) RequestAccounts(ctx context.Context, serviceID string, count int, purpose string) ([]AccountInfo, string, error) {
+	if s.repo == nil {
+		return nil, "", fmt.Errorf("repository not configured")
+	}
 	if count <= 0 || count > 100 {
 		return nil, "", fmt.Errorf("invalid count: must be 1-100")
 	}
@@ -84,6 +87,9 @@ func (s *Service) RequestAccounts(ctx context.Context, serviceID string, count i
 
 // ReleaseAccounts releases previously locked accounts.
 func (s *Service) ReleaseAccounts(ctx context.Context, serviceID string, accountIDs []string) (int, error) {
+	if s.repo == nil {
+		return 0, fmt.Errorf("repository not configured")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -115,6 +121,9 @@ func (s *Service) ReleaseAccounts(ctx context.Context, serviceID string, account
 
 // ReleaseAllByService releases all accounts locked by a service.
 func (s *Service) ReleaseAllByService(ctx context.Context, serviceID string) (int, error) {
+	if s.repo == nil {
+		return 0, fmt.Errorf("repository not configured")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -142,6 +151,9 @@ func (s *Service) ReleaseAllByService(ctx context.Context, serviceID string) (in
 
 // UpdateBalance updates an account's token balance.
 func (s *Service) UpdateBalance(ctx context.Context, serviceID, accountID, tokenType string, delta int64, absolute *int64) (int64, int64, int64, error) {
+	if s.repo == nil {
+		return 0, 0, 0, fmt.Errorf("repository not configured")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -209,6 +221,9 @@ func (s *Service) UpdateBalance(ctx context.Context, serviceID, accountID, token
 
 // GetPoolInfo returns pool statistics with per-token breakdowns.
 func (s *Service) GetPoolInfo(ctx context.Context) (*PoolInfoResponse, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("repository not configured")
+	}
 	accounts, err := s.repo.List(ctx)
 	if err != nil {
 		return nil, err
@@ -244,6 +259,9 @@ func (s *Service) GetPoolInfo(ctx context.Context) (*PoolInfoResponse, error) {
 
 // ListAccountsByService returns accounts locked by a specific service.
 func (s *Service) ListAccountsByService(ctx context.Context, serviceID string, tokenType string, minBalance *int64) ([]AccountInfo, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("repository not configured")
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -268,6 +286,9 @@ func (s *Service) ListAccountsByService(ctx context.Context, serviceID string, t
 
 // runAccountRotation periodically rotates pool accounts (daily rotation).
 func (s *Service) runAccountRotation(ctx context.Context) {
+	if s.repo == nil {
+		return
+	}
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
 
@@ -286,6 +307,9 @@ func (s *Service) runAccountRotation(ctx context.Context) {
 // rotateAccounts retires old accounts and creates new ones.
 // Locked accounts are NEVER rotated.
 func (s *Service) rotateAccounts(ctx context.Context) {
+	if s.repo == nil {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -364,6 +388,9 @@ func (s *Service) rotateAccounts(ctx context.Context) {
 
 // runLockCleanup periodically cleans up stale locks.
 func (s *Service) runLockCleanup(ctx context.Context) {
+	if s.repo == nil {
+		return
+	}
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
 
@@ -381,6 +408,9 @@ func (s *Service) runLockCleanup(ctx context.Context) {
 
 // cleanupStaleLocks releases accounts that have been locked too long.
 func (s *Service) cleanupStaleLocks(ctx context.Context) {
+	if s.repo == nil {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/R3E-Network/service_layer/internal/database"
 	"github.com/R3E-Network/service_layer/internal/httputil"
+	"github.com/R3E-Network/service_layer/internal/logging"
 	neovaultsupabase "github.com/R3E-Network/service_layer/services/neovault/supabase"
 )
 
@@ -193,10 +194,15 @@ func (s *Service) handleAdminListRegistrations(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// TODO: Verify admin role via gateway or middleware
-	_ = adminID
+	if !httputil.RequireAdminRole(w, r) {
+		return
+	}
 
 	statusFilter := r.URL.Query().Get("status")
+	logging.Default().LogSecurityEvent(r.Context(), "neovault_admin_list_registrations", map[string]interface{}{
+		"admin_id":      adminID,
+		"status_filter": statusFilter,
+	})
 
 	var registrations []neovaultsupabase.Registration
 	var err error
@@ -239,7 +245,9 @@ func (s *Service) handleAdminReviewRegistration(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// TODO: Verify admin role via gateway or middleware
+	if !httputil.RequireAdminRole(w, r) {
+		return
+	}
 
 	var input AdminApproveInput
 	if !httputil.DecodeJSON(w, r, &input) {

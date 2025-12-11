@@ -22,6 +22,10 @@ import (
 
 // handleListSecrets lists metadata for a user's secrets (no plaintext).
 func (s *Service) handleListSecrets(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		httputil.ServiceUnavailable(w, "database not configured")
+		return
+	}
 	userID, ok := httputil.RequireUserID(w, r)
 	if !ok {
 		return
@@ -52,6 +56,10 @@ func (s *Service) handleListSecrets(w http.ResponseWriter, r *http.Request) {
 
 // handleCreateSecret creates or updates a secret for the user.
 func (s *Service) handleCreateSecret(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		httputil.ServiceUnavailable(w, "database not configured")
+		return
+	}
 	userID, ok := httputil.RequireUserID(w, r)
 	if !ok {
 		return
@@ -143,6 +151,10 @@ func (s *Service) handleCreateSecret(w http.ResponseWriter, r *http.Request) {
 
 // handleGetSecret returns the plaintext secret for the user.
 func (s *Service) handleGetSecret(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		httputil.ServiceUnavailable(w, "database not configured")
+		return
+	}
 	userID, ok := httputil.RequireUserID(w, r)
 	if !ok {
 		return
@@ -225,6 +237,9 @@ func (s *Service) authorizeServiceCaller(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Service) isServiceAllowedForSecret(ctx context.Context, userID, secretName, serviceID string) (bool, error) {
+	if s.db == nil {
+		return false, fmt.Errorf("database not configured")
+	}
 	allowedServices, err := s.db.GetAllowedServices(ctx, userID, secretName)
 	if err != nil {
 		return false, err
@@ -239,6 +254,10 @@ func (s *Service) isServiceAllowedForSecret(ctx context.Context, userID, secretN
 
 // handleGetSecretPermissions lists allowed services for a secret (user only).
 func (s *Service) handleGetSecretPermissions(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		httputil.ServiceUnavailable(w, "database not configured")
+		return
+	}
 	userID, ok := httputil.RequireUserID(w, r)
 	if !ok {
 		return
@@ -262,6 +281,10 @@ func (s *Service) handleGetSecretPermissions(w http.ResponseWriter, r *http.Requ
 
 // handleSetSecretPermissions replaces the allowed service list (user only).
 func (s *Service) handleSetSecretPermissions(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		httputil.ServiceUnavailable(w, "database not configured")
+		return
+	}
 	userID, ok := httputil.RequireUserID(w, r)
 	if !ok {
 		return
@@ -290,6 +313,10 @@ func (s *Service) handleSetSecretPermissions(w http.ResponseWriter, r *http.Requ
 
 // handleDeleteSecret deletes a secret (user only).
 func (s *Service) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		httputil.ServiceUnavailable(w, "database not configured")
+		return
+	}
 	userID, ok := httputil.RequireUserID(w, r)
 	if !ok {
 		return
@@ -337,6 +364,10 @@ func (s *Service) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 
 // handleGetAuditLogs retrieves audit logs for the user.
 func (s *Service) handleGetAuditLogs(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		httputil.ServiceUnavailable(w, "database not configured")
+		return
+	}
 	userID, ok := httputil.RequireUserID(w, r)
 	if !ok {
 		return
@@ -365,6 +396,10 @@ func (s *Service) handleGetAuditLogs(w http.ResponseWriter, r *http.Request) {
 
 // handleGetSecretAuditLogs retrieves audit logs for a specific secret.
 func (s *Service) handleGetSecretAuditLogs(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		httputil.ServiceUnavailable(w, "database not configured")
+		return
+	}
 	userID, ok := httputil.RequireUserID(w, r)
 	if !ok {
 		return
@@ -399,7 +434,10 @@ func (s *Service) handleGetSecretAuditLogs(w http.ResponseWriter, r *http.Reques
 
 // logAudit creates an audit log entry for a secret operation.
 func (s *Service) logAudit(ctx context.Context, userID, secretName, action, serviceID string, success bool, errorMsg string, r *http.Request) {
-	log := &neostoresupabase.AuditLog{
+	if s.db == nil {
+		return
+	}
+	auditLog := &neostoresupabase.AuditLog{
 		ID:           uuid.New().String(),
 		UserID:       userID,
 		SecretName:   secretName,
@@ -411,13 +449,13 @@ func (s *Service) logAudit(ctx context.Context, userID, secretName, action, serv
 	}
 
 	if r != nil {
-		log.IPAddress = getClientIP(r)
-		log.UserAgent = r.UserAgent()
+		auditLog.IPAddress = getClientIP(r)
+		auditLog.UserAgent = r.UserAgent()
 	}
 
 	// Log asynchronously to avoid blocking the main operation
 	go func() {
-		if err := s.db.CreateAuditLog(context.Background(), log); err != nil {
+		if err := s.db.CreateAuditLog(context.Background(), auditLog); err != nil {
 			// Log error but don't fail the operation
 			fmt.Printf("[neostore] failed to create audit log: %v\n", err)
 		}

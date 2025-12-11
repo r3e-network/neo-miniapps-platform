@@ -46,6 +46,14 @@ func Unauthorized(w http.ResponseWriter, message string) {
 	WriteError(w, http.StatusUnauthorized, message)
 }
 
+// Forbidden writes a 403 Forbidden response.
+func Forbidden(w http.ResponseWriter, message string) {
+	if message == "" {
+		message = "forbidden"
+	}
+	WriteError(w, http.StatusForbidden, message)
+}
+
 // NotFound writes a 404 Not Found response.
 func NotFound(w http.ResponseWriter, message string) {
 	if message == "" {
@@ -154,6 +162,11 @@ func GetUserID(r *http.Request) string {
 	return r.Header.Get("X-User-ID")
 }
 
+// GetUserRole extracts the user role from the X-User-Role header.
+func GetUserRole(r *http.Request) string {
+	return r.Header.Get("X-User-Role")
+}
+
 // RequireUserID extracts the user ID from the X-User-ID header.
 // Returns false and writes an error response if not present.
 func RequireUserID(w http.ResponseWriter, r *http.Request) (string, bool) {
@@ -163,6 +176,17 @@ func RequireUserID(w http.ResponseWriter, r *http.Request) (string, bool) {
 		return "", false
 	}
 	return userID, true
+}
+
+// RequireAdminRole verifies the user role is admin or super_admin.
+// Returns false and writes a 403 Forbidden response if the role check fails.
+func RequireAdminRole(w http.ResponseWriter, r *http.Request) bool {
+	role := strings.ToLower(GetUserRole(r))
+	if role == "admin" || role == "super_admin" {
+		return true
+	}
+	Forbidden(w, "admin role required")
+	return false
 }
 
 // PaginationParams extracts pagination parameters from the request.
@@ -199,7 +223,7 @@ func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 			if allowed {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-User-ID")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-User-ID, X-User-Role")
 				w.Header().Set("Access-Control-Allow-Credentials", "true")
 				w.Header().Set("Access-Control-Max-Age", "86400")
 			}

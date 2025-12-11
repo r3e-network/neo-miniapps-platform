@@ -13,18 +13,19 @@ import (
 
 // Claims represents JWT claims
 type Claims struct {
-	UserID      string `json:"user_id"`
-	Email       string `json:"email,omitempty"`
-	NeoAddress  string `json:"neo_address,omitempty"`
-	AuthMethod  string `json:"auth_method"`
+	UserID     string `json:"user_id"`
+	Email      string `json:"email,omitempty"`
+	NeoAddress string `json:"neo_address,omitempty"`
+	AuthMethod string `json:"auth_method"`
+	Role       string `json:"role,omitempty"`
 	jwt.RegisteredClaims
 }
 
 // AuthMiddleware provides JWT authentication
 type AuthMiddleware struct {
-	publicKey  interface{}
-	logger     *logging.Logger
-	skipPaths  map[string]bool
+	publicKey interface{}
+	logger    *logging.Logger
+	skipPaths map[string]bool
 }
 
 // NewAuthMiddleware creates a new authentication middleware
@@ -76,6 +77,9 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 
 		// Add claims to context
 		ctx := context.WithValue(r.Context(), logging.UserIDKey, claims.UserID)
+		if claims.Role != "" {
+			ctx = context.WithValue(ctx, logging.RoleKey, claims.Role)
+		}
 		ctx = logging.WithTraceID(ctx, logging.GetTraceID(r.Context()))
 
 		// Log successful authentication
@@ -136,6 +140,11 @@ func (m *AuthMiddleware) respondError(w http.ResponseWriter, r *http.Request, er
 // GetUserID extracts user ID from context
 func GetUserID(ctx context.Context) string {
 	return logging.GetUserID(ctx)
+}
+
+// GetUserRole extracts user role from context
+func GetUserRole(ctx context.Context) string {
+	return logging.GetRole(ctx)
 }
 
 // RequireUserID middleware ensures user ID is present in context

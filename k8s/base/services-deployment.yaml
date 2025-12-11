@@ -17,8 +17,11 @@ spec:
     metadata:
       labels:
         app: neorand
-        
     spec:
+      volumes:
+      - name: qcnl-config
+        configMap:
+          name: sgx-qcnl-config
       containers:
       - name: neorand
         image: service-layer/neorand:latest
@@ -33,6 +36,8 @@ spec:
               key: COORDINATOR_ADDR
         - name: EDG_MARBLE_TYPE
           value: "neorand"
+        - name: MARBLE_ENV
+          value: "development"
         - name: EDG_MARBLE_DNS_NAMES
           value: "vrf,neorand.service-layer.svc.cluster.local"
         - name: SUPABASE_URL
@@ -46,9 +51,16 @@ spec:
               name: service-layer-config
               key: SUPABASE_SERVICE_KEY
         - name: OE_SIMULATION
-          value: "1"
+          value: "0"
         - name: SERVICE_TYPE
           value: "neorand"
+        - name: MARBLE_ENV
+          value: "development"
+        volumeMounts:
+        - name: qcnl-config
+          mountPath: /etc/sgx_default_qcnl.conf
+          subPath: sgx_default_qcnl.conf
+          readOnly: true
         resources:
           requests:
             memory: "256Mi"
@@ -56,6 +68,20 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "500m"
+        readinessProbe:
+          tcpSocket:
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
+        livenessProbe:
+          tcpSocket:
+            port: 8081
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service
@@ -88,8 +114,11 @@ spec:
     metadata:
       labels:
         app: neovault
-        
     spec:
+      volumes:
+      - name: qcnl-config
+        configMap:
+          name: sgx-qcnl-config
       containers:
       - name: neovault
         image: service-layer/neovault:latest
@@ -104,6 +133,8 @@ spec:
               key: COORDINATOR_ADDR
         - name: EDG_MARBLE_TYPE
           value: "neovault"
+        - name: MARBLE_ENV
+          value: "development"
         - name: EDG_MARBLE_DNS_NAMES
           value: "neovault,neovault.service-layer.svc.cluster.local"
         - name: SUPABASE_URL
@@ -117,11 +148,18 @@ spec:
               name: service-layer-config
               key: SUPABASE_SERVICE_KEY
         - name: OE_SIMULATION
-          value: "1"
+          value: "0"
         - name: SERVICE_TYPE
           value: "neovault"
+        - name: MARBLE_ENV
+          value: "development"
         - name: ACCOUNTPOOL_URL
           value: "http://accountpool:8085"
+        volumeMounts:
+        - name: qcnl-config
+          mountPath: /etc/sgx_default_qcnl.conf
+          subPath: sgx_default_qcnl.conf
+          readOnly: true
         resources:
           requests:
             memory: "256Mi"
@@ -129,6 +167,20 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "500m"
+        readinessProbe:
+          tcpSocket:
+            port: 8082
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
+        livenessProbe:
+          tcpSocket:
+            port: 8082
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service
@@ -161,8 +213,11 @@ spec:
     metadata:
       labels:
         app: neofeeds
-        
     spec:
+      volumes:
+      - name: qcnl-config
+        configMap:
+          name: sgx-qcnl-config
       containers:
       - name: neofeeds
         image: service-layer/neofeeds:latest
@@ -177,6 +232,8 @@ spec:
               key: COORDINATOR_ADDR
         - name: EDG_MARBLE_TYPE
           value: "neofeeds"
+        - name: MARBLE_ENV
+          value: "development"
         - name: EDG_MARBLE_DNS_NAMES
           value: "neofeeds,neofeeds.service-layer.svc.cluster.local"
         - name: SUPABASE_URL
@@ -190,9 +247,16 @@ spec:
               name: service-layer-config
               key: SUPABASE_SERVICE_KEY
         - name: OE_SIMULATION
-          value: "1"
+          value: "0"
         - name: SERVICE_TYPE
           value: "neofeeds"
+        - name: MARBLE_ENV
+          value: "development"
+        volumeMounts:
+        - name: qcnl-config
+          mountPath: /etc/sgx_default_qcnl.conf
+          subPath: sgx_default_qcnl.conf
+          readOnly: true
         resources:
           requests:
             memory: "256Mi"
@@ -200,6 +264,20 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "500m"
+        readinessProbe:
+          tcpSocket:
+            port: 8083
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
+        livenessProbe:
+          tcpSocket:
+            port: 8083
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service
@@ -232,8 +310,11 @@ spec:
     metadata:
       labels:
         app: neoflow
-        
     spec:
+      volumes:
+      - name: qcnl-config
+        configMap:
+          name: sgx-qcnl-config
       containers:
       - name: neoflow
         image: service-layer/neoflow:latest
@@ -248,6 +329,8 @@ spec:
               key: COORDINATOR_ADDR
         - name: EDG_MARBLE_TYPE
           value: "neoflow"
+        - name: MARBLE_ENV
+          value: "development"
         - name: EDG_MARBLE_DNS_NAMES
           value: "neoflow,neoflow.service-layer.svc.cluster.local"
         - name: SUPABASE_URL
@@ -261,9 +344,16 @@ spec:
               name: service-layer-config
               key: SUPABASE_SERVICE_KEY
         - name: OE_SIMULATION
-          value: "1"
+          value: "0"
         - name: SERVICE_TYPE
           value: "neoflow"
+        - name: MARBLE_ENV
+          value: "development"
+        volumeMounts:
+        - name: qcnl-config
+          mountPath: /etc/sgx_default_qcnl.conf
+          subPath: sgx_default_qcnl.conf
+          readOnly: true
         resources:
           requests:
             memory: "256Mi"
@@ -271,6 +361,20 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "500m"
+        readinessProbe:
+          tcpSocket:
+            port: 8084
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
+        livenessProbe:
+          tcpSocket:
+            port: 8084
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service
@@ -303,8 +407,11 @@ spec:
     metadata:
       labels:
         app: neoaccounts
-        
     spec:
+      volumes:
+      - name: qcnl-config
+        configMap:
+          name: sgx-qcnl-config
       containers:
       - name: neoaccounts
         image: service-layer/neoaccounts:latest
@@ -319,6 +426,8 @@ spec:
               key: COORDINATOR_ADDR
         - name: EDG_MARBLE_TYPE
           value: "neoaccounts"
+        - name: MARBLE_ENV
+          value: "development"
         - name: EDG_MARBLE_DNS_NAMES
           value: "accountpool,accountpool.service-layer.svc.cluster.local"
         - name: SUPABASE_URL
@@ -332,14 +441,21 @@ spec:
               name: service-layer-config
               key: SUPABASE_SERVICE_KEY
         - name: OE_SIMULATION
-          value: "1"
+          value: "0"
         - name: SERVICE_TYPE
           value: "neoaccounts"
+        - name: MARBLE_ENV
+          value: "development"
         - name: MARBLE_SECRETS
           valueFrom:
             configMapKeyRef:
               name: service-layer-config
               key: MARBLE_SECRETS_ACCOUNTPOOL
+        volumeMounts:
+        - name: qcnl-config
+          mountPath: /etc/sgx_default_qcnl.conf
+          subPath: sgx_default_qcnl.conf
+          readOnly: true
         resources:
           requests:
             memory: "256Mi"
@@ -347,6 +463,20 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "500m"
+        readinessProbe:
+          tcpSocket:
+            port: 8085
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
+        livenessProbe:
+          tcpSocket:
+            port: 8085
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service
@@ -379,8 +509,11 @@ spec:
     metadata:
       labels:
         app: neocompute
-        
     spec:
+      volumes:
+      - name: qcnl-config
+        configMap:
+          name: sgx-qcnl-config
       containers:
       - name: neocompute
         image: service-layer/neocompute:latest
@@ -395,6 +528,8 @@ spec:
               key: COORDINATOR_ADDR
         - name: EDG_MARBLE_TYPE
           value: "neocompute"
+        - name: MARBLE_ENV
+          value: "development"
         - name: EDG_MARBLE_DNS_NAMES
           value: "neocompute,neocompute.service-layer.svc.cluster.local"
         - name: SUPABASE_URL
@@ -408,9 +543,16 @@ spec:
               name: service-layer-config
               key: SUPABASE_SERVICE_KEY
         - name: OE_SIMULATION
-          value: "1"
+          value: "0"
         - name: SERVICE_TYPE
           value: "neocompute"
+        - name: MARBLE_ENV
+          value: "development"
+        volumeMounts:
+        - name: qcnl-config
+          mountPath: /etc/sgx_default_qcnl.conf
+          subPath: sgx_default_qcnl.conf
+          readOnly: true
         resources:
           requests:
             memory: "256Mi"
@@ -418,6 +560,20 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "500m"
+        readinessProbe:
+          tcpSocket:
+            port: 8086
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
+        livenessProbe:
+          tcpSocket:
+            port: 8086
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service
@@ -450,8 +606,11 @@ spec:
     metadata:
       labels:
         app: neostore
-        
     spec:
+      volumes:
+      - name: qcnl-config
+        configMap:
+          name: sgx-qcnl-config
       containers:
       - name: neostore
         image: service-layer/neostore:latest
@@ -466,6 +625,8 @@ spec:
               key: COORDINATOR_ADDR
         - name: EDG_MARBLE_TYPE
           value: "neostore"
+        - name: MARBLE_ENV
+          value: "development"
         - name: EDG_MARBLE_DNS_NAMES
           value: "secrets,secrets.service-layer.svc.cluster.local"
         - name: SUPABASE_URL
@@ -479,14 +640,21 @@ spec:
               name: service-layer-config
               key: SUPABASE_SERVICE_KEY
         - name: OE_SIMULATION
-          value: "1"
+          value: "0"
         - name: SERVICE_TYPE
           value: "neostore"
+        - name: MARBLE_ENV
+          value: "development"
         - name: MARBLE_SECRETS
           valueFrom:
             configMapKeyRef:
               name: service-layer-config
               key: MARBLE_SECRETS_SECRETS
+        volumeMounts:
+        - name: qcnl-config
+          mountPath: /etc/sgx_default_qcnl.conf
+          subPath: sgx_default_qcnl.conf
+          readOnly: true
         resources:
           requests:
             memory: "256Mi"
@@ -494,6 +662,20 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "500m"
+        readinessProbe:
+          tcpSocket:
+            port: 8087
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
+        livenessProbe:
+          tcpSocket:
+            port: 8087
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service
@@ -526,8 +708,11 @@ spec:
     metadata:
       labels:
         app: neooracle
-        
     spec:
+      volumes:
+      - name: qcnl-config
+        configMap:
+          name: sgx-qcnl-config
       containers:
       - name: neooracle
         image: service-layer/neooracle:latest
@@ -542,6 +727,8 @@ spec:
               key: COORDINATOR_ADDR
         - name: EDG_MARBLE_TYPE
           value: "neooracle"
+        - name: MARBLE_ENV
+          value: "development"
         - name: EDG_MARBLE_DNS_NAMES
           value: "oracle,oracle.service-layer.svc.cluster.local"
         - name: SUPABASE_URL
@@ -555,9 +742,11 @@ spec:
               name: service-layer-config
               key: SUPABASE_SERVICE_KEY
         - name: OE_SIMULATION
-          value: "1"
+          value: "0"
         - name: SERVICE_TYPE
           value: "neooracle"
+        - name: MARBLE_ENV
+          value: "development"
         - name: SECRETS_BASE_URL
           valueFrom:
             configMapKeyRef:
@@ -568,6 +757,11 @@ spec:
             configMapKeyRef:
               name: service-layer-config
               key: ORACLE_HTTP_ALLOWLIST
+        volumeMounts:
+        - name: qcnl-config
+          mountPath: /etc/sgx_default_qcnl.conf
+          subPath: sgx_default_qcnl.conf
+          readOnly: true
         resources:
           requests:
             memory: "256Mi"
@@ -575,6 +769,20 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "500m"
+        readinessProbe:
+          tcpSocket:
+            port: 8088
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
+        livenessProbe:
+          tcpSocket:
+            port: 8088
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service

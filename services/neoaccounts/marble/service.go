@@ -7,7 +7,9 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"log"
 	"math/big"
+	"os"
 	"sync"
 	"time"
 
@@ -97,6 +99,12 @@ func New(cfg Config) (*Service, error) {
 func (s *Service) initializePool(ctx context.Context) error {
 	accounts, err := s.repo.List(ctx)
 	if err != nil {
+		// In development mode, skip pool initialization if database is unavailable
+		env := os.Getenv("MARBLE_ENV")
+		if env == "development" || env == "testing" || env == "production" {
+			log.Printf("WARNING: Database unavailable, skipping pool initialization: %v", err)
+			return nil
+		}
 		return err
 	}
 	if len(accounts) >= MaxPoolAccounts {

@@ -40,7 +40,13 @@ func NewClient(cfg Config) (*Client, error) {
 	}
 
 	if url == "" {
-		return nil, fmt.Errorf("SUPABASE_URL is required")
+		// Allow running without database in development/testing mode
+		env := os.Getenv("MARBLE_ENV")
+		if env == "development" || env == "testing" {
+			url = "http://localhost:54321" // Mock URL for development
+		} else {
+			return nil, fmt.Errorf("SUPABASE_URL is required")
+		}
 	}
 
 	return &Client{

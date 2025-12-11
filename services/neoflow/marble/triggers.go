@@ -19,6 +19,9 @@ import (
 )
 
 func (s *Service) checkAndExecuteTriggers(ctx context.Context) {
+	if s.repo == nil {
+		return
+	}
 	triggers, err := s.repo.GetPendingTriggers(ctx)
 	if err != nil {
 		return

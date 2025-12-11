@@ -1,26 +1,25 @@
-version: '3.8'
-
 services:
   # =============================================================================
-  # MarbleRun Coordinator
+  # MarbleRun Coordinator - Using host network for DCAP/PCCS access
   # =============================================================================
   coordinator:
     image: ghcr.io/edgelesssys/marblerun/coordinator:v1.7.0
     container_name: marblerun-coordinator
-    ports:
-      - "4433:4433"   # Client API
-      - "9944:9944"   # Mesh API
+    network_mode: host
     environment:
-      - EDG_COORDINATOR_MESH_ADDR=coordinator:2001
-      - EDG_COORDINATOR_CLIENT_ADDR=coordinator:4433
+      - EDG_COORDINATOR_MESH_ADDR=0.0.0.0:2001
+      - EDG_COORDINATOR_CLIENT_ADDR=0.0.0.0:4433
       - EDG_COORDINATOR_DNS_NAMES=localhost,coordinator
       - EDG_COORDINATOR_SEAL_DIR=/coordinator/data
-      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - OE_SIMULATION=${OE_SIMULATION:-0}
     volumes:
       - coordinator-data:/coordinator/data
-      - ./manifests:/manifests:ro
-    networks:
-      - marblerun
+      - ../manifests:/manifests:ro
+      - /var/run/aesmd:/var/run/aesmd
+      - /etc/sgx_default_qcnl.conf:/etc/sgx_default_qcnl.conf:ro
+    devices:
+      - /dev/sgx_enclave:/dev/sgx_enclave
+      - /dev/sgx_provision:/dev/sgx_provision
     restart: unless-stopped
 
   # =============================================================================
@@ -31,21 +30,24 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.gateway
     container_name: service-gateway
-    ports:
-      - "8080:8080"
+    network_mode: host
     environment:
-      - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
+      - EDG_MARBLE_COORDINATOR_ADDR=localhost:2001
       - EDG_MARBLE_TYPE=gateway
       - EDG_MARBLE_DNS_NAMES=localhost,gateway
       - EDG_MARBLE_UUID_FILE=/marble/uuid
-      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - OE_SIMULATION=${OE_SIMULATION:-0}
       - PORT=8080
+      - MARBLE_ENV=development
     volumes:
       - gateway-data:/marble
+      - /var/run/aesmd:/var/run/aesmd
+      - /etc/sgx_default_qcnl.conf:/etc/sgx_default_qcnl.conf:ro
+    devices:
+      - /dev/sgx_enclave:/dev/sgx_enclave
+      - /dev/sgx_provision:/dev/sgx_provision
     depends_on:
       - coordinator
-    networks:
-      - marblerun
     restart: unless-stopped
 
   # =============================================================================
@@ -58,16 +60,22 @@ services:
       args:
         SERVICE: vrf
     container_name: service-vrf
+    network_mode: host
     environment:
-      - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
+      - EDG_MARBLE_COORDINATOR_ADDR=localhost:2001
       - EDG_MARBLE_TYPE=neorand
       - EDG_MARBLE_DNS_NAMES=localhost,vrf
-      - SERVICE_TYPE=vrf
-      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - SERVICE_TYPE=neorand
+      - OE_SIMULATION=${OE_SIMULATION:-0}
+      - MARBLE_ENV=development
+    volumes:
+      - /var/run/aesmd:/var/run/aesmd
+      - /etc/sgx_default_qcnl.conf:/etc/sgx_default_qcnl.conf:ro
+    devices:
+      - /dev/sgx_enclave:/dev/sgx_enclave
+      - /dev/sgx_provision:/dev/sgx_provision
     depends_on:
       - coordinator
-    networks:
-      - marblerun
     restart: unless-stopped
 
   # =============================================================================
@@ -80,17 +88,23 @@ services:
       args:
         SERVICE: neovault
     container_name: service-neovault
+    network_mode: host
     environment:
-      - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
+      - EDG_MARBLE_COORDINATOR_ADDR=localhost:2001
       - EDG_MARBLE_TYPE=neovault
       - EDG_MARBLE_DNS_NAMES=localhost,neovault
       - SERVICE_TYPE=neovault
-      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - OE_SIMULATION=${OE_SIMULATION:-0}
+      - MARBLE_ENV=development
+    volumes:
+      - /var/run/aesmd:/var/run/aesmd
+      - /etc/sgx_default_qcnl.conf:/etc/sgx_default_qcnl.conf:ro
+    devices:
+      - /dev/sgx_enclave:/dev/sgx_enclave
+      - /dev/sgx_provision:/dev/sgx_provision
     depends_on:
       - coordinator
-      - accountpool
-    networks:
-      - marblerun
+      - neoaccounts
     restart: unless-stopped
 
   # =============================================================================
@@ -103,16 +117,22 @@ services:
       args:
         SERVICE: neofeeds
     container_name: service-neofeeds
+    network_mode: host
     environment:
-      - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
+      - EDG_MARBLE_COORDINATOR_ADDR=localhost:2001
       - EDG_MARBLE_TYPE=neofeeds
       - EDG_MARBLE_DNS_NAMES=localhost,neofeeds
       - SERVICE_TYPE=neofeeds
-      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - OE_SIMULATION=${OE_SIMULATION:-0}
+      - MARBLE_ENV=development
+    volumes:
+      - /var/run/aesmd:/var/run/aesmd
+      - /etc/sgx_default_qcnl.conf:/etc/sgx_default_qcnl.conf:ro
+    devices:
+      - /dev/sgx_enclave:/dev/sgx_enclave
+      - /dev/sgx_provision:/dev/sgx_provision
     depends_on:
       - coordinator
-    networks:
-      - marblerun
     restart: unless-stopped
 
   # =============================================================================
@@ -125,21 +145,26 @@ services:
       args:
         SERVICE: neoflow
     container_name: service-neoflow
+    network_mode: host
     environment:
-      - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
+      - EDG_MARBLE_COORDINATOR_ADDR=localhost:2001
       - EDG_MARBLE_TYPE=neoflow
       - EDG_MARBLE_DNS_NAMES=localhost,neoflow
       - SERVICE_TYPE=neoflow
-      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - OE_SIMULATION=${OE_SIMULATION:-0}
+      - MARBLE_ENV=development
+    volumes:
+      - /var/run/aesmd:/var/run/aesmd
+      - /etc/sgx_default_qcnl.conf:/etc/sgx_default_qcnl.conf:ro
+    devices:
+      - /dev/sgx_enclave:/dev/sgx_enclave
+      - /dev/sgx_provision:/dev/sgx_provision
     depends_on:
       - coordinator
-    networks:
-      - marblerun
     restart: unless-stopped
 
   # =============================================================================
-  # AccountPool Service Marble (Internal - Shared Account Management)
-  # Not exposed externally, used by other services (neovault, etc.)
+  # AccountPool Service Marble (Internal)
   # =============================================================================
   neoaccounts:
     build:
@@ -148,20 +173,26 @@ services:
       args:
         SERVICE: accountpool
     container_name: service-accountpool
+    network_mode: host
     environment:
-      - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
+      - EDG_MARBLE_COORDINATOR_ADDR=localhost:2001
       - EDG_MARBLE_TYPE=neoaccounts
       - EDG_MARBLE_DNS_NAMES=localhost,accountpool
-      - SERVICE_TYPE=accountpool
-      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - SERVICE_TYPE=neoaccounts
+      - OE_SIMULATION=${OE_SIMULATION:-0}
+      - MARBLE_ENV=development
+    volumes:
+      - /var/run/aesmd:/var/run/aesmd
+      - /etc/sgx_default_qcnl.conf:/etc/sgx_default_qcnl.conf:ro
+    devices:
+      - /dev/sgx_enclave:/dev/sgx_enclave
+      - /dev/sgx_provision:/dev/sgx_provision
     depends_on:
       - coordinator
-    networks:
-      - marblerun
     restart: unless-stopped
 
   # =============================================================================
-  # NeoCompute Service Marble (Planned)
+  # NeoCompute Service Marble
   # =============================================================================
   neocompute:
     build:
@@ -170,21 +201,80 @@ services:
       args:
         SERVICE: neocompute
     container_name: service-neocompute
+    network_mode: host
     environment:
-      - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
+      - EDG_MARBLE_COORDINATOR_ADDR=localhost:2001
       - EDG_MARBLE_TYPE=neocompute
       - EDG_MARBLE_DNS_NAMES=localhost,neocompute
       - SERVICE_TYPE=neocompute
-      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - OE_SIMULATION=${OE_SIMULATION:-0}
+      - MARBLE_ENV=development
+    volumes:
+      - /var/run/aesmd:/var/run/aesmd
+      - /etc/sgx_default_qcnl.conf:/etc/sgx_default_qcnl.conf:ro
+    devices:
+      - /dev/sgx_enclave:/dev/sgx_enclave
+      - /dev/sgx_provision:/dev/sgx_provision
     depends_on:
       - coordinator
-    networks:
-      - marblerun
     restart: unless-stopped
 
-networks:
-  marblerun:
-    driver: bridge
+  # =============================================================================
+  # NeoStore Service Marble
+  # =============================================================================
+  neostore:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: neostore
+    container_name: service-neostore
+    network_mode: host
+    environment:
+      - EDG_MARBLE_COORDINATOR_ADDR=localhost:2001
+      - EDG_MARBLE_TYPE=neostore
+      - EDG_MARBLE_DNS_NAMES=localhost,neostore
+      - SERVICE_TYPE=neostore
+      - OE_SIMULATION=${OE_SIMULATION:-0}
+      - MARBLE_ENV=development
+    volumes:
+      - /var/run/aesmd:/var/run/aesmd
+      - /etc/sgx_default_qcnl.conf:/etc/sgx_default_qcnl.conf:ro
+    devices:
+      - /dev/sgx_enclave:/dev/sgx_enclave
+      - /dev/sgx_provision:/dev/sgx_provision
+    depends_on:
+      - coordinator
+    restart: unless-stopped
+
+  # =============================================================================
+  # NeoOracle Service Marble
+  # =============================================================================
+  neooracle:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: neooracle
+    container_name: service-neooracle
+    network_mode: host
+    environment:
+      - EDG_MARBLE_COORDINATOR_ADDR=localhost:2001
+      - EDG_MARBLE_TYPE=neooracle
+      - EDG_MARBLE_DNS_NAMES=localhost,neooracle
+      - SERVICE_TYPE=neooracle
+      - OE_SIMULATION=${OE_SIMULATION:-0}
+      - MARBLE_ENV=development
+      - ORACLE_HTTP_ALLOWLIST="api.binance.com,api.coinbase.com,api.coingecko.com"
+    volumes:
+      - /var/run/aesmd:/var/run/aesmd
+      - /etc/sgx_default_qcnl.conf:/etc/sgx_default_qcnl.conf:ro
+    devices:
+      - /dev/sgx_enclave:/dev/sgx_enclave
+      - /dev/sgx_provision:/dev/sgx_provision
+    depends_on:
+      - coordinator
+    restart: unless-stopped
 
 volumes:
   coordinator-data:

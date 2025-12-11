@@ -150,6 +150,20 @@ func (r *Repository) UpdateUserNonce(ctx context.Context, userID, nonce string) 
 	return nil
 }
 
+// HealthCheck verifies database connectivity by issuing a lightweight query.
+func (r *Repository) HealthCheck(ctx context.Context) error {
+	if r == nil || r.client == nil {
+		return fmt.Errorf("repository not initialized")
+	}
+	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	if _, err := r.client.request(checkCtx, "GET", "users", nil, "select=id&limit=1"); err != nil {
+		return fmt.Errorf("health check failed: %w", err)
+	}
+	return nil
+}
+
 // =============================================================================
 // Service Request Operations
 // =============================================================================

@@ -20,6 +20,8 @@ const (
 	TraceIDKey ContextKey = "trace_id"
 	// UserIDKey is the context key for user ID
 	UserIDKey ContextKey = "user_id"
+	// RoleKey is the context key for user role
+	RoleKey ContextKey = "role"
 	// ServiceKey is the context key for service name
 	ServiceKey ContextKey = "service"
 )
@@ -78,6 +80,11 @@ func (l *Logger) WithContext(ctx context.Context) *logrus.Entry {
 	// Add user ID if present
 	if userID := ctx.Value(UserIDKey); userID != nil {
 		entry = entry.WithField("user_id", userID)
+	}
+
+	// Add role if present
+	if role := ctx.Value(RoleKey); role != nil {
+		entry = entry.WithField("role", role)
 	}
 
 	return entry
@@ -147,6 +154,19 @@ func WithUserID(ctx context.Context, userID string) context.Context {
 func GetUserID(ctx context.Context) string {
 	if userID := ctx.Value(UserIDKey); userID != nil {
 		return userID.(string)
+	}
+	return ""
+}
+
+// WithRole adds a user role to the context
+func WithRole(ctx context.Context, role string) context.Context {
+	return context.WithValue(ctx, RoleKey, role)
+}
+
+// GetRole retrieves the user role from context
+func GetRole(ctx context.Context) string {
+	if role := ctx.Value(RoleKey); role != nil {
+		return role.(string)
 	}
 	return ""
 }

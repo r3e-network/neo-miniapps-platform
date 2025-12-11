@@ -92,7 +92,7 @@ func main() {
 		env := os.Getenv("MARBLE_ENV")
 		if env == "development" || env == "testing" {
 			log.Printf("WARNING: Using insecure default JWT secret - DO NOT USE IN PRODUCTION")
-			jwtSecret = []byte("dev-only-secret-" + env)
+			jwtSecret = []byte("dev-only-secret-32bytes-minimum-" + env)
 		} else {
 			log.Fatalf("CRITICAL: JWT_SECRET is required in production. Set via MarbleRun secrets or JWT_SECRET env var")
 		}

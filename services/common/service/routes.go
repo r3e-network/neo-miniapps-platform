@@ -14,11 +14,12 @@ import (
 
 // HealthResponse is the standard response for /health endpoint.
 type HealthResponse struct {
-	Status    string `json:"status"`
-	Service   string `json:"service"`
-	Version   string `json:"version"`
-	Enclave   bool   `json:"enclave"`
-	Timestamp string `json:"timestamp"`
+	Status    string         `json:"status"`
+	Service   string         `json:"service"`
+	Version   string         `json:"version"`
+	Enclave   bool           `json:"enclave"`
+	Timestamp string         `json:"timestamp"`
+	Details   map[string]any `json:"details,omitempty"`
 }
 
 // InfoResponse is the standard response for /info endpoint.
@@ -39,10 +40,14 @@ type InfoResponse struct {
 func HealthHandler(s *BaseService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		status := "healthy"
+		var details map[string]any
 
 		// Check if service implements HealthChecker for custom status
 		if checker, ok := interface{}(s).(HealthChecker); ok {
 			status = checker.HealthStatus()
+			if status != "healthy" {
+				details = checker.HealthDetails()
+			}
 		}
 
 		resp := HealthResponse{
@@ -51,8 +56,40 @@ func HealthHandler(s *BaseService) http.HandlerFunc {
 			Version:   s.Version(),
 			Enclave:   s.Marble().IsEnclave(),
 			Timestamp: time.Now().Format(time.RFC3339),
+			Details:   details,
 		}
 		httputil.WriteJSON(w, http.StatusOK, resp)
+	}
+}
+
+// ReadinessHandler returns a readiness probe handler suitable for k8s.
+func ReadinessHandler(s *BaseService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		status := "healthy"
+		var details map[string]any
+
+		if checker, ok := interface{}(s).(HealthChecker); ok {
+			status = checker.HealthStatus()
+			if status != "healthy" {
+				details = checker.HealthDetails()
+			}
+		}
+
+		resp := HealthResponse{
+			Status:    status,
+			Service:   s.Name(),
+			Version:   s.Version(),
+			Enclave:   s.Marble().IsEnclave(),
+			Timestamp: time.Now().Format(time.RFC3339),
+			Details:   details,
+		}
+
+		code := http.StatusOK
+		if status == "unhealthy" {
+			code = http.StatusServiceUnavailable
+		}
+
+		httputil.WriteJSON(w, code, resp)
 	}
 }
 
@@ -86,5 +123,6 @@ func InfoHandler(s *BaseService) http.HandlerFunc {
 func (b *BaseService) RegisterStandardRoutes() {
 	router := b.Router()
 	router.HandleFunc("/health", HealthHandler(b)).Methods("GET")
+	router.HandleFunc("/ready", ReadinessHandler(b)).Methods("GET")
 	router.HandleFunc("/info", InfoHandler(b)).Methods("GET")
 }

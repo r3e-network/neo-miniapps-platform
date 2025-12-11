@@ -100,13 +100,16 @@ func (m *Marble) Initialize(ctx context.Context) error {
 		}
 	}
 
-	// Configure TLS for mTLS communication
-	m.tlsConfig = &tls.Config{
-		Certificates: []tls.Certificate{m.cert},
-		RootCAs:      m.rootCA,
-		ClientCAs:    m.rootCA,
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		MinVersion:   tls.VersionTLS13,
+	// Configure TLS for mTLS communication only if we have valid certificates
+	// Without certificates from Coordinator, run in HTTP mode (development/simulation)
+	if certPEM != "" && keyPEM != "" {
+		m.tlsConfig = &tls.Config{
+			Certificates: []tls.Certificate{m.cert},
+			RootCAs:      m.rootCA,
+			ClientCAs:    m.rootCA,
+			ClientAuth:   tls.RequireAndVerifyClientCert,
+			MinVersion:   tls.VersionTLS13,
+		}
 	}
 
 	// Load secrets from environment (injected by Coordinator)

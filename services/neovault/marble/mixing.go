@@ -56,6 +56,9 @@ func secureShuffle(n int, swap func(i, j int)) {
 
 // startMixing begins the mixing process for a request.
 func (s *Service) startMixing(ctx context.Context, request *MixRequest) {
+	if s.repo == nil {
+		return
+	}
 	request.Status = StatusMixing
 	request.MixingStartAt = time.Now()
 
@@ -185,6 +188,9 @@ func (s *Service) runDeliveryChecker(ctx context.Context) {
 
 // checkDeliveries processes requests that have completed mixing.
 func (s *Service) checkDeliveries(ctx context.Context) {
+	if s.repo == nil {
+		return
+	}
 	now := time.Now()
 	mixing, err := s.repo.ListByStatus(ctx, string(StatusMixing))
 	if err != nil {

@@ -70,6 +70,8 @@ type RepositoryInterface interface {
 	BaseRepository
 	PriceFeedRepository
 	SecretRepository
+	// HealthCheck verifies connectivity with the underlying database.
+	HealthCheck(ctx context.Context) error
 }
 
 // =============================================================================

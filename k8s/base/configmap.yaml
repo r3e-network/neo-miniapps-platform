@@ -4,8 +4,8 @@ metadata:
   name: service-layer-config
   namespace: service-layer
 data:
-  # MarbleRun Coordinator address
-  COORDINATOR_ADDR: "marblerun-coordinator.marblerun:2001"
+  # MarbleRun Coordinator address (full K8s DNS)
+  COORDINATOR_ADDR: "coordinator-mesh-api.marblerun.svc.cluster.local:2001"
   # Service ports
   GATEWAY_PORT: "8080"
   VRF_PORT: "8081"
@@ -16,11 +16,13 @@ data:
   NEOCOMPUTE_PORT: "8086"
   SECRETS_PORT: "8087"
   ORACLE_PORT: "8088"
-  # Supabase Configuration (UPDATE THESE WITH REAL VALUES)
-  SUPABASE_URL: "https://placeholder.supabase.co"
-  SUPABASE_SERVICE_KEY: "placeholder-key"
-  # Neo RPC
-  NEO_RPC_URL: "https://mainnet1.neo.coz.io:443"
+  # Supabase Configuration
+  SUPABASE_URL: "https://dmonstzalbldzzdbbcdj.supabase.co"
+  SUPABASE_SERVICE_KEY: "sb_secret_B6OeQfZiVCcPtxR0KyGroA_lUtz42PN"
+  # Neo RPC (Testnet)
+  NEO_RPC_URL: "https://testnet1.neo.coz.io:443"
+  # JWT Secret for development (32+ bytes required)
+  JWT_SECRET: "dev-only-secret-32bytes-minimum-k8s-development"
   # Service Secrets (DEV ONLY - generate real keys for production)
   SECRETS_MASTER_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
   POOL_MASTER_KEY: "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"

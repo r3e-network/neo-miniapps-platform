@@ -15,61 +15,75 @@ spec:
       labels:
         app: gateway
     spec:
+      volumes:
+        - name: qcnl-config
+          configMap:
+            name: sgx-qcnl-config
       containers:
-      - name: gateway
-        image: service-layer/gateway:latest
-        imagePullPolicy: IfNotPresent
-        ports:
-        - containerPort: 8080
-          name: http
-        env:
-        - name: EDG_MARBLE_COORDINATOR_ADDR
-          valueFrom:
-            configMapKeyRef:
-              name: service-layer-config
-              key: COORDINATOR_ADDR
-        - name: EDG_MARBLE_TYPE
-          value: "gateway"
-        - name: EDG_MARBLE_DNS_NAMES
-          value: "gateway,gateway.service-layer,gateway.service-layer.svc.cluster.local"
-        - name: OE_SIMULATION
-          value: "1"
-        - name: PORT
-          value: "8080"
-        - name: SUPABASE_URL
-          valueFrom:
-            configMapKeyRef:
-              name: service-layer-config
-              key: SUPABASE_URL
-        - name: SUPABASE_SERVICE_KEY
-          valueFrom:
-            configMapKeyRef:
-              name: service-layer-config
-              key: SUPABASE_SERVICE_KEY
-        - name: NEO_RPC_URL
-          valueFrom:
-            configMapKeyRef:
-              name: service-layer-config
-              key: NEO_RPC_URL
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "100m"
-          limits:
-            memory: "2Gi"
-            cpu: "1000m"
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 5
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
+        - name: gateway
+          image: service-layer/gateway:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: EDG_MARBLE_COORDINATOR_ADDR
+              valueFrom:
+                configMapKeyRef:
+                  name: service-layer-config
+                  key: COORDINATOR_ADDR
+            - name: EDG_MARBLE_TYPE
+              value: "gateway"
+            - name: EDG_MARBLE_DNS_NAMES
+              value: "gateway,gateway.service-layer,gateway.service-layer.svc.cluster.local"
+            - name: OE_SIMULATION
+              value: "0"
+            - name: PORT
+              value: "8080"
+            - name: MARBLE_ENV
+              value: "development"
+            - name: SUPABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: service-layer-config
+                  key: SUPABASE_URL
+            - name: SUPABASE_SERVICE_KEY
+              valueFrom:
+                configMapKeyRef:
+                  name: service-layer-config
+                  key: SUPABASE_SERVICE_KEY
+            - name: NEO_RPC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: service-layer-config
+                  key: NEO_RPC_URL
+            - name: JWT_SECRET
+              valueFrom:
+                configMapKeyRef:
+                  name: service-layer-config
+                  key: JWT_SECRET
+          volumeMounts:
+            - name: qcnl-config
+              mountPath: /etc/sgx_default_qcnl.conf
+              subPath: sgx_default_qcnl.conf
+              readOnly: true
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 20
 ---
 apiVersion: v1
 kind: Service
@@ -81,7 +95,7 @@ spec:
   selector:
     app: gateway
   ports:
-  - port: 8080
-    targetPort: 8080
-    nodePort: 30080
-    name: http
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30080
+      name: http

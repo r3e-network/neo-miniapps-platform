@@ -2,6 +2,7 @@
 package database
 
 import (
+	"context"
 	"sync"
 )
 
@@ -57,6 +58,14 @@ func (m *MockRepository) Reset() {
 	m.gasBankTransactions = make(map[string]*GasBankTransaction)
 	m.depositRequests = make(map[string]*DepositRequest)
 	m.ErrorOnNextCall = nil
+}
+
+// HealthCheck simulates a healthy database connection for tests.
+func (m *MockRepository) HealthCheck(ctx context.Context) error {
+	if err := m.checkError(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Ensure MockRepository implements RepositoryInterface

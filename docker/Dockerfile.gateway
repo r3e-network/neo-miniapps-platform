@@ -3,10 +3,10 @@
 # Uses EGo for SGX enclave execution
 # =============================================================================
 
-FROM ghcr.io/edgelesssys/ego-deploy:v1.5.3 AS runtime
+FROM ghcr.io/edgelesssys/ego-deploy:v1.8.0 AS runtime
 
 # Build stage
-FROM ghcr.io/edgelesssys/ego-dev:v1.5.3 AS builder
+FROM ghcr.io/edgelesssys/ego-dev:v1.8.0 AS builder
 
 WORKDIR /app
 
@@ -26,7 +26,7 @@ RUN cat > enclave.json << 'EOF'
     "exe": "gateway",
     "key": "private.pem",
     "debug": false,
-    "heapSize": 1024,
+    "heapSize": 256,
     "executableHeap": false,
     "productID": 1,
     "securityVersion": 1,
@@ -42,7 +42,18 @@ RUN cat > enclave.json << 'EOF'
         {"name": "EDG_MARBLE_DNS_NAMES", "fromHost": true},
         {"name": "EDG_MARBLE_UUID_FILE", "fromHost": true},
         {"name": "OE_SIMULATION", "fromHost": true},
-        {"name": "PORT", "fromHost": true}
+        {"name": "SERVICE_TYPE", "fromHost": true},
+        {"name": "MARBLE_TYPE", "fromHost": true},
+        {"name": "PORT", "fromHost": true},
+        {"name": "MARBLE_ENV", "fromHost": true},
+        {"name": "JWT_SECRET", "fromHost": true},
+        {"name": "SUPABASE_URL", "fromHost": true},
+        {"name": "SUPABASE_SERVICE_KEY", "fromHost": true},
+        {"name": "NEO_RPC_URL", "fromHost": true},
+        {"name": "MARBLE_SECRETS", "fromHost": true},
+        {"name": "ACCOUNTPOOL_URL", "fromHost": true},
+        {"name": "SECRETS_BASE_URL", "fromHost": true},
+        {"name": "ORACLE_HTTP_ALLOWLIST", "fromHost": true}
     ],
     "files": [
         {
@@ -72,4 +83,4 @@ RUN mkdir -p /marble
 EXPOSE 8080
 
 # Run with ego
-ENTRYPOINT ["ego", "run", "gateway"]
+ENTRYPOINT ["ego", "marblerun", "gateway"]
