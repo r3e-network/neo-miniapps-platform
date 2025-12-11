@@ -11,23 +11,23 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/marble"
-	accountpool "github.com/R3E-Network/service_layer/services/accountpool/marble"
-	mixer "github.com/R3E-Network/service_layer/services/mixer/marble"
-	vrf "github.com/R3E-Network/service_layer/services/vrf/marble"
+	neoaccounts "github.com/R3E-Network/service_layer/services/neoaccounts/marble"
+	neovault "github.com/R3E-Network/service_layer/services/neovault/marble"
+	vrf "github.com/R3E-Network/service_layer/services/neorand/marble"
 )
 
-// TestAccountPoolSmoke performs basic smoke tests on the AccountPool service.
-func TestAccountPoolSmoke(t *testing.T) {
+// TestNeoAccountsSmoke performs basic smoke tests on the NeoAccounts service.
+func TestNeoAccountsSmoke(t *testing.T) {
 	t.Run("service creates successfully", func(t *testing.T) {
-		m, err := marble.New(marble.Config{MarbleType: "accountpool"})
+		m, err := marble.New(marble.Config{MarbleType: "neoaccounts"})
 		if err != nil {
 			t.Fatalf("marble.New: %v", err)
 		}
 		m.SetTestSecret("POOL_MASTER_KEY", []byte("smoke-test-pool-key-32-bytes!!!!"))
 
-		svc, err := accountpool.New(accountpool.Config{Marble: m})
+		svc, err := neoaccounts.New(neoaccounts.Config{Marble: m})
 		if err != nil {
-			t.Fatalf("accountpool.New: %v", err)
+			t.Fatalf("neoaccounts.New: %v", err)
 		}
 		if svc == nil {
 			t.Fatal("service should not be nil")
@@ -35,9 +35,9 @@ func TestAccountPoolSmoke(t *testing.T) {
 	})
 
 	t.Run("health endpoint responds", func(t *testing.T) {
-		m, _ := marble.New(marble.Config{MarbleType: "accountpool"})
+		m, _ := marble.New(marble.Config{MarbleType: "neoaccounts"})
 		m.SetTestSecret("POOL_MASTER_KEY", []byte("smoke-test-pool-key-32-bytes!!!!"))
-		svc, _ := accountpool.New(accountpool.Config{Marble: m})
+		svc, _ := neoaccounts.New(neoaccounts.Config{Marble: m})
 
 		req := httptest.NewRequest("GET", "/health", nil)
 		w := httptest.NewRecorder()
@@ -53,12 +53,12 @@ func TestAccountPoolSmoke(t *testing.T) {
 	})
 
 	t.Run("service metadata correct", func(t *testing.T) {
-		m, _ := marble.New(marble.Config{MarbleType: "accountpool"})
+		m, _ := marble.New(marble.Config{MarbleType: "neoaccounts"})
 		m.SetTestSecret("POOL_MASTER_KEY", []byte("smoke-test-pool-key-32-bytes!!!!"))
-		svc, _ := accountpool.New(accountpool.Config{Marble: m})
+		svc, _ := neoaccounts.New(neoaccounts.Config{Marble: m})
 
-		if svc.ID() != "accountpool" {
-			t.Errorf("expected ID 'accountpool', got '%s'", svc.ID())
+		if svc.ID() != "neoaccounts" {
+			t.Errorf("expected ID 'neoaccounts', got '%s'", svc.ID())
 		}
 		if svc.Name() != "Account Pool Service" {
 			t.Errorf("expected name 'Account Pool Service', got '%s'", svc.Name())
@@ -66,21 +66,21 @@ func TestAccountPoolSmoke(t *testing.T) {
 	})
 }
 
-// TestMixerSmoke performs basic smoke tests on the Mixer service.
-func TestMixerSmoke(t *testing.T) {
+// TestNeoVaultSmoke performs basic smoke tests on the NeoVault service.
+func TestNeoVaultSmoke(t *testing.T) {
 	t.Run("service creates successfully", func(t *testing.T) {
-		m, err := marble.New(marble.Config{MarbleType: "mixer"})
+		m, err := marble.New(marble.Config{MarbleType: "neovault"})
 		if err != nil {
 			t.Fatalf("marble.New: %v", err)
 		}
-		m.SetTestSecret("MIXER_MASTER_KEY", []byte("smoke-test-mixer-key-32-bytes!!!"))
+		m.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("smoke-test-neovault-key-32-bytes!!!"))
 
-		svc, err := mixer.New(mixer.Config{
+		svc, err := neovault.New(neovault.Config{
 			Marble:         m,
-			AccountPoolURL: "http://localhost:8081",
+			NeoAccountsURL: "http://localhost:8081",
 		})
 		if err != nil {
-			t.Fatalf("mixer.New: %v", err)
+			t.Fatalf("neovault.New: %v", err)
 		}
 		if svc == nil {
 			t.Fatal("service should not be nil")
@@ -88,11 +88,11 @@ func TestMixerSmoke(t *testing.T) {
 	})
 
 	t.Run("health endpoint responds", func(t *testing.T) {
-		m, _ := marble.New(marble.Config{MarbleType: "mixer"})
-		m.SetTestSecret("MIXER_MASTER_KEY", []byte("smoke-test-mixer-key-32-bytes!!!"))
-		svc, _ := mixer.New(mixer.Config{
+		m, _ := marble.New(marble.Config{MarbleType: "neovault"})
+		m.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("smoke-test-neovault-key-32-bytes!!!"))
+		svc, _ := neovault.New(neovault.Config{
 			Marble:         m,
-			AccountPoolURL: "http://localhost:8081",
+			NeoAccountsURL: "http://localhost:8081",
 		})
 
 		req := httptest.NewRequest("GET", "/health", nil)
@@ -105,27 +105,27 @@ func TestMixerSmoke(t *testing.T) {
 	})
 
 	t.Run("service metadata correct", func(t *testing.T) {
-		m, _ := marble.New(marble.Config{MarbleType: "mixer"})
-		m.SetTestSecret("MIXER_MASTER_KEY", []byte("smoke-test-mixer-key-32-bytes!!!"))
-		svc, _ := mixer.New(mixer.Config{
+		m, _ := marble.New(marble.Config{MarbleType: "neovault"})
+		m.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("smoke-test-neovault-key-32-bytes!!!"))
+		svc, _ := neovault.New(neovault.Config{
 			Marble:         m,
-			AccountPoolURL: "http://localhost:8081",
+			NeoAccountsURL: "http://localhost:8081",
 		})
 
-		if svc.ID() != "mixer" {
-			t.Errorf("expected ID 'mixer', got '%s'", svc.ID())
+		if svc.ID() != "neovault" {
+			t.Errorf("expected ID 'neovault', got '%s'", svc.ID())
 		}
-		if svc.Name() != "Mixer Service" {
-			t.Errorf("expected name 'Mixer Service', got '%s'", svc.Name())
+		if svc.Name() != "NeoVault Service" {
+			t.Errorf("expected name 'NeoVault Service', got '%s'", svc.Name())
 		}
 	})
 
 	t.Run("supported tokens available", func(t *testing.T) {
-		m, _ := marble.New(marble.Config{MarbleType: "mixer"})
-		m.SetTestSecret("MIXER_MASTER_KEY", []byte("smoke-test-mixer-key-32-bytes!!!"))
-		svc, _ := mixer.New(mixer.Config{
+		m, _ := marble.New(marble.Config{MarbleType: "neovault"})
+		m.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("smoke-test-neovault-key-32-bytes!!!"))
+		svc, _ := neovault.New(neovault.Config{
 			Marble:         m,
-			AccountPoolURL: "http://localhost:8081",
+			NeoAccountsURL: "http://localhost:8081",
 		})
 
 		tokens := svc.GetSupportedTokens()
@@ -143,7 +143,7 @@ func TestMixerSmoke(t *testing.T) {
 // TestVRFSmoke performs basic smoke tests on the VRF service.
 func TestVRFSmoke(t *testing.T) {
 	t.Run("service creates successfully", func(t *testing.T) {
-		m, err := marble.New(marble.Config{MarbleType: "vrf"})
+		m, err := marble.New(marble.Config{MarbleType: "neorand"})
 		if err != nil {
 			t.Fatalf("marble.New: %v", err)
 		}
@@ -159,7 +159,7 @@ func TestVRFSmoke(t *testing.T) {
 	})
 
 	t.Run("health endpoint responds", func(t *testing.T) {
-		m, _ := marble.New(marble.Config{MarbleType: "vrf"})
+		m, _ := marble.New(marble.Config{MarbleType: "neorand"})
 		m.SetTestSecret("VRF_PRIVATE_KEY", []byte("smoke-test-vrf-key-32-bytes!!!!!"))
 		svc, _ := vrf.New(vrf.Config{Marble: m})
 
@@ -173,12 +173,12 @@ func TestVRFSmoke(t *testing.T) {
 	})
 
 	t.Run("service metadata correct", func(t *testing.T) {
-		m, _ := marble.New(marble.Config{MarbleType: "vrf"})
+		m, _ := marble.New(marble.Config{MarbleType: "neorand"})
 		m.SetTestSecret("VRF_PRIVATE_KEY", []byte("smoke-test-vrf-key-32-bytes!!!!!"))
 		svc, _ := vrf.New(vrf.Config{Marble: m})
 
-		if svc.ID() != "vrf" {
-			t.Errorf("expected ID 'vrf', got '%s'", svc.ID())
+		if svc.ID() != "neorand" {
+			t.Errorf("expected ID 'neorand', got '%s'", svc.ID())
 		}
 	})
 }
@@ -277,9 +277,9 @@ func TestServiceFrameworkSmoke(t *testing.T) {
 
 // TestConcurrencySmoke tests basic concurrent access.
 func TestConcurrencySmoke(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "accountpool"})
+	m, _ := marble.New(marble.Config{MarbleType: "neoaccounts"})
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("smoke-test-pool-key-32-bytes!!!!"))
-	svc, _ := accountpool.New(accountpool.Config{Marble: m})
+	svc, _ := neoaccounts.New(neoaccounts.Config{Marble: m})
 
 	done := make(chan bool, 20)
 
@@ -312,9 +312,9 @@ func TestConcurrencySmoke(t *testing.T) {
 
 // TestEndpointResponsivenessSmoke tests that endpoints respond within expected time.
 func TestEndpointResponsivenessSmoke(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "accountpool"})
+	m, _ := marble.New(marble.Config{MarbleType: "neoaccounts"})
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("smoke-test-pool-key-32-bytes!!!!"))
-	svc, _ := accountpool.New(accountpool.Config{Marble: m})
+	svc, _ := neoaccounts.New(neoaccounts.Config{Marble: m})
 
 	maxDuration := 100 * time.Millisecond
 

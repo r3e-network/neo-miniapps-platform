@@ -95,10 +95,10 @@ export function Settings() {
 
   const availableScopes = [
     { id: 'oracle', label: 'Oracle Service' },
-    { id: 'vrf', label: 'VRF Service' },
+    { id: 'neorand', label: 'NeoRand Service' },
     { id: 'secrets', label: 'Secrets Management' },
-    { id: 'automation', label: 'Automation' },
-    { id: 'datafeeds', label: 'Data Feeds' },
+    { id: 'neoflow', label: 'NeoFlow' },
+    { id: 'neofeeds', label: 'Data Feeds' },
     { id: 'gasbank', label: 'Gas Bank' },
   ];
 
@@ -480,7 +480,7 @@ export function Settings() {
           <div className="space-y-3">
             <label className="flex items-center gap-3">
               <input type="checkbox" className="w-4 h-4 rounded" defaultChecked />
-              <span className="text-gray-300">Email notifications for automation triggers</span>
+              <span className="text-gray-300">Email notifications for neoflow triggers</span>
             </label>
             <label className="flex items-center gap-3">
               <input type="checkbox" className="w-4 h-4 rounded" defaultChecked />

@@ -57,14 +57,14 @@ func NewEventListener(cfg ListenerConfig) *EventListener {
 	if cfg.Contracts.VRF != "" {
 		contractHashes[cfg.Contracts.VRF] = true
 	}
-	if cfg.Contracts.Mixer != "" {
-		contractHashes[cfg.Contracts.Mixer] = true
+	if cfg.Contracts.NeoVault != "" {
+		contractHashes[cfg.Contracts.NeoVault] = true
 	}
-	if cfg.Contracts.DataFeeds != "" {
-		contractHashes[cfg.Contracts.DataFeeds] = true
+	if cfg.Contracts.NeoFeeds != "" {
+		contractHashes[cfg.Contracts.NeoFeeds] = true
 	}
-	if cfg.Contracts.Automation != "" {
-		contractHashes[cfg.Contracts.Automation] = true
+	if cfg.Contracts.NeoFlow != "" {
+		contractHashes[cfg.Contracts.NeoFlow] = true
 	}
 
 	return &EventListener{

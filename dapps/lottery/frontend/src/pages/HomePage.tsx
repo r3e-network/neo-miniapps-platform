@@ -114,7 +114,7 @@ export function HomePage() {
             icon: Zap,
             color: 'yellow',
             title: 'Automated Draws',
-            description: 'Daily draws at midnight UTC, automatically triggered by Service Layer Automation. No human intervention required.',
+            description: 'Daily draws at midnight UTC, automatically triggered by Service Layer NeoFlow. No human intervention required.',
           },
           {
             icon: Trophy,

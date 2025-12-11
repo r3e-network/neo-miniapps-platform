@@ -23,16 +23,16 @@ A production-ready, TEE-protected service layer for Neo N3 blockchain, built wit
                     ▼               ▼               ▼
 ┌─────────────────────┐ ┌─────────────────────┐ ┌─────────────────────┐
 │   GATEWAY MARBLE    │ │  SERVICE MARBLES    │ │   WORKER MARBLES    │
-│   (EGo Enclave)     │ │  (EGo Enclaves)     │ │   (EGo Enclaves)    │
+│   (EGo TEE)     │ │  (EGo TEEs)     │ │   (EGo TEEs)    │
 │                     │ │                     │ │                     │
-│ • API Gateway       │ │ • Oracle            │ │ • Automation Jobs   │
-│ • Auth/JWT          │ │ • VRF               │ │ • DataFeeds Push    │
-│ • Rate Limiting     │ │ • Mixer             │ │ • Event Processing  │
+│ • API Gateway       │ │ • Oracle            │ │ • NeoFlow Jobs   │
+│ • Auth/JWT          │ │ • VRF               │ │ • NeoFeeds Push    │
+│ • Rate Limiting     │ │ • NeoVault             │ │ • Event Processing  │
 │ • Request Routing   │ │ • Secrets           │ │                     │
-│                     │ │ • DataFeeds         │ │                     │
+│                     │ │ • NeoFeeds         │ │                     │
 │                     │ │ • GasBank           │ │                     │
-│                     │ │ • Automation        │ │                     │
-│                     │ │ • Confidential      │ │                     │
+│                     │ │ • NeoFlow        │ │                     │
+│                     │ │ • NeoCompute      │ │                     │
 │                     │ │ • Accounts          │ │                     │
 │                     │ │ • CCIP              │ │                     │
 │                     │ │ • DataLink          │ │                     │
@@ -58,7 +58,7 @@ A production-ready, TEE-protected service layer for Neo N3 blockchain, built wit
 - Go 1.22+
 - Docker & Docker Compose
 - Node.js 20+
-- EGo SDK (for SGX development)
+- EGo SDK (for MarbleRun development)
 - MarbleRun CLI
 
 ### Development (Simulation Mode)
@@ -78,17 +78,17 @@ make marblerun-manifest
 make frontend-dev
 ```
 
-### Production (SGX Hardware)
+### Production (MarbleRun Hardware)
 
 ```bash
 # Build with EGo
 make build-ego
 
-# Sign enclaves
-make sign-enclaves
+# Sign marbles
+make sign-marbles
 
-# Start with SGX hardware
-make docker-up-sgx
+# Start with MarbleRun hardware
+make docker-up-tee
 ```
 
 ## 📦 Services
@@ -98,12 +98,12 @@ make docker-up-sgx
 | **Gateway** | API Gateway with JWT auth | 8080 |
 | **Oracle** | External data fetching | - |
 | **VRF** | Verifiable random function | - |
-| **Mixer** | Deterministic Shared Seed Privacy Mixer (v4.1) | - |
+| **NeoVault** | Deterministic Shared Seed Privacy NeoVault (v4.1) | - |
 | **Secrets** | Secure secret management | - |
-| **DataFeeds** | Price feed aggregation | - |
+| **NeoFeeds** | Price feed aggregation | - |
 | **GasBank** | Gas fee management | - |
-| **Automation** | Task automation | - |
-| **Confidential** | Confidential compute | - |
+| **NeoFlow** | Task neoflow | - |
+| **NeoCompute** | NeoCompute compute | - |
 | **Accounts** | User account management | - |
 | **CCIP** | Cross-chain interoperability | - |
 | **DataLink** | Data linking service | - |
@@ -126,8 +126,8 @@ contracts/
 ├── ServiceLayerGateway/    # Main entry point - fee management, routing
 ├── OracleService/          # Oracle request/fulfillment
 ├── VRFService/             # VRF request/fulfillment with proof storage
-├── MixerService/           # Deterministic Shared Seed Privacy Mixer (v4.1)
-├── DataFeedsService/       # Price feed aggregation
+├── NeoVaultService/           # Deterministic Shared Seed Privacy NeoVault (v4.1)
+├── NeoFeedsService/       # Price feed aggregation
 └── examples/               # Example consumer contracts
 ```
 
@@ -137,11 +137,11 @@ The Service Layer supports three different service patterns:
 
 | Pattern | Services | Description |
 |---------|----------|-------------|
-| **Request-Response** | Oracle, VRF, Mixer, Confidential | User initiates request → TEE processes → Callback |
-| **Push (Auto-Update)** | DataFeeds | TEE periodically updates on-chain data, no user request needed |
-| **Trigger-Based** | Automation | User registers trigger → TEE monitors conditions → Periodic callbacks |
+| **Request-Response** | Oracle, VRF, NeoVault, NeoCompute | User initiates request → TEE processes → Callback |
+| **Push (Auto-Update)** | NeoFeeds | TEE periodically updates on-chain data, no user request needed |
+| **Trigger-Based** | NeoFlow | User registers trigger → TEE monitors conditions → Periodic callbacks |
 
-#### Pattern 1: Request-Response (Oracle, VRF, Mixer)
+#### Pattern 1: Request-Response (Oracle, VRF, NeoVault)
 
 Complete request flow from User to Callback:
 
@@ -168,7 +168,7 @@ Complete request flow from User to Callback:
 ├────────────────────────────────────────────────────────────────────┼────────┤
 │                                                                    ▼        │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                    Service Layer (TEE Enclave)                       │   │
+│  │                    Service Layer (TEE TEE)                       │   │
 │  │  5. Monitor blockchain events                                        │   │
 │  │  6. Process request (HTTP fetch / VRF compute / Mix execution)       │   │
 │  │  7. Sign result with TEE private key                                 │   │
@@ -205,9 +205,9 @@ Complete request flow from User to Callback:
 | 10 | User Contract | `Callback()` | Receives result, updates state |
 | 11 | User | Complete | Transaction confirmed |
 
-#### Pattern 2: Push / Auto-Update (DataFeeds)
+#### Pattern 2: Push / Auto-Update (NeoFeeds)
 
-DataFeeds service automatically updates on-chain price data without user requests:
+NeoFeeds service automatically updates on-chain price data without user requests:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -217,13 +217,13 @@ DataFeeds service automatically updates on-chain price data without user request
 │  │  1. Fetch prices from multiple sources (Binance, Coinbase, etc.)    │   │
 │  │  2. Aggregate and validate data (median, outlier removal)           │   │
 │  │  3. Sign aggregated price with TEE key                              │   │
-│  │  4. Submit to DataFeedsService contract periodically                │   │
+│  │  4. Submit to NeoFeedsService contract periodically                │   │
 │  └──────────────────────────────────┬──────────────────────────────────┘   │
 └─────────────────────────────────────┼───────────────────────────────────────┘
                                       │ UpdatePrice()
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                      DataFeedsService Contract                               │
+│                      NeoFeedsService Contract                               │
 │  • Stores latest prices (BTC/USD, ETH/USD, NEO/USD, GAS/USD, etc.)         │
 │  • Verifies TEE signature                                                   │
 │  • Emits PriceUpdated event                                                 │
@@ -237,7 +237,7 @@ DataFeeds service automatically updates on-chain price data without user request
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-#### Pattern 3: Trigger-Based (Automation)
+#### Pattern 3: Trigger-Based (NeoFlow)
 
 Users register triggers, TEE monitors conditions and invokes callbacks:
 
@@ -246,7 +246,7 @@ Users register triggers, TEE monitors conditions and invokes callbacks:
 │                      TRIGGER REGISTRATION (One-time)                         │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  ┌──────┐    ┌───────────────┐    ┌─────────────────────┐    ┌────────────┐│
-│  │ User │───►│ User Contract │───►│ ServiceLayerGateway │───►│ Automation ││
+│  │ User │───►│ User Contract │───►│ ServiceLayerGateway │───►│ NeoFlow ││
 │  └──────┘    │               │    │  RequestService()   │    │  Service   ││
 │              │RegisterTrigger│    └─────────────────────┘    │ OnRequest()││
 │              └───────────────┘                               └─────┬──────┘│
@@ -265,7 +265,7 @@ Users register triggers, TEE monitors conditions and invokes callbacks:
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │  Loop: Check all registered triggers                                 │   │
 │  │  • Time triggers: Compare current time                               │   │
-│  │  • Price triggers: Check DataFeeds prices                            │   │
+│  │  • Price triggers: Check NeoFeeds prices                            │   │
 │  │  • Event triggers: Monitor blockchain events                         │   │
 │  │  When condition met → Execute callback                               │   │
 │  └──────────────────────────────────┬──────────────────────────────────┘   │
@@ -276,13 +276,13 @@ Users register triggers, TEE monitors conditions and invokes callbacks:
 │                         CALLBACK EXECUTION (Periodic)                        │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  ┌──────┐    ┌───────────────┐    ┌─────────────────────┐    ┌────────────┐│
-│  │ User │◄───│ User Contract │◄───│ ServiceLayerGateway │◄───│ Automation ││
+│  │ User │◄───│ User Contract │◄───│ ServiceLayerGateway │◄───│ NeoFlow ││
 │  └──────┘    │   Callback()  │    │  FulfillRequest()   │    │  Service   ││
 │              │ (e.g. rebase) │    └─────────────────────┘    └────────────┘│
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Automation Trigger Examples:**
+**NeoFlow Trigger Examples:**
 
 | Trigger Type | Example | Use Case |
 |--------------|---------|----------|
@@ -291,9 +291,9 @@ Users register triggers, TEE monitors conditions and invokes callbacks:
 | Threshold | `balance < 10 GAS` | Auto-refill gas bank |
 | Event-based | `event: LiquidityAdded` | React to on-chain events |
 
-### Mixer Service (v4.1) - Deterministic Shared Seed
+### NeoVault Service (v4.1) - Deterministic Shared Seed
 
-The Mixer uses **standard single-sig addresses** (identical to ordinary users) for maximum privacy:
+The NeoVault uses **standard single-sig addresses** (identical to ordinary users) for maximum privacy:
 
 - **No on-chain pool registration** - Pool accounts managed entirely off-chain
 - **Standard single-sig addresses** - No multisig fingerprint, indistinguishable from regular users
@@ -311,12 +311,12 @@ The Mixer uses **standard single-sig addresses** (identical to ordinary users) f
 
 ## 🔐 Security Features
 
-### TEE Protection (Intel SGX)
+### TEE Protection (Intel MarbleRun)
 
-- All services run inside EGo SGX enclaves
+- All services run inside EGo MarbleRun TEE
 - Remote attestation via MarbleRun
-- Secrets never leave the enclave
-- TLS termination inside enclave
+- Secrets never leave the TEE
+- TLS termination inside TEE
 
 ### MarbleRun Integration
 
@@ -346,13 +346,13 @@ service_layer/
 ├── services/
 │   ├── oracle/           # Oracle service
 │   ├── vrf/              # VRF service
-│   ├── mixer/            # Mixer service
+│   ├── neovault/            # NeoVault service
 │   ├── accountpool/      # Shared account pool service (locks/signs on behalf of others)
 │   ├── secrets/          # Secrets service
-│   ├── datafeeds/        # DataFeeds service
+│   ├── neofeeds/        # NeoFeeds service
 │   ├── gasbank/          # GasBank service
-│   ├── automation/       # Automation service
-│   ├── confidential/     # Confidential compute
+│   ├── neoflow/       # NeoFlow service
+│   ├── neocompute/     # NeoCompute compute
 │   ├── accounts/         # Accounts service
 │   ├── ccip/             # CCIP service
 │   ├── datalink/         # DataLink service
@@ -383,7 +383,7 @@ service_layer/
 
 ```bash
 make build          # Build all services
-make build-ego      # Build with EGo for SGX
+make build-ego      # Build with EGo for MarbleRun
 make test           # Run tests
 make lint           # Run linter
 make fmt            # Format code
@@ -394,7 +394,7 @@ make fmt            # Format code
 ```bash
 make docker-build   # Build Docker images
 make docker-up      # Start in simulation mode
-make docker-up-sgx  # Start with SGX hardware
+make docker-up-tee  # Start with MarbleRun hardware
 make docker-down    # Stop all services
 make docker-logs    # View logs
 ```
@@ -466,12 +466,12 @@ NEO_NETWORK_MAGIC=894710606
 
 # MarbleRun
 COORDINATOR_ADDR=:4433
-OE_SIMULATION=1  # Set to 0 for SGX hardware
+OE_SIMULATION=1  # Set to 0 for MarbleRun hardware
 ```
 
 ## 🔄 Upgrade Notes
 
-- AccountPool shared table: new deployments use `pool_accounts` (see `migrations/003_service_persistence.sql`). Existing deployments should apply `migrations/006_accountpool_schema.sql` to rename any legacy `mixer_pool_accounts` table and add lock columns/indexes expected by the AccountPool service.
+- AccountPool shared table: new deployments use `pool_accounts` (see `migrations/003_service_persistence.sql`). Existing deployments should apply `migrations/006_accountpool_schema.sql` to rename any legacy `neovault_pool_accounts` table and add lock columns/indexes expected by the AccountPool service.
 
 ## 📄 License
 

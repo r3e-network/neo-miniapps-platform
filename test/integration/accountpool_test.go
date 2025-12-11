@@ -1,4 +1,4 @@
-// Package integration provides integration tests for the AccountPool service.
+// Package integration provides integration tests for the NeoAccounts service.
 package integration
 
 import (
@@ -12,33 +12,33 @@ import (
 
 	"github.com/R3E-Network/service_layer/internal/crypto"
 	"github.com/R3E-Network/service_layer/internal/marble"
-	accountpool "github.com/R3E-Network/service_layer/services/accountpool/marble"
+	neoaccounts "github.com/R3E-Network/service_layer/services/neoaccounts/marble"
 )
 
-func createTestAccountPoolService(t *testing.T) *accountpool.Service {
+func createTestNeoAccountsService(t *testing.T) *neoaccounts.Service {
 	t.Helper()
-	m, err := marble.New(marble.Config{MarbleType: "accountpool"})
+	m, err := marble.New(marble.Config{MarbleType: "neoaccounts"})
 	if err != nil {
 		t.Fatalf("marble.New: %v", err)
 	}
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("integration-test-key-32-bytes!!!"))
 
-	svc, err := accountpool.New(accountpool.Config{Marble: m})
+	svc, err := neoaccounts.New(neoaccounts.Config{Marble: m})
 	if err != nil {
-		t.Fatalf("accountpool.New: %v", err)
+		t.Fatalf("neoaccounts.New: %v", err)
 	}
 	return svc
 }
 
-func TestAccountPoolServiceCreation(t *testing.T) {
-	svc := createTestAccountPoolService(t)
+func TestNeoAccountsServiceCreation(t *testing.T) {
+	svc := createTestNeoAccountsService(t)
 
 	if svc == nil {
 		t.Fatal("service should not be nil")
 	}
 
-	if svc.ID() != "accountpool" {
-		t.Errorf("expected ID 'accountpool', got '%s'", svc.ID())
+	if svc.ID() != "neoaccounts" {
+		t.Errorf("expected ID 'neoaccounts', got '%s'", svc.ID())
 	}
 
 	if svc.Name() != "Account Pool Service" {
@@ -46,8 +46,8 @@ func TestAccountPoolServiceCreation(t *testing.T) {
 	}
 }
 
-func TestAccountPoolHealthEndpoint(t *testing.T) {
-	svc := createTestAccountPoolService(t)
+func TestNeoAccountsHealthEndpoint(t *testing.T) {
+	svc := createTestNeoAccountsService(t)
 
 	req := httptest.NewRequest("GET", "/health", nil)
 	w := httptest.NewRecorder()
@@ -62,11 +62,11 @@ func TestAccountPoolHealthEndpoint(t *testing.T) {
 // Note: Tests that require DB access are marked with t.Skip or use panic recovery
 // In a real environment, these would run against a test database
 
-func TestAccountPoolRequestEndpointValidation(t *testing.T) {
-	svc := createTestAccountPoolService(t)
+func TestNeoAccountsRequestEndpointValidation(t *testing.T) {
+	svc := createTestNeoAccountsService(t)
 
 	t.Run("missing service_id", func(t *testing.T) {
-		input := accountpool.RequestAccountsInput{Count: 1}
+		input := neoaccounts.RequestAccountsInput{Count: 1}
 		body, _ := json.Marshal(input)
 		req := httptest.NewRequest("POST", "/request", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -85,11 +85,11 @@ func TestAccountPoolRequestEndpointValidation(t *testing.T) {
 	})
 }
 
-func TestAccountPoolReleaseEndpointValidation(t *testing.T) {
-	svc := createTestAccountPoolService(t)
+func TestNeoAccountsReleaseEndpointValidation(t *testing.T) {
+	svc := createTestNeoAccountsService(t)
 
 	t.Run("missing service_id", func(t *testing.T) {
-		input := accountpool.ReleaseAccountsInput{AccountIDs: []string{"acc-1"}}
+		input := neoaccounts.ReleaseAccountsInput{AccountIDs: []string{"acc-1"}}
 		body, _ := json.Marshal(input)
 		req := httptest.NewRequest("POST", "/release", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -107,27 +107,27 @@ func TestAccountPoolReleaseEndpointValidation(t *testing.T) {
 	})
 }
 
-func TestAccountPoolSignEndpointValidation(t *testing.T) {
-	svc := createTestAccountPoolService(t)
+func TestNeoAccountsSignEndpointValidation(t *testing.T) {
+	svc := createTestNeoAccountsService(t)
 
 	tests := []struct {
 		name     string
-		input    accountpool.SignTransactionInput
+		input    neoaccounts.SignTransactionInput
 		wantCode int
 	}{
 		{
 			name:     "missing service_id",
-			input:    accountpool.SignTransactionInput{AccountID: "acc-1", TxHash: []byte("hash")},
+			input:    neoaccounts.SignTransactionInput{AccountID: "acc-1", TxHash: []byte("hash")},
 			wantCode: http.StatusBadRequest,
 		},
 		{
 			name:     "missing account_id",
-			input:    accountpool.SignTransactionInput{ServiceID: "mixer", TxHash: []byte("hash")},
+			input:    neoaccounts.SignTransactionInput{ServiceID: "neovault", TxHash: []byte("hash")},
 			wantCode: http.StatusBadRequest,
 		},
 		{
 			name:     "missing tx_hash",
-			input:    accountpool.SignTransactionInput{ServiceID: "mixer", AccountID: "acc-1"},
+			input:    neoaccounts.SignTransactionInput{ServiceID: "neovault", AccountID: "acc-1"},
 			wantCode: http.StatusBadRequest,
 		},
 	}
@@ -148,11 +148,11 @@ func TestAccountPoolSignEndpointValidation(t *testing.T) {
 	}
 }
 
-func TestAccountPoolBatchSignEndpointValidation(t *testing.T) {
-	svc := createTestAccountPoolService(t)
+func TestNeoAccountsBatchSignEndpointValidation(t *testing.T) {
+	svc := createTestNeoAccountsService(t)
 
 	t.Run("missing service_id", func(t *testing.T) {
-		input := accountpool.BatchSignInput{Requests: []accountpool.SignRequest{{AccountID: "acc-1", TxHash: []byte("hash")}}}
+		input := neoaccounts.BatchSignInput{Requests: []neoaccounts.SignRequest{{AccountID: "acc-1", TxHash: []byte("hash")}}}
 		body, _ := json.Marshal(input)
 		req := httptest.NewRequest("POST", "/batch-sign", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -170,22 +170,22 @@ func TestAccountPoolBatchSignEndpointValidation(t *testing.T) {
 	})
 }
 
-func TestAccountPoolBalanceEndpointValidation(t *testing.T) {
-	svc := createTestAccountPoolService(t)
+func TestNeoAccountsBalanceEndpointValidation(t *testing.T) {
+	svc := createTestNeoAccountsService(t)
 
 	tests := []struct {
 		name     string
-		input    accountpool.UpdateBalanceInput
+		input    neoaccounts.UpdateBalanceInput
 		wantCode int
 	}{
 		{
 			name:     "missing service_id",
-			input:    accountpool.UpdateBalanceInput{AccountID: "acc-1", Delta: 100},
+			input:    neoaccounts.UpdateBalanceInput{AccountID: "acc-1", Delta: 100},
 			wantCode: http.StatusBadRequest,
 		},
 		{
 			name:     "missing account_id",
-			input:    accountpool.UpdateBalanceInput{ServiceID: "mixer", Delta: 100},
+			input:    neoaccounts.UpdateBalanceInput{ServiceID: "neovault", Delta: 100},
 			wantCode: http.StatusBadRequest,
 		},
 	}
@@ -206,21 +206,21 @@ func TestAccountPoolBalanceEndpointValidation(t *testing.T) {
 	}
 }
 
-func TestAccountPoolKeyDerivationConsistency(t *testing.T) {
-	m1, _ := marble.New(marble.Config{MarbleType: "accountpool"})
+func TestNeoAccountsKeyDerivationConsistency(t *testing.T) {
+	m1, _ := marble.New(marble.Config{MarbleType: "neoaccounts"})
 	m1.SetTestSecret("POOL_MASTER_KEY", []byte("consistent-master-key-32-bytes!!"))
-	svc1, _ := accountpool.New(accountpool.Config{Marble: m1})
+	svc1, _ := neoaccounts.New(neoaccounts.Config{Marble: m1})
 
-	m2, _ := marble.New(marble.Config{MarbleType: "accountpool"})
+	m2, _ := marble.New(marble.Config{MarbleType: "neoaccounts"})
 	m2.SetTestSecret("POOL_MASTER_KEY", []byte("consistent-master-key-32-bytes!!"))
-	svc2, _ := accountpool.New(accountpool.Config{Marble: m2})
+	svc2, _ := neoaccounts.New(neoaccounts.Config{Marble: m2})
 
 	// Services created with same master key should produce identical accounts
 	_ = svc1
 	_ = svc2
 }
 
-func TestAccountPoolCryptoIntegration(t *testing.T) {
+func TestNeoAccountsCryptoIntegration(t *testing.T) {
 	masterKey := []byte("crypto-integration-key-32-bytes!")
 
 	key1, err := crypto.DeriveKey(masterKey, []byte("account-1"), "pool-account", 32)
@@ -243,8 +243,8 @@ func TestAccountPoolCryptoIntegration(t *testing.T) {
 	}
 }
 
-func TestAccountPoolServiceStartStop(t *testing.T) {
-	svc := createTestAccountPoolService(t)
+func TestNeoAccountsServiceStartStop(t *testing.T) {
+	svc := createTestNeoAccountsService(t)
 	ctx := context.Background()
 
 	// Start will fail without DB but should not panic
@@ -259,8 +259,8 @@ func TestAccountPoolServiceStartStop(t *testing.T) {
 	}
 }
 
-func TestAccountPoolRouterMethods(t *testing.T) {
-	svc := createTestAccountPoolService(t)
+func TestNeoAccountsRouterMethods(t *testing.T) {
+	svc := createTestNeoAccountsService(t)
 	router := svc.Router()
 
 	endpoints := []struct {
@@ -308,8 +308,8 @@ func TestAccountPoolRouterMethods(t *testing.T) {
 	}
 }
 
-func TestAccountPoolConcurrentAccess(t *testing.T) {
-	svc := createTestAccountPoolService(t)
+func TestNeoAccountsConcurrentAccess(t *testing.T) {
+	svc := createTestNeoAccountsService(t)
 
 	done := make(chan bool, 10)
 	for i := 0; i < 10; i++ {
@@ -331,10 +331,10 @@ func TestAccountPoolConcurrentAccess(t *testing.T) {
 	}
 }
 
-func BenchmarkAccountPoolHealthEndpoint(b *testing.B) {
-	m, _ := marble.New(marble.Config{MarbleType: "accountpool"})
+func BenchmarkNeoAccountsHealthEndpoint(b *testing.B) {
+	m, _ := marble.New(marble.Config{MarbleType: "neoaccounts"})
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("benchmark-master-key-32-bytes!!!"))
-	svc, _ := accountpool.New(accountpool.Config{Marble: m})
+	svc, _ := neoaccounts.New(neoaccounts.Config{Marble: m})
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

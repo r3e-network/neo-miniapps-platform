@@ -1,0 +1,34 @@
+// Package neocompute provides types for the neocompute service.
+package neocomputemarble
+
+import "time"
+
+// =============================================================================
+// Request/Response Types
+// =============================================================================
+
+// ExecuteRequest represents a script execution request.
+type ExecuteRequest struct {
+	Script     string                 `json:"script"`
+	EntryPoint string                 `json:"entry_point,omitempty"`
+	Input      map[string]interface{} `json:"input,omitempty"`
+	SecretRefs []string               `json:"secret_refs,omitempty"`
+	Timeout    int                    `json:"timeout,omitempty"`
+}
+
+// ExecuteResponse represents a script execution response.
+type ExecuteResponse struct {
+	JobID     string                 `json:"job_id"`
+	Status    string                 `json:"status"`
+	Output    map[string]interface{} `json:"output,omitempty"`
+	Logs      []string               `json:"logs,omitempty"`
+	Error     string                 `json:"error,omitempty"`
+	GasUsed   int64                  `json:"gas_used"`
+	StartedAt time.Time              `json:"started_at"`
+	Duration  string                 `json:"duration,omitempty"`
+
+	// TEE attestation fields - prove result came from enclave
+	EncryptedOutput string `json:"encrypted_output,omitempty"` // AES-GCM encrypted output (base64)
+	OutputHash      string `json:"output_hash,omitempty"`      // SHA256 hash of plaintext output
+	Signature       string `json:"signature,omitempty"`        // HMAC-SHA256 signature of output hash
+}

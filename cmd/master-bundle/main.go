@@ -28,16 +28,16 @@ type masterKeyResponse struct {
 }
 
 func main() {
-	accountPool := flag.String("accountpool", "", "AccountPool base URL (https://host:port)")
+	neoAccounts := flag.String("neoaccounts", "", "NeoAccounts base URL (https://host:port)")
 	out := flag.String("out", "", "Output file for bundle (optional)")
 	flag.Parse()
 
-	if *accountPool == "" {
+	if *neoAccounts == "" {
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	bundle, err := fetchMasterKey(*accountPool)
+	bundle, err := fetchMasterKey(*neoAccounts)
 	if err != nil {
 		log.Fatalf("fetch master key: %v", err)
 	}

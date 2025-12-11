@@ -34,8 +34,8 @@ func TestMarbleType(t *testing.T) {
 		marbleType string
 	}{
 		{"vrf", "vrf"},
-		{"mixer", "mixer"},
-		{"datafeeds", "datafeeds"},
+		{"neovault", "neovault"},
+		{"neofeeds", "neofeeds"},
 		{"empty", ""},
 	}
 

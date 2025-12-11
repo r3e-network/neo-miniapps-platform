@@ -26,10 +26,10 @@ func main() {
 	rpc := flag.String("rpc", "", "Neo RPC URL")
 	gateway := flag.String("gateway", "", "Gateway contract hash (0x-prefixed)")
 	privHex := flag.String("priv", "", "Hex-encoded private key (admin)")
-	pubKeyHex := flag.String("pubkey", "", "Compressed pubkey hex to anchor (optional if --accountpool is set)")
-	pubKeyHashHex := flag.String("pubkey-hash", "", "SHA-256 hash of pubkey (hex, 32 bytes; optional if --accountpool is set)")
+	pubKeyHex := flag.String("pubkey", "", "Compressed pubkey hex to anchor (optional if --neoaccounts is set)")
+	pubKeyHashHex := flag.String("pubkey-hash", "", "SHA-256 hash of pubkey (hex, 32 bytes; optional if --neoaccounts is set)")
 	attestHashHex := flag.String("attest-hash", "", "Attestation bundle hash/CID (hex; optional if --bundle is set)")
-	accountPool := flag.String("accountpool", "", "AccountPool base URL; if set, fetch pubkey/hash from /master-key")
+	neoAccounts := flag.String("neoaccounts", "", "NeoAccounts base URL; if set, fetch pubkey/hash from /master-key")
 	bundleURI := flag.String("bundle", "", "Optional bundle URI (file:/// or https://) to compute attestation hash automatically")
 	flag.Parse()
 
@@ -40,8 +40,8 @@ func main() {
 
 	mk := masterKeyResponse{Hash: *pubKeyHashHex, PubKey: *pubKeyHex}
 	var err error
-	if *accountPool != "" {
-		mk, err = fetchMasterKey(*accountPool)
+	if *neoAccounts != "" {
+		mk, err = fetchMasterKey(*neoAccounts)
 		if err != nil {
 			log.Fatalf("fetch master key: %v", err)
 		}

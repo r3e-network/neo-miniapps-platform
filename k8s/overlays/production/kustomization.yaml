@@ -52,7 +52,7 @@ replicas:
     count: 2
   - name: vrf
     count: 2
-  - name: mixer
+  - name: neovault
     count: 2
   - name: oracle
     count: 2

@@ -427,7 +427,7 @@ func TestRepositoryGetServiceRequests(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode([]ServiceRequest{
 			{ID: "req-1", ServiceType: "vrf"},
-			{ID: "req-2", ServiceType: "mixer"},
+			{ID: "req-2", ServiceType: "neovault"},
 		})
 	}))
 	defer server.Close()

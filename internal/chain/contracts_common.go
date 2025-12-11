@@ -13,11 +13,11 @@ import (
 // ContractAddresses holds the deployed contract addresses.
 type ContractAddresses struct {
 	Gateway    string `json:"gateway"`
-	VRF        string `json:"vrf"`
-	Mixer      string `json:"mixer"`
-	DataFeeds  string `json:"datafeeds"`
+	VRF        string `json:"neorand"`
+	NeoVault      string `json:"neovault"`
+	NeoFeeds  string `json:"neofeeds"`
 	GasBank    string `json:"gasbank"`
-	Automation string `json:"automation"`
+	NeoFlow string `json:"neoflow"`
 }
 
 // LoadFromEnv loads contract addresses from environment variables.
@@ -28,14 +28,14 @@ func (c *ContractAddresses) LoadFromEnv() {
 	if h := os.Getenv("CONTRACT_VRF_HASH"); h != "" {
 		c.VRF = h
 	}
-	if h := os.Getenv("CONTRACT_MIXER_HASH"); h != "" {
-		c.Mixer = h
+	if h := os.Getenv("CONTRACT_NEOVAULT_HASH"); h != "" {
+		c.NeoVault = h
 	}
-	if h := os.Getenv("CONTRACT_DATAFEEDS_HASH"); h != "" {
-		c.DataFeeds = h
+	if h := os.Getenv("CONTRACT_NEOFEEDS_HASH"); h != "" {
+		c.NeoFeeds = h
 	}
-	if h := os.Getenv("CONTRACT_AUTOMATION_HASH"); h != "" {
-		c.Automation = h
+	if h := os.Getenv("CONTRACT_NEOFLOW_HASH"); h != "" {
+		c.NeoFlow = h
 	}
 }
 
@@ -78,18 +78,18 @@ const (
 )
 
 // =============================================================================
-// Mixer Types
+// NeoVault Types
 // =============================================================================
 
-// MixerPool represents a mixer pool from the contract.
-type MixerPool struct {
+// NeoVaultPool represents a neovault pool from the contract.
+type NeoVaultPool struct {
 	Denomination *big.Int
 	LeafCount    *big.Int
 	Active       bool
 }
 
 // =============================================================================
-// DataFeeds Types
+// NeoFeeds Types
 // =============================================================================
 
 // PriceData represents price data from the contract.
@@ -102,7 +102,7 @@ type PriceData struct {
 }
 
 // ContractFeedConfig represents on-chain price feed configuration from the smart contract.
-// Note: This is different from datafeeds.FeedConfig which is for service configuration.
+// Note: This is different from neofeeds.FeedConfig which is for service configuration.
 type ContractFeedConfig struct {
 	FeedID      string
 	Description string
@@ -112,10 +112,10 @@ type ContractFeedConfig struct {
 }
 
 // =============================================================================
-// Automation Types
+// NeoFlow Types
 // =============================================================================
 
-// Trigger represents an automation trigger from the contract.
+// Trigger represents an neoflow trigger from the contract.
 type Trigger struct {
 	TriggerID      *big.Int
 	RequestID      *big.Int

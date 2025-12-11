@@ -19,11 +19,11 @@ const (
 
 // ServiceFees defines the fee for each service (in GAS smallest unit, 1e-8 GAS).
 var ServiceFees = map[string]int64{
-	"vrf":          100000,  // 0.001 GAS per VRF request
-	"automation":   50000,   // 0.0005 GAS per trigger execution
-	"datafeeds":    10000,   // 0.0001 GAS per price query
-	"mixer":        5000000, // 0.05 GAS base fee (+ 0.5% of amount)
-	"confidential": 100000,  // 0.001 GAS per compute job
+	"neorand":          100000,  // 0.001 GAS per VRF request
+	"neoflow":   50000,   // 0.0005 GAS per trigger execution
+	"neofeeds":    10000,   // 0.0001 GAS per price query
+	"neovault":        5000000, // 0.05 GAS base fee (+ 0.5% of amount)
+	"neocompute": 100000,  // 0.001 GAS per compute job
 }
 
 // Reservation represents a fee reservation for a pending operation.

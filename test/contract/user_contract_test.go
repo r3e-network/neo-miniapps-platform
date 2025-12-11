@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/marble"
-	accountpool "github.com/R3E-Network/service_layer/services/accountpool/marble"
-	mixer "github.com/R3E-Network/service_layer/services/mixer/marble"
-	vrf "github.com/R3E-Network/service_layer/services/vrf/marble"
+	neoaccounts "github.com/R3E-Network/service_layer/services/neoaccounts/marble"
+	neovault "github.com/R3E-Network/service_layer/services/neovault/marble"
+	vrf "github.com/R3E-Network/service_layer/services/neorand/marble"
 )
 
 // ============================================================================
@@ -41,7 +41,7 @@ type VRFPayload struct {
 }
 
 func TestVRFLotteryContractFlow(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "vrf"})
+	m, _ := marble.New(marble.Config{MarbleType: "neorand"})
 	m.SetTestSecret("VRF_PRIVATE_KEY", []byte("lottery-test-vrf-key-32-bytes!!!"))
 
 	vrfSvc, err := vrf.New(vrf.Config{Marble: m})
@@ -152,10 +152,10 @@ func TestVRFLotteryContractFlow(t *testing.T) {
 }
 
 // ============================================================================
-// Mixer Client Contract Tests
+// NeoVault Client Contract Tests
 // ============================================================================
 
-type MixerPayload struct {
+type NeoVaultPayload struct {
 	DepositID        int64  `json:"deposit_id"`
 	TokenType        string `json:"token_type"`
 	Amount           int64  `json:"amount"`
@@ -172,26 +172,26 @@ type MixRequestInfo struct {
 	OutputsHash []byte `json:"outputs_hash"`
 }
 
-func TestMixerClientContractFlow(t *testing.T) {
-	apMarble, _ := marble.New(marble.Config{MarbleType: "accountpool"})
-	apMarble.SetTestSecret("POOL_MASTER_KEY", []byte("mixer-client-test-pool-key-32b!!"))
+func TestNeoVaultClientContractFlow(t *testing.T) {
+	apMarble, _ := marble.New(marble.Config{MarbleType: "neoaccounts"})
+	apMarble.SetTestSecret("POOL_MASTER_KEY", []byte("neovault-client-test-pool-key-32b!!"))
 
-	apSvc, _ := accountpool.New(accountpool.Config{Marble: apMarble})
+	apSvc, _ := neoaccounts.New(neoaccounts.Config{Marble: apMarble})
 	apServer := httptest.NewServer(apSvc.Router())
 	defer apServer.Close()
 
-	mixerMarble, _ := marble.New(marble.Config{MarbleType: "mixer"})
-	mixerMarble.SetTestSecret("MIXER_MASTER_KEY", []byte("mixer-client-test-mixer-key-32b!"))
+	neovaultMarble, _ := marble.New(marble.Config{MarbleType: "neovault"})
+	neovaultMarble.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("neovault-client-test-neovault-key-32b!"))
 
-	mixerSvc, err := mixer.New(mixer.Config{
-		Marble:         mixerMarble,
-		AccountPoolURL: apServer.URL,
+	neovaultSvc, err := neovault.New(neovault.Config{
+		Marble:         neovaultMarble,
+		NeoAccountsURL: apServer.URL,
 	})
 	if err != nil {
-		t.Fatalf("mixer.New: %v", err)
+		t.Fatalf("neovault.New: %v", err)
 	}
 
-	t.Run("mixer request creation simulation", func(t *testing.T) {
+	t.Run("neovault request creation simulation", func(t *testing.T) {
 		// Simulate user deposit
 		deposit := struct {
 			DepositID int64
@@ -208,7 +208,7 @@ func TestMixerClientContractFlow(t *testing.T) {
 		}
 
 		// Verify deposit meets minimum
-		gasConfig := mixerSvc.GetTokenConfig("GAS")
+		gasConfig := neovaultSvc.GetTokenConfig("GAS")
 		if gasConfig == nil {
 			t.Fatal("GAS config not found")
 		}
@@ -220,7 +220,7 @@ func TestMixerClientContractFlow(t *testing.T) {
 		// Create mix request
 		encryptedTargets := []byte("encrypted-target-addresses-data")
 
-		mixPayload := MixerPayload{
+		mixPayload := NeoVaultPayload{
 			DepositID:        deposit.DepositID,
 			TokenType:        deposit.TokenType,
 			Amount:           deposit.Amount,
@@ -245,8 +245,8 @@ func TestMixerClientContractFlow(t *testing.T) {
 		}
 	})
 
-	t.Run("mixer callback handling", func(t *testing.T) {
-		type MixerCallback struct {
+	t.Run("neovault callback handling", func(t *testing.T) {
+		type NeoVaultCallback struct {
 			RequestID int64  `json:"request_id"`
 			Success   bool   `json:"success"`
 			Result    []byte `json:"result"` // outputs hash
@@ -254,7 +254,7 @@ func TestMixerClientContractFlow(t *testing.T) {
 		}
 
 		// Successful mix
-		successCallback := MixerCallback{
+		successCallback := NeoVaultCallback{
 			RequestID: 100,
 			Success:   true,
 			Result:    []byte("outputs-hash-after-mixing"),
@@ -269,7 +269,7 @@ func TestMixerClientContractFlow(t *testing.T) {
 		}
 
 		// Failed mix (should trigger refund)
-		failedCallback := MixerCallback{
+		failedCallback := NeoVaultCallback{
 			RequestID: 101,
 			Success:   false,
 			Result:    nil,
@@ -284,14 +284,14 @@ func TestMixerClientContractFlow(t *testing.T) {
 		}
 	})
 
-	t.Run("mixer service token validation", func(t *testing.T) {
-		tokens := mixerSvc.GetSupportedTokens()
+	t.Run("neovault service token validation", func(t *testing.T) {
+		tokens := neovaultSvc.GetSupportedTokens()
 		if len(tokens) == 0 {
 			t.Error("should have supported tokens")
 		}
 
 		// Verify GAS config
-		gasConfig := mixerSvc.GetTokenConfig("GAS")
+		gasConfig := neovaultSvc.GetTokenConfig("GAS")
 		if gasConfig == nil {
 			t.Fatal("GAS config required")
 		}
@@ -300,7 +300,7 @@ func TestMixerClientContractFlow(t *testing.T) {
 			gasConfig.MinTxAmount, gasConfig.MaxTxAmount, gasConfig.ServiceFeeRate)
 
 		// Verify NEO config
-		neoConfig := mixerSvc.GetTokenConfig("NEO")
+		neoConfig := neovaultSvc.GetTokenConfig("NEO")
 		if neoConfig == nil {
 			t.Fatal("NEO config required")
 		}
@@ -339,8 +339,8 @@ type Position struct {
 }
 
 func TestDeFiPriceConsumerContractFlow(t *testing.T) {
-	t.Run("datafeeds price reading simulation", func(t *testing.T) {
-		// Simulate DataFeeds contract returning price
+	t.Run("neofeeds price reading simulation", func(t *testing.T) {
+		// Simulate NeoFeeds contract returning price
 		gasPriceFeed := PriceFeed{
 			Pair:      "GAS/USD",
 			Price:     450000000, // $4.50 with 8 decimals
@@ -447,22 +447,22 @@ func TestDeFiPriceConsumerContractFlow(t *testing.T) {
 
 func TestFullServiceLayerContractIntegration(t *testing.T) {
 	// Setup services
-	apMarble, _ := marble.New(marble.Config{MarbleType: "accountpool"})
+	apMarble, _ := marble.New(marble.Config{MarbleType: "neoaccounts"})
 	apMarble.SetTestSecret("POOL_MASTER_KEY", []byte("full-integration-pool-key-32b!!!"))
-	apSvc, _ := accountpool.New(accountpool.Config{Marble: apMarble})
+	apSvc, _ := neoaccounts.New(neoaccounts.Config{Marble: apMarble})
 
 	apServer := httptest.NewServer(apSvc.Router())
 	defer apServer.Close()
 
-	vrfMarble, _ := marble.New(marble.Config{MarbleType: "vrf"})
+	vrfMarble, _ := marble.New(marble.Config{MarbleType: "neorand"})
 	vrfMarble.SetTestSecret("VRF_PRIVATE_KEY", []byte("full-integration-vrf-key-32bytes"))
 	vrfSvc, _ := vrf.New(vrf.Config{Marble: vrfMarble})
 
-	mixerMarble, _ := marble.New(marble.Config{MarbleType: "mixer"})
-	mixerMarble.SetTestSecret("MIXER_MASTER_KEY", []byte("full-integration-mixer-key-32b!!"))
-	mixerSvc, _ := mixer.New(mixer.Config{
-		Marble:         mixerMarble,
-		AccountPoolURL: apServer.URL,
+	neovaultMarble, _ := marble.New(marble.Config{MarbleType: "neovault"})
+	neovaultMarble.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("full-integration-neovault-key-32b!!"))
+	neovaultSvc, _ := neovault.New(neovault.Config{
+		Marble:         neovaultMarble,
+		NeoAccountsURL: apServer.URL,
 	})
 
 	t.Run("simulate gateway request routing", func(t *testing.T) {
@@ -481,17 +481,17 @@ func TestFullServiceLayerContractIntegration(t *testing.T) {
 			RequestID:      1,
 			UserContract:   "0x1111111111111111111111111111111111111111",
 			Caller:         "NCallerAddress12345678901234567890",
-			ServiceType:    "vrf",
+			ServiceType:    "neorand",
 			Payload:        []byte(`{"seed":"lottery-seed","num_words":1}`),
 			CallbackMethod: "onVRFCallback",
 		}
 
-		// Mixer request from mixer client
-		mixerRequest := ServiceRequest{
+		// NeoVault request from neovault client
+		neovaultRequest := ServiceRequest{
 			RequestID:      2,
 			UserContract:   "0x2222222222222222222222222222222222222222",
 			Caller:         "NCallerAddress12345678901234567890",
-			ServiceType:    "mixer",
+			ServiceType:    "neovault",
 			Payload:        []byte(`{"deposit_id":1,"token_type":"GAS","amount":500000000}`),
 			CallbackMethod: "onMixCallback",
 		}
@@ -506,7 +506,7 @@ func TestFullServiceLayerContractIntegration(t *testing.T) {
 			CallbackMethod: "onOracleCallback",
 		}
 
-		requests := []ServiceRequest{vrfRequest, mixerRequest, oracleRequest}
+		requests := []ServiceRequest{vrfRequest, neovaultRequest, oracleRequest}
 
 		for _, req := range requests {
 			t.Logf("Request %d: service=%s, contract=%s, callback=%s",
@@ -530,19 +530,19 @@ func TestFullServiceLayerContractIntegration(t *testing.T) {
 			}()
 		}
 
-		// Concurrent Mixer health checks
+		// Concurrent NeoVault health checks
 		for i := 0; i < 10; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				req := httptest.NewRequest("GET", "/health", nil)
 				w := httptest.NewRecorder()
-				mixerSvc.Router().ServeHTTP(w, req)
+				neovaultSvc.Router().ServeHTTP(w, req)
 				results <- (w.Code == http.StatusOK)
 			}()
 		}
 
-		// Concurrent AccountPool health checks
+		// Concurrent NeoAccounts health checks
 		for i := 0; i < 10; i++ {
 			wg.Add(1)
 			go func() {
@@ -602,7 +602,7 @@ func TestContractEventProcessing(t *testing.T) {
 				"request_id":    int64(12345),
 				"user_contract": "0xUserContractHash",
 				"caller":        "NCallerAddress",
-				"service_type":  "vrf",
+				"service_type":  "neorand",
 				"payload":       "base64EncodedPayload",
 			},
 		}
@@ -614,7 +614,7 @@ func TestContractEventProcessing(t *testing.T) {
 		if event.EventName != "ServiceRequest" {
 			t.Errorf("expected ServiceRequest, got %s", event.EventName)
 		}
-		if event.State["service_type"] != "vrf" {
+		if event.State["service_type"] != "neorand" {
 			t.Errorf("expected service_type vrf, got %v", event.State["service_type"])
 		}
 	})

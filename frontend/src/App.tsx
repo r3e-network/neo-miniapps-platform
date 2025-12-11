@@ -5,9 +5,10 @@ import { Dashboard } from './pages/Dashboard';
 import { Services } from './pages/Services';
 import { Secrets } from './pages/Secrets';
 import { GasBank } from './pages/GasBank';
-import { Automation } from './pages/Automation';
+import { NeoFlow } from './pages/NeoFlow';
 import { Settings } from './pages/Settings';
-import { Mixer } from './pages/Mixer';
+import { NeoVault } from './pages/NeoVault';
+import { VRF } from './pages/VRF';
 import { Login } from './pages/Login';
 import { AuthCallback } from './pages/AuthCallback';
 import { useAuthStore } from './stores/auth';
@@ -37,10 +38,11 @@ export default function App() {
                   <Routes>
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/services" element={<Services />} />
-                    <Route path="/mixer" element={<Mixer />} />
-                    <Route path="/secrets" element={<Secrets />} />
+                    <Route path="/neovault" element={<NeoVault />} />
+                    <Route path="/neorand" element={<VRF />} />
+                    <Route path="/neostore" element={<Secrets />} />
                     <Route path="/gasbank" element={<GasBank />} />
-                    <Route path="/automation" element={<Automation />} />
+                    <Route path="/neoflow" element={<NeoFlow />} />
                     <Route path="/settings" element={<Settings />} />
                   </Routes>
                 </Layout>

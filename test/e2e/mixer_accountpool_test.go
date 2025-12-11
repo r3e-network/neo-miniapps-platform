@@ -12,47 +12,47 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/marble"
-	accountpool "github.com/R3E-Network/service_layer/services/accountpool/marble"
-	mixer "github.com/R3E-Network/service_layer/services/mixer/marble"
+	neoaccounts "github.com/R3E-Network/service_layer/services/neoaccounts/marble"
+	neovault "github.com/R3E-Network/service_layer/services/neovault/marble"
 )
 
-// TestMixerAccountPoolIntegration tests the integration between Mixer and AccountPool services.
-func TestMixerAccountPoolIntegration(t *testing.T) {
-	// Create AccountPool service
-	apMarble, _ := marble.New(marble.Config{MarbleType: "accountpool"})
+// TestNeoVaultNeoAccountsIntegration tests the integration between NeoVault and NeoAccounts services.
+func TestNeoVaultNeoAccountsIntegration(t *testing.T) {
+	// Create NeoAccounts service
+	apMarble, _ := marble.New(marble.Config{MarbleType: "neoaccounts"})
 	apMarble.SetTestSecret("POOL_MASTER_KEY", []byte("e2e-test-pool-master-key-32b!!!"))
 
-	apSvc, err := accountpool.New(accountpool.Config{Marble: apMarble})
+	apSvc, err := neoaccounts.New(neoaccounts.Config{Marble: apMarble})
 	if err != nil {
-		t.Fatalf("accountpool.New: %v", err)
+		t.Fatalf("neoaccounts.New: %v", err)
 	}
 
-	// Start AccountPool HTTP server
+	// Start NeoAccounts HTTP server
 	apServer := httptest.NewServer(apSvc.Router())
 	defer apServer.Close()
 
-	// Create Mixer service pointing to AccountPool
-	mixerMarble, _ := marble.New(marble.Config{MarbleType: "mixer"})
-	mixerMarble.SetTestSecret("MIXER_MASTER_KEY", []byte("e2e-test-mixer-master-key-32b!!"))
+	// Create NeoVault service pointing to NeoAccounts
+	neovaultMarble, _ := marble.New(marble.Config{MarbleType: "neovault"})
+	neovaultMarble.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("e2e-test-neovault-master-key-32b!!"))
 
-	mixerSvc, err := mixer.New(mixer.Config{
-		Marble:         mixerMarble,
-		AccountPoolURL: apServer.URL,
+	neovaultSvc, err := neovault.New(neovault.Config{
+		Marble:         neovaultMarble,
+		NeoAccountsURL: apServer.URL,
 	})
 	if err != nil {
-		t.Fatalf("mixer.New: %v", err)
+		t.Fatalf("neovault.New: %v", err)
 	}
 
-	t.Run("mixer service creation with accountpool url", func(t *testing.T) {
-		if mixerSvc == nil {
-			t.Fatal("mixer service should not be nil")
+	t.Run("neovault service creation with neoaccounts url", func(t *testing.T) {
+		if neovaultSvc == nil {
+			t.Fatal("neovault service should not be nil")
 		}
-		if mixerSvc.ID() != "mixer" {
-			t.Errorf("expected ID 'mixer', got '%s'", mixerSvc.ID())
+		if neovaultSvc.ID() != "neovault" {
+			t.Errorf("expected ID 'neovault', got '%s'", neovaultSvc.ID())
 		}
 	})
 
-	t.Run("accountpool service responds to health check", func(t *testing.T) {
+	t.Run("neoaccounts service responds to health check", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/health", nil)
 		w := httptest.NewRecorder()
 		apSvc.Router().ServeHTTP(w, req)
@@ -62,10 +62,10 @@ func TestMixerAccountPoolIntegration(t *testing.T) {
 		}
 	})
 
-	t.Run("mixer service responds to health check", func(t *testing.T) {
+	t.Run("neovault service responds to health check", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/health", nil)
 		w := httptest.NewRecorder()
-		mixerSvc.Router().ServeHTTP(w, req)
+		neovaultSvc.Router().ServeHTTP(w, req)
 
 		if w.Code != http.StatusOK {
 			t.Errorf("expected status 200, got %d", w.Code)
@@ -73,9 +73,9 @@ func TestMixerAccountPoolIntegration(t *testing.T) {
 	})
 }
 
-// TestAccountPoolClientIntegration tests the AccountPoolClient HTTP client.
-func TestAccountPoolClientIntegration(t *testing.T) {
-	// Create a mock AccountPool server that returns proper responses
+// TestNeoAccountsClientIntegration tests the NeoAccountsClient HTTP client.
+func TestNeoAccountsClientIntegration(t *testing.T) {
+	// Create a mock NeoAccounts server that returns proper responses
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/request", func(w http.ResponseWriter, r *http.Request) {
@@ -101,12 +101,14 @@ func TestAccountPoolClientIntegration(t *testing.T) {
 			count = 1
 		}
 
-		accounts := make([]accountpool.AccountInfo, count)
+		accounts := make([]neoaccounts.AccountInfo, count)
 		for i := 0; i < count; i++ {
-			accounts[i] = accountpool.AccountInfo{
-				ID:         "mock-acc-" + string(rune('a'+i)),
-				Address:    "NMockAddress" + string(rune('A'+i)),
-				Balance:    1000000,
+			accounts[i] = neoaccounts.AccountInfo{
+				ID:      "mock-acc-" + string(rune('a'+i)),
+				Address: "NMockAddress" + string(rune('A'+i)),
+				Balances: map[string]neoaccounts.TokenBalance{
+					"GAS": {TokenType: "GAS", Amount: 1000000},
+				},
 				CreatedAt:  time.Now(),
 				LastUsedAt: time.Now(),
 				TxCount:    0,
@@ -116,7 +118,7 @@ func TestAccountPoolClientIntegration(t *testing.T) {
 			}
 		}
 
-		resp := accountpool.RequestAccountsResponse{
+		resp := neoaccounts.RequestAccountsResponse{
 			Accounts: accounts,
 			LockID:   "mock-lock-123",
 		}
@@ -179,7 +181,7 @@ func TestAccountPoolClientIntegration(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	client := mixer.NewAccountPoolClient(server.URL, "mixer")
+	client := neovault.NewNeoAccountsClient(server.URL, "neovault")
 
 	t.Run("request accounts", func(t *testing.T) {
 		ctx := context.Background()
@@ -195,8 +197,8 @@ func TestAccountPoolClientIntegration(t *testing.T) {
 			t.Error("lock_id should not be empty")
 		}
 		for _, acc := range resp.Accounts {
-			if acc.LockedBy != "mixer" {
-				t.Errorf("expected locked_by 'mixer', got '%s'", acc.LockedBy)
+			if acc.LockedBy != "neovault" {
+				t.Errorf("expected locked_by 'neovault', got '%s'", acc.LockedBy)
 			}
 		}
 	})
@@ -227,8 +229,8 @@ func TestAccountPoolClientIntegration(t *testing.T) {
 	})
 }
 
-// TestAccountPoolClientErrorHandling tests error scenarios.
-func TestAccountPoolClientErrorHandling(t *testing.T) {
+// TestNeoAccountsClientErrorHandling tests error scenarios.
+func TestNeoAccountsClientErrorHandling(t *testing.T) {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/request", func(w http.ResponseWriter, r *http.Request) {
@@ -242,7 +244,7 @@ func TestAccountPoolClientErrorHandling(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	client := mixer.NewAccountPoolClient(server.URL, "mixer")
+	client := neovault.NewNeoAccountsClient(server.URL, "neovault")
 	ctx := context.Background()
 
 	t.Run("request accounts error", func(t *testing.T) {
@@ -260,8 +262,8 @@ func TestAccountPoolClientErrorHandling(t *testing.T) {
 	})
 }
 
-// TestAccountPoolClientTimeout tests timeout handling.
-func TestAccountPoolClientTimeout(t *testing.T) {
+// TestNeoAccountsClientTimeout tests timeout handling.
+func TestNeoAccountsClientTimeout(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/request", func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(100 * time.Millisecond)
@@ -271,7 +273,7 @@ func TestAccountPoolClientTimeout(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	client := mixer.NewAccountPoolClient(server.URL, "mixer")
+	client := neovault.NewNeoAccountsClient(server.URL, "neovault")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
@@ -282,25 +284,25 @@ func TestAccountPoolClientTimeout(t *testing.T) {
 	}
 }
 
-// TestMixerTokenConfigs tests mixer token configuration.
-func TestMixerTokenConfigs(t *testing.T) {
-	mixerMarble, _ := marble.New(marble.Config{MarbleType: "mixer"})
-	mixerMarble.SetTestSecret("MIXER_MASTER_KEY", []byte("e2e-test-mixer-master-key-32b!!"))
+// TestNeoVaultTokenConfigs tests neovault token configuration.
+func TestNeoVaultTokenConfigs(t *testing.T) {
+	neovaultMarble, _ := marble.New(marble.Config{MarbleType: "neovault"})
+	neovaultMarble.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("e2e-test-neovault-master-key-32b!!"))
 
-	mixerSvc, _ := mixer.New(mixer.Config{
-		Marble:         mixerMarble,
-		AccountPoolURL: "http://localhost:8081",
+	neovaultSvc, _ := neovault.New(neovault.Config{
+		Marble:         neovaultMarble,
+		NeoAccountsURL: "http://localhost:8081",
 	})
 
 	t.Run("default token configs", func(t *testing.T) {
-		tokens := mixerSvc.GetSupportedTokens()
+		tokens := neovaultSvc.GetSupportedTokens()
 		if len(tokens) < 2 {
 			t.Errorf("expected at least 2 supported tokens, got %d", len(tokens))
 		}
 	})
 
 	t.Run("get GAS config", func(t *testing.T) {
-		cfg := mixerSvc.GetTokenConfig("GAS")
+		cfg := neovaultSvc.GetTokenConfig("GAS")
 		if cfg == nil {
 			t.Fatal("GAS config should not be nil")
 		}
@@ -313,7 +315,7 @@ func TestMixerTokenConfigs(t *testing.T) {
 	})
 
 	t.Run("get NEO config", func(t *testing.T) {
-		cfg := mixerSvc.GetTokenConfig("NEO")
+		cfg := neovaultSvc.GetTokenConfig("NEO")
 		if cfg == nil {
 			t.Fatal("NEO config should not be nil")
 		}
@@ -323,7 +325,7 @@ func TestMixerTokenConfigs(t *testing.T) {
 	})
 
 	t.Run("unknown token returns default", func(t *testing.T) {
-		cfg := mixerSvc.GetTokenConfig("UNKNOWN")
+		cfg := neovaultSvc.GetTokenConfig("UNKNOWN")
 		if cfg == nil {
 			t.Fatal("should return default config for unknown token")
 		}
@@ -334,7 +336,7 @@ func TestMixerTokenConfigs(t *testing.T) {
 func TestE2EServiceCoordination(t *testing.T) {
 	// Simulate a full mixing flow with mocked services
 
-	// Step 1: Create AccountPool mock that tracks state
+	// Step 1: Create NeoAccounts mock that tracks state
 	lockedAccounts := make(map[string]string) // accountID -> serviceID
 	var mu sync.Mutex
 
@@ -348,19 +350,21 @@ func TestE2EServiceCoordination(t *testing.T) {
 		serviceID, _ := input["service_id"].(string)
 		count := int(input["count"].(float64))
 
-		accounts := make([]accountpool.AccountInfo, count)
+		accounts := make([]neoaccounts.AccountInfo, count)
 		for i := 0; i < count; i++ {
 			accID := fmt.Sprintf("acc-%d", len(lockedAccounts)+i)
 			lockedAccounts[accID] = serviceID
-			accounts[i] = accountpool.AccountInfo{
-				ID:       accID,
-				Address:  "NAddr" + accID,
-				Balance:  1000000,
+			accounts[i] = neoaccounts.AccountInfo{
+				ID:      accID,
+				Address: "NAddr" + accID,
+				Balances: map[string]neoaccounts.TokenBalance{
+					"GAS": {TokenType: "GAS", Amount: 1000000},
+				},
 				LockedBy: serviceID,
 			}
 		}
 
-		json.NewEncoder(w).Encode(accountpool.RequestAccountsResponse{
+		json.NewEncoder(w).Encode(neoaccounts.RequestAccountsResponse{
 			Accounts: accounts,
 			LockID:   "lock-" + serviceID,
 		})
@@ -390,7 +394,7 @@ func TestE2EServiceCoordination(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	client := mixer.NewAccountPoolClient(server.URL, "mixer")
+	client := neovault.NewNeoAccountsClient(server.URL, "neovault")
 	ctx := context.Background()
 
 	t.Run("request-use-release flow", func(t *testing.T) {

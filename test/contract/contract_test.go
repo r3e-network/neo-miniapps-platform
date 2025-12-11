@@ -36,9 +36,9 @@ func TestContractCompilation(t *testing.T) {
 	contracts := []string{
 		"ServiceLayerGateway",
 		"VRFService",
-		"MixerService",
-		"DataFeedsService",
-		"AutomationService",
+		"NeoVaultService",
+		"NeoFeedsService",
+		"NeoFlowService",
 	}
 
 	contractBase := filepath.Join("..", "..", "contracts")
@@ -50,13 +50,13 @@ func TestContractCompilation(t *testing.T) {
 			case "ServiceLayerGateway":
 				contractDir = "gateway"
 			case "VRFService":
-				contractDir = "vrf"
-			case "MixerService":
-				contractDir = "mixer"
-			case "DataFeedsService":
-				contractDir = "datafeeds"
-			case "AutomationService":
-				contractDir = "automation"
+				contractDir = "neorand"
+			case "NeoVaultService":
+				contractDir = "neovault"
+			case "NeoFeedsService":
+				contractDir = "neofeeds"
+			case "NeoFlowService":
+				contractDir = "neoflow"
 			}
 
 			sourceFile := filepath.Join(contractBase, contractDir, contract+".cs")
@@ -174,12 +174,12 @@ func TestVRFServiceContract(t *testing.T) {
 	})
 }
 
-func TestMixerServiceContract(t *testing.T) {
+func TestNeoVaultServiceContract(t *testing.T) {
 	SkipIfNoNeoExpress(t)
 	SkipIfNoCompiledContracts(t)
 
 	if testing.Short() {
-		t.Skip("skipping Mixer test in short mode")
+		t.Skip("skipping NeoVault test in short mode")
 	}
 
 	t.Run("service registration", func(t *testing.T) {

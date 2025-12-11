@@ -1,4 +1,4 @@
-// Package contract provides datafeeds integration tests with Neo Express.
+// Package contract provides neofeeds integration tests with Neo Express.
 package contract
 
 import (
@@ -15,29 +15,29 @@ import (
 
 	"github.com/R3E-Network/service_layer/internal/database"
 	"github.com/R3E-Network/service_layer/internal/marble"
-	datafeeds "github.com/R3E-Network/service_layer/services/datafeeds/marble"
+	neofeeds "github.com/R3E-Network/service_layer/services/neofeeds/marble"
 )
 
-// TestDataFeedsPriceFetching tests that datafeeds can fetch prices from Chainlink and Binance.
-func TestDataFeedsPriceFetching(t *testing.T) {
+// TestNeoFeedsPriceFetching tests that neofeeds can fetch prices from Chainlink and Binance.
+func TestNeoFeedsPriceFetching(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	m, err := marble.New(marble.Config{MarbleType: "datafeeds"})
+	m, err := marble.New(marble.Config{MarbleType: "neofeeds"})
 	if err != nil {
 		t.Fatalf("marble.New: %v", err)
 	}
-	m.SetTestSecret("DATAFEEDS_SIGNING_KEY", []byte("test-signing-key-32-bytes-long!!"))
+	m.SetTestSecret("NEOFEEDS_SIGNING_KEY", []byte("test-signing-key-32-bytes-long!!"))
 
 	mockDB := database.NewMockRepository()
-	svc, err := datafeeds.New(datafeeds.Config{
+	svc, err := neofeeds.New(neofeeds.Config{
 		Marble:      m,
 		DB:          mockDB,
 		ArbitrumRPC: "https://arb1.arbitrum.io/rpc",
 	})
 	if err != nil {
-		t.Fatalf("datafeeds.New: %v", err)
+		t.Fatalf("neofeeds.New: %v", err)
 	}
 
 	t.Run("fetch BTC price from Chainlink", func(t *testing.T) {
@@ -107,10 +107,10 @@ func TestDataFeedsPriceFetching(t *testing.T) {
 	})
 }
 
-// TestDataFeedsHTTPHandler tests the HTTP handlers for datafeeds service.
-func TestDataFeedsHTTPHandler(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "datafeeds"})
-	m.SetTestSecret("DATAFEEDS_SIGNING_KEY", []byte("test-signing-key-32-bytes-long!!"))
+// TestNeoFeedsHTTPHandler tests the HTTP handlers for neofeeds service.
+func TestNeoFeedsHTTPHandler(t *testing.T) {
+	m, _ := marble.New(marble.Config{MarbleType: "neofeeds"})
+	m.SetTestSecret("NEOFEEDS_SIGNING_KEY", []byte("test-signing-key-32-bytes-long!!"))
 
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -118,17 +118,17 @@ func TestDataFeedsHTTPHandler(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	mockConfig := &datafeeds.DataFeedsConfig{
+	mockConfig := &neofeeds.NeoFeedsConfig{
 		Version: "1.0",
-		Sources: []datafeeds.SourceConfig{
+		Sources: []neofeeds.SourceConfig{
 			{ID: "mock", Name: "Mock", URL: mockServer.URL, JSONPath: "price", Weight: 1},
 		},
-		Feeds: []datafeeds.FeedConfig{
+		Feeds: []neofeeds.FeedConfig{
 			{ID: "BTC/USD", Pair: "BTCUSDT", Sources: []string{"mock"}, Enabled: true},
 		},
 		UpdateInterval: 60 * time.Second,
 	}
-	svc, _ := datafeeds.New(datafeeds.Config{Marble: m, DB: database.NewMockRepository(), FeedsConfig: mockConfig})
+	svc, _ := neofeeds.New(neofeeds.Config{Marble: m, DB: database.NewMockRepository(), FeedsConfig: mockConfig})
 
 	t.Run("health endpoint", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/health", nil)
@@ -160,7 +160,7 @@ func TestDataFeedsHTTPHandler(t *testing.T) {
 			t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
 		}
 
-		var resp datafeeds.PriceResponse
+		var resp neofeeds.PriceResponse
 		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -177,11 +177,11 @@ func TestDataFeedsHTTPHandler(t *testing.T) {
 	})
 }
 
-// TestDataFeedsSignatureVerification tests that signatures can be verified.
-func TestDataFeedsSignatureVerification(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "datafeeds"})
+// TestNeoFeedsSignatureVerification tests that signatures can be verified.
+func TestNeoFeedsSignatureVerification(t *testing.T) {
+	m, _ := marble.New(marble.Config{MarbleType: "neofeeds"})
 	signingKey := []byte("test-signing-key-32-bytes-long!!")
-	m.SetTestSecret("DATAFEEDS_SIGNING_KEY", signingKey)
+	m.SetTestSecret("NEOFEEDS_SIGNING_KEY", signingKey)
 
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -189,17 +189,17 @@ func TestDataFeedsSignatureVerification(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	mockConfig := &datafeeds.DataFeedsConfig{
+	mockConfig := &neofeeds.NeoFeedsConfig{
 		Version: "1.0",
-		Sources: []datafeeds.SourceConfig{
+		Sources: []neofeeds.SourceConfig{
 			{ID: "mock", Name: "Mock", URL: mockServer.URL, JSONPath: "price", Weight: 1},
 		},
-		Feeds: []datafeeds.FeedConfig{
+		Feeds: []neofeeds.FeedConfig{
 			{ID: "BTC/USD", Pair: "BTCUSDT", Sources: []string{"mock"}, Enabled: true},
 		},
 		UpdateInterval: 60 * time.Second,
 	}
-	svc, _ := datafeeds.New(datafeeds.Config{Marble: m, DB: database.NewMockRepository(), FeedsConfig: mockConfig})
+	svc, _ := neofeeds.New(neofeeds.Config{Marble: m, DB: database.NewMockRepository(), FeedsConfig: mockConfig})
 
 	ctx := context.Background()
 	price, err := svc.GetPrice(ctx, "BTC/USD")
@@ -223,40 +223,40 @@ func TestDataFeedsSignatureVerification(t *testing.T) {
 	}
 }
 
-// TestNeoExpressDataFeedsContract tests datafeeds contract deployment and invocation.
-func TestNeoExpressDataFeedsContract(t *testing.T) {
+// TestNeoExpressNeoFeedsContract tests neofeeds contract deployment and invocation.
+func TestNeoExpressNeoFeedsContract(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping neo-express test in short mode")
 	}
 
 	SkipIfNoNeoExpress(t)
 
-	nefPath := filepath.Join("..", "..", "contracts", "build", "DataFeedsService.nef")
+	nefPath := filepath.Join("..", "..", "contracts", "build", "NeoFeedsService.nef")
 	if _, err := os.Stat(nefPath); os.IsNotExist(err) {
-		t.Skip("DataFeedsService.nef not found, run 'make build-contracts' first")
+		t.Skip("NeoFeedsService.nef not found, run 'make build-contracts' first")
 	}
 
-	t.Log("Neo Express datafeeds contract test - contract deployment ready")
+	t.Log("Neo Express neofeeds contract test - contract deployment ready")
 	t.Logf("Contract artifacts found at: %s", nefPath)
 }
 
-// TestDataFeedsMultiplePrices tests fetching multiple prices concurrently.
-func TestDataFeedsMultiplePrices(t *testing.T) {
+// TestNeoFeedsMultiplePrices tests fetching multiple prices concurrently.
+func TestNeoFeedsMultiplePrices(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	m, _ := marble.New(marble.Config{MarbleType: "datafeeds"})
-	m.SetTestSecret("DATAFEEDS_SIGNING_KEY", []byte("test-signing-key-32-bytes-long!!"))
+	m, _ := marble.New(marble.Config{MarbleType: "neofeeds"})
+	m.SetTestSecret("NEOFEEDS_SIGNING_KEY", []byte("test-signing-key-32-bytes-long!!"))
 
 	mockDB2 := database.NewMockRepository()
-	svc, err := datafeeds.New(datafeeds.Config{
+	svc, err := neofeeds.New(neofeeds.Config{
 		Marble:      m,
 		DB:          mockDB2,
 		ArbitrumRPC: "https://arb1.arbitrum.io/rpc",
 	})
 	if err != nil {
-		t.Fatalf("datafeeds.New: %v", err)
+		t.Fatalf("neofeeds.New: %v", err)
 	}
 
 	feeds := []string{"BTC/USD", "ETH/USD", "SOL/USD", "NEO/USD", "GAS/USD"}
@@ -308,7 +308,7 @@ func TestChainlinkDirectFetch(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	client, err := datafeeds.NewChainlinkClient("")
+	client, err := neofeeds.NewChainlinkClient("")
 	if err != nil {
 		t.Fatalf("NewChainlinkClient: %v", err)
 	}
@@ -355,16 +355,16 @@ func TestChainlinkDirectFetch(t *testing.T) {
 	})
 }
 
-// TestDataFeedsServiceInfo tests service info methods.
-func TestDataFeedsServiceInfo(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "datafeeds"})
-	svc, _ := datafeeds.New(datafeeds.Config{Marble: m, DB: database.NewMockRepository()})
+// TestNeoFeedsServiceInfo tests service info methods.
+func TestNeoFeedsServiceInfo(t *testing.T) {
+	m, _ := marble.New(marble.Config{MarbleType: "neofeeds"})
+	svc, _ := neofeeds.New(neofeeds.Config{Marble: m, DB: database.NewMockRepository()})
 
-	if svc.ID() != "datafeeds" {
-		t.Errorf("expected ID 'datafeeds', got '%s'", svc.ID())
+	if svc.ID() != "neofeeds" {
+		t.Errorf("expected ID 'neofeeds', got '%s'", svc.ID())
 	}
-	if svc.Name() != "DataFeeds Service" {
-		t.Errorf("expected name 'DataFeeds Service', got '%s'", svc.Name())
+	if svc.Name() != "NeoFeeds Service" {
+		t.Errorf("expected name 'NeoFeeds Service', got '%s'", svc.Name())
 	}
 	if svc.Version() != "3.0.0" {
 		t.Errorf("expected version '3.0.0', got '%s'", svc.Version())
@@ -379,20 +379,20 @@ func BenchmarkPriceFetching(b *testing.B) {
 	}))
 	defer mockServer.Close()
 
-	m, _ := marble.New(marble.Config{MarbleType: "datafeeds"})
-	m.SetTestSecret("DATAFEEDS_SIGNING_KEY", []byte("test-signing-key-32-bytes-long!!"))
+	m, _ := marble.New(marble.Config{MarbleType: "neofeeds"})
+	m.SetTestSecret("NEOFEEDS_SIGNING_KEY", []byte("test-signing-key-32-bytes-long!!"))
 
-	mockConfig := &datafeeds.DataFeedsConfig{
+	mockConfig := &neofeeds.NeoFeedsConfig{
 		Version: "1.0",
-		Sources: []datafeeds.SourceConfig{
+		Sources: []neofeeds.SourceConfig{
 			{ID: "mock", URL: mockServer.URL, JSONPath: "price", Weight: 1},
 		},
-		Feeds: []datafeeds.FeedConfig{
+		Feeds: []neofeeds.FeedConfig{
 			{ID: "BTC/USD", Pair: "BTCUSDT", Sources: []string{"mock"}, Enabled: true},
 		},
 		UpdateInterval: 60 * time.Second,
 	}
-	svc, _ := datafeeds.New(datafeeds.Config{Marble: m, DB: database.NewMockRepository(), FeedsConfig: mockConfig})
+	svc, _ := neofeeds.New(neofeeds.Config{Marble: m, DB: database.NewMockRepository(), FeedsConfig: mockConfig})
 
 	ctx := context.Background()
 

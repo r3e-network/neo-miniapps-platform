@@ -77,7 +77,7 @@ type RepositoryInterface interface {
 // =============================================================================
 
 // SecretRepository defines Secret data access methods.
-// These methods are shared by multiple services (secrets, confidential).
+// These methods are shared by multiple services (neostore, neocompute).
 type SecretRepository interface {
 	GetSecrets(ctx context.Context, userID string) ([]Secret, error)
 	CreateSecret(ctx context.Context, secret *Secret) error

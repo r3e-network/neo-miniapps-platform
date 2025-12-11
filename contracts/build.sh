@@ -20,9 +20,9 @@ mkdir -p build
 service_contracts=(
     "../services/oracle/contract:OracleService"
     "../services/vrf/contract:VRFService"
-    "../services/mixer/contract:MixerService"
+    "../services/mixer/contract:NeoVaultService"
     "../services/datafeeds/contract:DataFeedsService"
-    "../services/automation/contract:AutomationService"
+    "../services/automation/contract:NeoFlowService"
     "../services/confidential/contract:ConfidentialService"
 )
 

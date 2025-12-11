@@ -11,15 +11,15 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/marble"
-	accountpool "github.com/R3E-Network/service_layer/services/accountpool/marble"
-	mixer "github.com/R3E-Network/service_layer/services/mixer/marble"
-	vrf "github.com/R3E-Network/service_layer/services/vrf/marble"
+	neoaccounts "github.com/R3E-Network/service_layer/services/neoaccounts/marble"
+	neovault "github.com/R3E-Network/service_layer/services/neovault/marble"
+	vrf "github.com/R3E-Network/service_layer/services/neorand/marble"
 )
 
 // TestServiceContractIntegration tests the integration between services and contracts.
 func TestServiceContractIntegration(t *testing.T) {
 	t.Run("vrf service can sign for contracts", func(t *testing.T) {
-		m, err := marble.New(marble.Config{MarbleType: "vrf"})
+		m, err := marble.New(marble.Config{MarbleType: "neorand"})
 		if err != nil {
 			t.Fatalf("marble.New: %v", err)
 		}
@@ -30,8 +30,8 @@ func TestServiceContractIntegration(t *testing.T) {
 			t.Fatalf("vrf.New: %v", err)
 		}
 
-		if svc.ID() != "vrf" {
-			t.Errorf("expected ID 'vrf', got '%s'", svc.ID())
+		if svc.ID() != "neorand" {
+			t.Errorf("expected ID 'neorand', got '%s'", svc.ID())
 		}
 
 		req := httptest.NewRequest("GET", "/health", nil)
@@ -43,19 +43,19 @@ func TestServiceContractIntegration(t *testing.T) {
 		}
 	})
 
-	t.Run("mixer service generates valid signatures", func(t *testing.T) {
-		m, err := marble.New(marble.Config{MarbleType: "mixer"})
+	t.Run("neovault service generates valid signatures", func(t *testing.T) {
+		m, err := marble.New(marble.Config{MarbleType: "neovault"})
 		if err != nil {
 			t.Fatalf("marble.New: %v", err)
 		}
-		m.SetTestSecret("MIXER_MASTER_KEY", []byte("test-mixer-master-key-32bytes!!!"))
+		m.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("test-neovault-master-key-32bytes!!!"))
 
-		svc, err := mixer.New(mixer.Config{
+		svc, err := neovault.New(neovault.Config{
 			Marble:         m,
-			AccountPoolURL: "http://localhost:8081",
+			NeoAccountsURL: "http://localhost:8081",
 		})
 		if err != nil {
-			t.Fatalf("mixer.New: %v", err)
+			t.Fatalf("neovault.New: %v", err)
 		}
 
 		tokens := svc.GetSupportedTokens()
@@ -64,60 +64,60 @@ func TestServiceContractIntegration(t *testing.T) {
 		}
 	})
 
-	t.Run("accountpool can derive contract-compatible keys", func(t *testing.T) {
-		m, err := marble.New(marble.Config{MarbleType: "accountpool"})
+	t.Run("neoaccounts can derive contract-compatible keys", func(t *testing.T) {
+		m, err := marble.New(marble.Config{MarbleType: "neoaccounts"})
 		if err != nil {
 			t.Fatalf("marble.New: %v", err)
 		}
 		m.SetTestSecret("POOL_MASTER_KEY", []byte("test-pool-master-key-32-bytes!!!"))
 
-		svc, err := accountpool.New(accountpool.Config{Marble: m})
+		svc, err := neoaccounts.New(neoaccounts.Config{Marble: m})
 		if err != nil {
-			t.Fatalf("accountpool.New: %v", err)
+			t.Fatalf("neoaccounts.New: %v", err)
 		}
 
-		if svc.ID() != "accountpool" {
-			t.Errorf("expected ID 'accountpool', got '%s'", svc.ID())
+		if svc.ID() != "neoaccounts" {
+			t.Errorf("expected ID 'neoaccounts', got '%s'", svc.ID())
 		}
 	})
 }
 
-// TestMixerContractFlow tests the mixer service flow that would interact with contracts.
-func TestMixerContractFlow(t *testing.T) {
-	apMarble, _ := marble.New(marble.Config{MarbleType: "accountpool"})
+// TestNeoVaultContractFlow tests the neovault service flow that would interact with contracts.
+func TestNeoVaultContractFlow(t *testing.T) {
+	apMarble, _ := marble.New(marble.Config{MarbleType: "neoaccounts"})
 	apMarble.SetTestSecret("POOL_MASTER_KEY", []byte("contract-test-pool-key-32bytes!!"))
 
-	apSvc, err := accountpool.New(accountpool.Config{Marble: apMarble})
+	apSvc, err := neoaccounts.New(neoaccounts.Config{Marble: apMarble})
 	if err != nil {
-		t.Fatalf("accountpool.New: %v", err)
+		t.Fatalf("neoaccounts.New: %v", err)
 	}
 
 	apServer := httptest.NewServer(apSvc.Router())
 	defer apServer.Close()
 
-	mixerMarble, _ := marble.New(marble.Config{MarbleType: "mixer"})
-	mixerMarble.SetTestSecret("MIXER_MASTER_KEY", []byte("contract-test-mixer-key-32bytes!"))
+	neovaultMarble, _ := marble.New(marble.Config{MarbleType: "neovault"})
+	neovaultMarble.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("contract-test-neovault-key-32bytes!"))
 
-	mixerSvc, err := mixer.New(mixer.Config{
-		Marble:         mixerMarble,
-		AccountPoolURL: apServer.URL,
+	neovaultSvc, err := neovault.New(neovault.Config{
+		Marble:         neovaultMarble,
+		NeoAccountsURL: apServer.URL,
 	})
 	if err != nil {
-		t.Fatalf("mixer.New: %v", err)
+		t.Fatalf("neovault.New: %v", err)
 	}
 
-	t.Run("mixer health endpoint", func(t *testing.T) {
+	t.Run("neovault health endpoint", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/health", nil)
 		w := httptest.NewRecorder()
-		mixerSvc.Router().ServeHTTP(w, req)
+		neovaultSvc.Router().ServeHTTP(w, req)
 
 		if w.Code != http.StatusOK {
 			t.Errorf("expected status 200, got %d", w.Code)
 		}
 	})
 
-	t.Run("mixer token config for contract interaction", func(t *testing.T) {
-		cfg := mixerSvc.GetTokenConfig("GAS")
+	t.Run("neovault token config for contract interaction", func(t *testing.T) {
+		cfg := neovaultSvc.GetTokenConfig("GAS")
 		if cfg == nil {
 			t.Fatal("GAS config should not be nil")
 		}
@@ -134,15 +134,15 @@ func TestMixerContractFlow(t *testing.T) {
 	})
 }
 
-// TestAccountPoolSigningForContracts tests that AccountPool can sign transactions
+// TestNeoAccountsSigningForContracts tests that NeoAccounts can sign transactions
 // that would be sent to Neo N3 contracts.
-func TestAccountPoolSigningForContracts(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "accountpool"})
+func TestNeoAccountsSigningForContracts(t *testing.T) {
+	m, _ := marble.New(marble.Config{MarbleType: "neoaccounts"})
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("signing-test-pool-key-32-bytes!!"))
 
-	svc, err := accountpool.New(accountpool.Config{Marble: m})
+	svc, err := neoaccounts.New(neoaccounts.Config{Marble: m})
 	if err != nil {
-		t.Fatalf("accountpool.New: %v", err)
+		t.Fatalf("neoaccounts.New: %v", err)
 	}
 
 	server := httptest.NewServer(svc.Router())
@@ -156,8 +156,8 @@ func TestAccountPoolSigningForContracts(t *testing.T) {
 			}
 		}()
 
-		input := accountpool.SignTransactionInput{
-			ServiceID: "mixer",
+		input := neoaccounts.SignTransactionInput{
+			ServiceID: "neovault",
 			AccountID: "test-account-1",
 			TxHash:    []byte("mock-transaction-hash-for-contract"),
 		}
@@ -186,9 +186,9 @@ func TestAccountPoolSigningForContracts(t *testing.T) {
 			}
 		}()
 
-		input := accountpool.BatchSignInput{
-			ServiceID: "mixer",
-			Requests: []accountpool.SignRequest{
+		input := neoaccounts.BatchSignInput{
+			ServiceID: "neovault",
+			Requests: []neoaccounts.SignRequest{
 				{AccountID: "account-1", TxHash: []byte("tx-hash-1")},
 				{AccountID: "account-2", TxHash: []byte("tx-hash-2")},
 			},
@@ -229,7 +229,7 @@ func TestContractEventMonitoring(t *testing.T) {
 		event.State.RequestID = 12345
 		event.State.UserContract = "NXV7ZhHiyM1aHXwpVsRZC6BwNFP2jghXAq"
 		event.State.Caller = "NMockCallerAddress12345678901234567"
-		event.State.ServiceType = "vrf"
+		event.State.ServiceType = "neorand"
 		event.State.Payload = []byte(`{"num_words": 3}`)
 
 		eventJSON, err := json.Marshal(event)
@@ -242,7 +242,7 @@ func TestContractEventMonitoring(t *testing.T) {
 			t.Fatalf("unmarshal event: %v", err)
 		}
 
-		if parsed.State.ServiceType != "vrf" {
+		if parsed.State.ServiceType != "neorand" {
 			t.Errorf("expected service type 'vrf', got '%s'", parsed.State.ServiceType)
 		}
 		if parsed.State.RequestID != 12345 {
@@ -305,10 +305,10 @@ func TestContractCallbackSimulation(t *testing.T) {
 
 // TestConcurrentContractOperations tests concurrent operations that might interact with contracts.
 func TestConcurrentContractOperations(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "accountpool"})
+	m, _ := marble.New(marble.Config{MarbleType: "neoaccounts"})
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("concurrent-test-key-32-bytes!!!!"))
 
-	svc, _ := accountpool.New(accountpool.Config{Marble: m})
+	svc, _ := neoaccounts.New(neoaccounts.Config{Marble: m})
 
 	done := make(chan bool, 50)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

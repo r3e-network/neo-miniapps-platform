@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -17,6 +18,23 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 )
+
+const (
+	oauthStateCookieName = "oauth_state"
+	oauthTokenCookieName = "sl_auth_token"
+)
+
+type oauthRepository interface {
+	CreateOAuthProvider(ctx context.Context, provider *database.OAuthProvider) error
+	CreateSession(ctx context.Context, session *database.UserSession) error
+	CreateUser(ctx context.Context, user *database.User) error
+	GetOAuthProvider(ctx context.Context, provider, providerID string) (*database.OAuthProvider, error)
+	GetOrCreateGasBankAccount(ctx context.Context, userID string) (*database.GasBankAccount, error)
+	GetUser(ctx context.Context, id string) (*database.User, error)
+	GetUserByEmail(ctx context.Context, email string) (*database.User, error)
+	UpdateOAuthProvider(ctx context.Context, provider *database.OAuthProvider) error
+	UpdateUserEmail(ctx context.Context, userID, email string) error
+}
 
 // =============================================================================
 // OAuth Handlers
@@ -52,11 +70,12 @@ func googleAuthHandler(m *marble.Marble) http.HandlerFunc {
 
 		state := generateState()
 		http.SetCookie(w, &http.Cookie{
-			Name:     "oauth_state",
+			Name:     oauthStateCookieName,
 			Value:    state,
 			Path:     "/",
 			HttpOnly: true,
 			Secure:   m.TLSConfig() != nil,
+			SameSite: http.SameSiteStrictMode,
 			MaxAge:   600,
 		})
 
@@ -71,12 +90,12 @@ func googleAuthHandler(m *marble.Marble) http.HandlerFunc {
 	}
 }
 
-func googleCallbackHandler(db *database.Repository, m *marble.Marble) http.HandlerFunc {
+func googleCallbackHandler(db oauthRepository, m *marble.Marble) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		clientID, clientSecret, redirectURL := getOAuthConfig(m, "google")
 
 		// Verify state
-		stateCookie, err := r.Cookie("oauth_state")
+		stateCookie, err := r.Cookie(oauthStateCookieName)
 		if err != nil || stateCookie.Value != r.URL.Query().Get("state") {
 			jsonError(w, "invalid state", http.StatusBadRequest)
 			return
@@ -140,7 +159,7 @@ func googleCallbackHandler(db *database.Repository, m *marble.Marble) http.Handl
 
 		// Handle OAuth login/link
 		handleOAuthCallback(w, r, db, "google", googleUser.ID, googleUser.Email, googleUser.Name, googleUser.Picture,
-			tokenData.AccessToken, tokenData.RefreshToken, tokenData.ExpiresIn)
+			tokenData.AccessToken, tokenData.RefreshToken, tokenData.ExpiresIn, m.TLSConfig() != nil)
 	}
 }
 
@@ -154,11 +173,12 @@ func githubAuthHandler(m *marble.Marble) http.HandlerFunc {
 
 		state := generateState()
 		http.SetCookie(w, &http.Cookie{
-			Name:     "oauth_state",
+			Name:     oauthStateCookieName,
 			Value:    state,
 			Path:     "/",
 			HttpOnly: true,
 			Secure:   m.TLSConfig() != nil,
+			SameSite: http.SameSiteStrictMode,
 			MaxAge:   600,
 		})
 
@@ -173,12 +193,12 @@ func githubAuthHandler(m *marble.Marble) http.HandlerFunc {
 	}
 }
 
-func githubCallbackHandler(db *database.Repository, m *marble.Marble) http.HandlerFunc {
+func githubCallbackHandler(db oauthRepository, m *marble.Marble) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		clientID, clientSecret, _ := getOAuthConfig(m, "github")
 
 		// Verify state
-		stateCookie, err := r.Cookie("oauth_state")
+		stateCookie, err := r.Cookie(oauthStateCookieName)
 		if err != nil || stateCookie.Value != r.URL.Query().Get("state") {
 			jsonError(w, "invalid state", http.StatusBadRequest)
 			return
@@ -276,18 +296,70 @@ func githubCallbackHandler(db *database.Repository, m *marble.Marble) http.Handl
 		}
 
 		handleOAuthCallback(w, r, db, "github", fmt.Sprintf("%d", githubUser.ID), email, name, githubUser.AvatarURL,
-			tokenData.AccessToken, "", 0)
+			tokenData.AccessToken, "", 0, m.TLSConfig() != nil)
 	}
 }
 
-func handleOAuthCallback(w http.ResponseWriter, r *http.Request, db *database.Repository,
-	provider, providerID, email, displayName, avatarURL, accessToken, refreshToken string, expiresIn int) {
+// isOAuthCookieMode returns true if OAuth should use HTTP-only cookies instead of URL params.
+// Default is true for security. Set OAUTH_COOKIE_MODE=false to disable.
+func isOAuthCookieMode() bool {
+	mode := strings.TrimSpace(strings.ToLower(os.Getenv("OAUTH_COOKIE_MODE")))
+	if mode == "" {
+		return true
+	}
+	switch mode {
+	case "0", "false", "off", "no":
+		return false
+	default:
+		return true
+	}
+}
+
+// setAuthTokenCookie sets the JWT token in an HTTP-only secure cookie.
+func setAuthTokenCookie(w http.ResponseWriter, token string, secure bool) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     oauthTokenCookieName,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   3600, // 1 hour
+		Expires:  time.Now().Add(time.Hour),
+	})
+}
+
+// clearOAuthStateCookie clears the oauth_state cookie after successful callback.
+func clearOAuthStateCookie(w http.ResponseWriter, secure bool) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     oauthStateCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   -1, // Delete cookie
+		Expires:  time.Unix(0, 0),
+	})
+}
+
+func handleOAuthCallback(w http.ResponseWriter, r *http.Request, db oauthRepository,
+	provider, providerID, email, displayName, avatarURL, accessToken, refreshToken string, expiresIn int,
+	secureCookie bool) {
 
 	ctx := r.Context()
 	frontendURL := os.Getenv("FRONTEND_URL")
 	if frontendURL == "" {
 		frontendURL = "http://localhost:3000"
 	}
+
+	// Determine if we should use secure cookies (TLS)
+	isSecure := secureCookie
+	if !isSecure {
+		proto := strings.ToLower(r.Header.Get("X-Forwarded-Proto"))
+		isSecure = r.TLS != nil || proto == "https"
+	}
+	useCookieMode := isOAuthCookieMode()
 
 	// Check if this OAuth provider is already linked
 	existingProvider, err := db.GetOAuthProvider(ctx, provider, providerID)
@@ -314,7 +386,10 @@ func handleOAuthCallback(w http.ResponseWriter, r *http.Request, db *database.Re
 			ExpiresAt: time.Now().Add(24 * time.Hour),
 			CreatedAt: time.Now(),
 		}
-		_ = db.CreateSession(ctx, session)
+		if err := db.CreateSession(ctx, session); err != nil {
+			http.Redirect(w, r, frontendURL+"/login?error=session_create_failed", http.StatusTemporaryRedirect)
+			return
+		}
 
 		// Update OAuth tokens
 		existingProvider.AccessToken = accessToken
@@ -322,9 +397,22 @@ func handleOAuthCallback(w http.ResponseWriter, r *http.Request, db *database.Re
 		if expiresIn > 0 {
 			existingProvider.ExpiresAt = time.Now().Add(time.Duration(expiresIn) * time.Second)
 		}
-		_ = db.UpdateOAuthProvider(ctx, existingProvider)
+		if err := db.UpdateOAuthProvider(ctx, existingProvider); err != nil {
+			http.Redirect(w, r, frontendURL+"/login?error=provider_update_failed", http.StatusTemporaryRedirect)
+			return
+		}
 
-		http.Redirect(w, r, frontendURL+"/auth/callback?token="+token, http.StatusTemporaryRedirect)
+		// Clear oauth_state cookie
+		clearOAuthStateCookie(w, isSecure)
+
+		// Redirect with token in cookie (secure) or URL (legacy fallback)
+		if !useCookieMode {
+			http.Redirect(w, r, frontendURL+"/login?error=cookie_mode_required", http.StatusTemporaryRedirect)
+			return
+		}
+
+		setAuthTokenCookie(w, token, isSecure)
+		http.Redirect(w, r, frontendURL+"/auth/callback?status=success", http.StatusTemporaryRedirect)
 		return
 	}
 
@@ -347,7 +435,10 @@ func handleOAuthCallback(w http.ResponseWriter, r *http.Request, db *database.Re
 		}
 
 		// Create gas bank account
-		_, _ = db.GetOrCreateGasBankAccount(ctx, user.ID)
+		if _, err := db.GetOrCreateGasBankAccount(ctx, user.ID); err != nil {
+			http.Redirect(w, r, frontendURL+"/login?error=gasbank_create_failed", http.StatusTemporaryRedirect)
+			return
+		}
 	}
 
 	// Link OAuth provider to user
@@ -366,11 +457,17 @@ func handleOAuthCallback(w http.ResponseWriter, r *http.Request, db *database.Re
 	if expiresIn > 0 {
 		oauthProvider.ExpiresAt = time.Now().Add(time.Duration(expiresIn) * time.Second)
 	}
-	_ = db.CreateOAuthProvider(ctx, oauthProvider)
+	if err := db.CreateOAuthProvider(ctx, oauthProvider); err != nil {
+		http.Redirect(w, r, frontendURL+"/login?error=provider_link_failed", http.StatusTemporaryRedirect)
+		return
+	}
 
 	// Update user email if not set
 	if user.Email == "" && email != "" {
-		_ = db.UpdateUserEmail(ctx, user.ID, email)
+		if err := db.UpdateUserEmail(ctx, user.ID, email); err != nil {
+			http.Redirect(w, r, frontendURL+"/login?error=user_email_update_failed", http.StatusTemporaryRedirect)
+			return
+		}
 	}
 
 	// Generate JWT
@@ -388,9 +485,22 @@ func handleOAuthCallback(w http.ResponseWriter, r *http.Request, db *database.Re
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 		CreatedAt: time.Now(),
 	}
-	_ = db.CreateSession(ctx, session)
+	if err := db.CreateSession(ctx, session); err != nil {
+		http.Redirect(w, r, frontendURL+"/login?error=session_create_failed", http.StatusTemporaryRedirect)
+		return
+	}
 
-	http.Redirect(w, r, frontendURL+"/auth/callback?token="+token, http.StatusTemporaryRedirect)
+	// Clear oauth_state cookie
+	clearOAuthStateCookie(w, isSecure)
+
+	// Redirect with token in cookie (secure) or URL (legacy fallback)
+	if !useCookieMode {
+		http.Redirect(w, r, frontendURL+"/login?error=cookie_mode_required", http.StatusTemporaryRedirect)
+		return
+	}
+
+	setAuthTokenCookie(w, token, isSecure)
+	http.Redirect(w, r, frontendURL+"/auth/callback?status=success", http.StatusTemporaryRedirect)
 }
 
 func listOAuthProvidersHandler(db *database.Repository) http.HandlerFunc {

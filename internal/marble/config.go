@@ -23,10 +23,10 @@ type CommonConfig struct {
 	// Contract hashes (optional)
 	GatewayHash    string
 	ServiceHash    string // Service-specific contract hash
-	DataFeedsHash  string
+	NeoFeedsHash  string
 	VRFHash        string
-	MixerHash      string
-	AutomationHash string
+	NeoVaultHash      string
+	NeoFlowHash string
 }
 
 // LoadContractHashesFromEnv loads contract hashes from environment variables.
@@ -34,17 +34,17 @@ func (c *CommonConfig) LoadContractHashesFromEnv() {
 	if h := os.Getenv("CONTRACT_GATEWAY_HASH"); h != "" {
 		c.GatewayHash = h
 	}
-	if h := os.Getenv("CONTRACT_DATAFEEDS_HASH"); h != "" {
-		c.DataFeedsHash = h
+	if h := os.Getenv("CONTRACT_NEOFEEDS_HASH"); h != "" {
+		c.NeoFeedsHash = h
 	}
 	if h := os.Getenv("CONTRACT_VRF_HASH"); h != "" {
 		c.VRFHash = h
 	}
-	if h := os.Getenv("CONTRACT_MIXER_HASH"); h != "" {
-		c.MixerHash = h
+	if h := os.Getenv("CONTRACT_NEOVAULT_HASH"); h != "" {
+		c.NeoVaultHash = h
 	}
-	if h := os.Getenv("CONTRACT_AUTOMATION_HASH"); h != "" {
-		c.AutomationHash = h
+	if h := os.Getenv("CONTRACT_NEOFLOW_HASH"); h != "" {
+		c.NeoFlowHash = h
 	}
 }
 

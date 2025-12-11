@@ -1,8 +1,8 @@
-// Deprecated: This file is deprecated. Use services/secrets/supabase package instead.
+// Deprecated: This file is deprecated. Use services/neostore/supabase package instead.
 // This file is kept for backward compatibility with existing code that uses
 // database.RepositoryInterface. New code should use:
 //
-//	import secretssupabase "github.com/R3E-Network/service_layer/services/secrets/supabase"
+//	import secretssupabase "github.com/R3E-Network/service_layer/services/neostore/supabase"
 //	secretsRepo := secretssupabase.NewRepository(baseRepo)
 package database
 
@@ -13,7 +13,7 @@ import (
 )
 
 // GetSecrets retrieves all secrets for a user.
-// Deprecated: Use services/secrets/supabase.Repository.GetSecrets instead.
+// Deprecated: Use services/neostore/supabase.Repository.GetSecrets instead.
 func (r *Repository) GetSecrets(ctx context.Context, userID string) ([]Secret, error) {
 	if err := ValidateUserID(userID); err != nil {
 		return nil, err

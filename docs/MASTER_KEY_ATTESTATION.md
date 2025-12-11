@@ -4,7 +4,7 @@ This flow lets operators bind the AccountPool master key to Coordinator attestat
 
 ## Secrets (Coordinator → AccountPool)
 - `POOL_MASTER_KEY` (32 bytes) **or** `COORD_MASTER_SEED` (>=16 bytes) to deterministically derive the master key.
-- `POOL_MASTER_KEY_HASH` — SHA-256 of the master key (raw 32 bytes or hex). Required in enclave mode to pin the key.
+- `POOL_MASTER_KEY_HASH` — SHA-256 of the master key (raw 32 bytes or hex). Required in TEE mode to pin the key.
 - `POOL_MASTER_ATTESTATION_HASH` (optional) — hash of the attestation bundle embedding `POOL_MASTER_KEY_HASH`.
 
 ## Attestation bundle (AccountPool `/master-key`)
@@ -23,14 +23,14 @@ This flow lets operators bind the AccountPool master key to Coordinator attestat
   "simulated": false
 }
 ```
-The quote’s report data contains `hash`, binding the master key to the enclave measurement.
+The quote’s report data contains `hash`, binding the master key to the TEE measurement.
 
 ## On-chain anchoring (gateway contract)
 Store/emit:
 - `masterPubKey` (derived externally from the master key when needed)
 - `masterPubKeyHash` = SHA-256(masterPubKey) (compressed)
 - `attestationHash` = SHA-256(attestation bundle) or CID of the bundle
-The contract does **not** parse SGX; it anchors hashes/events for transparency.
+The contract does **not** parse attestation; it anchors hashes/events for transparency.
 
 ### CLI helper (admin)
 Use `cmd/anchor-master-key` to call `setTEEMasterKey` on the gateway:
@@ -48,7 +48,7 @@ This stores the pubkey, pubkey hash, and attestation hash and emits `TEEMasterKe
 ## Verifier checklist (off-chain)
 1) Fetch `masterPubKeyHash` and `attestationHash` from the gateway contract/event.
 2) Fetch the attestation bundle (by hash/CID/URL).
-3) Verify SGX quote + chain with expected policy (signer, ProdID fixed, ISVSVN >= minimum; optionally pin manifest hash).
+3) Verify MarbleRun quote + chain with expected policy (signer, ProdID fixed, ISVSVN >= minimum; optionally pin manifest hash).
 4) Check quote report data == `hash(master_pubkey)` from bundle.
 5) Check `hash(bundle)` == `attestationHash` on-chain.
 6) If also anchoring pubkey: ensure `hash(masterPubKey)` == on-chain `masterPubKeyHash`.

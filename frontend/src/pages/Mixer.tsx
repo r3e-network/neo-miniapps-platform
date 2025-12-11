@@ -46,7 +46,7 @@ interface MixRequest {
   can_refund: boolean;
 }
 
-export function Mixer() {
+export function NeoVault() {
   // Form state
   const [targets, setTargets] = useState<TargetAddress[]>([{ address: '', amount: '' }]);
   const [mixOption, setMixOption] = useState(MIX_OPTIONS[1].value);
@@ -55,14 +55,14 @@ export function Mixer() {
 
   // Query for user's mix requests
   const { data: requests, isLoading: loadingRequests, refetch } = useQuery({
-    queryKey: ['mixer-requests'],
-    queryFn: () => api.getMixerRequests(),
+    queryKey: ['neovault-requests'],
+    queryFn: () => api.getNeoVaultRequests(),
   });
 
   // Query for service info
   const { data: serviceInfo } = useQuery({
-    queryKey: ['mixer-info'],
-    queryFn: () => api.getMixerInfo(),
+    queryKey: ['neovault-info'],
+    queryFn: () => api.getNeoVaultInfo(),
   });
 
   // Create mix request mutation
@@ -78,7 +78,7 @@ export function Mixer() {
 
   // Claim refund mutation
   const refundMutation = useMutation({
-    mutationFn: (requestId: string) => api.claimMixerRefund(requestId),
+    mutationFn: (requestId: string) => api.claimNeoVaultRefund(requestId),
     onSuccess: () => refetch(),
   });
 
@@ -138,7 +138,7 @@ export function Mixer() {
           <Shuffle className="w-8 h-8 text-purple-500" />
         </div>
         <div>
-          <h1 className="text-3xl font-bold text-white">Privacy Mixer</h1>
+          <h1 className="text-3xl font-bold text-white">Privacy NeoVault</h1>
           <p className="text-gray-400">Double-Blind HD Multi-sig Privacy Transactions</p>
         </div>
       </div>

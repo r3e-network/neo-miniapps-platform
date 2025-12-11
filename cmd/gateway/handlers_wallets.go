@@ -43,22 +43,25 @@ func addWalletHandler(db *database.Repository) http.HandlerFunc {
 			return
 		}
 
-		// Verify Neo N3 signature to prove wallet ownership
-		if req.PublicKey != "" && req.Signature != "" && req.Message != "" {
-			if !verifyNeoSignature(req.Address, req.Message, req.Signature, req.PublicKey) {
-				jsonError(w, "invalid signature", http.StatusUnauthorized)
-				return
-			}
+		// Require Neo N3 signature to prove wallet ownership
+		if req.PublicKey == "" || req.Signature == "" || req.Message == "" {
+			jsonError(w, "publicKey, signature, and message are required to add a wallet", http.StatusBadRequest)
+			return
+		}
+		if !verifyNeoSignature(req.Address, req.Message, req.Signature, req.PublicKey) {
+			jsonError(w, "invalid signature", http.StatusUnauthorized)
+			return
 		}
 
 		wallet := &database.UserWallet{
-			UserID:              userID,
-			Address:             req.Address,
-			Label:               req.Label,
-			IsPrimary:           false,
-			Verified:            true,
-			VerificationMessage: req.Message,
-			CreatedAt:           time.Now(),
+			UserID:                userID,
+			Address:               req.Address,
+			Label:                 req.Label,
+			IsPrimary:             false,
+			Verified:              true,
+			VerificationMessage:   req.Message,
+			VerificationSignature: req.Signature,
+			CreatedAt:             time.Now(),
 		}
 
 		if err := db.CreateWallet(r.Context(), wallet); err != nil {
@@ -102,6 +105,11 @@ func verifyWalletHandler(db *database.Repository) http.HandlerFunc {
 			return
 		}
 
+		if req.PublicKey == "" || req.Signature == "" || req.Message == "" {
+			jsonError(w, "publicKey, signature, and message are required to verify wallet", http.StatusBadRequest)
+			return
+		}
+
 		// Get wallet to verify ownership
 		wallet, err := db.GetWallet(r.Context(), walletID, userID)
 		if err != nil {
@@ -110,11 +118,9 @@ func verifyWalletHandler(db *database.Repository) http.HandlerFunc {
 		}
 
 		// Verify Neo N3 signature to prove wallet ownership
-		if req.PublicKey != "" && req.Signature != "" && req.Message != "" {
-			if !verifyNeoSignature(wallet.Address, req.Message, req.Signature, req.PublicKey) {
-				jsonError(w, "invalid signature", http.StatusUnauthorized)
-				return
-			}
+		if !verifyNeoSignature(wallet.Address, req.Message, req.Signature, req.PublicKey) {
+			jsonError(w, "invalid signature", http.StatusUnauthorized)
+			return
 		}
 
 		if err := db.VerifyWallet(r.Context(), walletID, req.Signature); err != nil {

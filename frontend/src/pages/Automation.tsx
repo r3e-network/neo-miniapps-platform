@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Zap, Plus, Play, Pause } from 'lucide-react';
 import { api } from '../api/client';
 
-export function Automation() {
+export function NeoFlow() {
   const { data: triggers, isLoading } = useQuery({
     queryKey: ['triggers'],
     queryFn: () => api.listTriggers(),
@@ -11,7 +11,7 @@ export function Automation() {
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-white">Automation</h1>
+        <h1 className="text-3xl font-bold text-white">NeoFlow</h1>
         <button className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors">
           <Plus className="w-5 h-5" />
           Create Trigger
@@ -25,7 +25,7 @@ export function Automation() {
         ) : triggers?.length === 0 ? (
           <div className="p-8 text-center text-gray-400">
             <Zap className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>No automation triggers yet.</p>
+            <p>No neoflow triggers yet.</p>
             <p className="text-sm mt-2">Create triggers to automate your workflows.</p>
           </div>
         ) : (

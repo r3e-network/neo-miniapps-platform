@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/marble"
-	datafeeds "github.com/R3E-Network/service_layer/services/datafeeds/marble"
+	neofeeds "github.com/R3E-Network/service_layer/services/neofeeds/marble"
 )
 
 const (
@@ -31,8 +31,8 @@ func getContractPaths(t *testing.T) (nefPath, manifestPath string) {
 	testDir, _ := os.Getwd()
 	root := filepath.Join(testDir, "..", "..")
 
-	nefPath = filepath.Join(root, "contracts", "build", "DataFeedsService.nef")
-	manifestPath = filepath.Join(root, "contracts", "build", "DataFeedsService.manifest.json")
+	nefPath = filepath.Join(root, "contracts", "build", "NeoFeedsService.nef")
+	manifestPath = filepath.Join(root, "contracts", "build", "NeoFeedsService.manifest.json")
 
 	if _, err := os.Stat(nefPath); os.IsNotExist(err) {
 		t.Skipf("Contract not found: %s", nefPath)
@@ -107,8 +107,8 @@ func TestFairyVirtualDeploy(t *testing.T) {
 	}
 }
 
-// TestDataFeedsServiceWithFairy tests the DataFeeds service with Fairy.
-func TestDataFeedsServiceWithFairy(t *testing.T) {
+// TestNeoFeedsServiceWithFairy tests the NeoFeeds service with Fairy.
+func TestNeoFeedsServiceWithFairy(t *testing.T) {
 	skipIfNoFairy(t)
 
 	nefPath, manifestPath := getContractPaths(t)
@@ -121,24 +121,24 @@ func TestDataFeedsServiceWithFairy(t *testing.T) {
 	}
 	defer client.DeleteSession(sessionID)
 
-	// Deploy DataFeedsService contract
+	// Deploy NeoFeedsService contract
 	deployResult, err := client.VirtualDeploy(sessionID, nefPath, manifestPath)
 	if err != nil {
 		t.Fatalf("VirtualDeploy: %v", err)
 	}
 	contractHash := deployResult.ContractHash
-	t.Logf("DataFeedsService deployed: %s", contractHash)
+	t.Logf("NeoFeedsService deployed: %s", contractHash)
 
-	// Initialize datafeeds service to fetch prices
-	m, _ := marble.New(marble.Config{MarbleType: "datafeeds"})
-	m.SetTestSecret("DATAFEEDS_SIGNING_KEY", []byte("test-signing-key-32-bytes-long!!"))
+	// Initialize neofeeds service to fetch prices
+	m, _ := marble.New(marble.Config{MarbleType: "neofeeds"})
+	m.SetTestSecret("NEOFEEDS_SIGNING_KEY", []byte("test-signing-key-32-bytes-long!!"))
 
-	svc, err := datafeeds.New(datafeeds.Config{
+	svc, err := neofeeds.New(neofeeds.Config{
 		Marble:      m,
 		ArbitrumRPC: "https://arb1.arbitrum.io/rpc",
 	})
 	if err != nil {
-		t.Fatalf("datafeeds.New: %v", err)
+		t.Fatalf("neofeeds.New: %v", err)
 	}
 
 	// Fetch BTC price from Chainlink
@@ -169,8 +169,8 @@ func TestDataFeedsServiceWithFairy(t *testing.T) {
 	}
 }
 
-// TestDataFeedsPriceFlow tests the full price flow with Fairy.
-func TestDataFeedsPriceFlow(t *testing.T) {
+// TestNeoFeedsPriceFlow tests the full price flow with Fairy.
+func TestNeoFeedsPriceFlow(t *testing.T) {
 	skipIfNoFairy(t)
 
 	nefPath, manifestPath := getContractPaths(t)
@@ -233,8 +233,8 @@ func BenchmarkFairyDeploy(b *testing.B) {
 
 	testDir, _ := os.Getwd()
 	root := filepath.Join(testDir, "..", "..")
-	nefPath := filepath.Join(root, "contracts", "build", "DataFeedsService.nef")
-	manifestPath := filepath.Join(root, "contracts", "build", "DataFeedsService.manifest.json")
+	nefPath := filepath.Join(root, "contracts", "build", "NeoFeedsService.nef")
+	manifestPath := filepath.Join(root, "contracts", "build", "NeoFeedsService.manifest.json")
 
 	if _, err := os.Stat(nefPath); os.IsNotExist(err) {
 		b.Skip("Contract not found")

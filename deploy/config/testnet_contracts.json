@@ -8,7 +8,7 @@
       "deployed_at": "2025-12-07T17:07:49Z"
     },
     {
-      "name": "DataFeedsService",
+      "name": "NeoFeedsService",
       "hash": "",
       "tx_hash": "",
       "gas_consumed": "1000979200",
@@ -22,14 +22,14 @@
       "deployed_at": "2025-12-07T17:07:50Z"
     },
     {
-      "name": "MixerService",
+      "name": "NeoVaultService",
       "hash": "",
       "tx_hash": "",
       "gas_consumed": "1000098010",
       "deployed_at": "2025-12-07T17:07:52Z"
     },
     {
-      "name": "AutomationService",
+      "name": "NeoFlowService",
       "hash": "",
       "tx_hash": "",
       "gas_consumed": "1000097988",

@@ -63,9 +63,9 @@ echo ""
 echo "=== Deploying Core Contracts ==="
 deploy_contract "ServiceLayerGateway"
 deploy_contract "VRFService"
-deploy_contract "MixerService"
+deploy_contract "NeoVaultService"
 deploy_contract "DataFeedsService"
-deploy_contract "AutomationService"
+deploy_contract "NeoFlowService"
 
 # Deploy example contracts
 echo ""

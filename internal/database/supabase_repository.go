@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"time"
 )
 
@@ -37,7 +38,7 @@ func (r *Repository) GetUser(ctx context.Context, id string) (*User, error) {
 		return nil, err
 	}
 
-	data, err := r.client.request(ctx, "GET", "users", nil, "id=eq."+id+"&limit=1")
+	data, err := r.client.request(ctx, "GET", "users", nil, "id=eq."+url.QueryEscape(id)+"&limit=1")
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrDatabaseError, err)
 	}
@@ -58,7 +59,7 @@ func (r *Repository) GetUserByAddress(ctx context.Context, address string) (*Use
 		return nil, err
 	}
 
-	data, err := r.client.request(ctx, "GET", "users", nil, "address=eq."+address+"&limit=1")
+	data, err := r.client.request(ctx, "GET", "users", nil, "address=eq."+url.QueryEscape(address)+"&limit=1")
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrDatabaseError, err)
 	}
@@ -82,7 +83,7 @@ func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*User, e
 		return nil, fmt.Errorf("%w: email cannot be empty", ErrInvalidInput)
 	}
 
-	data, err := r.client.request(ctx, "GET", "users", nil, "email=eq."+email+"&limit=1")
+	data, err := r.client.request(ctx, "GET", "users", nil, "email=eq."+url.QueryEscape(email)+"&limit=1")
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrDatabaseError, err)
 	}
@@ -126,7 +127,7 @@ func (r *Repository) UpdateUserEmail(ctx context.Context, userID, email string) 
 		"email":      email,
 		"updated_at": time.Now(),
 	}
-	_, err := r.client.request(ctx, "PATCH", "users", update, "id=eq."+userID)
+	_, err := r.client.request(ctx, "PATCH", "users", update, "id=eq."+url.QueryEscape(userID))
 	if err != nil {
 		return fmt.Errorf("%w: update user email: %v", ErrDatabaseError, err)
 	}
@@ -142,7 +143,7 @@ func (r *Repository) UpdateUserNonce(ctx context.Context, userID, nonce string) 
 	update := map[string]interface{}{
 		"nonce": SanitizeString(nonce),
 	}
-	_, err := r.client.request(ctx, "PATCH", "users", update, "id=eq."+userID)
+	_, err := r.client.request(ctx, "PATCH", "users", update, "id=eq."+url.QueryEscape(userID))
 	if err != nil {
 		return fmt.Errorf("%w: update user nonce: %v", ErrDatabaseError, err)
 	}
@@ -160,7 +161,7 @@ func (r *Repository) GetServiceRequests(ctx context.Context, userID string, limi
 	}
 	limit = ValidateLimit(limit, 50, 1000)
 
-	query := fmt.Sprintf("user_id=eq.%s&order=created_at.desc&limit=%d", userID, limit)
+	query := fmt.Sprintf("user_id=eq.%s&order=created_at.desc&limit=%d", url.QueryEscape(userID), limit)
 	data, err := r.client.request(ctx, "GET", "service_requests", nil, query)
 	if err != nil {
 		return nil, fmt.Errorf("%w: get service requests: %v", ErrDatabaseError, err)
@@ -198,7 +199,7 @@ func (r *Repository) UpdateServiceRequest(ctx context.Context, req *ServiceReque
 		return err
 	}
 
-	_, err := r.client.request(ctx, "PATCH", "service_requests", req, "id=eq."+req.ID)
+	_, err := r.client.request(ctx, "PATCH", "service_requests", req, "id=eq."+url.QueryEscape(req.ID))
 	if err != nil {
 		return fmt.Errorf("%w: update service request: %v", ErrDatabaseError, err)
 	}
@@ -216,7 +217,7 @@ func (r *Repository) GetLatestPrice(ctx context.Context, feedID string) (*PriceF
 	}
 	feedID = SanitizeString(feedID)
 
-	query := fmt.Sprintf("feed_id=eq.%s&order=timestamp.desc&limit=1", feedID)
+	query := fmt.Sprintf("feed_id=eq.%s&order=timestamp.desc&limit=1", url.QueryEscape(feedID))
 	data, err := r.client.request(ctx, "GET", "price_feeds", nil, query)
 	if err != nil {
 		return nil, fmt.Errorf("%w: get latest price: %v", ErrDatabaseError, err)

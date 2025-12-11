@@ -1,0 +1,105 @@
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gofmt
+    - goimports
+    - misspell
+    - gocritic
+    - revive
+    - stylecheck
+    - unconvert
+    - unparam
+    - gosec
+    - exportloopref
+    - nolintlint
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  govet:
+    check-shadowing: true
+    enable-all: true
+
+  gofmt:
+    simplify: true
+
+  goimports:
+    local-prefixes: github.com/R3E-Network/service_layer
+
+  misspell:
+    locale: US
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+
+  revive:
+    rules:
+      - name: exported
+        severity: warning
+        disabled: false
+        arguments:
+          - "checkPrivateReceivers"
+          - "sayRepetitiveInsteadOfStutters"
+
+  stylecheck:
+    checks: ["all", "-ST1000", "-ST1003", "-ST1016", "-ST1020", "-ST1021", "-ST1022"]
+
+  gosec:
+    excludes:
+      - G104 # Audit errors not checked
+      - G304 # File path provided as taint input
+      - G401 # Use of weak cryptographic primitive
+      - G501 # Import blocklist: crypto/md5
+      - G505 # Import blocklist: crypto/sha1
+
+issues:
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gosec
+        - errcheck
+        - gocritic
+
+    # Exclude known issues
+    - text: "weak cryptographic primitive"
+      linters:
+        - gosec
+
+    - text: "G404: Use of weak random number generator"
+      linters:
+        - gosec
+
+    # Exclude godoc issues for test files
+    - path: _test\.go
+      text: "exported: exported (method|function|type|const|var) .* should have comment or be unexported"
+      linters:
+        - revive
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  uniq-by-line: true
+  sort-results: true

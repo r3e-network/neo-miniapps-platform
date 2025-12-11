@@ -51,7 +51,7 @@ services:
   # =============================================================================
   # VRF Service Marble
   # =============================================================================
-  vrf:
+  neorand:
     build:
       context: ..
       dockerfile: docker/Dockerfile.service
@@ -60,7 +60,7 @@ services:
     container_name: service-vrf
     environment:
       - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
-      - EDG_MARBLE_TYPE=vrf
+      - EDG_MARBLE_TYPE=neorand
       - EDG_MARBLE_DNS_NAMES=localhost,vrf
       - SERVICE_TYPE=vrf
       - OE_SIMULATION=${OE_SIMULATION:-1}
@@ -71,20 +71,20 @@ services:
     restart: unless-stopped
 
   # =============================================================================
-  # Mixer Service Marble
+  # NeoVault Service Marble
   # =============================================================================
-  mixer:
+  neovault:
     build:
       context: ..
       dockerfile: docker/Dockerfile.service
       args:
-        SERVICE: mixer
-    container_name: service-mixer
+        SERVICE: neovault
+    container_name: service-neovault
     environment:
       - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
-      - EDG_MARBLE_TYPE=mixer
-      - EDG_MARBLE_DNS_NAMES=localhost,mixer
-      - SERVICE_TYPE=mixer
+      - EDG_MARBLE_TYPE=neovault
+      - EDG_MARBLE_DNS_NAMES=localhost,neovault
+      - SERVICE_TYPE=neovault
       - OE_SIMULATION=${OE_SIMULATION:-1}
     depends_on:
       - coordinator
@@ -94,20 +94,20 @@ services:
     restart: unless-stopped
 
   # =============================================================================
-  # DataFeeds Service Marble
+  # NeoFeeds Service Marble
   # =============================================================================
-  datafeeds:
+  neofeeds:
     build:
       context: ..
       dockerfile: docker/Dockerfile.service
       args:
-        SERVICE: datafeeds
-    container_name: service-datafeeds
+        SERVICE: neofeeds
+    container_name: service-neofeeds
     environment:
       - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
-      - EDG_MARBLE_TYPE=datafeeds
-      - EDG_MARBLE_DNS_NAMES=localhost,datafeeds
-      - SERVICE_TYPE=datafeeds
+      - EDG_MARBLE_TYPE=neofeeds
+      - EDG_MARBLE_DNS_NAMES=localhost,neofeeds
+      - SERVICE_TYPE=neofeeds
       - OE_SIMULATION=${OE_SIMULATION:-1}
     depends_on:
       - coordinator
@@ -116,20 +116,20 @@ services:
     restart: unless-stopped
 
   # =============================================================================
-  # Automation Service Marble
+  # NeoFlow Service Marble
   # =============================================================================
-  automation:
+  neoflow:
     build:
       context: ..
       dockerfile: docker/Dockerfile.service
       args:
-        SERVICE: automation
-    container_name: service-automation
+        SERVICE: neoflow
+    container_name: service-neoflow
     environment:
       - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
-      - EDG_MARBLE_TYPE=automation
-      - EDG_MARBLE_DNS_NAMES=localhost,automation
-      - SERVICE_TYPE=automation
+      - EDG_MARBLE_TYPE=neoflow
+      - EDG_MARBLE_DNS_NAMES=localhost,neoflow
+      - SERVICE_TYPE=neoflow
       - OE_SIMULATION=${OE_SIMULATION:-1}
     depends_on:
       - coordinator
@@ -139,9 +139,9 @@ services:
 
   # =============================================================================
   # AccountPool Service Marble (Internal - Shared Account Management)
-  # Not exposed externally, used by other services (mixer, etc.)
+  # Not exposed externally, used by other services (neovault, etc.)
   # =============================================================================
-  accountpool:
+  neoaccounts:
     build:
       context: ..
       dockerfile: docker/Dockerfile.service
@@ -150,7 +150,7 @@ services:
     container_name: service-accountpool
     environment:
       - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
-      - EDG_MARBLE_TYPE=accountpool
+      - EDG_MARBLE_TYPE=neoaccounts
       - EDG_MARBLE_DNS_NAMES=localhost,accountpool
       - SERVICE_TYPE=accountpool
       - OE_SIMULATION=${OE_SIMULATION:-1}
@@ -161,20 +161,20 @@ services:
     restart: unless-stopped
 
   # =============================================================================
-  # Confidential Compute Service Marble (Planned)
+  # NeoCompute Service Marble (Planned)
   # =============================================================================
-  confidential:
+  neocompute:
     build:
       context: ..
       dockerfile: docker/Dockerfile.service
       args:
-        SERVICE: confidential
-    container_name: service-confidential
+        SERVICE: neocompute
+    container_name: service-neocompute
     environment:
       - EDG_MARBLE_COORDINATOR_ADDR=coordinator:2001
-      - EDG_MARBLE_TYPE=confidential
-      - EDG_MARBLE_DNS_NAMES=localhost,confidential
-      - SERVICE_TYPE=confidential
+      - EDG_MARBLE_TYPE=neocompute
+      - EDG_MARBLE_DNS_NAMES=localhost,neocompute
+      - SERVICE_TYPE=neocompute
       - OE_SIMULATION=${OE_SIMULATION:-1}
     depends_on:
       - coordinator

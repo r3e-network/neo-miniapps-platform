@@ -82,13 +82,25 @@ func main() {
 		log.Fatalf("Failed to initialize marble: %v", err)
 	}
 
-	// Load JWT secret
+	// Load JWT secret - REQUIRED in production
 	if secret, ok := m.Secret("JWT_SECRET"); ok {
 		jwtSecret = secret
 	} else if envSecret := os.Getenv("JWT_SECRET"); envSecret != "" {
 		jwtSecret = []byte(envSecret)
 	} else {
-		jwtSecret = []byte("default-dev-secret-change-in-production")
+		// In development mode (MARBLE_ENV=development), allow insecure default
+		env := os.Getenv("MARBLE_ENV")
+		if env == "development" || env == "testing" {
+			log.Printf("WARNING: Using insecure default JWT secret - DO NOT USE IN PRODUCTION")
+			jwtSecret = []byte("dev-only-secret-" + env)
+		} else {
+			log.Fatalf("CRITICAL: JWT_SECRET is required in production. Set via MarbleRun secrets or JWT_SECRET env var")
+		}
+	}
+
+	// Validate JWT secret length
+	if len(jwtSecret) < 32 {
+		log.Fatalf("CRITICAL: JWT_SECRET must be at least 32 bytes for security")
 	}
 
 	// Initialize database
@@ -200,8 +212,8 @@ func registerRoutes(router *mux.Router, db *database.Repository, m *marble.Marbl
 
 	// Service proxy routes
 	protected.HandleFunc("/vrf/{path:.*}", proxyHandler("vrf")).Methods("GET", "POST")
-	protected.HandleFunc("/mixer/{path:.*}", proxyHandler("mixer")).Methods("GET", "POST")
-	protected.HandleFunc("/datafeeds/{path:.*}", proxyHandler("datafeeds")).Methods("GET", "POST")
-	protected.HandleFunc("/automation/{path:.*}", proxyHandler("automation")).Methods("GET", "POST", "PUT", "DELETE")
-	protected.HandleFunc("/confidential/{path:.*}", proxyHandler("confidential")).Methods("GET", "POST")
+	protected.HandleFunc("/neovault/{path:.*}", proxyHandler("neovault")).Methods("GET", "POST")
+	protected.HandleFunc("/neofeeds/{path:.*}", proxyHandler("neofeeds")).Methods("GET", "POST")
+	protected.HandleFunc("/neoflow/{path:.*}", proxyHandler("neoflow")).Methods("GET", "POST", "PUT", "DELETE")
+	protected.HandleFunc("/neocompute/{path:.*}", proxyHandler("neocompute")).Methods("GET", "POST")
 }

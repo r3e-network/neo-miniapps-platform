@@ -15,7 +15,7 @@ import (
 // ServiceChainModule defines the interface for service-specific chain modules.
 // Each service implements this interface to register its chain interaction code.
 type ServiceChainModule interface {
-	// ServiceType returns the service type identifier (e.g., "vrf", "mixer")
+	// ServiceType returns the service type identifier (e.g., "neorand", "neovault")
 	ServiceType() string
 
 	// Initialize initializes the chain module with the given client and wallet

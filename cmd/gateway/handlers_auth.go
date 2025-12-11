@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/database"
@@ -62,13 +63,11 @@ func nonceHandler(db *database.Repository) http.HandlerFunc {
 			return
 		}
 
-		// Generate random nonce
-		nonceBytes := make([]byte, 32)
-		if _, err := rand.Read(nonceBytes); err != nil {
+		nonce, err := generateNonce()
+		if err != nil {
 			jsonError(w, "failed to generate nonce", http.StatusInternalServerError)
 			return
 		}
-		nonce := hex.EncodeToString(nonceBytes)
 
 		// Get or create user
 		user, err := db.GetUserByAddress(r.Context(), req.Address)
@@ -108,18 +107,29 @@ func registerHandler(db *database.Repository) http.HandlerFunc {
 			PublicKey string `json:"publicKey"`
 			Signature string `json:"signature"`
 			Message   string `json:"message"`
+			Nonce     string `json:"nonce"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			jsonError(w, "invalid request", http.StatusBadRequest)
 			return
 		}
 
-		// Verify Neo N3 signature (public key required for verification)
-		if req.PublicKey != "" && req.Signature != "" && req.Message != "" {
-			if !verifyNeoSignature(req.Address, req.Message, req.Signature, req.PublicKey) {
-				jsonError(w, "invalid signature", http.StatusUnauthorized)
-				return
-			}
+		// SECURITY: Signature verification is MANDATORY for wallet registration
+		// All fields must be provided to prove wallet ownership
+		if req.PublicKey == "" || req.Signature == "" || req.Message == "" {
+			jsonError(w, "publicKey, signature, and message are required for wallet registration", http.StatusBadRequest)
+			return
+		}
+
+		// Verify Neo N3 signature to prove wallet ownership
+		if !verifyNeoSignature(req.Address, req.Message, req.Signature, req.PublicKey) {
+			jsonError(w, "invalid signature - wallet ownership verification failed", http.StatusUnauthorized)
+			return
+		}
+
+		if req.Nonce == "" {
+			jsonError(w, "nonce is required", http.StatusBadRequest)
+			return
 		}
 
 		// Get or create user
@@ -136,6 +146,16 @@ func registerHandler(db *database.Repository) http.HandlerFunc {
 			}
 		}
 
+		// Enforce nonce binding and one-time use
+		if user.Nonce == "" || user.Nonce != req.Nonce {
+			jsonError(w, "invalid nonce", http.StatusUnauthorized)
+			return
+		}
+		if !strings.Contains(req.Message, user.Nonce) {
+			jsonError(w, "nonce not present in signed message", http.StatusUnauthorized)
+			return
+		}
+
 		// Create primary wallet
 		wallet := &database.UserWallet{
 			UserID:    user.ID,
@@ -144,10 +164,16 @@ func registerHandler(db *database.Repository) http.HandlerFunc {
 			Verified:  true,
 			CreatedAt: time.Now(),
 		}
-		_ = db.CreateWallet(r.Context(), wallet)
+		if err := db.CreateWallet(r.Context(), wallet); err != nil {
+			jsonError(w, "failed to create wallet", http.StatusInternalServerError)
+			return
+		}
 
 		// Create gas bank account
-		_, _ = db.GetOrCreateGasBankAccount(r.Context(), user.ID)
+		if _, err := db.GetOrCreateGasBankAccount(r.Context(), user.ID); err != nil {
+			jsonError(w, "failed to create gas bank account", http.StatusInternalServerError)
+			return
+		}
 
 		// Generate JWT token
 		token, err := generateJWT(user.ID)
@@ -164,7 +190,15 @@ func registerHandler(db *database.Repository) http.HandlerFunc {
 			ExpiresAt: time.Now().Add(24 * time.Hour),
 			CreatedAt: time.Now(),
 		}
-		_ = db.CreateSession(r.Context(), session)
+		if err := db.CreateSession(r.Context(), session); err != nil {
+			jsonError(w, "failed to create session", http.StatusInternalServerError)
+			return
+		}
+
+		// Rotate nonce to prevent replay
+		if nextNonce, err := generateNonce(); err == nil {
+			_ = db.UpdateUserNonce(r.Context(), user.ID, nextNonce)
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -182,23 +216,39 @@ func loginHandler(db *database.Repository) http.HandlerFunc {
 			PublicKey string `json:"publicKey"`
 			Signature string `json:"signature"`
 			Message   string `json:"message"`
+			Nonce     string `json:"nonce"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			jsonError(w, "invalid request", http.StatusBadRequest)
 			return
 		}
 
-		// Verify Neo N3 signature (public key required for verification)
-		if req.PublicKey != "" && req.Signature != "" && req.Message != "" {
-			if !verifyNeoSignature(req.Address, req.Message, req.Signature, req.PublicKey) {
-				jsonError(w, "invalid signature", http.StatusUnauthorized)
-				return
-			}
+		// SECURITY: Signature verification is MANDATORY for wallet login
+		// All fields must be provided to prove wallet ownership
+		if req.PublicKey == "" || req.Signature == "" || req.Message == "" {
+			jsonError(w, "publicKey, signature, and message are required for wallet login", http.StatusBadRequest)
+			return
+		}
+
+		// Verify Neo N3 signature to prove wallet ownership
+		if !verifyNeoSignature(req.Address, req.Message, req.Signature, req.PublicKey) {
+			jsonError(w, "invalid signature - wallet ownership verification failed", http.StatusUnauthorized)
+			return
 		}
 
 		user, err := db.GetUserByAddress(r.Context(), req.Address)
 		if err != nil {
 			jsonError(w, "user not found", http.StatusNotFound)
+			return
+		}
+
+		// Enforce nonce binding and one-time use
+		if req.Nonce == "" || user.Nonce == "" || req.Nonce != user.Nonce {
+			jsonError(w, "invalid nonce", http.StatusUnauthorized)
+			return
+		}
+		if !strings.Contains(req.Message, user.Nonce) {
+			jsonError(w, "nonce not present in signed message", http.StatusUnauthorized)
 			return
 		}
 
@@ -217,7 +267,15 @@ func loginHandler(db *database.Repository) http.HandlerFunc {
 			ExpiresAt: time.Now().Add(24 * time.Hour),
 			CreatedAt: time.Now(),
 		}
-		_ = db.CreateSession(r.Context(), session)
+		if err := db.CreateSession(r.Context(), session); err != nil {
+			jsonError(w, "failed to create session", http.StatusInternalServerError)
+			return
+		}
+
+		// Rotate nonce to prevent replay
+		if nextNonce, err := generateNonce(); err == nil {
+			_ = db.UpdateUserNonce(r.Context(), user.ID, nextNonce)
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -267,4 +325,12 @@ func meHandler(db *database.Repository) http.HandlerFunc {
 			"gasbank": account,
 		})
 	}
+}
+
+func generateNonce() (string, error) {
+	nonceBytes := make([]byte, 32)
+	if _, err := rand.Read(nonceBytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(nonceBytes), nil
 }

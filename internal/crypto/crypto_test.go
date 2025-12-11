@@ -365,8 +365,8 @@ func TestGenerateVRF(t *testing.T) {
 		t.Errorf("GenerateVRF() output length = %d, want 32", len(proof.Output))
 	}
 
-	if len(proof.Proof) != 64 {
-		t.Errorf("GenerateVRF() proof length = %d, want 64", len(proof.Proof))
+	if len(proof.Proof) != 97 {
+		t.Errorf("GenerateVRF() proof length = %d, want 97", len(proof.Proof))
 	}
 
 	if len(proof.PublicKey) != 33 {

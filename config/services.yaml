@@ -1,0 +1,60 @@
+# Neo Services Configuration
+# Each service is a separate Marble in MarbleRun, running in its own TEE enclave.
+# Enable/disable services here - disabled services will exit gracefully (exit code 0).
+
+services:
+  # NeoRand - Verifiable Random Number Generation
+  # Use cases: Gaming, lotteries, fair distribution
+  neorand:
+    enabled: true
+    port: 8081
+    description: "Verifiable random number generation for gaming, lotteries, and fair distribution"
+
+  # NeoOracle - External Data Delivery with Proofs
+  # Use cases: Price feeds, weather data, sports results
+  neooracle:
+    enabled: true
+    port: 8082
+    description: "External data delivery with cryptographic proofs for price feeds and real-world data"
+
+  # NeoFeeds - Decentralized Market Data
+  # Use cases: DeFi protocols, trading algorithms
+  neofeeds:
+    enabled: true
+    port: 8083
+    description: "Decentralized market data feeds for DeFi protocols and trading algorithms"
+
+  # NeoAccounts - Account Pool Management
+  # Use cases: Multi-sig wallets, enterprise security
+  neoaccounts:
+    enabled: true
+    port: 8084
+    description: "Account pool management for multi-sig wallets and enterprise security"
+
+  # NeoVault - Secure Cryptographic Operations
+  # Use cases: Privacy mixing, secure transactions
+  neovault:
+    enabled: true
+    port: 8085
+    description: "Secure cryptographic operations and privacy-preserving transactions"
+
+  # NeoCompute - Secure JavaScript Execution
+  # Use cases: Private computations, neocompute data processing
+  neocompute:
+    enabled: true
+    port: 8086
+    description: "Secure JavaScript execution for private computations and neocompute data processing"
+
+  # NeoFlow - Automated Smart Contract Execution
+  # Use cases: Event-driven workflows, conditional triggers, batch operations
+  neoflow:
+    enabled: true
+    port: 8087
+    description: "Automated smart contract execution for event-driven workflows and triggers"
+
+  # NeoStore - Encrypted Data Management
+  # Use cases: Document storage, backup systems
+  neostore:
+    enabled: true
+    port: 8088
+    description: "Encrypted data management for secure document storage and backup systems"

@@ -16,10 +16,10 @@ import (
 
 var coreContracts = []string{
 	"ServiceLayerGateway",
-	"DataFeedsService",
+	"NeoFeedsService",
 	"VRFService",
-	"MixerService",
-	"AutomationService",
+	"NeoVaultService",
+	"NeoFlowService",
 }
 
 // DeployedContract and DeploymentResult are imported from internal/chain package

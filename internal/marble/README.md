@@ -3,7 +3,7 @@
 This package is a thin SDK that wraps MarbleRun primitives for services:
 - Loads Coordinator-injected TLS certs/CA and builds an mTLS HTTP client for cross-marble traffic.
 - Exposes injected secrets via `Marble.Secret/UseSecret`.
-- Surfaces enclave identity (report, UUID, marble type) to services.
+- Surfaces TEE identity (report, UUID, marble type) to services.
 
 We keep this layer even though MarbleRun is used because it provides:
 1. A stable Go API inside services (tests and simulation can stub it).
@@ -70,9 +70,9 @@ defer crypto.ZeroBytes(secret) // Always zero secrets after use
 | Secret | Service | Description |
 |--------|---------|-------------|
 | `VRF_PRIVATE_KEY` | VRF | ECDSA P-256 private key |
-| `MIXER_MASTER_KEY` | Mixer | HMAC signing key |
+| `MIXER_MASTER_KEY` | NeoVault | HMAC signing key |
 | `POOL_MASTER_KEY` | AccountPool | HD wallet master key |
-| `DATAFEEDS_SIGNING_KEY` | DataFeeds | Price signing key |
+| `DATAFEEDS_SIGNING_KEY` | NeoFeeds | Price signing key |
 | `SECRETS_MASTER_KEY` | Secrets | AES-256 encryption key |
 
 ## mTLS Communication

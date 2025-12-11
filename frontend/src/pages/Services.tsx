@@ -1,14 +1,14 @@
 import { Server, ExternalLink } from 'lucide-react';
 
 const services = [
-  { id: 'oracle', name: 'Oracle', description: 'Fetch external data securely', status: 'active' },
-  { id: 'vrf', name: 'VRF', description: 'Verifiable random function', status: 'active' },
-  { id: 'mixer', name: 'Mixer', description: 'Privacy-preserving transactions', status: 'active' },
-  { id: 'secrets', name: 'Secrets', description: 'Secure secret management', status: 'active' },
-  { id: 'datafeeds', name: 'DataFeeds', description: 'Price feed aggregation', status: 'active' },
+  { id: 'neooracle', name: 'NeoOracle', description: 'Fetch external data securely', status: 'active' },
+  { id: 'neorand', name: 'NeoRand', description: 'Verifiable random function', status: 'active' },
+  { id: 'neovault', name: 'NeoVault', description: 'Privacy-preserving transactions', status: 'active' },
+  { id: 'neostore', name: 'NeoStore', description: 'Secure secret management', status: 'active' },
+  { id: 'neofeeds', name: 'NeoFeeds', description: 'Price feed aggregation', status: 'active' },
   { id: 'gasbank', name: 'GasBank', description: 'Gas fee management', status: 'active' },
-  { id: 'automation', name: 'Automation', description: 'Task automation', status: 'active' },
-  { id: 'confidential', name: 'Confidential', description: 'Confidential compute', status: 'active' },
+  { id: 'neoflow', name: 'NeoFlow', description: 'Task neoflow', status: 'active' },
+  { id: 'neocompute', name: 'NeoCompute', description: 'NeoCompute compute', status: 'active' },
   { id: 'accounts', name: 'Accounts', description: 'User account management', status: 'active' },
   { id: 'ccip', name: 'CCIP', description: 'Cross-chain interoperability', status: 'active' },
   { id: 'datalink', name: 'DataLink', description: 'Data linking service', status: 'active' },

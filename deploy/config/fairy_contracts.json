@@ -8,7 +8,7 @@
       "state": "HALT"
     },
     {
-      "name": "DataFeedsService",
+      "name": "NeoFeedsService",
       "hash": "0x7507972a4c97ccaffe7af5d1179081492882b1d6",
       "gas_consumed": "1048756280",
       "state": "HALT"
@@ -20,13 +20,13 @@
       "state": "HALT"
     },
     {
-      "name": "MixerService",
+      "name": "NeoVaultService",
       "hash": "0xce78ec48b222e3afc7c3eca90c40ea128c1b15f2",
       "gas_consumed": "1004604430",
       "state": "HALT"
     },
     {
-      "name": "AutomationService",
+      "name": "NeoFlowService",
       "hash": "0x85c4697f9a2b0b1fe7325ffb73b362e198b16bf7",
       "gas_consumed": "1004595910",
       "state": "HALT"

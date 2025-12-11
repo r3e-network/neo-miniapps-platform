@@ -44,9 +44,9 @@ SERVICE_FEES = {
 # Service contract mapping
 SERVICE_CONTRACTS = {
     "vrf": "VRFService",
-    "mixer": "MixerService",
+    "mixer": "NeoVaultService",
     "datafeeds": "DataFeedsService",
-    "automation": "AutomationService",
+    "automation": "NeoFlowService",
 }
 
 

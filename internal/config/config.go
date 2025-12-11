@@ -43,11 +43,11 @@ type Config struct {
 	// Service Ports
 	GatewayPort      int
 	VRFPort          int
-	MixerPort        int
-	DataFeedsPort    int
-	AutomationPort   int
-	AccountPoolPort  int
-	ConfidentialPort int
+	NeoVaultPort        int
+	NeoFeedsPort    int
+	NeoFlowPort   int
+	NeoAccountsPort  int
+	NeoComputePort int
 	SecretsPort      int
 	OraclePort       int
 
@@ -134,11 +134,11 @@ func (c *Config) loadFromEnv() error {
 	// Service Ports
 	c.GatewayPort = getIntEnv("GATEWAY_PORT", 8080)
 	c.VRFPort = getIntEnv("VRF_PORT", 8081)
-	c.MixerPort = getIntEnv("MIXER_PORT", 8082)
-	c.DataFeedsPort = getIntEnv("DATAFEEDS_PORT", 8083)
-	c.AutomationPort = getIntEnv("AUTOMATION_PORT", 8084)
-	c.AccountPoolPort = getIntEnv("ACCOUNTPOOL_PORT", 8085)
-	c.ConfidentialPort = getIntEnv("CONFIDENTIAL_PORT", 8086)
+	c.NeoVaultPort = getIntEnv("NEOVAULT_PORT", 8082)
+	c.NeoFeedsPort = getIntEnv("NEOFEEDS_PORT", 8083)
+	c.NeoFlowPort = getIntEnv("NEOFLOW_PORT", 8084)
+	c.NeoAccountsPort = getIntEnv("NEOACCOUNTS_PORT", 8085)
+	c.NeoComputePort = getIntEnv("NEOCOMPUTE_PORT", 8086)
 	c.SecretsPort = getIntEnv("SECRETS_PORT", 8087)
 	c.OraclePort = getIntEnv("ORACLE_PORT", 8088)
 
@@ -216,8 +216,8 @@ func (c *Config) Validate() error {
 
 	// Port validations
 	ports := []int{
-		c.GatewayPort, c.VRFPort, c.MixerPort, c.DataFeedsPort,
-		c.AutomationPort, c.AccountPoolPort, c.ConfidentialPort,
+		c.GatewayPort, c.VRFPort, c.NeoVaultPort, c.NeoFeedsPort,
+		c.NeoFlowPort, c.NeoAccountsPort, c.NeoComputePort,
 		c.SecretsPort, c.OraclePort,
 	}
 	for _, port := range ports {

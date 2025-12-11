@@ -13,7 +13,7 @@
 
 ## Architecture Overview
 
-The Neo Service Layer is a **TEE-Centric (Trusted Execution Environment)** platform built on **MarbleRun + EGo** for confidential computing on the Neo N3 blockchain. It provides oracle services, verifiable randomness, privacy mixing, automated task execution, and price feeds through a secure enclave-based architecture.
+The Neo Service Layer is a **TEE-Centric (Trusted Execution Environment)** platform built on **MarbleRun + EGo** for neocompute computing on the Neo N3 blockchain. It provides oracle services, verifiable randomness, privacy mixing, automated task execution, and price feeds through a secure TEE-based architecture.
 
 ### High-Level Architecture
 
@@ -26,7 +26,7 @@ The Neo Service Layer is a **TEE-Centric (Trusted Execution Environment)** platf
                                       │
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                          API GATEWAY (EGo Enclave)                          │
+│                          API GATEWAY (EGo TEE)                          │
 │                    Authentication, Routing, Rate Limiting                   │
 │                         JWT + Neo Wallet Signature Auth                     │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -34,12 +34,12 @@ The Neo Service Layer is a **TEE-Centric (Trusted Execution Environment)** platf
                     ┌─────────────────┼─────────────────┐
                     ▼                 ▼                 ▼
 ┌───────────────────────┐ ┌───────────────────────┐ ┌───────────────────────┐
-│   VRF Service         │ │   Mixer Service       │ │   DataFeeds Service   │
-│   (EGo Enclave)       │ │   (EGo Enclave)       │ │   (EGo Enclave)       │
+│   NeoRand Service         │ │   NeoVault Service       │ │   NeoFeeds Service   │
+│   (EGo TEE)       │ │   (EGo TEE)       │ │   (EGo TEE)       │
 └───────────────────────┘ └───────────────────────┘ └───────────────────────┘
 ┌───────────────────────┐ ┌───────────────────────┐ ┌───────────────────────┐
-│   Automation Service  │ │   AccountPool Service │ │   Confidential Service│
-│   (EGo Enclave)       │ │   (EGo Enclave)       │ │   (EGo Enclave)       │
+│   NeoFlow Service  │ │   AccountPool Service │ │   NeoCompute Service│
+│   (EGo TEE)       │ │   (EGo TEE)       │ │   (EGo TEE)       │
 └───────────────────────┘ └───────────────────────┘ └───────────────────────┘
                                       │
                     ┌─────────────────┼─────────────────┐
@@ -52,8 +52,8 @@ The Neo Service Layer is a **TEE-Centric (Trusted Execution Environment)** platf
 
 ### Core Design Principles
 
-1. **TEE-First Security**: All sensitive operations execute inside SGX enclaves
-2. **Secrets Never Leave Enclave**: Private keys and secrets are managed via MarbleRun Coordinator
+1. **TEE-First Security**: All sensitive operations execute inside MarbleRun TEEs
+2. **Secrets Never Leave TEE**: Private keys and secrets are managed via MarbleRun Coordinator
 3. **Request-Callback Pattern**: On-chain requests trigger off-chain TEE processing with on-chain callbacks
 4. **Capability-Based Access**: Services declare required capabilities in their manifest
 
@@ -65,8 +65,8 @@ The Neo Service Layer is a **TEE-Centric (Trusted Execution Environment)** platf
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
-| TEE Runtime | EGo (Edgeless Systems) | SGX enclave execution |
-| Orchestration | MarbleRun | Multi-enclave coordination, secrets management |
+| TEE Runtime | EGo (Edgeless Systems) | MarbleRun TEE execution |
+| Orchestration | MarbleRun | Multi-TEE coordination, secrets management |
 | Database | Supabase (PostgreSQL) | Persistent storage, real-time subscriptions |
 | HTTP Router | Gorilla Mux | REST API routing |
 | Blockchain | Neo N3 | Smart contract interaction |
@@ -84,15 +84,15 @@ The Neo Service Layer is a **TEE-Centric (Trusted Execution Environment)** platf
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
-| Secrets | MarbleRun Coordinator | Enclave secret injection |
+| Secrets | MarbleRun Coordinator | TEE secret injection |
 | TLS | mTLS (MarbleRun) | Inter-service communication |
-| Attestation | Intel SGX | Remote attestation |
+| Attestation | MarbleRun/EGo | Remote attestation |
 
 ---
 
 ## Services
 
-### 1. VRF Service (Verifiable Random Function)
+### 1. NeoRand Service (Verifiable Random Function)
 
 **Purpose**: Provides cryptographically verifiable random numbers for smart contracts.
 
@@ -158,11 +158,11 @@ type DirectRandomResponse struct {
 
 - **Private Key**: Injected by MarbleRun Coordinator (`VRF_PRIVATE_KEY`)
 - **Algorithm**: ECDSA P-256 with deterministic VRF construction
-- **Upgrade Safety**: Key persists across enclave upgrades (MRENCLAVE changes)
+- **Upgrade Safety**: Key persists across TEE upgrades (MRENCLAVE changes)
 
 ---
 
-### 2. Mixer Service (Privacy Mixing)
+### 2. NeoVault Service (Privacy Mixing)
 
 **Purpose**: Privacy-preserving transaction mixing for Neo N3 tokens.
 
@@ -175,7 +175,7 @@ Fee is deducted from delivery (user receives NetAmount = TotalAmount - ServiceFe
 
 ```
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│    User      │     │ Mixer Service│     │ AccountPool  │     │  Blockchain  │
+│    User      │     │ NeoVault Service│     │ AccountPool  │     │  Blockchain  │
 └──────┬───────┘     └──────┬───────┘     └──────┬───────┘     └──────┬───────┘
        │                    │                    │                    │
        │ Request Mix        │                    │                    │
@@ -236,7 +236,7 @@ Fee is deducted from delivery (user receives NetAmount = TotalAmount - ServiceFe
 
 ---
 
-### 3. DataFeeds Service (Price Oracle)
+### 3. NeoFeeds Service (Price Oracle)
 
 **Purpose**: Aggregated price feeds from multiple sources with TEE attestation.
 
@@ -246,7 +246,7 @@ Fee is deducted from delivery (user receives NetAmount = TotalAmount - ServiceFe
 
 ```
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│ Price Sources│     │ DataFeeds Svc│     │ DataFeeds    │     │ User Contract│
+│ Price Sources│     │ NeoFeeds Svc│     │ NeoFeeds    │     │ User Contract│
 │ (Chainlink,  │     │ (TEE)        │     │ Contract     │     │              │
 │  Binance)    │     │              │     │              │     │              │
 └──────┬───────┘     └──────┬───────┘     └──────┬───────┘     └──────┬───────┘
@@ -315,9 +315,9 @@ sources:
 
 ---
 
-### 4. Automation Service (Task Automation)
+### 4. NeoFlow Service (Task NeoFlow)
 
-**Purpose**: Trigger-based task automation for smart contracts.
+**Purpose**: Trigger-based task neoflow for smart contracts.
 
 **Architecture Pattern**: Trigger-Based Execution
 
@@ -334,7 +334,7 @@ sources:
 
 ```
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│    User      │     │ Automation   │     │ Condition    │     │ User Contract│
+│    User      │     │ NeoFlow   │     │ Condition    │     │ User Contract│
 │              │     │ Service (TEE)│     │ Monitor      │     │              │
 └──────┬───────┘     └──────┬───────┘     └──────┬───────┘     └──────┬───────┘
        │                    │                    │                    │
@@ -373,7 +373,7 @@ sources:
 
 ### 5. AccountPool Service
 
-**Purpose**: HD-derived pool account management for mixer and other services.
+**Purpose**: HD-derived pool account management for neovault and other services.
 
 **Architecture Pattern**: Account Lending
 
@@ -397,16 +397,16 @@ sources:
 
 ---
 
-### 6. Confidential Service
+### 6. NeoCompute Service
 
-**Purpose**: Confidential computing for sensitive data processing.
+**Purpose**: NeoCompute computing for sensitive data processing.
 
 **Architecture Pattern**: Sealed Computation
 
 #### Features
 
 - Data encryption at rest and in transit
-- Computation inside SGX enclave
+- Computation inside MarbleRun TEE
 - Result attestation
 
 ---
@@ -428,8 +428,8 @@ sources:
                     ┌─────────────────┼─────────────────┐
                     ▼                 ▼                 ▼
 ┌───────────────────────┐ ┌───────────────────────┐ ┌───────────────────────┐
-│   EGo Enclave         │ │   EGo Enclave         │ │   EGo Enclave         │
-│   (VRF Service)       │ │   (Mixer Service)     │ │   (Gateway)           │
+│   EGo TEE         │ │   EGo TEE         │ │   EGo TEE         │
+│   (NeoRand Service)       │ │   (NeoVault Service)     │ │   (Gateway)           │
 │                       │ │                       │ │                       │
 │ MARBLE_CERT           │ │ MARBLE_CERT           │ │ MARBLE_CERT           │
 │ MARBLE_KEY            │ │ MARBLE_KEY            │ │ MARBLE_KEY            │
@@ -439,7 +439,7 @@ sources:
 └───────────────────────┘ └───────────────────────┘ └───────────────────────┘
 ```
 
-### Enclave Configuration (enclave.json)
+### TEE Configuration (enclave.json)
 
 ```json
 {
@@ -490,8 +490,8 @@ sources:
 │  supabase_repository.go  - Data access layer                                │
 │  supabase_models.go      - Data models                                      │
 │  supabase_vrf.go         - VRF-specific queries                             │
-│  supabase_automation.go  - Automation-specific queries                      │
-│  mixer.go                - Mixer-specific queries                           │
+│  supabase_neoflow.go  - NeoFlow-specific queries                      │
+│  neovault.go                - NeoVault-specific queries                           │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -517,18 +517,18 @@ sources:
 
 ### TEE Security Guarantees
 
-1. **Confidentiality**: Code and data inside enclave are encrypted
+1. **NeoComputeity**: Code and data inside TEE are encrypted
 2. **Integrity**: Tampering is detected via hardware attestation
-3. **Attestation**: Remote parties can verify enclave identity
+3. **Attestation**: Remote parties can verify TEE identity
 
 ### Secret Management
 
 | Secret | Service | Injection Method |
 |--------|---------|------------------|
 | VRF_PRIVATE_KEY | VRF | MarbleRun Coordinator |
-| MIXER_MASTER_KEY | Mixer | MarbleRun Coordinator |
+| MIXER_MASTER_KEY | NeoVault | MarbleRun Coordinator |
 | POOL_MASTER_KEY | AccountPool | MarbleRun Coordinator |
-| DATAFEEDS_SIGNING_KEY | DataFeeds | MarbleRun Coordinator |
+| DATAFEEDS_SIGNING_KEY | NeoFeeds | MarbleRun Coordinator |
 | JWT_SECRET | Gateway | MarbleRun Coordinator |
 
 ### Authentication Flow
@@ -572,7 +572,7 @@ sources:
 │                         Production Environment                              │
 │                                                                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                    SGX-Enabled Kubernetes Cluster                    │   │
+│  │                    MarbleRun-Enabled Kubernetes Cluster                    │   │
 │  │                                                                      │   │
 │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐               │   │
 │  │  │ MarbleRun    │  │ Gateway Pod  │  │ Service Pods │               │   │
@@ -606,7 +606,7 @@ sources:
 | Route | Method | Description |
 |-------|--------|-------------|
 | `/health` | GET | Health check |
-| `/attestation` | GET | SGX attestation report |
+| `/attestation` | GET | MarbleRun attestation report |
 | `/api/v1/auth/nonce` | POST | Get auth nonce |
 | `/api/v1/auth/register` | POST | Register user |
 | `/api/v1/auth/login` | POST | Login with Neo wallet |
@@ -621,11 +621,11 @@ sources:
 | `/api/v1/apikeys` | GET/POST | Manage API keys |
 | `/api/v1/wallets` | GET/POST | Manage wallets |
 | `/api/v1/gasbank/*` | * | Gas bank operations |
-| `/api/v1/vrf/*` | * | VRF service proxy |
-| `/api/v1/mixer/*` | * | Mixer service proxy |
-| `/api/v1/datafeeds/*` | * | DataFeeds service proxy |
-| `/api/v1/automation/*` | * | Automation service proxy |
-| `/api/v1/confidential/*` | * | Confidential service proxy |
+| `/api/v1/neorand/*` | * | VRF service proxy |
+| `/api/v1/neovault/*` | * | NeoVault service proxy |
+| `/api/v1/neofeeds/*` | * | NeoFeeds service proxy |
+| `/api/v1/neoflow/*` | * | NeoFlow service proxy |
+| `/api/v1/neocompute/*` | * | NeoCompute service proxy |
 
 ---
 
@@ -633,12 +633,12 @@ sources:
 
 | Service | Version | Status |
 |---------|---------|--------|
-| VRF Service | 2.0.0 | Production |
-| Mixer Service | 3.2.0 | Production |
-| DataFeeds Service | 3.0.0 | Production |
-| Automation Service | 2.0.0 | Production |
+| NeoRand Service | 2.0.0 | Production |
+| NeoVault Service | 3.2.0 | Production |
+| NeoFeeds Service | 3.0.0 | Production |
+| NeoFlow Service | 2.0.0 | Production |
 | AccountPool Service | 1.0.0 | Production |
-| Confidential Service | 1.0.0 | Beta |
+| NeoCompute Service | 1.0.0 | Beta |
 
 ---
 

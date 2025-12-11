@@ -26,6 +26,8 @@ dist-ssr
 # Go/Rust vendored or build outputs
 vendor/
 sdk/rust/devpack/target/
+.gocache/
+*.out
 
 # Build outputs
 bin/

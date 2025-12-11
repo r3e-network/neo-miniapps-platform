@@ -11,6 +11,25 @@ import (
 // Stack Item Parsers
 // =============================================================================
 
+// ParseArray extracts an array of StackItems from a parent StackItem.
+func ParseArray(item StackItem) ([]StackItem, error) {
+	if item.Type != "Array" && item.Type != "Struct" {
+		return nil, fmt.Errorf("expected Array or Struct, got %s", item.Type)
+	}
+
+	var items []StackItem
+	if err := json.Unmarshal(item.Value, &items); err != nil {
+		return nil, fmt.Errorf("unmarshal array: %w", err)
+	}
+	return items, nil
+}
+
+// ParseString parses a string from a StackItem.
+// Alias for ParseStringFromItem for consistency.
+func ParseString(item StackItem) (string, error) {
+	return ParseStringFromItem(item)
+}
+
 func ParseHash160(item StackItem) (string, error) {
 	if item.Type == "ByteString" || item.Type == "Buffer" {
 		var value string
@@ -170,7 +189,7 @@ func ParseServiceRequest(item StackItem) (*ContractServiceRequest, error) {
 	}, nil
 }
 
-func ParseMixerPool(item StackItem) (*MixerPool, error) {
+func ParseNeoVaultPool(item StackItem) (*NeoVaultPool, error) {
 	if item.Type != "Array" && item.Type != "Struct" {
 		return nil, fmt.Errorf("expected Array or Struct, got %s", item.Type)
 	}
@@ -197,7 +216,7 @@ func ParseMixerPool(item StackItem) (*MixerPool, error) {
 		return nil, fmt.Errorf("parse active: %w", err)
 	}
 
-	return &MixerPool{
+	return &NeoVaultPool{
 		Denomination: denomination,
 		LeafCount:    leafCount,
 		Active:       active,

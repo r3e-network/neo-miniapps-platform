@@ -1,0 +1,55 @@
+using Neo;
+using Neo.Cryptography.ECC;
+using Neo.SmartContract.Framework;
+using Neo.SmartContract.Framework.Services;
+using System;
+using System.Numerics;
+
+namespace ServiceLayer.Gateway
+{
+    public partial class ServiceLayerGateway
+    {
+        public static void RegisterTEEAccount(UInt160 teeAccount, ECPoint teePubKey)
+        {
+            RequireAdmin();
+            if (teeAccount == null || !teeAccount.IsValid) throw new Exception("Invalid TEE account");
+            if (teePubKey == null) throw new Exception("Invalid public key");
+
+            byte[] accountKey = Helper.Concat(new byte[] { PREFIX_TEE_ACCOUNT }, (byte[])teeAccount);
+            byte[] pubKeyKey = Helper.Concat(new byte[] { PREFIX_TEE_PUBKEY }, (byte[])teeAccount);
+
+            Storage.Put(Storage.CurrentContext, accountKey, 1);
+            Storage.Put(Storage.CurrentContext, pubKeyKey, teePubKey);
+
+            OnTEERegistered(teeAccount, teePubKey);
+        }
+
+        public static void RemoveTEEAccount(UInt160 teeAccount)
+        {
+            RequireAdmin();
+            byte[] accountKey = Helper.Concat(new byte[] { PREFIX_TEE_ACCOUNT }, (byte[])teeAccount);
+            byte[] pubKeyKey = Helper.Concat(new byte[] { PREFIX_TEE_PUBKEY }, (byte[])teeAccount);
+
+            Storage.Delete(Storage.CurrentContext, accountKey);
+            Storage.Delete(Storage.CurrentContext, pubKeyKey);
+        }
+
+        public static bool IsTEEAccount(UInt160 account)
+        {
+            byte[] key = Helper.Concat(new byte[] { PREFIX_TEE_ACCOUNT }, (byte[])account);
+            return (BigInteger)Storage.Get(Storage.CurrentContext, key) == 1;
+        }
+
+        public static ECPoint GetTEEPublicKey(UInt160 teeAccount)
+        {
+            byte[] key = Helper.Concat(new byte[] { PREFIX_TEE_PUBKEY }, (byte[])teeAccount);
+            return (ECPoint)Storage.Get(Storage.CurrentContext, key);
+        }
+
+        internal static void RequireTEE()
+        {
+            Transaction tx = (Transaction)Runtime.ScriptContainer;
+            if (!IsTEEAccount(tx.Sender)) throw new Exception("TEE account only");
+        }
+    }
+}

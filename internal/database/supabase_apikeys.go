@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"time"
 )
 
@@ -41,7 +42,7 @@ func (r *Repository) GetAPIKeys(ctx context.Context, userID string) ([]APIKey, e
 		return nil, err
 	}
 
-	query := fmt.Sprintf("user_id=eq.%s&revoked=eq.false&order=created_at.desc", userID)
+	query := fmt.Sprintf("user_id=eq.%s&revoked=eq.false&order=created_at.desc", url.QueryEscape(userID))
 	data, err := r.client.request(ctx, "GET", "api_keys", nil, query)
 	if err != nil {
 		return nil, fmt.Errorf("%w: get api keys: %v", ErrDatabaseError, err)
@@ -61,7 +62,7 @@ func (r *Repository) GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIK
 	}
 	keyHash = SanitizeString(keyHash)
 
-	query := fmt.Sprintf("key_hash=eq.%s&revoked=eq.false&limit=1", keyHash)
+	query := fmt.Sprintf("key_hash=eq.%s&revoked=eq.false&limit=1", url.QueryEscape(keyHash))
 	data, err := r.client.request(ctx, "GET", "api_keys", nil, query)
 	if err != nil {
 		return nil, fmt.Errorf("%w: get api key by hash: %v", ErrDatabaseError, err)
@@ -89,7 +90,7 @@ func (r *Repository) RevokeAPIKey(ctx context.Context, keyID, userID string) err
 	update := map[string]interface{}{
 		"revoked": true,
 	}
-	query := fmt.Sprintf("id=eq.%s&user_id=eq.%s", keyID, userID)
+	query := fmt.Sprintf("id=eq.%s&user_id=eq.%s", url.QueryEscape(keyID), url.QueryEscape(userID))
 	_, err := r.client.request(ctx, "PATCH", "api_keys", update, query)
 	if err != nil {
 		return fmt.Errorf("%w: revoke api key: %v", ErrDatabaseError, err)
@@ -106,7 +107,7 @@ func (r *Repository) UpdateAPIKeyLastUsed(ctx context.Context, keyID string) err
 	update := map[string]interface{}{
 		"last_used": time.Now(),
 	}
-	_, err := r.client.request(ctx, "PATCH", "api_keys", update, "id=eq."+keyID)
+	_, err := r.client.request(ctx, "PATCH", "api_keys", update, "id=eq."+url.QueryEscape(keyID))
 	if err != nil {
 		return fmt.Errorf("%w: update api key last used: %v", ErrDatabaseError, err)
 	}

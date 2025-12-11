@@ -17,17 +17,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Updated README.md with production-ready architecture
 - Improved security across all services with JWT authentication
-- Enhanced Mixer service with ownership verification
-- Added rate limiting to Automation service
+- Enhanced NeoVault service with ownership verification
+- Added rate limiting to NeoFlow service
 
 ### Removed
 - Deprecated review documents (12 files)
 - Deprecated scripts: `find_duplications.sh`, `split_large_files.sh`
 
 ### Fixed
-- Security vulnerabilities in VRF, Mixer, and Automation services
+- Security vulnerabilities in VRF, NeoVault, and NeoFlow services
 - Authentication bypass issues
-- Ownership verification in Mixer service
+- Ownership verification in NeoVault service
 
 ### Security
 - Added JWT authentication middleware to all services
@@ -38,17 +38,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Initial release with MarbleRun + EGo + Supabase + Netlify architecture
-- 9 core services: Gateway, VRF, Mixer, Oracle, Automation, AccountPool, Confidential, Secrets, DataFeeds
+- 9 core services: Gateway, VRF, NeoVault, Oracle, NeoFlow, AccountPool, NeoCompute, Secrets, NeoFeeds
 - Neo N3 smart contracts for service integration
-- TEE protection with Intel SGX
+- TEE protection with MarbleRun/EGo
 - Remote attestation via MarbleRun
 - Multi-tenant database with Row Level Security
-- Deterministic Shared Seed Privacy Mixer (v4.1)
+- Deterministic Shared Seed Privacy NeoVault (v4.1)
 
 ### Security
-- All services run inside EGo SGX enclaves
-- Secrets never leave the enclave
-- TLS termination inside enclave
+- All services run inside EGo MarbleRun TEE
+- Secrets never leave the TEE
+- TLS termination inside TEE
 - ECDSA secp256r1 (Neo N3 compatible)
 - AES-256-GCM encryption
 - HKDF key derivation

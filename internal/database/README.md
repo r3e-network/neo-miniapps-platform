@@ -96,28 +96,28 @@ req, err := vrfRepo.GetByRequestID(ctx, "vrf-123")
 requests, err := vrfRepo.ListByStatus(ctx, "pending")
 ```
 
-### Mixer Service
+### NeoVault Service
 
 ```go
-import mixersupabase "github.com/R3E-Network/service_layer/services/mixer/supabase"
+import neovaultsupabase "github.com/R3E-Network/service_layer/services/neovault/supabase"
 
-mixerRepo := mixersupabase.NewRepository(baseRepo)
+neovaultRepo := neovaultsupabase.NewRepository(baseRepo)
 
-err := mixerRepo.Create(ctx, &mixersupabase.Request{...})
-req, err := mixerRepo.GetByID(ctx, "mix-123")
-requests, err := mixerRepo.ListByStatus(ctx, "mixing")
+err := neovaultRepo.Create(ctx, &neovaultsupabase.Request{...})
+req, err := neovaultRepo.GetByID(ctx, "mix-123")
+requests, err := neovaultRepo.ListByStatus(ctx, "mixing")
 ```
 
-### Automation Service
+### NeoFlow Service
 
 ```go
-import automationsupabase "github.com/R3E-Network/service_layer/services/automation/supabase"
+import neoflowsupabase "github.com/R3E-Network/service_layer/services/neoflow/supabase"
 
-automationRepo := automationsupabase.NewRepository(baseRepo)
+neoflowRepo := neoflowsupabase.NewRepository(baseRepo)
 
-err := automationRepo.CreateTrigger(ctx, &automationsupabase.Trigger{...})
-triggers, err := automationRepo.GetTriggers(ctx, userID)
-err := automationRepo.CreateExecution(ctx, &automationsupabase.Execution{...})
+err := neoflowRepo.CreateTrigger(ctx, &neoflowsupabase.Trigger{...})
+triggers, err := neoflowRepo.GetTriggers(ctx, userID)
+err := neoflowRepo.CreateExecution(ctx, &neoflowsupabase.Execution{...})
 ```
 
 ### AccountPool Service
@@ -141,7 +141,7 @@ secretsRepo := secretssupabase.NewRepository(baseRepo)
 
 err := secretsRepo.CreateSecret(ctx, &secretssupabase.Secret{...})
 secrets, err := secretsRepo.GetSecrets(ctx, userID)
-err := secretsRepo.SetAllowedServices(ctx, userID, secretName, []string{"vrf", "automation"})
+err := secretsRepo.SetAllowedServices(ctx, userID, secretName, []string{"vrf", "neoflow"})
 ```
 
 ## Shared Operations
@@ -244,10 +244,10 @@ If you have code using the old service-specific methods from `database.Repositor
 |------------------|-----|
 | `repo.CreateVRFRequest()` | `vrfRepo.Create()` |
 | `repo.GetVRFRequest()` | `vrfRepo.GetByRequestID()` |
-| `repo.CreateMixerRequest()` | `mixerRepo.Create()` |
-| `repo.GetMixerRequest()` | `mixerRepo.GetByID()` |
-| `repo.CreateAutomationTrigger()` | `automationRepo.CreateTrigger()` |
-| `repo.GetAutomationTriggers()` | `automationRepo.GetTriggers()` |
+| `repo.CreateNeoVaultRequest()` | `neovaultRepo.Create()` |
+| `repo.GetNeoVaultRequest()` | `neovaultRepo.GetByID()` |
+| `repo.CreateNeoFlowTrigger()` | `neoflowRepo.CreateTrigger()` |
+| `repo.GetNeoFlowTriggers()` | `neoflowRepo.GetTriggers()` |
 | `repo.CreatePoolAccount()` | `poolRepo.Create()` |
 | `repo.GetPoolAccount()` | `poolRepo.GetByID()` |
 | `repo.GetSecretPolicies()` | `secretsRepo.GetAllowedServices()` |

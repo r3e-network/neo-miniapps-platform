@@ -6,7 +6,7 @@
 
 - **可证明公平**: 中奖号码使用 Service Layer VRF（可验证随机函数）生成，确保密码学安全的随机数
 - **Quick Pick 随机选号**: 使用 Neo N3 内置 `Runtime.GetRandom()` syscall 生成随机号码
-- **自动开奖**: 每日开奖由 Service Layer Automation 服务自动触发
+- **自动开奖**: 每日开奖由 Service Layer NeoFlow 服务自动触发
 - **完全透明**: 所有操作记录在链上，完全可追溯
 - **多级奖金**: MegaMillions 风格的奖金结构，头奖可累积
 - **1分钟锁定期**: 开奖前1分钟停止售票，确保公平性
@@ -41,11 +41,11 @@
 │  - Quick Pick (Runtime.GetRandom)                               │
 │  - 奖金分配                                                      │
 │  - VRF 回调处理                                                  │
-│  - Automation 触发处理                                          │
+│  - NeoFlow 触发处理                                          │
 ├─────────────────────────────────────────────────────────────────┤
 │  Service Layer 集成                                             │
 │  ┌─────────────────┐  ┌─────────────────┐                      │
-│  │   VRF Service   │  │ Automation Svc  │                      │
+│  │   VRF Service   │  │ NeoFlow Svc  │                      │
 │  │  (中奖号码生成)  │  │   (每日开奖)    │                      │
 │  └─────────────────┘  └─────────────────┘                      │
 └─────────────────────────────────────────────────────────────────┘
@@ -141,8 +141,8 @@ neo-express contract deploy MegaLottery.nef
 # 设置 VRF 合约地址
 neo-express contract invoke MegaLottery setVRFContract <VRF_CONTRACT_HASH>
 
-# 设置 Automation 合约地址
-neo-express contract invoke MegaLottery setAutomationContract <AUTOMATION_CONTRACT_HASH>
+# 设置 NeoFlow 合约地址
+neo-express contract invoke MegaLottery setNeoFlowContract <AUTOMATION_CONTRACT_HASH>
 
 # 注册每日触发器
 neo-express contract invoke MegaLottery registerDailyTrigger
@@ -227,13 +227,13 @@ public static BigInteger QuickPick()
 }
 ```
 
-### Automation 集成
+### NeoFlow 集成
 
-每日开奖由 Service Layer Automation 触发：
+每日开奖由 Service Layer NeoFlow 触发：
 
 ```csharp
 // 注册基于时间的每日开奖触发器
-Contract.Call(automationContract, "registerTrigger", CallFlags.All, new object[] {
+Contract.Call(neoflowContract, "registerTrigger", CallFlags.All, new object[] {
     contractHash,       // 回调合约
     1,                  // 触发类型：时间
     "0 0 * * *",        // Cron 表达式：每日 UTC 00:00

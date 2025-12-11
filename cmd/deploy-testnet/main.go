@@ -16,16 +16,16 @@ import (
 
 var contracts = []string{
 	"ServiceLayerGateway",
-	"DataFeedsService",
+	"NeoFeedsService",
 	"VRFService",
-	"MixerService",
-	"AutomationService",
+	"NeoVaultService",
+	"NeoFlowService",
 }
 
 var exampleContracts = []string{
 	"ExampleConsumer",
 	"VRFLottery",
-	"MixerClient",
+	"NeoVaultClient",
 	"DeFiPriceConsumer",
 }
 

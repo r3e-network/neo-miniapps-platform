@@ -67,9 +67,9 @@ type GasBankAccount struct {
 | Service | Fee Type | Amount |
 |---------|----------|--------|
 | VRF | Per request | 0.001 GAS |
-| Mixer | Percentage | 0.5% of amount |
-| Automation | Per execution | 0.0005 GAS |
-| DataFeeds | Per update | 0.0001 GAS |
+| NeoVault | Percentage | 0.5% of amount |
+| NeoFlow | Per execution | 0.0005 GAS |
+| NeoFeeds | Per update | 0.0001 GAS |
 
 ## Usage Example
 

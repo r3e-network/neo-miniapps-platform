@@ -42,8 +42,8 @@ The Neo Service Layer has been reviewed for production readiness. All core servi
 | Package | Coverage | Assessment |
 |---------|----------|------------|
 | internal/crypto | 71.9% | ✅ Good |
-| services/confidential | 65.3% | ✅ Good |
-| services/datafeeds | 61.5% | ✅ Good |
+| services/neocompute | 65.3% | ✅ Good |
+| services/neofeeds | 61.5% | ✅ Good |
 | services/oracle | 58.6% | ✅ Good |
 | internal/marble | 43.8% | ⚠️ Acceptable |
 | internal/gasbank | 40.9% | ⚠️ Acceptable |
@@ -51,8 +51,8 @@ The Neo Service Layer has been reviewed for production readiness. All core servi
 | services/vrf | 28.6% | ⚠️ Acceptable |
 | internal/database | 17.1% | ⚠️ Needs improvement |
 | services/accountpool | 11.4% | ⚠️ Needs improvement |
-| services/automation | 10.8% | ⚠️ Needs improvement |
-| services/mixer | 9.6% | ⚠️ Needs improvement |
+| services/neoflow | 10.8% | ⚠️ Needs improvement |
+| services/neovault | 9.6% | ⚠️ Needs improvement |
 | internal/chain | 5.7% | ⚠️ Needs improvement |
 
 **Average Coverage**: ~35%
@@ -64,10 +64,10 @@ The Neo Service Layer has been reviewed for production readiness. All core servi
 
 ### 3.1 Security Architecture ✅
 
-- **TEE Integration**: All services run inside EGo SGX enclaves
+- **TEE Integration**: All services run inside EGo MarbleRun TEEs
 - **Secret Management**: Secrets injected via MarbleRun Coordinator
 - **mTLS**: Inter-service communication secured with mutual TLS
-- **Key Protection**: Private keys never leave enclave memory
+- **Key Protection**: Private keys never leave TEE memory
 - **Attestation**: Remote attestation supported for verification
 
 ### 3.2 Service Architecture ✅
@@ -75,11 +75,11 @@ The Neo Service Layer has been reviewed for production readiness. All core servi
 | Service | Version | Status | Pattern |
 |---------|---------|--------|---------|
 | VRF | 2.0.0 | ✅ Production | Request-Callback |
-| Mixer | 3.2.0 | ✅ Production | Off-Chain + Dispute |
-| DataFeeds | 3.0.0 | ✅ Production | Push/Auto-Update |
-| Automation | 2.0.0 | ✅ Production | Trigger-Based |
+| NeoVault | 3.2.0 | ✅ Production | Off-Chain + Dispute |
+| NeoFeeds | 3.0.0 | ✅ Production | Push/Auto-Update |
+| NeoFlow | 2.0.0 | ✅ Production | Trigger-Based |
 | AccountPool | 1.0.0 | ✅ Production | Account Lending |
-| Confidential | 1.0.0 | ⚠️ Beta | Sealed Computation |
+| NeoCompute | 1.0.0 | ⚠️ Beta | Sealed Computation |
 | Secrets | 1.0.0 | ✅ Production | Encrypted Storage |
 | Oracle | 1.0.0 | ✅ Production | HTTP Proxy |
 
@@ -108,9 +108,9 @@ The Neo Service Layer has been reviewed for production readiness. All core servi
 | Secret | Service | Description |
 |--------|---------|-------------|
 | VRF_PRIVATE_KEY | VRF | ECDSA P-256 private key |
-| MIXER_MASTER_KEY | Mixer | HMAC signing key |
+| MIXER_MASTER_KEY | NeoVault | HMAC signing key |
 | POOL_MASTER_KEY | AccountPool | HD wallet master key |
-| DATAFEEDS_SIGNING_KEY | DataFeeds | Price signing key |
+| DATAFEEDS_SIGNING_KEY | NeoFeeds | Price signing key |
 | SECRETS_MASTER_KEY | Secrets | AES-256 encryption key |
 
 ---
@@ -132,7 +132,7 @@ The Neo Service Layer has been reviewed for production readiness. All core servi
 | CPU | 4 cores | 8 cores |
 | RAM | 8 GB | 16 GB |
 | Storage | 50 GB SSD | 100 GB SSD |
-| SGX | Required | Required |
+| MarbleRun | Required | Required |
 | Network | 100 Mbps | 1 Gbps |
 
 ### 5.3 Post-Deployment
@@ -167,7 +167,7 @@ All services expose `/health` endpoint returning:
 - Request rate per service
 - Error rate per service
 - Database connection pool usage
-- Memory usage per enclave
+- Memory usage per TEE
 - Chain event processing lag
 
 ---
@@ -175,7 +175,7 @@ All services expose `/health` endpoint returning:
 ## 7. Known Limitations
 
 1. **Test Coverage**: Some services have low test coverage (<30%)
-2. **Confidential Service**: Still in beta, not recommended for production use
+2. **NeoCompute Service**: Still in beta, not recommended for production use
 3. **Fairy Tests**: Require external Neo Fairy instance
 4. **Chain Integration**: Requires deployed smart contracts
 
@@ -185,7 +185,7 @@ All services expose `/health` endpoint returning:
 
 ### 8.1 High Priority
 
-1. **Increase Test Coverage**: Target 60%+ for critical services (mixer, automation, accountpool)
+1. **Increase Test Coverage**: Target 60%+ for critical services (neovault, neoflow, accountpool)
 2. **Add Integration Tests**: More tests with mock database
 3. **Error Handling**: Add more comprehensive error handling in chain interactions
 

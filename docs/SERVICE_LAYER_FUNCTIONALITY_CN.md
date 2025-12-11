@@ -10,7 +10,7 @@
 6. [数据流程](#6-数据流程)
 7. [部署指南](#7-部署指南)
 8. [API 参考](#8-api-参考)
-9. [Mixer 安全与争议处理模型](#9-mixer-安全与争议处理模型)
+9. [NeoVault 安全与争议处理模型](#9-neovault-安全与争议处理模型)
 10. [服务升级安全性](#10-服务升级安全性)
 
 ---
@@ -25,7 +25,7 @@ Neo Service Layer 是一个基于可信执行环境 (TEE) 的生产级服务平�
 
 | 组件 | 技术 | 用途 |
 |------|------|------|
-| **机密计算** | MarbleRun + EGo | SGX enclave 编排和 Go 运行时 |
+| **机密计算** | MarbleRun + EGo | MarbleRun TEE 编排和 Go 运行时 |
 | **数据库** | Supabase (PostgreSQL) | 持久化存储 + RLS 安全策略 |
 | **前端托管** | Netlify | 静态站点部署 + CDN |
 | **编程语言** | Go 1.21+ | 后端服务实现 |
@@ -35,7 +35,7 @@ Neo Service Layer 是一个基于可信执行环境 (TEE) 的生产级服务平�
 - **纵深防御**: 每一层都提供安全保护
 - **零信任架构**: 所有组件间通过证明验证身份
 - **最小攻击面**: 服务能力受 manifest 严格限制
-- **密钥永不离开 enclave**: 使用回调模式访问敏感数据
+- **密钥永不离开 TEE**: 使用回调模式访问敏感数据
 
 ---
 
@@ -61,7 +61,7 @@ Neo Service Layer 是一个基于可信执行环境 (TEE) 的生产级服务平�
 │  │  • JWT 认证验证                                                   │   │
 │  │  • 请求路由分发                                                   │   │
 │  │  • 速率限制                                                       │   │
-│  │  • TLS 终止 (在 enclave 内)                                       │   │
+│  │  • TLS 终止 (在 TEE 内)                                       │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────┘
                            │ mTLS
@@ -69,7 +69,7 @@ Neo Service Layer 是一个基于可信执行环境 (TEE) 的生产级服务平�
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        服务层 (Service Marbles)                          │
 │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐            │
-│  │   VRF   │ │  Mixer  │ │DataFeeds│ │Automate │ │Confiden │            │
+│  │   VRF   │ │  NeoVault  │ │NeoFeeds│ │Automate │ │Confiden │            │
 │  └─────────┘ └────┬────┘ └─────────┘ └─────────┘ └─────────┘            │
 │                   │ HTTP (内部)                                          │
 │                   ▼                                                     │
@@ -97,8 +97,8 @@ Neo Service Layer 是一个基于可信执行环境 (TEE) 的生产级服务平�
 │  │  PostgreSQL + Row Level Security (RLS)                           │   │
 │  │  • users, api_keys, secrets                                      │   │
 │  │  • service_requests, price_feeds                                 │   │
-│  │  • gasbank_accounts, automation_triggers                         │   │
-│  │  • vrf_requests, mixer_requests, pool_accounts                    │   │
+│  │  • gasbank_accounts, neoflow_triggers                         │   │
+│  │  • vrf_requests, neovault_requests, pool_accounts                    │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -108,7 +108,7 @@ Neo Service Layer 是一个基于可信执行环境 (TEE) 的生产级服务平�
 #### 2.2.1 Marble 生命周期
 
 ```
-1. Marble 在 EGo enclave 内启动
+1. Marble 在 EGo TEE 内启动
          │
          ▼
 2. Marble 生成远程证明报告 (attestation quote)
@@ -143,7 +143,7 @@ type Marble struct {
     // 密钥 (由 Coordinator 注入)
     secrets    map[string][]byte
 
-    // Enclave 报告
+    // TEE 报告
     report     *attestation.Report
 }
 ```
@@ -151,7 +151,7 @@ type Marble struct {
 #### 2.2.3 密钥安全访问模式
 
 ```go
-// 密钥永不离开 enclave - 只能通过回调访问
+// 密钥永不离开 TEE - 只能通过回调访问
 err := marble.UseSecret("API_KEY", func(secret []byte) error {
     // 在这里使用密钥
     // 回调返回后自动清零
@@ -174,11 +174,11 @@ price_feeds            -- 价格数据
 gasbank_accounts       -- Gas 银行账户
 gasbank_transactions   -- Gas 银行交易记录
 deposit_requests       -- 充值请求
-automation_triggers    -- 自动化触发器
-automation_executions  -- 自动化执行记录
+neoflow_triggers    -- 自动化触发器
+neoflow_executions  -- 自动化执行记录
 vrf_requests           -- VRF 请求
 pool_accounts          -- 共享账户池 (由 AccountPool 服务管理)
-mixer_requests         -- 混币请求记录
+neovault_requests         -- 混币请求记录
 ```
 
 #### 2.3.2 Row Level Security (RLS)
@@ -244,11 +244,11 @@ service_layer/
 │       └── client.go
 ├── services/                # 服务实现
 │   ├── vrf/                 # 可验证随机函数
-│   ├── mixer/               # 隐私混币
+│   ├── neovault/               # 隐私混币
 │   ├── accountpool/         # 内部服务: 账户池管理、HD密钥、签名
-│   ├── datafeeds/           # 价格数据聚合
-│   ├── automation/          # 自动化触发器
-│   └── confidential/        # 机密计算 (规划中)
+│   ├── neofeeds/           # 价格数据聚合
+│   ├── neoflow/          # 自动化触发器
+│   └── neocompute/        # 机密计算 (规划中)
 ├── manifests/
 │   └── manifest.json        # MarbleRun manifest
 ├── migrations/
@@ -312,10 +312,10 @@ type VRFService struct {
 | 服务 | 费用 (GAS) |
 |------|------|
 | VRF | 0.001 |
-| Automation | 0.0005 |
-| DataFeeds | 0.0001 |
-| Mixer | 0.05 + 0.5% |
-| Confidential | 0.001 |
+| NeoFlow | 0.0005 |
+| NeoFeeds | 0.0001 |
+| NeoVault | 0.05 + 0.5% |
+| NeoCompute | 0.001 |
 
 ---
 
@@ -344,7 +344,7 @@ type VRFService struct {
 
 **API 端点**:
 ```
-POST /vrf/random
+POST /neorand/random
 {
     "seed": "0x1234...",
     "num_words": 3
@@ -359,7 +359,7 @@ Response:
     "timestamp": "2024-12-06T12:00:00Z"
 }
 
-POST /vrf/verify
+POST /neorand/verify
 {
     "seed": "0x1234...",
     "random_words": [...],
@@ -373,15 +373,15 @@ Response:
 }
 ```
 
-### 4.2 Mixer 服务 (隐私混币，账户模型 + TEE + Dispute)
+### 4.2 NeoVault 服务 (隐私混币，账户模型 + TEE + Dispute)
 
 #### 4.2.1 总体目标
 
-Mixer 服务在 Neo N3 账户模型下提供一种 **隐私增强的资产流转方式**，通过：
+NeoVault 服务在 Neo N3 账户模型下提供一种 **隐私增强的资产流转方式**，通过：
 
 - 由 TEE 控制的一组 **HD 派生池地址** 作为中转和混淆节点
 - 链下混币逻辑运行在 TEE（EGo + MarbleRun）中
-- **用户直接给池地址转账**，而不是先通过链上 Mixer 合约请求
+- **用户直接给池地址转账**，而不是先通过链上 NeoVault 合约请求
 - 使用 **请求哈希 (request hash) + TEE 签名** 为每次混币建立可审计凭证
 - 在正常路径下尽量提供隐私混淆
 - 在**超时或争议时放弃隐私，用链上 Dispute 机制换取补偿**
@@ -405,7 +405,7 @@ Mixer 服务在 Neo N3 账户模型下提供一种 **隐私增强的资产流转
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     链下 TEE (Mixer Marble)                      │
+│                     链下 TEE (NeoVault Marble)                      │
 │                                                                 │
 │  • 持有 HD 种子 (由 MarbleRun 注入的 Master_Secret)                │
 │  • 派生池地址私钥 (pool_0, pool_1, ..., pool_N)                    │
@@ -419,7 +419,7 @@ Mixer 服务在 Neo N3 账户模型下提供一种 **隐私增强的资产流转
                     │（超时争议时）
                     ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                Mixer 合约 (同时承担 Dispute 职责)                  │
+│                NeoVault 合约 (同时承担 Dispute 职责)                  │
 │                                                                 │
 │  • 记录每个 requestHash 的状态：                                   │
 │    - deadline (超时时间)                                         │
@@ -429,7 +429,7 @@ Mixer 服务在 Neo N3 账户模型下提供一种 **隐私增强的资产流转
 │    - 原始申请字段 (requestBytes)                                  │
 │    - requestHash                                                │
 │    - TEE 对 requestHash 的签名 (sig_TEE)                         │
-│  • 验证 Mixer 提交的履约证明：                                     │
+│  • 验证 NeoVault 提交的履约证明：                                     │
 │    - TEE 对 (requestHash || txidsHash) 的签名                    │
 │  • 超时且未履约 → 允许用户从保证金池领赔付                            │
 │                                                                 │
@@ -438,14 +438,14 @@ Mixer 服务在 Neo N3 账户模型下提供一种 **隐私增强的资产流转
 
 #### 4.2.3 账户模型下的池地址架构
 
-与 UTXO 不同，Neo N3 使用账户模型。Mixer 的资金流：
+与 UTXO 不同，Neo N3 使用账户模型。NeoVault 的资金流：
 
 - 若干由 **AccountPool 内部服务** 管理的 **池地址**（Pool Accounts），均为普通单签地址：
   - 从链上看，这些地址与普通用户地址在脚本/类型上无法区分
   - 但其行为模式可以被一定程度分析（这是账户模型的天然限制）
   - **私钥永不离开 AccountPool 服务**，其他服务只能请求签名
 - 用户直接向这些池地址转账（链上表现为普通转账）
-- Mixer 服务通过 HTTP 调用 AccountPool 请求账户、构造交易、请求签名
+- NeoVault 服务通过 HTTP 调用 AccountPool 请求账户、构造交易、请求签名
 
 **AccountPool 服务架构：**
 
@@ -466,7 +466,7 @@ Mixer 服务在 Neo N3 账户模型下提供一种 **隐私增强的资产流转
                               │ HTTP (mTLS)
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                     Mixer Service                               │
+│                     NeoVault Service                               │
 │                                                                 │
 │  • 请求池账户用于混币                                              │
 │  • 构造交易，请求 AccountPool 签名                                 │
@@ -491,13 +491,13 @@ POOL_MASTER_KEY (由 Coordinator 注入到 AccountPool)
 - 服务请求账户时，AccountPool 锁定账户并记录 `locked_by` 字段
 - 只有锁定账户的服务才能请求签名
 - 账户有 24 小时锁定超时，防止僵尸锁
-- 混币完成后 Mixer 显式释放账户
+- 混币完成后 NeoVault 显式释放账户
 
 **合规性配置：**
 
 - 单次混币请求的入池金额上限：**≤ 10,000 币**
 - 整个池子内总余额上限：**≤ 100,000 币**
-- 这两个规则写在 Mixer Marble 的代码中，并通过 MarbleRun attestation 对外证明
+- 这两个规则写在 NeoVault Marble 的代码中，并通过 MarbleRun attestation 对外证明
 
 #### 4.2.4 用户请求与 requestHash + TEE 签名
 
@@ -522,11 +522,11 @@ POOL_MASTER_KEY (由 Coordinator 注入到 AccountPool)
 }
 ```
 
-Mixer Marble 在 enclave 内：
+NeoVault Marble 在 TEE 内：
 
 1. 使用确定性序列化（例如 canonical JSON / protobuf）得到 `requestBytes`
 2. 计算 `requestHash = Hash256(requestBytes)`
-3. 使用 enclave 内 TEE 密钥对 `requestHash` 签名：`sig_TEE = Sign_TEE(requestHash)`
+3. 使用 TEE 内 TEE 密钥对 `requestHash` 签名：`sig_TEE = Sign_TEE(requestHash)`
 
 返回给用户：
 
@@ -545,18 +545,18 @@ Mixer Marble 在 enclave 内：
 **阶段 1：入池**
 
 1. 用户本地使用自己的私钥，构造并签名一组转账交易，将资金从用户地址分散转入多个池地址（`Addr_pool*`）
-2. 用户可以自行广播，也可以把已签名但未广播的交易交给 Mixer 服务来分时广播
-3. Mixer 记录这些入池交易与 `requestHash` 的关联
+2. 用户可以自行广播，也可以把已签名但未广播的交易交给 NeoVault 服务来分时广播
+3. NeoVault 记录这些入池交易与 `requestHash` 的关联
 
 **阶段 2：池内混淆**
 
-- Mixer TEE 在内部：
+- NeoVault TEE 在内部：
   - 在池地址之间调拨资金（噪声交易 / 拆分合并）
   - 控制时间窗口和转账图的形状，以提高链上分析难度（在账户模型下只能提高难度，不能保证强匿名）
 
 **阶段 3：出池**
 
-- 在约定的混币时间窗口内或之后，Mixer 从池地址向用户目标地址发起一系列转账
+- 在约定的混币时间窗口内或之后，NeoVault 从池地址向用户目标地址发起一系列转账
 - 这些转账在链上表现为：`Addr_poolX -> NTargetY` 等普通转账
 
 **阶段 4：结束**
@@ -569,7 +569,7 @@ Mixer Marble 在 enclave 内：
 
 > 关键规则：**一旦进入 dispute 流程，就不再追求隐私，只追求可审计性与赔付能力。**
 
-Mixer 合约内部维护的 `RequestRecord`（逻辑结构示例）：
+NeoVault 合约内部维护的 `RequestRecord`（逻辑结构示例）：
 
 ```csharp
 struct RequestRecord
@@ -586,7 +586,7 @@ struct RequestRecord
 
 当用户认为在 deadline 后仍未收到满意结果，可以：
 
-1. 将当时的 `request` 原始字段、`requestHash` 和 `teeSignature` 提交到 Mixer 合约的 `Dispute` 方法：
+1. 将当时的 `request` 原始字段、`requestHash` 和 `teeSignature` 提交到 NeoVault 合约的 `Dispute` 方法：
 
 ```csharp
 public static void Dispute(
@@ -602,11 +602,11 @@ public static void Dispute(
    - 根据 requestBytes 中的 `timestamp` 和 `mix_option` 计算 deadline
    - 如果当前时间 > deadline（可含 grace period），则标记该请求为 `Disputed = true`
 
-##### 步骤 2：Mixer 提交履约证明
+##### 步骤 2：NeoVault 提交履约证明
 
-如果 Mixer 确实已经完成该请求的混币：
+如果 NeoVault 确实已经完成该请求的混币：
 
-1. Mixer TEE 收集与该 `requestHash` 对应的"最终出池转账交易列表"：`txid_1, txid_2, ..., txid_n`
+1. NeoVault TEE 收集与该 `requestHash` 对应的"最终出池转账交易列表"：`txid_1, txid_2, ..., txid_n`
 2. 计算：
    - `txidsHash = Hash256(txid_1 || txid_2 || ... || txid_n)`
    - `proofSig = Sign_TEE(requestHash || txidsHash)`
@@ -624,7 +624,7 @@ public static void ProveFulfilled(
 
 ##### 步骤 3：用户申请赔付
 
-用户在 deadline + 宽限期之后，如果已发起 Dispute 但 Mixer 未 ProveFulfilled：
+用户在 deadline + 宽限期之后，如果已发起 Dispute 但 NeoVault 未 ProveFulfilled：
 
 ```csharp
 public static void ClaimCompensation(ByteString requestHash)
@@ -636,9 +636,9 @@ public static void ClaimCompensation(ByteString requestHash)
 
 #### 4.2.7 隐私与信任的权衡
 
-- **正常路径**：用户只看见链上入池/出池交易，不知道中间路径；Mixer 通过时间混淆、金额拆分和噪声交易提升分析难度
-- **争议路径**：用户把原请求字段公开到链上，Mixer 把交易列表哈希绑定到请求上，隐私被牺牲换取可审计性 + 赔付权
-- **信任模型**：用户信任 TEE/MarbleRun 确保 Mixer Marble 二进制和签名密钥未被篡改
+- **正常路径**：用户只看见链上入池/出池交易，不知道中间路径；NeoVault 通过时间混淆、金额拆分和噪声交易提升分析难度
+- **争议路径**：用户把原请求字段公开到链上，NeoVault 把交易列表哈希绑定到请求上，隐私被牺牲换取可审计性 + 赔付权
+- **信任模型**：用户信任 TEE/MarbleRun 确保 NeoVault Marble 二进制和签名密钥未被篡改
 
 **混币时长选项**: 30分钟 / 1小时 / 24小时 / 7天
 
@@ -656,17 +656,17 @@ event BondSlashed(serviceId, slashedAmount, remainingBond)
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/mixer/info` | GET | 混币服务与池状态（额度、上限、负载） |
-| `/mixer/request` | POST | 发起混币请求（返回 requestHash + TEE 签名） |
-| `/mixer/status/{requestId}` | GET | 查询请求链下处理状态 |
-| `/mixer/requests` | GET | 分页查看近期请求摘要 |
+| `/neovault/info` | GET | 混币服务与池状态（额度、上限、负载） |
+| `/neovault/request` | POST | 发起混币请求（返回 requestHash + TEE 签名） |
+| `/neovault/status/{requestId}` | GET | 查询请求链下处理状态 |
+| `/neovault/requests` | GET | 分页查看近期请求摘要 |
 
 **合规性配置**:
 - 单次混币请求入池金额上限：≤ 10,000 币
 - 整体池余额上限：≤ 100,000 币
 - 通过 MarbleRun attestation 对外证明规则未被更改
 
-### 4.3 DataFeeds 服务 (数据聚合)
+### 4.3 NeoFeeds 服务 (数据聚合)
 
 **功能**: 聚合多源价格数据
 
@@ -692,12 +692,12 @@ event BondSlashed(serviceId, slashedAmount, remainingBond)
 
 **API 端点**:
 ```
-GET /datafeeds/prices
-GET /datafeeds/prices/{pair}
-GET /datafeeds/sources
+GET /neofeeds/prices
+GET /neofeeds/prices/{pair}
+GET /neofeeds/sources
 ```
 
-### 4.4 Automation 服务 (自动化)
+### 4.4 NeoFlow 服务 (自动化)
 
 **功能**: 定时任务和条件触发
 
@@ -708,19 +708,19 @@ GET /datafeeds/sources
 
 **API 端点**:
 ```
-GET /automation/triggers
-POST /automation/triggers
-GET /automation/triggers/{id}
-DELETE /automation/triggers/{id}
-POST /automation/triggers/{id}/enable
-POST /automation/triggers/{id}/disable
+GET /neoflow/triggers
+POST /neoflow/triggers
+GET /neoflow/triggers/{id}
+DELETE /neoflow/triggers/{id}
+POST /neoflow/triggers/{id}/enable
+POST /neoflow/triggers/{id}/disable
 ```
 
-### 4.5 Confidential 服务 (机密计算) [规划中]
+### 4.5 NeoCompute 服务 (机密计算) [规划中]
 
 **状态**: 规划中 (Planned) - 当前为占位服务
 
-**功能**: 在 enclave 内执行用户代码
+**功能**: 在 TEE 内执行用户代码
 
 **规划特性**:
 - 支持 JS/Lua/WASM 脚本运行时
@@ -730,9 +730,9 @@ POST /automation/triggers/{id}/disable
 
 **计划 API 端点**:
 ```
-POST /confidential/execute
-GET /confidential/jobs/{id}
-GET /confidential/jobs
+POST /neocompute/execute
+GET /neocompute/jobs/{id}
+GET /neocompute/jobs
 ```
 
 ### 4.6 AccountPool 服务 (内部服务)
@@ -743,7 +743,7 @@ GET /confidential/jobs
 
 **设计原则**:
 - **私钥隔离**: 所有池账户私钥仅存在于 AccountPool 服务内部，永不离开此 TEE
-- **服务调用**: 其他服务（如 Mixer）通过 HTTP API 请求账户和签名
+- **服务调用**: 其他服务（如 NeoVault）通过 HTTP API 请求账户和签名
 - **锁定机制**: 账户被服务锁定后，只有该服务可请求签名
 - **确定性派生**: 使用 HKDF 从主密钥派生账户密钥，确保升级安全
 
@@ -775,9 +775,9 @@ GET /confidential/jobs
 ```json
 // POST /request
 {
-  "service_id": "mixer",
+  "service_id": "neovault",
   "count": 3,
-  "purpose": "mixer-deposit"
+  "purpose": "neovault-deposit"
 }
 
 // Response
@@ -792,7 +792,7 @@ GET /confidential/jobs
 
 // POST /sign
 {
-  "service_id": "mixer",
+  "service_id": "neovault",
   "account_id": "acc-001",
   "tx_hash": "0x..."
 }
@@ -806,7 +806,7 @@ GET /confidential/jobs
 ```
 
 **使用此服务的其他服务**:
-- **Mixer**: 请求池账户进行混币操作
+- **NeoVault**: 请求池账户进行混币操作
 
 ---
 
@@ -825,7 +825,7 @@ GET /confidential/jobs
                            │ 远程证明
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    可信区域 (SGX Enclave)                    │
+│                    可信区域 (MarbleRun TEE)                    │
 │  • 应用代码                                                  │
 │  • 密钥材料                                                  │
 │  • 敏感数据处理                                               │
@@ -843,7 +843,7 @@ MarbleRun Coordinator
 │  Service Marbles (各服务独立密钥)                                         │
 │                                                                         │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐          │
-│  │   VRF Marble    │  │ AccountPool     │  │ DataFeeds       │          │
+│  │   VRF Marble    │  │ AccountPool     │  │ NeoFeeds       │          │
 │  │                 │  │ Marble (内部)    │  │ Marble          │          │
 │  │ VRF_PRIVATE_KEY │  │                 │  │                 │          │
 │  │ (直接使用)       │  │ POOL_MASTER_KEY │  │ DATAFEEDS_KEY   │          │
@@ -859,7 +859,7 @@ MarbleRun Coordinator
 │                                │ HTTP API (签名请求)                     │
 │                                ▼                                        │
 │                       ┌─────────────────┐                               │
-│                       │  Mixer Marble   │                               │
+│                       │  NeoVault Marble   │                               │
 │                       │                 │                               │
 │                       │ MIXER_MASTER_KEY│  ← 用于请求哈希签名              │
 │                       │ (不含池账户私钥)  │                               │
@@ -873,14 +873,14 @@ MarbleRun Coordinator
 - **服务间通信**: mTLS (TLS 1.3, 证书由 Coordinator 签发)
 - **数据库通信**: TLS + API Key 认证
 
-### 5.4 账户模型下的 Mixer 隐私边界
+### 5.4 账户模型下的 NeoVault 隐私边界
 
-对于 Mixer 服务，特别增加如下说明：
+对于 NeoVault 服务，特别增加如下说明：
 
 - Neo N3 使用 **账户模型**，不是 UTXO 模型
 - 池地址在脚本类型上与普通单签地址相同，但：
   - 其行为模式（资金集中来自/流向某些类型地址）仍可能被链上分析工具聚类分析
-- Mixer 在账户模型下提供的是：
+- NeoVault 在账户模型下提供的是：
   - **交易路径混淆 / 分时广播 / 金额拆分 / 噪声注入带来的"分析难度提升"**
   - 而不是在强对手模型下的形式化强匿名性
 - 一旦用户发起 dispute：
@@ -910,11 +910,11 @@ MarbleRun Coordinator
 │                                 │ 远程证明 + 密钥注入                                  │
 │                                 ▼                                                   │
 │  ┌────────────────────────────────────────────────────────────────────────────┐     │
-│  │                          EGo Enclave 层 (可信执行)                           │     │
+│  │                          EGo TEE 层 (可信执行)                           │     │
 │  │  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐            │     │
-│  │  │  Gateway   │  │    VRF     │  │   Mixer    │  │ DataFeeds  │  ...       │     │
+│  │  │  Gateway   │  │    VRF     │  │   NeoVault    │  │ NeoFeeds  │  ...       │     │
 │  │  │  Marble    │  │  Marble    │  │  Marble    │  │  Marble    │            │     │
-│  │  │ (EGo+SGX)  │  │ (EGo+SGX)  │  │ (EGo+SGX)  │  │ (EGo+SGX)  │            │     │
+│  │  │ (EGo+MarbleRun)  │  │ (EGo+MarbleRun)  │  │ (EGo+MarbleRun)  │  │ (EGo+MarbleRun)  │            │     │
 │  │  └──────┬─────┘  └──────┬─────┘  └──────┬─────┘  └──────┬─────┘            │     │
 │  │         │               │               │               │                  │     │
 │  │         └───────────────┴───────┬───────┴───────────────┘                  │     │
@@ -932,18 +932,18 @@ MarbleRun Coordinator
 │  │  │  • users       │ │  └─────────────────┘  │  └────────────────────────┘  │     │
 │  │  │  • api_keys    │ │                       │  ┌────────────────────────┐  │     │
 │  │  │  • vrf_requests│ │                       │  │     VRFService         │  │     │
-│  │  │  • mixer_*     │ │                       │  │  • 随机数请求/验证       │  │     │
+│  │  │  • neovault_*     │ │                       │  │  • 随机数请求/验证       │  │     │
 │  │  │  • price_feeds │ │                       │  └────────────────────────┘  │     │
 │  │  │  • gasbank_*   │ │                       │  ┌────────────────────────┐  │     │
-│  │  │  • automation_*│ │                       │  │    MixerService        │  │     │
+│  │  │  • neoflow_*│ │                       │  │    NeoVaultService        │  │     │
 │  │  └────────────────┘ │                       │  │  • 混币/争议/赔付        │  │     │
 │  └─────────────────────┘                       │  └────────────────────────┘  │     │
 │                                                │  ┌────────────────────────┐  │     │
-│                                                │  │   DataFeedsService     │  │     │
+│                                                │  │   NeoFeedsService     │  │     │
 │                                                │  │  • 价格推送 • 数据验证    │  │     │
 │                                                │  └────────────────────────┘  │     │
 │                                                │  ┌────────────────────────┐  │     │
-│                                                │  │  AutomationService     │  │     │
+│                                                │  │  NeoFlowService     │  │     │
 │                                                │  │  • 触发器 • 条件执行     │  │     │
 │                                                │  └────────────────────────┘  │     │
 │                                                └──────────────────────────────┘     │
@@ -956,7 +956,7 @@ MarbleRun Coordinator
 | 组件 | 技术 | 职责 |
 |------|------|------|
 | **MarbleRun Coordinator** | MarbleRun v1.7+ | 管理 manifest、验证远程证明、注入密钥和 TLS 证书 |
-| **EGo Enclave** | EGo + Intel SGX | 在隔离环境中运行 Go 服务，保护密钥和敏感计算 |
+| **EGo TEE** | EGo + MarbleRun/EGo | 在隔离环境中运行 Go 服务，保护密钥和敏感计算 |
 | **Supabase** | PostgreSQL + RLS | 持久化所有业务数据，通过 RLS 实现行级安全 |
 | **Neo N3 智能合约** | Neo N3 区块链 | 链上请求管理、费用结算、回调执行、状态验证 |
 
@@ -966,9 +966,9 @@ MarbleRun Coordinator
 |------|------|----------|
 | **ServiceLayerGateway** | 统一入口、请求路由、费用管理、TEE 账户管理 | 用户 → Gateway → Service |
 | **VRFService** | VRF 请求存储、随机数验证、结果回调 | 请求-响应 |
-| **MixerService** | 混币请求、争议处理、保证金管理 | 请求-响应 + 争议 |
-| **DataFeedsService** | 价格数据存储、数据源管理、新鲜度检查 | 推送模式 |
-| **AutomationService** | 触发器注册、条件检查、执行记录 | 触发器模式 |
+| **NeoVaultService** | 混币请求、争议处理、保证金管理 | 请求-响应 + 争议 |
+| **NeoFeedsService** | 价格数据存储、数据源管理、新鲜度检查 | 推送模式 |
+| **NeoFlowService** | 触发器注册、条件检查、执行记录 | 触发器模式 |
 
 ### 6.0.1 Marble 启动与密钥注入流程
 
@@ -979,8 +979,8 @@ MarbleRun Coordinator
 │                                                                                 │
 │   VRF Marble (EGo)                        MarbleRun Coordinator                 │
 │        │                                           │                            │
-│        │  1. 启动 EGo enclave                       │                            │
-│        │  2. 生成 SGX Quote (远程证明)               │                            │
+│        │  1. 启动 EGo TEE                       │                            │
+│        │  2. 生成 MarbleRun Quote (远程证明)               │                            │
 │        │ ─────────────────────────────────────────►│                            │
 │        │                                           │                            │
 │        │                                   3. 验证 Quote:                        │
@@ -1010,7 +1010,7 @@ MarbleRun Coordinator
 │                    完整数据流 (链上请求 → TEE 处理 → 链上回调)                               │
 ├─────────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                         │
-│   用户/DApp           Neo N3 区块链                TEE (EGo Enclave)          Supabase    │
+│   用户/DApp           Neo N3 区块链                TEE (EGo TEE)          Supabase    │
 │      │                    │                              │                      │       │
 │      │  1. 调用用户合约     │                              │                      │       │
 │      │ ──────────────────►│                              │                      │       │
@@ -1065,7 +1065,7 @@ MarbleRun Coordinator
 |------|------|------|----------|
 | 1-4 | 链上合约 | 用户发起请求 → Gateway 路由 → Service 合约发出事件 | Neo N3 区块链 |
 | 5-6 | TEE | 监听链上事件，解析请求数据，记录到数据库 | Supabase |
-| 7 | TEE | 使用 Coordinator 注入的私钥进行 VRF 计算 | 内存 (enclave) |
+| 7 | TEE | 使用 Coordinator 注入的私钥进行 VRF 计算 | 内存 (TEE) |
 | 8 | TEE | 更新请求状态和结果到数据库 | Supabase |
 | 9-11 | TEE → 链上 | TEE 签名结果，调用 Gateway 回调，通知用户合约 | Neo N3 区块链 |
 
@@ -1075,11 +1075,11 @@ Service Layer 支持三种不同的服务模式：
 
 | 模式 | 服务 | 说明 |
 |------|------|------|
-| **请求-响应** | VRF, Mixer, Confidential | 用户发起请求 → TEE 处理 → 回调 |
-| **推送 (自动更新)** | DataFeeds | TEE 定期更新链上数据，无需用户请求 |
-| **触发器** | Automation | 用户注册触发器 → TEE 监控条件 → 周期性回调 |
+| **请求-响应** | VRF, NeoVault, NeoCompute | 用户发起请求 → TEE 处理 → 回调 |
+| **推送 (自动更新)** | NeoFeeds | TEE 定期更新链上数据，无需用户请求 |
+| **触发器** | NeoFlow | 用户注册触发器 → TEE 监控条件 → 周期性回调 |
 
-### 6.1 模式一：请求-响应 (VRF, Mixer, Confidential)
+### 6.1 模式一：请求-响应 (VRF, NeoVault, NeoCompute)
 
 从用户到回调的完整请求流程：
 
@@ -1106,7 +1106,7 @@ Service Layer 支持三种不同的服务模式：
 ├────────────────────────────────────────────────────────────────────┼────────┤
 │                                                                    ▼        │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │                    Service Layer (TEE Enclave)                      │    │
+│  │                    Service Layer (TEE TEE)                      │    │
 │  │  5. 监听区块链事件                                                     │   │
 │  │  6. 处理请求 (VRF 计算 / 混币执行 / 机密计算)                            │    │
 │  │  7. 使用 TEE 私钥签名结果                                              │    │
@@ -1143,9 +1143,9 @@ Service Layer 支持三种不同的服务模式：
 | 10 | 用户合约 | `Callback()` | 接收结果，更新应用状态 |
 | 11 | 用户 | - | 交易在区块链上确认 |
 
-### 6.2 模式二：推送/自动更新 (DataFeeds)
+### 6.2 模式二：推送/自动更新 (NeoFeeds)
 
-DataFeeds 服务自动更新链上价格数据，无需用户请求：
+NeoFeeds 服务自动更新链上价格数据，无需用户请求：
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -1155,13 +1155,13 @@ DataFeeds 服务自动更新链上价格数据，无需用户请求：
 │  │  1. 从多个数据源获取价格 (Binance, Coinbase 等)                         │    │
 │  │  2. 聚合并验证数据 (中位数, 异常值过滤)                                  │    │
 │  │  3. 使用 TEE 密钥签名聚合价格                                          │    │
-│  │  4. 定期提交到 DataFeedsService 合约                                  │    │
+│  │  4. 定期提交到 NeoFeedsService 合约                                  │    │
 │  └──────────────────────────────────┬──────────────────────────────────┘    │
 └─────────────────────────────────────┼───────────────────────────────────────┘
                                       │ UpdatePrice()
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                      DataFeedsService 合约                                   │
+│                      NeoFeedsService 合约                                   │
 │  • 存储最新价格 (BTC/USD, ETH/USD, NEO/USD, GAS/USD 等)                       │
 │  • 验证 TEE 签名                                                             │
 │  • 发出 PriceUpdated 事件                                                    │
@@ -1175,7 +1175,7 @@ DataFeeds 服务自动更新链上价格数据，无需用户请求：
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 6.3 模式三：触发器 (Automation)
+### 6.3 模式三：触发器 (NeoFlow)
 
 用户注册触发器，TEE 监控条件并周期性调用回调：
 
@@ -1184,7 +1184,7 @@ DataFeeds 服务自动更新链上价格数据，无需用户请求：
 │                       触发器注册 (一次性)                                      │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  ┌──────┐    ┌───────────────┐    ┌─────────────────────┐    ┌────────────┐ │
-│  │ 用户  │───►│   用户合约     │───►│ ServiceLayerGateway │───►│ Automation │ │
+│  │ 用户  │───►│   用户合约     │───►│ ServiceLayerGateway │───►│ NeoFlow │ │
 │  └──────┘    │               │    │  RequestService()   │    │  Service   │ │
 │              │ RegisterTrigger│   └─────────────────────┘    │ OnRequest()│ │
 │              └───────────────┘                               └─────┬──────┘ │
@@ -1203,7 +1203,7 @@ DataFeeds 服务自动更新链上价格数据，无需用户请求：
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
 │  │  循环: 检查所有已注册的触发器                                           │    │
 │  │  • 时间触发: 比较当前时间                                              │    │
-│  │  • 价格触发: 检查 DataFeeds 价格                                       │    │
+│  │  • 价格触发: 检查 NeoFeeds 价格                                       │    │
 │  │  • 事件触发: 监控区块链事件                                             │    │
 │  │  当条件满足 → 执行回调                                                 │    │
 │  └──────────────────────────────────┬──────────────────────────────────┘    │
@@ -1214,13 +1214,13 @@ DataFeeds 服务自动更新链上价格数据，无需用户请求：
 │                         回调执行 (周期性)                                     │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  ┌──────┐    ┌───────────────┐    ┌─────────────────────┐    ┌────────────┐ │
-│  │ 用户  │◄───│   用户合约     │◄───│ ServiceLayerGateway │◄───│ Automation │ │
+│  │ 用户  │◄───│   用户合约     │◄───│ ServiceLayerGateway │◄───│ NeoFlow │ │
 │  └──────┘    │   Callback()  │    │  FulfillRequest()   │    │  Service   │ │
 │              │ (如: rebase)  │    └─────────────────────┘    └────────────┘ │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Automation 触发器示例:**
+**NeoFlow 触发器示例:**
 
 | 触发器类型 | 示例 | 用例 |
 |------------|------|------|
@@ -1261,7 +1261,7 @@ DataFeeds 服务自动更新链上价格数据，无需用户请求：
 ```
 Marble                          Coordinator
    │                                 │
-   │   1. 生成 SGX Quote              │
+   │   1. 生成 MarbleRun Quote              │
    │ ───────────────────────────────►│
    │                                 │
    │                                 │  2. 验证 Quote
@@ -1284,7 +1284,7 @@ Marble                          Coordinator
 ### 7.1 环境要求
 
 **硬件要求**:
-- Intel SGX 支持的 CPU (生产环境)
+- MarbleRun/EGo 支持的 CPU (生产环境)
 - 最少 8GB RAM
 - 50GB SSD
 
@@ -1310,8 +1310,8 @@ docker compose logs -f gateway
 ### 7.3 生产模式部署
 
 ```bash
-# 确保 SGX 驱动已安装
-ls /dev/sgx_enclave
+# 确保 MarbleRun 驱动已安装
+ls /dev/tee
 
 # 设置生产模式
 export OE_SIMULATION=0
@@ -1382,19 +1382,19 @@ Authorization: Bearer <JWT_TOKEN>
 | Gateway | `/attestation` | GET | 证明状态 |
 | Gateway | `/api/v1/auth/register` | POST | 用户注册 |
 | Gateway | `/api/v1/auth/login` | POST | 用户登录 |
-| VRF | `/vrf/random` | POST | 生成随机数 |
-| VRF | `/vrf/verify` | POST | 验证随机数 |
-| Mixer | `/mixer/info` | GET | 混币服务与池状态 |
-| Mixer | `/mixer/request` | POST | 发起混币请求（返回 requestHash + TEE 签名） |
-| Mixer | `/mixer/status/{requestId}` | GET | 查询请求链下处理状态 |
-| Mixer | `/mixer/requests` | GET | 分页查看近期请求摘要 |
-| DataFeeds | `/datafeeds/prices` | GET | 获取价格 |
-| DataFeeds | `/datafeeds/prices/{pair}` | GET | 获取指定交易对价格 |
-| DataFeeds | `/datafeeds/sources` | GET | 获取数据源列表 |
-| Automation | `/automation/triggers` | GET/POST | 触发器管理 |
-| Automation | `/automation/triggers/{id}` | GET/DELETE | 查询/删除触发器 |
-| Confidential | `/confidential/execute` | POST | 执行机密计算任务 [规划中] |
-| Confidential | `/confidential/jobs/{id}` | GET | 查询任务状态 [规划中] |
+| VRF | `/neorand/random` | POST | 生成随机数 |
+| VRF | `/neorand/verify` | POST | 验证随机数 |
+| NeoVault | `/neovault/info` | GET | 混币服务与池状态 |
+| NeoVault | `/neovault/request` | POST | 发起混币请求（返回 requestHash + TEE 签名） |
+| NeoVault | `/neovault/status/{requestId}` | GET | 查询请求链下处理状态 |
+| NeoVault | `/neovault/requests` | GET | 分页查看近期请求摘要 |
+| NeoFeeds | `/neofeeds/prices` | GET | 获取价格 |
+| NeoFeeds | `/neofeeds/prices/{pair}` | GET | 获取指定交易对价格 |
+| NeoFeeds | `/neofeeds/sources` | GET | 获取数据源列表 |
+| NeoFlow | `/neoflow/triggers` | GET/POST | 触发器管理 |
+| NeoFlow | `/neoflow/triggers/{id}` | GET/DELETE | 查询/删除触发器 |
+| NeoCompute | `/neocompute/execute` | POST | 执行机密计算任务 [规划中] |
+| NeoCompute | `/neocompute/jobs/{id}` | GET | 查询任务状态 [规划中] |
 
 **内部服务 API** (仅限服务间调用):
 
@@ -1408,7 +1408,7 @@ Authorization: Bearer <JWT_TOKEN>
 
 ---
 
-## 9. Mixer 安全与争议处理模型
+## 9. NeoVault 安全与争议处理模型
 
 本节可作为白皮书/安全审计章节的内容引用。
 
@@ -1416,17 +1416,17 @@ Authorization: Bearer <JWT_TOKEN>
 
 - 在 Neo N3 账户模型下提供一套 **隐私增强的链下混币服务**
 - 保证：
-  - 用户与 Mixer 之间的请求具有 **可验证的承诺**（requestHash + TEE 签名）
-  - 当 Mixer 未在约定时间履约时，用户可以通过链上合约发起争议并获得赔偿
+  - 用户与 NeoVault 之间的请求具有 **可验证的承诺**（requestHash + TEE 签名）
+  - 当 NeoVault 未在约定时间履约时，用户可以通过链上合约发起争议并获得赔偿
   - 一旦进入争议流程，隐私让位于可审计性
 
 ### 9.2 信任假设
 
-- **信任** Intel SGX / TEE 硬件 + MarbleRun 协调器能够：
-  - 保证 Mixer Marble 二进制以及内部密钥不会被恶意方篡改或泄露
+- **信任** MarbleRun/EGo / TEE 硬件 + MarbleRun 协调器能够：
+  - 保证 NeoVault Marble 二进制以及内部密钥不会被恶意方篡改或泄露
 - **不信任**：
   - 外部操作系统、云平台、网络
-- **针对 Mixer**：
+- **针对 NeoVault**：
   - 默认不信任服务运营方的"口头承诺"，而是通过：
     - TEE 证明 + 合约验证 TEE 签名 + 经济保证金
     来强制其履约
@@ -1435,27 +1435,27 @@ Authorization: Bearer <JWT_TOKEN>
 
 1. **请求承诺 (Commitment)**
    每次混币请求通过 `requestHash = Hash(requestBytes)` 和 `sig_TEE = Sign_TEE(requestHash)` 被 TEE 承诺。
-   用户持有 `(requestBytes, requestHash, sig_TEE)`，可在未来于链上证明"Mixer TEE 确实接受过这样一个请求"。
+   用户持有 `(requestBytes, requestHash, sig_TEE)`，可在未来于链上证明"NeoVault TEE 确实接受过这样一个请求"。
 
 2. **账户池混币 (通过 AccountPool 服务)**
    - 使用一组由 **AccountPool 内部服务** 管理的 HD 池地址收款和分发
-   - 池账户私钥仅存在于 AccountPool 服务内，Mixer 通过 HTTP API 请求签名
+   - 池账户私钥仅存在于 AccountPool 服务内，NeoVault 通过 HTTP API 请求签名
    - 按策略控制时间和金额分布，以提升链上分析成本
 
 3. **额度与合规控制**
-   Mixer Marble 内部硬编码：
+   NeoVault Marble 内部硬编码：
    - 单请求入池金额上限（≤ 10,000 币）
    - 整体池余额上限（≤ 100,000 币）
    外界可通过 attestation 验证该逻辑未被更改。
 
 4. **争议与赔付**
-   - 用户可在超时后，将原请求明文 + `requestHash` + `sig_TEE` 发往 Mixer 合约
+   - 用户可在超时后，将原请求明文 + `requestHash` + `sig_TEE` 发往 NeoVault 合约
    - 合约验证通过后，记为 Disputed
-   - Mixer 可提交 TEE 对 `(requestHash || txidsHash)` 的签名作为履约证明
+   - NeoVault 可提交 TEE 对 `(requestHash || txidsHash)` 的签名作为履约证明
    - 若超时未提交履约证明，则合约从保证金池对用户进行赔付
 
 5. **隐私与补偿的权衡**
-   - 正常路径下，Mixer 只在链上留下常规账户转账轨迹，不公开请求详细内容
+   - 正常路径下，NeoVault 只在链上留下常规账户转账轨迹，不公开请求详细内容
    - 争议路径下，用户主动公开请求内容与目标地址，换取赔偿权
    - 这是用户在使用前需知晓的安全/隐私权衡
 
@@ -1465,18 +1465,18 @@ Authorization: Bearer <JWT_TOKEN>
 
 ### 10.1 设计原则
 
-Neo Service Layer 的密钥管理设计确保 **enclave 升级不会影响任何业务密钥**。这是通过以下原则实现的：
+Neo Service Layer 的密钥管理设计确保 **TEE 升级不会影响任何业务密钥**。这是通过以下原则实现的：
 
 1. **所有业务密钥来自 MarbleRun 注入**
    - 密钥通过 manifest 定义，由 Coordinator 在证明通过后注入
    - 密钥存储在 Coordinator 的 sealed state 中，而非 Marble 本地
 
-2. **密钥派生不依赖 enclave 身份**
+2. **密钥派生不依赖 TEE 身份**
    - HKDF 派生上下文仅使用业务标识符（如 accountID）
-   - 不使用 MRENCLAVE、MRSIGNER 或其他 enclave 测量值
+   - 不使用 MRENCLAVE、MRSIGNER 或其他 TEE 测量值
 
 3. **无本地 sealing key 依赖**
-   - 业务数据不使用 enclave sealing key 加密
+   - 业务数据不使用 TEE sealing key 加密
    - 所有持久化数据存储在 Supabase，使用 MarbleRun 注入的密钥加密
 
 ### 10.2 密钥架构
@@ -1491,24 +1491,24 @@ Neo Service Layer 的密钥管理设计确保 **enclave 升级不会影响任何
 │   │  Manifest 定义的密钥 (升级后保持不变)                                  │    │
 │   │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐  │    │
 │   │  │ VRF_PRIVATE_KEY  │  │ MIXER_MASTER_KEY │  │ DATAFEEDS_KEY    │  │    │
-│   │  │ (VRF 签名密钥)    │  │ (Mixer 主密钥)    │  │ (数据签名密钥)     │  │    │
+│   │  │ (VRF 签名密钥)    │  │ (NeoVault 主密钥)    │  │ (数据签名密钥)     │  │    │
 │   │  └────────┬─────────┘  └────────┬─────────┘  └──────────────────┘  │    │
 │   └───────────┼─────────────────────┼──────────────────────────────────┘    │
 │               │                     │                                       │
 │               │ 证明通过后注入        │ 证明通过后注入                           │
 │               ▼                     ▼                                       │
 │   ┌─────────────────────────────────────────────────────────────────────┐   │
-│   │                     EGo Enclave (可升级)                             │   │
+│   │                     EGo TEE (可升级)                             │   │
 │   │                                                                     │   │
-│   │   VRF Service                    Mixer Service                      │   │
+│   │   NeoRand Service                    NeoVault Service                      │   │
 │   │   ┌─────────────────┐           ┌─────────────────────────────────┐ │   │
 │   │   │ privateKey      │           │ masterKey                       │ │   │
 │   │   │ (直接使用)       │           │     │                           │ │   │
-│   │   └─────────────────┘           │     │ HKDF 派生 (无 enclave ID)  │ │   │
+│   │   └─────────────────┘           │     │ HKDF 派生 (无 TEE ID)  │ │   │
 │   │                                 │     ▼                           │ │   │
 │   │                                 │ DeriveKey(masterKey,            │ │   │
 │   │                                 │           accountID,            │ │   │
-│   │                                 │           "mixer-account", 32)  │ │   │
+│   │                                 │           "neovault-account", 32)  │ │   │
 │   │                                 │     │                           │ │   │
 │   │                                 │     ▼                           │ │   │
 │   │                                 │ Pool Account Keys               │ │   │
@@ -1521,17 +1521,17 @@ Neo Service Layer 的密钥管理设计确保 **enclave 升级不会影响任何
 
 ### 10.3 HKDF 密钥派生
 
-所有派生密钥使用 HKDF-SHA256，**派生上下文不包含 enclave 身份**：
+所有派生密钥使用 HKDF-SHA256，**派生上下文不包含 TEE 身份**：
 
 ```go
 // internal/crypto/crypto.go
 func DeriveKey(masterKey []byte, salt []byte, info string, keyLen int) ([]byte, error) {
     // 输入:
     // - masterKey: 来自 MarbleRun 注入 (升级后不变)
-    // - salt: 业务标识符如 accountID (与 enclave 无关)
-    // - info: 用途字符串如 "mixer-account" (与 enclave 无关)
+    // - salt: 业务标识符如 accountID (与 TEE 无关)
+    // - info: 用途字符串如 "neovault-account" (与 TEE 无关)
     //
-    // 结果: 升级 enclave 后，相同输入产生相同输出
+    // 结果: 升级 TEE 后，相同输入产生相同输出
     hkdfReader := hkdf.New(sha256.New, masterKey, salt, []byte(info))
     key := make([]byte, keyLen)
     io.ReadFull(hkdfReader, key)
@@ -1541,7 +1541,7 @@ func DeriveKey(masterKey []byte, salt []byte, info string, keyLen int) ([]byte, 
 
 **派生参数对比**：
 
-| 参数 | 来源 | 包含 enclave ID? | 升级后变化? |
+| 参数 | 来源 | 包含 TEE ID? | 升级后变化? |
 |------|------|-----------------|------------|
 | masterKey | MarbleRun 注入 | ❌ 否 | ❌ 不变 |
 | salt | 业务 ID (如 accountID) | ❌ 否 | ❌ 不变 |
@@ -1554,12 +1554,12 @@ func DeriveKey(masterKey []byte, salt []byte, info string, keyLen int) ([]byte, 
 | **VRF** | VRF_PRIVATE_KEY | Marble.Secret() | 直接使用 | ✅ |
 | **AccountPool** | POOL_MASTER_KEY | Marble.Secret() | 直接使用 | ✅ |
 | **AccountPool 池账户** | 池账户私钥 | DeriveKey() | HKDF(masterKey, accountID, "pool-account") | ✅ |
-| **Mixer** | MIXER_MASTER_KEY | Marble.Secret() | 直接使用 (用于请求签名) | ✅ |
-| **DataFeeds** | DATAFEEDS_SIGNING_KEY | Marble.Secret() | 直接使用 | ✅ |
-| **Automation** | AUTOMATION_KEY | Marble.Secret() | 直接使用 | ✅ |
+| **NeoVault** | MIXER_MASTER_KEY | Marble.Secret() | 直接使用 (用于请求签名) | ✅ |
+| **NeoFeeds** | DATAFEEDS_SIGNING_KEY | Marble.Secret() | 直接使用 | ✅ |
+| **NeoFlow** | AUTOMATION_KEY | Marble.Secret() | 直接使用 | ✅ |
 | **TLS** | MARBLE_CERT/KEY | Coordinator 签发 | 每次启动重新签发 | ✅ |
 
-**注意**: Mixer 服务不再直接持有池账户私钥，而是通过 HTTP API 请求 AccountPool 服务进行签名。
+**注意**: NeoVault 服务不再直接持有池账户私钥，而是通过 HTTP API 请求 AccountPool 服务进行签名。
 
 ### 10.5 升级流程
 
@@ -1570,9 +1570,9 @@ func DeriveKey(masterKey []byte, salt []byte, info string, keyLen int) ([]byte, 
 │                                                                             │
 │  1. 准备新版本                                                                │
 │     ┌─────────────────────────────────────────────────────────────────┐     │
-│     │  • 构建新的 EGo enclave 二进制                                    │     │
+│     │  • 构建新的 EGo TEE 二进制                                    │     │
 │     │  • 获取新的 MRENCLAVE 值                                          │     │
-│     │  • 代码审计确保无 sealing key 或 enclave ID 依赖                    │     │
+│     │  • 代码审计确保无 sealing key 或 TEE ID 依赖                    │     │
 │     └─────────────────────────────────────────────────────────────────┘     │
 │                                      │                                       │
 │                                      ▼                                       │
@@ -1610,7 +1610,7 @@ func DeriveKey(masterKey []byte, salt []byte, info string, keyLen int) ([]byte, 
 
 - [ ] 代码不使用 `enclave.GetSealKey()` 或类似 API
 - [ ] HKDF 派生不包含 MRENCLAVE/MRSIGNER 作为输入
-- [ ] 业务数据不使用 enclave sealing 加密
+- [ ] 业务数据不使用 TEE sealing 加密
 - [ ] manifest 中的 Secrets 定义与旧版本兼容
 - [ ] 池账户等派生密钥可以从相同主密钥重建
 
@@ -1621,7 +1621,7 @@ func DeriveKey(masterKey []byte, salt []byte, info string, keyLen int) ([]byte, 
 | 操作 | 后果 | 严重性 |
 |------|------|--------|
 | 修改 manifest 中的 Secret 值 | 所有服务密钥变化 | 🔴 严重 |
-| 在 HKDF 中添加 enclave ID | 派生密钥变化 | 🔴 严重 |
+| 在 HKDF 中添加 TEE ID | 派生密钥变化 | 🔴 严重 |
 | 使用 sealing key 加密业务数据 | 升级后无法解密 | 🔴 严重 |
 | 更改 HKDF info 字符串 | 派生密钥变化 | 🟡 中等 |
 
@@ -1636,12 +1636,12 @@ func DeriveKey(masterKey []byte, salt []byte, info string, keyLen int) ([]byte, 
 ✅ internal/database    - 22 tests passed
 ✅ internal/marble      - 18 tests passed
 ✅ internal/gasbank     - 7 tests passed
-✅ services/vrf         - 6 tests passed
-✅ services/mixer       - 3 tests passed
+✅ services/neorand         - 6 tests passed
+✅ services/neovault       - 3 tests passed
 ✅ services/accountpool - (内部服务，无独立测试)
-✅ services/datafeeds   - 6 tests passed
-✅ services/automation  - 6 tests passed
-✅ services/confidential - 5 tests passed
+✅ services/neofeeds   - 6 tests passed
+✅ services/neoflow  - 6 tests passed
+✅ services/neocompute - 5 tests passed
 ✅ test/integration     - 12 tests passed
 ```
 
@@ -1652,7 +1652,7 @@ func DeriveKey(masterKey []byte, salt []byte, info string, keyLen int) ([]byte, 
 - **最后更新**: 2025-01-15
 - **作者**: Neo Service Layer Team
 - **变更记录**:
-  - v3.2.0: 添加 AccountPool 内部服务，重构 Mixer 使用 AccountPool 进行账户管理
+  - v3.2.0: 添加 AccountPool 内部服务，重构 NeoVault 使用 AccountPool 进行账户管理
   - v3.1.0: 添加服务升级安全性章节 (Section 10)
   - v3.0.0: 添加完整四层架构文档 (MarbleRun + EGo + Supabase + Neo N3)
 

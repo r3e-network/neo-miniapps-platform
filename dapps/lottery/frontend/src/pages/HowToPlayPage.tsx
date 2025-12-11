@@ -155,7 +155,7 @@ export function HowToPlayPage() {
             <h3 className="text-white font-semibold mb-2">Daily Draws</h3>
             <p className="text-gray-400 text-sm">
               Draws happen every day at <strong className="text-white">00:00 UTC</strong> (midnight).
-              The draw is automatically triggered by Service Layer Automation.
+              The draw is automatically triggered by Service Layer NeoFlow.
             </p>
           </div>
           <div>
@@ -201,7 +201,7 @@ export function HowToPlayPage() {
           <div>
             <h3 className="text-white font-semibold mb-2">Automated Operations</h3>
             <p className="text-gray-400 text-sm">
-              Draws are triggered automatically by Service Layer Automation. No human
+              Draws are triggered automatically by Service Layer NeoFlow. No human
               intervention is required, eliminating the possibility of manipulation.
             </p>
           </div>

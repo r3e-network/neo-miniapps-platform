@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -21,9 +22,23 @@ import (
 
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")
+		// Get origin from request for credentials support
+		origin := r.Header.Get("Origin")
+		if origin != "" && isOriginAllowed(origin) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")
+			w.Header().Set("Access-Control-Allow-Credentials", "true") // Required for cookie auth
+		} else if origin != "" {
+			// Reject unknown origins when credentials are used
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			http.Error(w, "CORS origin not allowed", http.StatusForbidden)
+			return
+		}
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
@@ -50,19 +65,23 @@ func authMiddleware(db *database.Repository, m *marble.Marble) mux.MiddlewareFun
 				}
 			}
 
-			// Try JWT token
+			// Try JWT token from Authorization header or auth_token cookie
+			var token string
 			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
+			if authHeader != "" && len(authHeader) >= 7 && strings.HasPrefix(authHeader, "Bearer ") {
+				token = authHeader[7:]
+			} else {
+				// Try auth_token cookie (for OAuth cookie-based flow)
+				if cookie, err := r.Cookie(oauthTokenCookieName); err == nil && cookie.Value != "" {
+					token = cookie.Value
+				}
+			}
+
+			if token == "" {
 				jsonError(w, "missing authorization", http.StatusUnauthorized)
 				return
 			}
 
-			if len(authHeader) < 7 || !strings.HasPrefix(authHeader, "Bearer ") {
-				jsonError(w, "invalid authorization header", http.StatusUnauthorized)
-				return
-			}
-
-			token := authHeader[7:]
 			userID, err := validateJWT(token)
 			if err != nil {
 				jsonError(w, "invalid token", http.StatusUnauthorized)
@@ -136,4 +155,18 @@ func jsonError(w http.ResponseWriter, message string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
+}
+
+func isOriginAllowed(origin string) bool {
+	allowed := os.Getenv("CORS_ALLOWED_ORIGINS")
+	if strings.TrimSpace(allowed) == "" {
+		allowed = "http://localhost:3000,http://localhost:5173"
+	}
+	for _, candidate := range strings.Split(allowed, ",") {
+		c := strings.TrimSpace(candidate)
+		if c != "" && c == origin {
+			return true
+		}
+	}
+	return false
 }

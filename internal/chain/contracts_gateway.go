@@ -159,3 +159,52 @@ func (g *GatewayContract) IsPaused(ctx context.Context) (bool, error) {
 	}
 	return ParseBoolean(result.Stack[0])
 }
+
+// =============================================================================
+// TEE Master Key Verification
+// =============================================================================
+
+// GetTEEMasterPubKey returns the anchored TEE master public key.
+func (g *GatewayContract) GetTEEMasterPubKey(ctx context.Context) ([]byte, error) {
+	result, err := g.client.InvokeFunction(ctx, g.contractHash, "getTEEMasterPubKey", nil)
+	if err != nil {
+		return nil, err
+	}
+	if result.State != "HALT" {
+		return nil, fmt.Errorf("execution failed: %s", result.Exception)
+	}
+	if len(result.Stack) == 0 {
+		return nil, fmt.Errorf("no result")
+	}
+	return ParseByteArray(result.Stack[0])
+}
+
+// GetTEEMasterPubKeyHash returns the SHA-256 hash of the anchored TEE master public key.
+func (g *GatewayContract) GetTEEMasterPubKeyHash(ctx context.Context) ([]byte, error) {
+	result, err := g.client.InvokeFunction(ctx, g.contractHash, "getTEEMasterPubKeyHash", nil)
+	if err != nil {
+		return nil, err
+	}
+	if result.State != "HALT" {
+		return nil, fmt.Errorf("execution failed: %s", result.Exception)
+	}
+	if len(result.Stack) == 0 {
+		return nil, fmt.Errorf("no result")
+	}
+	return ParseByteArray(result.Stack[0])
+}
+
+// GetTEEMasterAttestationHash returns the attestation hash/CID for the TEE master key.
+func (g *GatewayContract) GetTEEMasterAttestationHash(ctx context.Context) ([]byte, error) {
+	result, err := g.client.InvokeFunction(ctx, g.contractHash, "getTEEMasterAttestationHash", nil)
+	if err != nil {
+		return nil, err
+	}
+	if result.State != "HALT" {
+		return nil, fmt.Errorf("execution failed: %s", result.Exception)
+	}
+	if len(result.Stack) == 0 {
+		return nil, fmt.Errorf("no result")
+	}
+	return ParseByteArray(result.Stack[0])
+}

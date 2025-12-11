@@ -48,9 +48,9 @@ output = "contracts/build/VRFService"
 order = 2
 
 [[contracts]]
-name = "MixerService"
-source = "contracts/mixer/MixerService.cs"
-output = "contracts/build/MixerService"
+name = "NeoVaultService"
+source = "contracts/mixer/NeoVaultService.cs"
+output = "contracts/build/NeoVaultService"
 order = 3
 
 [[contracts]]
@@ -60,9 +60,9 @@ output = "contracts/build/DataFeedsService"
 order = 4
 
 [[contracts]]
-name = "AutomationService"
-source = "contracts/automation/AutomationService.cs"
-output = "contracts/build/AutomationService"
+name = "NeoFlowService"
+source = "contracts/automation/NeoFlowService.cs"
+output = "contracts/build/NeoFlowService"
 order = 5
 
 # Example contracts (user contracts that consume services)

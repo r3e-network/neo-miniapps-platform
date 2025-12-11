@@ -164,7 +164,7 @@ func TestReserve(t *testing.T) {
 
 	m := NewManager(repo)
 
-	reservationID, err := m.Reserve(context.Background(), "user-123", "vrf", "ref-123", 300000)
+	reservationID, err := m.Reserve(context.Background(), "user-123", "neorand", "ref-123", 300000)
 	if err != nil {
 		t.Fatalf("Reserve() error = %v", err)
 	}
@@ -193,7 +193,7 @@ func TestRelease(t *testing.T) {
 
 	m := NewManager(repo)
 
-	reservationID, _ := m.Reserve(context.Background(), "user-123", "vrf", "ref-123", 100000)
+	reservationID, _ := m.Reserve(context.Background(), "user-123", "neorand", "ref-123", 100000)
 
 	err := m.Release(context.Background(), "user-123", reservationID)
 	if err != nil {
@@ -216,7 +216,7 @@ func TestConsume(t *testing.T) {
 
 	m := NewManager(repo)
 
-	reservationID, _ := m.Reserve(context.Background(), "user-123", "vrf", "ref-123", 100000)
+	reservationID, _ := m.Reserve(context.Background(), "user-123", "neorand", "ref-123", 100000)
 
 	err := m.Consume(context.Background(), "user-123", reservationID)
 	if err != nil {
@@ -225,7 +225,7 @@ func TestConsume(t *testing.T) {
 }
 
 func TestGetServiceFee(t *testing.T) {
-	fee := GetServiceFee("vrf")
+	fee := GetServiceFee("neorand")
 	if fee != 100000 {
 		t.Errorf("GetServiceFee(vrf) = %d, want 100000", fee)
 	}
@@ -237,7 +237,7 @@ func TestGetServiceFee(t *testing.T) {
 }
 
 func TestServiceFees(t *testing.T) {
-	expectedServices := []string{"vrf", "automation", "datafeeds", "mixer", "confidential"}
+	expectedServices := []string{"neorand", "neoflow", "neofeeds", "neovault", "neocompute"}
 	for _, svc := range expectedServices {
 		if _, ok := ServiceFees[svc]; !ok {
 			t.Errorf("ServiceFees missing %s", svc)

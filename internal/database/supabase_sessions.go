@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"time"
 )
 
@@ -42,7 +43,7 @@ func (r *Repository) GetSessionByTokenHash(ctx context.Context, tokenHash string
 	tokenHash = SanitizeString(tokenHash)
 
 	now := time.Now().Format(time.RFC3339)
-	query := fmt.Sprintf("token_hash=eq.%s&expires_at=gt.%s&limit=1", tokenHash, now)
+	query := fmt.Sprintf("token_hash=eq.%s&expires_at=gt.%s&limit=1", url.QueryEscape(tokenHash), url.QueryEscape(now))
 	data, err := r.client.request(ctx, "GET", "user_sessions", nil, query)
 	if err != nil {
 		return nil, fmt.Errorf("%w: get session by token hash: %v", ErrDatabaseError, err)
@@ -67,7 +68,7 @@ func (r *Repository) UpdateSessionActivity(ctx context.Context, sessionID string
 	update := map[string]interface{}{
 		"last_active": time.Now(),
 	}
-	_, err := r.client.request(ctx, "PATCH", "user_sessions", update, "id=eq."+sessionID)
+	_, err := r.client.request(ctx, "PATCH", "user_sessions", update, "id=eq."+url.QueryEscape(sessionID))
 	if err != nil {
 		return fmt.Errorf("%w: update session activity: %v", ErrDatabaseError, err)
 	}
@@ -81,7 +82,7 @@ func (r *Repository) DeleteSession(ctx context.Context, tokenHash string) error 
 	}
 	tokenHash = SanitizeString(tokenHash)
 
-	_, err := r.client.request(ctx, "DELETE", "user_sessions", nil, "token_hash=eq."+tokenHash)
+	_, err := r.client.request(ctx, "DELETE", "user_sessions", nil, "token_hash=eq."+url.QueryEscape(tokenHash))
 	if err != nil {
 		return fmt.Errorf("%w: delete session: %v", ErrDatabaseError, err)
 	}
@@ -94,7 +95,7 @@ func (r *Repository) DeleteUserSessions(ctx context.Context, userID string) erro
 		return err
 	}
 
-	_, err := r.client.request(ctx, "DELETE", "user_sessions", nil, "user_id=eq."+userID)
+	_, err := r.client.request(ctx, "DELETE", "user_sessions", nil, "user_id=eq."+url.QueryEscape(userID))
 	if err != nil {
 		return fmt.Errorf("%w: delete user sessions: %v", ErrDatabaseError, err)
 	}

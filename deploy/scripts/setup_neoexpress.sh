@@ -69,9 +69,9 @@ mkdir -p build
 CONTRACTS=(
     "gateway/ServiceLayerGateway"
     "vrf/VRFService"
-    "mixer/MixerService"
+    "mixer/NeoVaultService"
     "datafeeds/DataFeedsService"
-    "automation/AutomationService"
+    "automation/NeoFlowService"
 )
 
 for contract in "${CONTRACTS[@]}"; do

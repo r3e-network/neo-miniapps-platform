@@ -1,5 +1,6 @@
-// Package main provides the generic Marble entry point for all services.
+// Package main provides the generic Marble entry point for all Neo services.
 // The service type is determined by the MARBLE_TYPE environment variable.
+// Each service is a separate Marble in MarbleRun, running in its own TEE enclave.
 package main
 
 import (
@@ -12,14 +13,35 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gorilla/mux"
+
+	"github.com/R3E-Network/service_layer/internal/config"
 	"github.com/R3E-Network/service_layer/internal/database"
 	"github.com/R3E-Network/service_layer/internal/marble"
-	automation "github.com/R3E-Network/service_layer/services/automation/marble"
-	confidential "github.com/R3E-Network/service_layer/services/confidential/marble"
-	datafeeds "github.com/R3E-Network/service_layer/services/datafeeds/marble"
-	mixer "github.com/R3E-Network/service_layer/services/mixer/marble"
-	vrf "github.com/R3E-Network/service_layer/services/vrf/marble"
+
+	// Neo service imports
+	neoaccounts "github.com/R3E-Network/service_layer/services/neoaccounts/marble"
+	neocompute "github.com/R3E-Network/service_layer/services/neocompute/marble"
+	neofeeds "github.com/R3E-Network/service_layer/services/neofeeds/marble"
+	neoflow "github.com/R3E-Network/service_layer/services/neoflow/marble"
+	neooracle "github.com/R3E-Network/service_layer/services/neooracle/marble"
+	neorand "github.com/R3E-Network/service_layer/services/neorand/marble"
+	neostore "github.com/R3E-Network/service_layer/services/neostore/marble"
+	neovault "github.com/R3E-Network/service_layer/services/neovault/marble"
 )
+
+// ServiceRunner interface for all Neo services
+type ServiceRunner interface {
+	Start(ctx context.Context) error
+	Stop() error
+	Router() *mux.Router
+}
+
+// Available Neo services
+var availableServices = []string{
+	"neoaccounts", "neocompute", "neofeeds", "neoflow",
+	"neooracle", "neorand", "neostore", "neovault",
+}
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -31,10 +53,20 @@ func main() {
 		serviceType = os.Getenv("SERVICE_TYPE") // Fallback for local testing
 	}
 	if serviceType == "" {
-		log.Fatal("MARBLE_TYPE environment variable required")
+		log.Fatalf("MARBLE_TYPE environment variable required. Available services: %v", availableServices)
 	}
 
+	log.Printf("Available services: %v", availableServices)
 	log.Printf("Starting %s service...", serviceType)
+
+	// Load services configuration
+	servicesCfg := config.LoadServicesConfigOrDefault()
+
+	// Check if service is enabled in config
+	if !servicesCfg.IsEnabled(serviceType) {
+		log.Printf("Service %s is disabled in configuration, exiting gracefully", serviceType)
+		os.Exit(0) // Graceful exit for disabled services
+	}
 
 	// Initialize Marble
 	m, err := marble.New(marble.Config{
@@ -57,7 +89,27 @@ func main() {
 	db := database.NewRepository(dbClient)
 
 	// Create service based on type
-	svc, err := createService(serviceType, m, db)
+	var svc ServiceRunner
+	switch serviceType {
+	case "neoaccounts":
+		svc, err = neoaccounts.New(neoaccounts.Config{Marble: m, DB: db})
+	case "neocompute":
+		svc, err = neocompute.New(neocompute.Config{Marble: m, DB: db})
+	case "neofeeds":
+		svc, err = neofeeds.New(neofeeds.Config{Marble: m, DB: db})
+	case "neoflow":
+		svc, err = neoflow.New(neoflow.Config{Marble: m, DB: db})
+	case "neooracle":
+		svc, err = neooracle.New(neooracle.Config{Marble: m})
+	case "neorand":
+		svc, err = neorand.New(neorand.Config{Marble: m, DB: db})
+	case "neostore":
+		svc, err = neostore.New(neostore.Config{Marble: m})
+	case "neovault":
+		svc, err = neovault.New(neovault.Config{Marble: m, DB: db})
+	default:
+		log.Fatalf("Unknown service: %s. Available: %v", serviceType, availableServices)
+	}
 	if err != nil {
 		log.Fatalf("Failed to create service: %v", err)
 	}
@@ -67,10 +119,14 @@ func main() {
 		log.Fatalf("Failed to start service: %v", err)
 	}
 
-	// Get port
+	// Get port from config or environment
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		if settings := servicesCfg.GetSettings(serviceType); settings != nil && settings.Port > 0 {
+			port = fmt.Sprintf("%d", settings.Port)
+		} else {
+			port = "8080"
+		}
 	}
 
 	// Create HTTP server
@@ -115,53 +171,4 @@ func main() {
 	}
 
 	log.Println("Service stopped")
-}
-
-// createService creates the appropriate service based on type.
-// Available services:
-// - vrf: Verifiable Random Function service
-// - mixer: Privacy-preserving transaction mixing service
-// - datafeeds: Aggregated price data feeds service
-// - automation: Scheduled task and trigger-based automation service
-// - confidential: Confidential computing service (planned)
-func createService(serviceType string, m *marble.Marble, db *database.Repository) (*marble.Service, error) {
-	switch serviceType {
-	case "vrf":
-		svc, err := vrf.New(vrf.Config{Marble: m, DB: db})
-		if err != nil {
-			return nil, err
-		}
-		return svc.Service, nil
-
-	case "mixer":
-		svc, err := mixer.New(mixer.Config{Marble: m, DB: db})
-		if err != nil {
-			return nil, err
-		}
-		return svc.Service, nil
-
-	case "datafeeds":
-		svc, err := datafeeds.New(datafeeds.Config{Marble: m, DB: db})
-		if err != nil {
-			return nil, err
-		}
-		return svc.Service, nil
-
-	case "automation":
-		svc, err := automation.New(automation.Config{Marble: m, DB: db})
-		if err != nil {
-			return nil, err
-		}
-		return svc.Service, nil
-
-	case "confidential":
-		svc, err := confidential.New(confidential.Config{Marble: m, DB: db})
-		if err != nil {
-			return nil, err
-		}
-		return svc.Service, nil
-
-	default:
-		return nil, fmt.Errorf("unknown service type: %s. Available: vrf, mixer, datafeeds, automation, confidential", serviceType)
-	}
 }

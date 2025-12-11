@@ -130,9 +130,9 @@ class ServiceLayerTestBase(ABC):
         # Deploy service contracts
         services = {
             "vrf": "VRFService",
-            "mixer": "MixerService",
+            "mixer": "NeoVaultService",
             "datafeeds": "DataFeedsService",
-            "automation": "AutomationService",
+            "automation": "NeoFlowService",
         }
 
         for service_type, contract_name in services.items():

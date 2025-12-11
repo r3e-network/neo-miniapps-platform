@@ -6,7 +6,7 @@
 .PHONY: all build test clean docker frontend deploy help
 
 # Variables
-SERVICES := gateway oracle vrf mixer secrets datafeeds gasbank automation confidential accounts ccip datalink datastreams dta cre
+SERVICES := gateway neooracle neorand neovault neostore neofeeds gasbank neoflow neocompute neoaccounts ccip datalink datastreams dta cre
 DOCKER_COMPOSE := docker compose -f docker/docker-compose.yaml
 
 # =============================================================================
@@ -48,14 +48,31 @@ sign-enclaves: ## Sign all enclave binaries
 # =============================================================================
 
 test: ## Run all tests
+	@echo "Running tests..."
 	go test -v ./...
 
+test-unit: ## Run unit tests only
+	@echo "Running unit tests..."
+	go test -v -short ./...
+
 test-coverage: ## Run tests with coverage
+	@echo "Running tests with coverage..."
 	go test -v -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report: coverage.html"
 
 test-integration: ## Run integration tests
+	@echo "Running integration tests..."
 	go test -v -tags=integration ./test/integration/...
+
+test-e2e: ## Run end-to-end tests
+	@echo "Running e2e tests..."
+	go test -v -tags=e2e ./test/e2e/...
+
+test-watch: ## Run tests in watch mode
+	@echo "Running tests in watch mode..."
+	@which gotestsum > /dev/null || go install gotest.tools/gotestsum@latest
+	gotestsum --watch
 
 # =============================================================================
 # Docker
@@ -133,12 +150,21 @@ frontend-deploy: ## Deploy frontend to Netlify
 
 dev: ## Start development environment
 	@echo "Starting development environment..."
+	@./scripts/install_dev_env.sh --skip-k8s || echo "Dependencies already installed"
 	OE_SIMULATION=1 $(DOCKER_COMPOSE) up -d coordinator
 	@sleep 5
 	@echo "Setting manifest..."
 	marblerun manifest set manifests/manifest.json localhost:4433 --insecure || true
 	@echo "Starting gateway..."
 	OE_SIMULATION=1 go run ./cmd/gateway
+
+dev-full: ## Start full development environment with all services
+	@echo "Starting full development environment..."
+	@./scripts/deploy_k8s.sh --env dev
+
+dev-stop: ## Stop development environment
+	@echo "Stopping development environment..."
+	$(DOCKER_COMPOSE) down
 
 dev-gateway: ## Run gateway in development mode
 	OE_SIMULATION=1 go run ./cmd/gateway
@@ -170,9 +196,19 @@ deploy-production: ## Deploy to production
 # =============================================================================
 
 clean: ## Clean build artifacts
+	@echo "Cleaning build artifacts..."
 	rm -rf bin/
 	rm -rf coverage.out coverage.html
 	rm -rf frontend/dist
+	rm -rf tmp/
+	@echo "Clean complete"
+
+clean-all: ## Clean everything including Docker images
+	@echo "Cleaning everything..."
+	$(MAKE) clean
+	$(DOCKER_COMPOSE) down -v --rmi local
+	docker system prune -f
+	@echo "Deep clean complete"
 
 generate: ## Generate code
 	go generate ./...
@@ -183,6 +219,34 @@ docs: ## Generate documentation
 version: ## Show version
 	@echo "Neo Service Layer v1.0.0"
 	@echo "MarbleRun + EGo + Supabase + Netlify"
+
+install-tools: ## Install development tools
+	@echo "Installing development tools..."
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	go install gotest.tools/gotestsum@latest
+	go install github.com/swaggo/swag/cmd/swag@latest
+	@echo "Tools installed"
+
+setup: ## Setup development environment
+	@echo "Setting up development environment..."
+	@./scripts/install_dev_env.sh --all
+	$(MAKE) install-tools
+	@echo "Setup complete"
+
+check: ## Run all checks (lint, test, build)
+	@echo "Running all checks..."
+	$(MAKE) lint
+	$(MAKE) test
+	$(MAKE) build
+	@echo "All checks passed"
+
+metrics: ## Show code metrics
+	@echo "Code metrics:"
+	@echo "Lines of code:"
+	@find . -name '*.go' -not -path './vendor/*' | xargs wc -l | tail -1
+	@echo ""
+	@echo "Test coverage:"
+	@go test -cover ./... | grep coverage || echo "Run 'make test-coverage' first"
 
 # =============================================================================
 # Help

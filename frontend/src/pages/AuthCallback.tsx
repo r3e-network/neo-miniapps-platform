@@ -12,7 +12,6 @@ export function AuthCallback() {
 
   useEffect(() => {
     const handleCallback = async () => {
-      const token = searchParams.get('token');
       const errorParam = searchParams.get('error');
 
       if (errorParam) {
@@ -21,17 +20,11 @@ export function AuthCallback() {
         return;
       }
 
-      if (!token) {
-        setError('No authentication token received');
-        setTimeout(() => navigate('/login'), 3000);
-        return;
-      }
-
       try {
-        api.setToken(token);
+        api.setToken(null);
 
-        // Fetch user profile to get user data
-        const profile = await api.getMe();
+        // Cookie-based auth: fetch profile which relies on secure HTTP-only cookie set during callback
+        const profile = await api.getMeWithCookie();
 
         login(
           {
@@ -39,7 +32,7 @@ export function AuthCallback() {
             address: profile.user.address || '',
             email: profile.user.email
           },
-          token
+          ''
         );
 
         navigate('/');

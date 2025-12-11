@@ -4,8 +4,8 @@
 
 The Neo Service Layer is a production-ready, TEE-protected service platform built on:
 
-- **MarbleRun**: Confidential computing orchestration
-- **EGo**: Go SGX enclave runtime
+- **MarbleRun**: NeoCompute computing orchestration
+- **EGo**: Go MarbleRun TEE runtime
 - **Supabase**: PostgreSQL database with RLS
 - **Netlify**: Frontend hosting
 
@@ -15,9 +15,9 @@ The Neo Service Layer is a production-ready, TEE-protected service platform buil
 
 Every layer provides security:
 - Network: mTLS between all services
-- Compute: SGX enclaves for all code execution
+- Compute: MarbleRun TEEs for all code execution
 - Storage: Encrypted at rest, RLS policies
-- Secrets: Never leave enclave memory
+- Secrets: Never leave TEE memory
 
 ### 2. Zero Trust Architecture
 
@@ -77,7 +77,7 @@ type Marble struct {
     // Secrets injected by Coordinator
     secrets    map[string][]byte
 
-    // Enclave report
+    // TEE report
     report     *enclave.Report
 }
 ```
@@ -85,7 +85,7 @@ type Marble struct {
 **Key Features:**
 - Automatic TLS configuration
 - Secret access via callback pattern
-- Enclave self-report for attestation
+- TEE self-report for attestation
 
 ### Service Architecture
 
@@ -125,7 +125,7 @@ Each service follows a consistent pattern:
 ### Attestation Flow
 
 ```
-1. Marble starts inside EGo enclave
+1. Marble starts inside EGo TEE
 2. Marble generates attestation quote
 3. Marble connects to Coordinator
 4. Coordinator verifies quote against manifest
@@ -138,7 +138,7 @@ Each service follows a consistent pattern:
 Secrets follow the "Use" callback pattern:
 
 ```go
-// Secrets never leave enclave memory
+// Secrets never leave TEE memory
 err := marble.UseSecret("API_KEY", func(secret []byte) error {
     // Use secret here
     // Automatically zeroed after callback
@@ -150,7 +150,7 @@ err := marble.UseSecret("API_KEY", func(secret []byte) error {
 
 - All inter-service communication uses mTLS
 - Certificates auto-provisioned by MarbleRun
-- External TLS terminates inside enclave
+- External TLS terminates inside TEE
 
 ## Data Flow
 
@@ -160,7 +160,7 @@ err := marble.UseSecret("API_KEY", func(secret []byte) error {
 Client → Gateway → Service → Database
    │        │         │         │
    │        │         │         └── RLS enforced
-   │        │         └── Enclave protected
+   │        │         └── TEE protected
    │        └── JWT validated
    └── HTTPS
 ```
@@ -171,21 +171,21 @@ Client → Gateway → Service → Database
 Manifest → Coordinator → Marble → Memory
     │           │           │        │
     │           │           │        └── Zeroed after use
-    │           │           └── Decrypted in enclave
+    │           │           └── Decrypted in TEE
     │           └── Encrypted at rest
     └── Defines access
 ```
 
 ## Upgrade Safety
 
-Enclave upgrades (changing MRENCLAVE) must NOT affect business keys. All cryptographic keys remain stable across upgrades.
+TEE upgrades (changing MRENCLAVE) must NOT affect business keys. All cryptographic keys remain stable across upgrades.
 
 ### Design Principles
 
 1. **Global Master Keys from MarbleRun** - All business keys derived from manifest-defined secrets
-2. **No Enclave Identity in Derivation** - HKDF context uses only business identifiers (account IDs, service names)
-3. **No SGX Sealing Keys** - Application never uses `sgx_seal_data()` for business data
-4. **Manifest-Defined Persistence** - Secrets defined in manifest persist across enclave versions
+2. **No TEE Identity in Derivation** - HKDF context uses only business identifiers (account IDs, service names)
+3. **No MarbleRun Sealing Keys** - Application never uses `sgx_seal_data()` for business data
+4. **Manifest-Defined Persistence** - Secrets defined in manifest persist across TEE versions
 
 ### Key Architecture
 
@@ -202,7 +202,7 @@ Enclave upgrades (changing MRENCLAVE) must NOT affect business keys. All cryptog
                             │ Secret Injection (after attestation)
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    TEE Enclave (Marble)                          │
+│                    TEE TEE (Marble)                          │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │  Marble.Secret("VRF_PRIVATE_KEY")      → VRF signing      │  │
 │  │  Marble.Secret("MIXER_MASTER_KEY")     → Pool derivation  │  │
@@ -211,8 +211,8 @@ Enclave upgrades (changing MRENCLAVE) must NOT affect business keys. All cryptog
 │                            │                                     │
 │                            ▼                                     │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │  HKDF Derivation (no enclave identity!)                   │  │
-│  │  DeriveKey(masterKey, accountID, "mixer-account", 32)     │  │
+│  │  HKDF Derivation (no TEE identity!)                   │  │
+│  │  DeriveKey(masterKey, accountID, "neovault-account", 32)     │  │
 │  │                    ↓                                       │  │
 │  │  Derived keys ONLY depend on:                              │  │
 │  │  - Master key (from MarbleRun)                             │  │
@@ -224,7 +224,7 @@ Enclave upgrades (changing MRENCLAVE) must NOT affect business keys. All cryptog
 
 ### HKDF Key Derivation
 
-The `DeriveKey` function uses HKDF-SHA256 without any enclave identity:
+The `DeriveKey` function uses HKDF-SHA256 without any TEE identity:
 
 ```go
 func DeriveKey(masterKey []byte, salt []byte, info string, keyLen int) ([]byte, error) {
@@ -239,7 +239,7 @@ func DeriveKey(masterKey []byte, salt []byte, info string, keyLen int) ([]byte, 
 |-----------|--------|----------------|
 | masterKey | MarbleRun injection | Stable (manifest-defined) |
 | salt | Business identifier (accountID) | Stable |
-| info | Service name ("mixer-account") | Stable |
+| info | Service name ("neovault-account") | Stable |
 | keyLen | Constant (32) | Stable |
 
 ### Service Key Sources
@@ -247,15 +247,15 @@ func DeriveKey(masterKey []byte, salt []byte, info string, keyLen int) ([]byte, 
 | Service | Key | Source | Derivation |
 |---------|-----|--------|------------|
 | VRF | Private Key | `Marble.Secret("VRF_PRIVATE_KEY")` | Direct use |
-| Mixer | Pool Keys | `Marble.Secret("MIXER_MASTER_KEY")` | HKDF with accountID |
-| DataFeeds | Signing Key | `Marble.Secret("DATAFEEDS_SIGNING_KEY")` | Direct use |
-| Automation | Signing Key | `Marble.Secret("AUTOMATION_SIGNING_KEY")` | Direct use |
+| NeoVault | Pool Keys | `Marble.Secret("MIXER_MASTER_KEY")` | HKDF with accountID |
+| NeoFeeds | Signing Key | `Marble.Secret("DATAFEEDS_SIGNING_KEY")` | Direct use |
+| NeoFlow | Signing Key | `Marble.Secret("AUTOMATION_SIGNING_KEY")` | Direct use |
 | TLS | Certificates | MarbleRun PKI | Auto-provisioned |
 
 ### Upgrade Process
 
 ```
-1. Build new enclave binary (new MRENCLAVE)
+1. Build new TEE binary (new MRENCLAVE)
 2. Update manifest.json with new MRENCLAVE/MRSIGNER
 3. Deploy new Marble instances
 4. Coordinator verifies new attestation
@@ -269,14 +269,14 @@ func DeriveKey(masterKey []byte, salt []byte, info string, keyLen int) ([]byte, 
 |-----------|------------|--------|
 | Using `sgx_seal_data()` for business keys | CRITICAL | Keys lost on upgrade |
 | Including MRENCLAVE in HKDF context | CRITICAL | Keys change on upgrade |
-| Hardcoding keys in enclave binary | HIGH | Keys change on rebuild |
-| Using enclave report fields in derivation | HIGH | Keys change on upgrade |
+| Hardcoding keys in TEE binary | HIGH | Keys change on rebuild |
+| Using TEE report fields in derivation | HIGH | Keys change on upgrade |
 
 ## Deployment
 
 ### Simulation Mode
 
-For development without SGX hardware:
+For development without MarbleRun hardware:
 
 ```bash
 OE_SIMULATION=1 docker compose up
@@ -284,7 +284,7 @@ OE_SIMULATION=1 docker compose up
 
 ### Production Mode
 
-With SGX hardware:
+With MarbleRun hardware:
 
 ```bash
 OE_SIMULATION=0 docker compose up
@@ -350,9 +350,9 @@ The Service Layer supports three different service patterns:
 
 | Pattern | Services | Description |
 |---------|----------|-------------|
-| **Request-Response** | VRF, Mixer, Confidential | User initiates request → TEE processes → Callback |
-| **Push (Auto-Update)** | DataFeeds | TEE periodically updates on-chain data, no user request needed |
-| **Trigger-Based** | Automation | User registers trigger → TEE monitors conditions → Periodic callbacks |
+| **Request-Response** | VRF, NeoVault, NeoCompute | User initiates request → TEE processes → Callback |
+| **Push (Auto-Update)** | NeoFeeds | TEE periodically updates on-chain data, no user request needed |
+| **Trigger-Based** | NeoFlow | User registers trigger → TEE monitors conditions → Periodic callbacks |
 
 ### Pattern 1: Request-Response Flow
 
@@ -381,7 +381,7 @@ The following diagram shows the complete flow from User to Callback:
 ├────────────────────────────────────────────────────────────────────┼────────┤
 │                                                                    ▼        │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                    Service Layer (TEE Enclave)                       │   │
+│  │                    Service Layer (TEE TEE)                       │   │
 │  │  5. Monitor blockchain events                                        │   │
 │  │  6. Process request (HTTP fetch / VRF compute / Mix execution)       │   │
 │  │  7. Sign result with TEE private key                                 │   │
@@ -439,13 +439,13 @@ The following diagram shows the complete flow from User to Callback:
 ┌─────────────────────────────────────────────────────────────────┐
 │                      Service Contracts                           │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐           │
-│  │   VRF    │ │  Mixer   │ │ DataFeeds│ │Automation│           │
+│  │   VRF    │ │  NeoVault   │ │ NeoFeeds│ │NeoFlow│           │
 │  │ Service  │ │ Service  │ │ Service  │ │ Service  │           │
 │  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘           │
 └───────┼────────────┼────────────┼────────────┼──────────────────┘
         │            │            │            │
         └────────────┴────────────┴────────────┘
-                          │ Events (VRFRequest, MixerRequest, etc.)
+                          │ Events (VRFRequest, NeoVaultRequest, etc.)
                           ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    TEE (Service Layer)                           │
@@ -459,9 +459,9 @@ The following diagram shows the complete flow from User to Callback:
                        User Contract
 ```
 
-### Pattern 2: Push / Auto-Update (DataFeeds)
+### Pattern 2: Push / Auto-Update (NeoFeeds)
 
-DataFeeds service automatically updates on-chain price data without user requests:
+NeoFeeds service automatically updates on-chain price data without user requests:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -471,13 +471,13 @@ DataFeeds service automatically updates on-chain price data without user request
 │  │  1. Fetch prices from multiple sources (Binance, Coinbase, etc.)    │   │
 │  │  2. Aggregate and validate data (median, outlier removal)           │   │
 │  │  3. Sign aggregated price with TEE key                              │   │
-│  │  4. Submit to DataFeedsService contract periodically                │   │
+│  │  4. Submit to NeoFeedsService contract periodically                │   │
 │  └──────────────────────────────────┬──────────────────────────────────┘   │
 └─────────────────────────────────────┼───────────────────────────────────────┘
                                       │ UpdatePrice()
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                      DataFeedsService Contract                               │
+│                      NeoFeedsService Contract                               │
 │  • Stores latest prices (BTC/USD, ETH/USD, NEO/USD, GAS/USD, etc.)         │
 │  • Verifies TEE signature                                                   │
 │  • Emits PriceUpdated event                                                 │
@@ -491,7 +491,7 @@ DataFeeds service automatically updates on-chain price data without user request
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Pattern 3: Trigger-Based (Automation)
+### Pattern 3: Trigger-Based (NeoFlow)
 
 Users register triggers, TEE monitors conditions and invokes callbacks periodically:
 
@@ -500,7 +500,7 @@ Users register triggers, TEE monitors conditions and invokes callbacks periodica
 │                      TRIGGER REGISTRATION (One-time)                         │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  ┌──────┐    ┌───────────────┐    ┌─────────────────────┐    ┌────────────┐│
-│  │ User │───►│ User Contract │───►│ ServiceLayerGateway │───►│ Automation ││
+│  │ User │───►│ User Contract │───►│ ServiceLayerGateway │───►│ NeoFlow ││
 │  └──────┘    │               │    │  RequestService()   │    │  Service   ││
 │              │RegisterTrigger│    └─────────────────────┘    │ OnRequest()││
 │              └───────────────┘                               └─────┬──────┘│
@@ -519,7 +519,7 @@ Users register triggers, TEE monitors conditions and invokes callbacks periodica
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │  Loop: Check all registered triggers                                 │   │
 │  │  • Time triggers: Compare current time                               │   │
-│  │  • Price triggers: Check DataFeeds prices                            │   │
+│  │  • Price triggers: Check NeoFeeds prices                            │   │
 │  │  • Event triggers: Monitor blockchain events                         │   │
 │  │  When condition met → Execute callback                               │   │
 │  └──────────────────────────────────┬──────────────────────────────────┘   │
@@ -530,13 +530,13 @@ Users register triggers, TEE monitors conditions and invokes callbacks periodica
 │                         CALLBACK EXECUTION (Periodic)                        │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  ┌──────┐    ┌───────────────┐    ┌─────────────────────┐    ┌────────────┐│
-│  │ User │◄───│ User Contract │◄───│ ServiceLayerGateway │◄───│ Automation ││
+│  │ User │◄───│ User Contract │◄───│ ServiceLayerGateway │◄───│ NeoFlow ││
 │  └──────┘    │   Callback()  │    │  FulfillRequest()   │    │  Service   ││
 │              │ (e.g. rebase) │    └─────────────────────┘    └────────────┘│
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Automation Trigger Examples:**
+**NeoFlow Trigger Examples:**
 
 | Trigger Type | Example | Use Case |
 |--------------|---------|----------|
@@ -545,9 +545,9 @@ Users register triggers, TEE monitors conditions and invokes callbacks periodica
 | Threshold | `balance < 10 GAS` | Auto-refill gas bank |
 | Event-based | `event: LiquidityAdded` | React to on-chain events |
 
-### Mixer Service (v3.0 - Off-Chain First)
+### NeoVault Service (v3.0 - Off-Chain First)
 
-The Mixer implements an **Off-Chain Mixing with On-Chain Dispute** pattern:
+The NeoVault implements an **Off-Chain Mixing with On-Chain Dispute** pattern:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -579,7 +579,7 @@ The Mixer implements an **Off-Chain Mixing with On-Chain Dispute** pattern:
 │  6. NORMAL PATH: User happy, ZERO on-chain link to service layer             │
 │                                                                              │
 │  7. DISPUTE PATH (if mix not done within 7 days):                            │
-│     └── User calls /dispute → Mixer submits CompletionProof on-chain         │
+│     └── User calls /dispute → NeoVault submits CompletionProof on-chain         │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -592,9 +592,9 @@ The Mixer implements an **Off-Chain Mixing with On-Chain Dispute** pattern:
 - **Privacy by Default**: On-chain data only exposed during dispute
 - **7-Day Deadline**: User can claim refund via dispute contract if not completed
 - Pool accounts are **standard single-sig addresses** (identical to ordinary users)
-- **AccountPool-owned keys**: AccountPool service derives/holds pool keys; mixer only locks/updates balances via API
+- **AccountPool-owned keys**: AccountPool service derives/holds pool keys; neovault only locks/updates balances via API
 
-**Mixer API Endpoints:**
+**NeoVault API Endpoints:**
 ```
 POST /request              - Create mix request, returns RequestProof
 POST /request/{id}/deposit - Confirm deposit, start mixing
@@ -627,8 +627,8 @@ listener.On("VRFRequest", func(event *chain.ContractEvent) error {
     return nil
 })
 
-// Note: Mixer requests are now handled directly via API, not on-chain events
-// The mixer uses the off-chain-first pattern with dispute-only on-chain
+// Note: NeoVault requests are now handled directly via API, not on-chain events
+// The neovault uses the off-chain-first pattern with dispute-only on-chain
 
 listener.Start(ctx)
 ```
@@ -668,8 +668,8 @@ services/*/supabase/         # Service-specific database operations
 | Service | Package | Models |
 |---------|---------|--------|
 | VRF | `services/vrf/supabase` | `Request`, `Response` |
-| Mixer | `services/mixer/supabase` | `Request`, `MixOperation` |
-| Automation | `services/automation/supabase` | `Trigger`, `Execution` |
+| NeoVault | `services/neovault/supabase` | `Request`, `MixOperation` |
+| NeoFlow | `services/neoflow/supabase` | `Trigger`, `Execution` |
 | AccountPool | `services/accountpool/supabase` | `Account`, `Lock` |
 | Secrets | `services/secrets/supabase` | `Secret`, `AllowedService` |
 

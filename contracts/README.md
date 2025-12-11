@@ -12,9 +12,9 @@ Service Layer 支持三种不同的服务模式：
 
 | 模式 | 服务 | 说明 |
 |------|------|------|
-| **请求-响应** | Oracle, VRF, Mixer, Confidential | 用户发起请求 → TEE 处理 → 回调 |
-| **推送 (自动更新)** | DataFeeds | TEE 定期更新链上数据，无需用户请求 |
-| **触发器** | Automation | 用户注册触发器 → TEE 监控条件 → 周期性回调 |
+| **请求-响应** | Oracle, VRF, NeoVault, NeoCompute | 用户发起请求 → TEE 处理 → 回调 |
+| **推送 (自动更新)** | NeoFeeds | TEE 定期更新链上数据，无需用户请求 |
+| **触发器** | NeoFlow | 用户注册触发器 → TEE 监控条件 → 周期性回调 |
 
 ### 模式一：请求-响应流程图
 
@@ -43,7 +43,7 @@ Service Layer 支持三种不同的服务模式：
 ├────────────────────────────────────────────────────────────────────┼────────┤
 │                                                                    ▼        │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                    Service Layer (TEE Enclave)                       │   │
+│  │                    Service Layer (MarbleRun TEE)                       │   │
 │  │  5. 监听区块链事件                                                    │   │
 │  │  6. 处理请求 (HTTP 获取 / VRF 计算 / 混币执行)                        │   │
 │  │  7. 使用 TEE 私钥签名结果                                             │   │
@@ -88,7 +88,7 @@ Service Layer 支持三种不同的服务模式：
 ┌─────────────────────────────────────────────────────────────────┐
 │                      服务合约层                                   │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐          │
-│  │ Oracle   │ │   VRF    │ │  Mixer   │ │ DataFeeds│          │
+│  │ Oracle   │ │   VRF    │ │  NeoVault   │ │ NeoFeeds│          │
 │  │ Service  │ │ Service  │ │ Service  │ │ Service  │          │
 │  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘          │
 └───────┼────────────┼────────────┼────────────┼──────────────────┘
@@ -163,9 +163,9 @@ Service Layer 支持三种不同的服务模式：
 2. 调用服务合约 `OnFulfill()`
 3. 执行用户合约回调方法
 
-### 模式二：推送/自动更新 (DataFeeds)
+### 模式二：推送/自动更新 (NeoFeeds)
 
-DataFeeds 服务自动更新链上价格数据，无需用户请求：
+NeoFeeds 服务自动更新链上价格数据，无需用户请求：
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -174,12 +174,12 @@ DataFeeds 服务自动更新链上价格数据，无需用户请求：
 │  1. 从多个数据源获取价格 (Binance, Coinbase 等)                               │
 │  2. 聚合并验证数据 (中位数, 异常值过滤)                                       │
 │  3. 使用 TEE 密钥签名聚合价格                                                 │
-│  4. 定期提交到 DataFeedsService 合约                                          │
+│  4. 定期提交到 NeoFeedsService 合约                                          │
 └─────────────────────────────────────┬───────────────────────────────────────┘
                                       │ UpdatePrice()
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                      DataFeedsService 合约                                   │
+│                      NeoFeedsService 合约                                   │
 │  • 存储最新价格 (BTC/USD, ETH/USD, NEO/USD, GAS/USD 等)                     │
 │  • 验证 TEE 签名                                                             │
 │  • 发出 PriceUpdated 事件                                                    │
@@ -192,7 +192,7 @@ DataFeeds 服务自动更新链上价格数据，无需用户请求：
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 模式三：触发器 (Automation)
+### 模式三：触发器 (NeoFlow)
 
 用户注册触发器，TEE 监控条件并周期性调用回调：
 
@@ -200,8 +200,8 @@ DataFeeds 服务自动更新链上价格数据，无需用户请求：
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                      触发器注册 (一次性)                                      │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  用户 → 用户合约.RegisterTrigger() → Gateway.RequestService("automation")   │
-│                                    → AutomationService.OnRequest()           │
+│  用户 → 用户合约.RegisterTrigger() → Gateway.RequestService("neoflow")   │
+│                                    → NeoFlowService.OnRequest()           │
 │                                                                              │
 │  触发器类型:                                                                  │
 │  • 时间触发: "每周五 00:00 UTC" (cron 表达式)                                 │
@@ -215,7 +215,7 @@ DataFeeds 服务自动更新链上价格数据，无需用户请求：
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  循环检查所有已注册的触发器:                                                   │
 │  • 时间触发: 比较当前时间                                                     │
-│  • 价格触发: 检查 DataFeeds 价格                                              │
+│  • 价格触发: 检查 NeoFeeds 价格                                              │
 │  • 事件触发: 监控区块链事件                                                   │
 │  当条件满足 → 执行回调                                                        │
 └─────────────────────────────────────┬───────────────────────────────────────┘
@@ -229,7 +229,7 @@ DataFeeds 服务自动更新链上价格数据，无需用户请求：
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Automation 触发器示例:**
+**NeoFlow 触发器示例:**
 
 | 触发器类型 | 示例 | 用例 |
 |------------|------|------|
@@ -268,10 +268,10 @@ DataFeeds 服务自动更新链上价格数据，无需用户请求：
 |------|-----------|
 | Oracle | 0.1 |
 | VRF | 0.1 |
-| Mixer | 0.5 |
-| DataFeeds | 0.05 |
-| Automation | 0.2 |
-| Confidential | 1.0 |
+| NeoVault | 0.5 |
+| NeoFeeds | 0.05 |
+| NeoFlow | 0.2 |
+| NeoCompute | 1.0 |
 
 ### OracleService
 
@@ -301,7 +301,7 @@ event VRFRequest(requestId, userContract, seed, numWords)
 event VRFFulfilled(requestId, randomWords, proof)
 ```
 
-### MixerService
+### NeoVaultService
 
 **确定性共享种子隐私混币服务 (v4.1)**
 
@@ -349,7 +349,7 @@ byte[] sharedSeed = HKDF.DeriveKey(
     masterSecret,
     32,
     teeAttestationHash,
-    Encoding.UTF8.GetBytes("neo-mixer-pool")
+    Encoding.UTF8.GetBytes("neo-vault-pool")
 );
 
 // 2. 派生私钥 (index = 账户序号)
@@ -462,7 +462,7 @@ public static void OnServiceCallback(BigInteger requestId, bool success, byte[] 
    ```bash
    neo-go contract deploy -i OracleService.nef -m OracleService.manifest.json
    neo-go contract deploy -i VRFService.nef -m VRFService.manifest.json
-   neo-go contract deploy -i MixerService.nef -m MixerService.manifest.json
+   neo-go contract deploy -i NeoVaultService.nef -m NeoVaultService.manifest.json
    ```
 
 3. **配置 Gateway**
@@ -472,16 +472,16 @@ public static void OnServiceCallback(BigInteger requestId, bool success, byte[] 
 
    # 注册服务
    neo-go contract invokefunction <gateway> registerService oracle <oracle_hash>
-   neo-go contract invokefunction <gateway> registerService vrf <vrf_hash>
-   neo-go contract invokefunction <gateway> registerService mixer <mixer_hash>
+   neo-go contract invokefunction <gateway> registerService neorand <neorand_hash>
+   neo-go contract invokefunction <gateway> registerService neovault <neovault_hash>
    ```
 
 4. **配置服务合约**
    ```bash
    # 设置 Gateway 地址
    neo-go contract invokefunction <oracle> setGateway <gateway_hash>
-   neo-go contract invokefunction <vrf> setGateway <gateway_hash>
-   neo-go contract invokefunction <mixer> setGateway <gateway_hash>
+   neo-go contract invokefunction <neorand> setGateway <gateway_hash>
+   neo-go contract invokefunction <neovault> setGateway <gateway_hash>
    ```
 
 ## Go 集成
@@ -542,7 +542,7 @@ txHash, err := fulfiller.FailRequest(ctx, requestID, "error reason")
 4. **费用预付**: 用户必须预存足够的 GAS
 5. **暂停机制**: Admin 可暂停合约应对紧急情况
 
-### ConfidentialService
+### NeoComputeService
 
 机密计算服务：
 
@@ -552,8 +552,8 @@ txHash, err := fulfiller.FailRequest(ctx, requestID, "error reason")
 
 **事件**:
 ```csharp
-event ConfidentialRequest(requestId, userContract, computationType, encryptedInput, inputCommitment)
-event ConfidentialFulfilled(requestId, encryptedOutput, outputCommitment)
+event NeoComputeRequest(requestId, userContract, computationType, encryptedInput, inputCommitment)
+event NeoComputeFulfilled(requestId, encryptedOutput, outputCommitment)
 ```
 
 **计算类型**:
@@ -574,22 +574,22 @@ contracts/
 │   └── ServiceContractBase.cs   # 服务合约基类 (Gateway 模式)
 ├── gateway/
 │   └── ServiceLayerGateway.cs   # 主入口合约
-├── oracle/
+├── neooracle/
 │   └── OracleService.cs         # Oracle 服务合约 (继承 ServiceContractBase)
-├── vrf/
+├── neorand/
 │   └── VRFService.cs            # VRF 服务合约 (继承 ServiceContractBase)
-├── confidential/
-│   └── ConfidentialService.cs   # Confidential 服务合约 (继承 ServiceContractBase)
-├── mixer/
-│   └── MixerService.cs          # Mixer 服务合约 (独立架构)
-├── datafeeds/
-│   └── DataFeedsService.cs      # DataFeeds 服务合约 (独立架构)
-├── automation/
-│   └── AutomationService.cs     # Automation 服务合约 (混合架构)
+├── neocompute/
+│   └── NeoComputeService.cs   # NeoCompute 服务合约 (继承 ServiceContractBase)
+├── neovault/
+│   └── NeoVaultService.cs          # NeoVault 服务合约 (独立架构)
+├── neofeeds/
+│   └── NeoFeedsService.cs      # NeoFeeds 服务合约 (独立架构)
+├── neoflow/
+│   └── NeoFlowService.cs     # NeoFlow 服务合约 (混合架构)
 └── examples/
     ├── ExampleConsumer.cs       # 示例用户合约
     ├── VRFLottery.cs            # VRF 彩票示例
-    ├── MixerClient.cs           # Mixer 客户端示例
+    ├── NeoVaultClient.cs           # NeoVault 客户端示例
     └── DeFiPriceConsumer.cs     # DeFi 价格消费者示例
 ```
 
@@ -597,9 +597,9 @@ contracts/
 
 | 架构类型 | 合约 | 说明 |
 |---------|------|------|
-| **Gateway 模式** | OracleService, VRFService, ConfidentialService | 继承 ServiceContractBase，通过 Gateway 路由请求 |
-| **独立架构** | MixerService, DataFeedsService | 有自己的 Admin/TEE 管理，不通过 Gateway |
-| **混合架构** | AutomationService | 有 Gateway 但 SetGateway 需要 Admin 权限 |
+| **Gateway 模式** | OracleService, VRFService, NeoComputeService | 继承 ServiceContractBase，通过 Gateway 路由请求 |
+| **独立架构** | NeoVaultService, NeoFeedsService | 有自己的 Admin/TEE 管理，不通过 Gateway |
+| **混合架构** | NeoFlowService | 有 Gateway 但 SetGateway 需要 Admin 权限 |
 
 ## 编译要求
 

@@ -5,7 +5,7 @@ A fully decentralized lottery dApp powered by Neo N3 blockchain and Service Laye
 ## Features
 
 - **Provably Fair**: Uses Service Layer VRF (Verifiable Random Function) for cryptographically secure random number generation
-- **Automated Draws**: Daily draws triggered automatically by Service Layer Automation
+- **Automated Draws**: Daily draws triggered automatically by Service Layer NeoFlow
 - **Transparent**: All operations recorded on-chain for full transparency
 - **Multiple Prize Tiers**: MegaMillions-style prize structure with jackpot rollover
 - **1-Minute Lockout**: Ticket sales lock 1 minute before draw for fairness
@@ -26,11 +26,11 @@ A fully decentralized lottery dApp powered by Neo N3 blockchain and Service Laye
 │  - Ticket Purchase & Storage                                    │
 │  - Prize Distribution                                           │
 │  - VRF Callback Handler                                         │
-│  - Automation Trigger Handler                                   │
+│  - NeoFlow Trigger Handler                                   │
 ├─────────────────────────────────────────────────────────────────┤
 │  Service Layer Integration                                      │
 │  ┌─────────────┐  ┌─────────────────┐                           │
-│  │ VRF Service │  │ Automation Svc  │                           │
+│  │ VRF Service │  │ NeoFlow Svc  │                           │
 │  │ (Random #s) │  │ (Daily Draws)   │                           │
 │  └─────────────┘  └─────────────────┘                           │
 └─────────────────────────────────────────────────────────────────┘
@@ -105,8 +105,8 @@ neo-express contract deploy MegaLottery.nef
 # Set VRF contract address
 neo-express contract invoke MegaLottery setVRFContract <VRF_CONTRACT_HASH>
 
-# Set Automation contract address
-neo-express contract invoke MegaLottery setAutomationContract <AUTOMATION_CONTRACT_HASH>
+# Set NeoFlow contract address
+neo-express contract invoke MegaLottery setNeoFlowContract <AUTOMATION_CONTRACT_HASH>
 
 # Register daily trigger
 neo-express contract invoke MegaLottery registerDailyTrigger
@@ -163,13 +163,13 @@ public static void FulfillRandomness(ByteString requestId, BigInteger[] randomWo
 }
 ```
 
-### Automation Integration
+### NeoFlow Integration
 
-Daily draws are triggered by Service Layer Automation:
+Daily draws are triggered by Service Layer NeoFlow:
 
 ```csharp
 // Register time-based trigger for daily draws
-Contract.Call(automationContract, "registerTrigger", CallFlags.All, new object[] {
+Contract.Call(neoflowContract, "registerTrigger", CallFlags.All, new object[] {
     contractHash,       // Callback contract
     1,                  // Trigger type: Time
     "0 0 * * *",        // Cron: Daily at midnight UTC

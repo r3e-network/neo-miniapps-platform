@@ -42,13 +42,13 @@ listener.Start(ctx)
 |------|----------|---------|
 | `contracts_gateway.go` | ServiceLayerGateway | Main entry point for all services |
 | `contracts_vrf.go` | VRFService | Verifiable random function |
-| `contracts_mixer.go` | MixerService | Privacy mixing |
-| `contracts_datafeeds.go` | DataFeedsService | Price oracle |
-| `contracts_automation.go` | AutomationService | Task automation |
+| `contracts_neovault.go` | NeoVaultService | Privacy mixing |
+| `contracts_neofeeds.go` | NeoFeedsService | Price oracle |
+| `contracts_neoflow.go` | NeoFlowService | Task neoflow |
 
 ### TEE Fulfiller (`contracts_fulfiller.go`)
 
-Executes on-chain callbacks from within the TEE enclave.
+Executes on-chain callbacks from within the MarbleRun TEE.
 
 ```go
 fulfiller := chain.NewTEEFulfiller(client, privateKey)
@@ -66,18 +66,18 @@ Parses Neo N3 notification events into typed structures.
 - `RandomnessRequested` - New VRF request
 - `RandomnessFulfilled` - VRF request completed
 
-### Mixer Events (`listener_events_mixer.go`)
+### NeoVault Events (`listener_events_neovault.go`)
 
 - `MixRequested` - New mix request
 - `MixCompleted` - Mix completed
 - `DisputeSubmitted` - Dispute filed
 
-### DataFeeds Events (`listener_events_datafeeds.go`)
+### NeoFeeds Events (`listener_events_neofeeds.go`)
 
 - `PriceUpdated` - Price feed updated
 - `FeedConfigured` - Feed configuration changed
 
-### Automation Events (`listener_events_automation.go`)
+### NeoFlow Events (`listener_events_neoflow.go`)
 
 - `TriggerRegistered` - New trigger registered
 - `TriggerExecuted` - Trigger executed

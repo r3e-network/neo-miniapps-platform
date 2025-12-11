@@ -32,10 +32,10 @@ type masterKeyResponse struct {
 func main() {
 	rpc := flag.String("rpc", "", "Neo RPC URL")
 	gateway := flag.String("gateway", "", "Gateway contract hash (0x-prefixed)")
-	accountPool := flag.String("accountpool", "", "AccountPool base URL (https://host:port)")
+	neoAccounts := flag.String("neoaccounts", "", "NeoAccounts base URL (https://host:port)")
 	flag.Parse()
 
-	if *rpc == "" || *gateway == "" || *accountPool == "" {
+	if *rpc == "" || *gateway == "" || *neoAccounts == "" {
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -43,7 +43,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	mk, err := fetchMasterKey(*accountPool)
+	mk, err := fetchMasterKey(*neoAccounts)
 	if err != nil {
 		log.Fatalf("fetch master key: %v", err)
 	}
@@ -67,7 +67,7 @@ func main() {
 		log.Fatalf("get on-chain attestation hash: %v", err)
 	}
 
-	fmt.Println("AccountPool /master-key:")
+	fmt.Println("NeoAccounts /master-key:")
 	fmt.Printf("  pubkey: %s\n", mk.PubKey)
 	fmt.Printf("  hash:   %s\n", mk.Hash)
 	fmt.Println("Gateway anchor:")

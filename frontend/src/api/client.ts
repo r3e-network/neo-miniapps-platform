@@ -184,6 +184,23 @@ class ApiClient {
     return this.request<MeResponse>('/me');
   }
 
+  // getMeWithCookie fetches user profile using HTTP-only cookie authentication.
+  // Used after OAuth callback when token is set via cookie instead of URL.
+  async getMeWithCookie(): Promise<MeResponse & { token?: string }> {
+    const response = await fetch(`${API_BASE}/me`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', // Include cookies in request
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  }
+
   // =============================================================================
   // API Keys
   // =============================================================================
@@ -291,16 +308,16 @@ class ApiClient {
   }
 
   // Oracle
-  async oracleFetch(url: string, jsonPath?: string) {
-    return this.request('/oracle/fetch', {
+  async neooracleFetch(url: string, jsonPath?: string) {
+    return this.request('/neooracle/fetch', {
       method: 'POST',
       body: { url, json_path: jsonPath },
     });
   }
 
   // VRF
-  async vrfRandom(seed: string, numWords = 1) {
-    return this.request('/vrf/random', {
+  async neorandRandom(seed: string, numWords = 1) {
+    return this.request('/neorand/random', {
       method: 'POST',
       body: { seed, num_words: numWords },
     });
@@ -308,44 +325,78 @@ class ApiClient {
 
   // Secrets
   async listSecrets() {
-    return this.request<Array<{ id: string; name: string; version: number }>>('/secrets/secrets');
+    return this.request<Array<{ id: string; name: string; version: number; created_at: string; last_accessed?: string }>>('/neostore/secrets');
   }
 
   async createSecret(name: string, value: string) {
-    return this.request('/secrets/secrets', {
+    return this.request('/neostore/secrets', {
       method: 'POST',
       body: { name, value },
     });
   }
 
-  // Automation
+  async deleteSecret(name: string) {
+    return this.request(`/secrets/secrets/${name}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getSecretPermissions(name: string) {
+    return this.request<Array<{ service_name: string; granted_at: string }>>(`/secrets/secrets/${name}/permissions`);
+  }
+
+  async grantSecretPermission(name: string, serviceName: string) {
+    return this.request(`/secrets/secrets/${name}/permissions`, {
+      method: 'POST',
+      body: { service_name: serviceName },
+    });
+  }
+
+  async revokeSecretPermission(name: string, serviceName: string) {
+    return this.request(`/secrets/secrets/${name}/permissions/${serviceName}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getSecretAuditLog(name: string) {
+    return this.request<Array<{
+      id: string;
+      secret_name: string;
+      action: string;
+      service_name?: string;
+      timestamp: string;
+      details?: string;
+    }>>(`/secrets/secrets/${name}/audit`);
+  }
+
+  // NeoFlow
   async listTriggers() {
-    return this.request<Array<{ id: string; name: string; enabled: boolean }>>('/automation/triggers');
+    return this.request<Array<{ id: string; name: string; enabled: boolean }>>('/neoflow/triggers');
   }
 
   async createTrigger(trigger: { name: string; trigger_type: string; schedule?: string; action: unknown }) {
-    return this.request('/automation/triggers', {
+    return this.request('/neoflow/triggers', {
       method: 'POST',
       body: trigger,
     });
   }
 
-  // DataFeeds
+  // NeoFeeds
   async getPrice(pair: string) {
-    return this.request<{ price: number; decimals: number; timestamp: string }>(`/datafeeds/price/${pair}`);
+    return this.request<{ price: number; decimals: number; timestamp: string }>(`/neofeeds/price/${pair}`);
   }
 
-  // Mixer
-  async getMixerInfo() {
+  // NeoVault
+  async getNeoVaultInfo() {
     return this.request<{
       status: string;
       bond_amount: string;
       available_capacity: string;
       total_mixed: string;
-    }>('/mixer/info');
+    }>('/neovault/info');
   }
 
-  async getMixerRequests() {
+  async getNeoVaultRequests() {
     return this.request<Array<{
       request_id: string;
       amount: string;
@@ -354,11 +405,11 @@ class ApiClient {
       created_at: string;
       deadline: string;
       can_refund: boolean;
-    }>>('/mixer/requests');
+    }>>('/neovault/requests');
   }
 
   async createMixRequest(targets: Array<{ address: string; amount: string }>, mixOption: number) {
-    return this.request<{ request_id: string; tx_hash: string }>('/mixer/request', {
+    return this.request<{ request_id: string; tx_hash: string }>('/neovault/request', {
       method: 'POST',
       body: {
         targets,
@@ -367,13 +418,13 @@ class ApiClient {
     });
   }
 
-  async claimMixerRefund(requestId: string) {
-    return this.request<{ tx_hash: string }>(`/mixer/refund/${requestId}`, {
+  async claimNeoVaultRefund(requestId: string) {
+    return this.request<{ tx_hash: string }>(`/neovault/refund/${requestId}`, {
       method: 'POST',
     });
   }
 
-  async getMixerRequest(requestId: string) {
+  async getNeoVaultRequest(requestId: string) {
     return this.request<{
       request_id: string;
       amount: string;
@@ -383,7 +434,7 @@ class ApiClient {
       deadline: string;
       can_refund: boolean;
       outputs_hash?: string;
-    }>(`/mixer/request/${requestId}`);
+    }>(`/neovault/request/${requestId}`);
   }
 }
 

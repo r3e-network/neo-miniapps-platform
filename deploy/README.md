@@ -104,15 +104,15 @@ After deployment, contracts are initialized with:
 
 1. **Gateway Configuration**
    - Register TEE account and public key
-   - Set service fees (Oracle: 0.1 GAS, VRF: 0.1 GAS, Mixer: 0.5 GAS, etc.)
-   - Register service contracts (VRF, Mixer, DataFeeds, Automation)
+   - Set service fees (Oracle: 0.1 GAS, VRF: 0.1 GAS, NeoVault: 0.5 GAS, etc.)
+   - Register service contracts (VRF, NeoVault, NeoFeeds, NeoFlow)
 
 2. **Service Contract Configuration**
    - Set Gateway address on each service contract
 
 3. **Example Contract Configuration**
    - Set Gateway address
-   - Set DataFeeds address (for DeFiPriceConsumer)
+   - Set NeoFeeds address (for DeFiPriceConsumer)
 
 ## Testing
 
@@ -123,9 +123,9 @@ make test
 
 ### Run Specific Service Tests
 ```bash
-make test-vrf
-make test-mixer
-make test-datafeeds
+make test-neorand
+make test-neovault
+make test-neofeeds
 ```
 
 ### Run Go Integration Tests
@@ -152,11 +152,11 @@ After deployment, contract addresses are saved to `config/deployed_contracts.jso
 {
   "ServiceLayerGateway": "0x1234...",
   "VRFService": "0x5678...",
-  "MixerService": "0x9abc...",
-  "DataFeedsService": "0xdef0...",
-  "AutomationService": "0x1234...",
+  "NeoVaultService": "0x9abc...",
+  "NeoFeedsService": "0xdef0...",
+  "NeoFlowService": "0x1234...",
   "VRFLottery": "0x5678...",
-  "MixerClient": "0x9abc...",
+  "NeoVaultClient": "0x9abc...",
   "DeFiPriceConsumer": "0xdef0..."
 }
 ```
@@ -169,10 +169,10 @@ Default fees (configurable in `initialize.py`):
 |---------|-----------|
 | Oracle | 0.1 |
 | VRF | 0.1 |
-| Mixer | 0.5 |
-| DataFeeds | 0.05 |
-| Automation | 0.2 |
-| Confidential | 1.0 |
+| NeoVault | 0.5 |
+| NeoFeeds | 0.05 |
+| NeoFlow | 0.2 |
+| NeoCompute | 1.0 |
 
 ## Troubleshooting
 

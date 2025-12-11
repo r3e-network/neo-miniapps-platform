@@ -143,11 +143,11 @@ func (t *TEEFulfiller) FailRequest(ctx context.Context, requestID *big.Int, reas
 	return txResult.TxHash, nil
 }
 
-// ResolveDispute submits completion proof to resolve a mixer dispute on-chain.
+// ResolveDispute submits completion proof to resolve a neovault dispute on-chain.
 // This is called ONLY when a user disputes a mix request.
 // Normal flow has ZERO on-chain transactions.
 // Returns the transaction hash after waiting for execution (2 minute timeout).
-func (t *TEEFulfiller) ResolveDispute(ctx context.Context, mixerHash string, requestHash, outputsHash []byte) (string, error) {
+func (t *TEEFulfiller) ResolveDispute(ctx context.Context, neovaultHash string, requestHash, outputsHash []byte) (string, error) {
 	nonce := t.nextNonce()
 
 	message := append(requestHash, outputsHash...)
@@ -167,7 +167,7 @@ func (t *TEEFulfiller) ResolveDispute(ctx context.Context, mixerHash string, req
 
 	txResult, err := t.client.InvokeFunctionWithSignerAndWait(
 		ctx,
-		mixerHash,
+		neovaultHash,
 		"resolveDispute",
 		params,
 		t.account,
@@ -189,12 +189,12 @@ func (t *TEEFulfiller) nextNonce() *big.Int {
 }
 
 // =============================================================================
-// TEE Fulfiller Extensions for DataFeeds and Automation
+// TEE Fulfiller Extensions for NeoFeeds and NeoFlow
 // =============================================================================
 
-// UpdatePrice updates a price feed on-chain (DataFeeds push pattern).
+// UpdatePrice updates a price feed on-chain (NeoFeeds push pattern).
 // Returns the transaction hash after waiting for execution (2 minute timeout).
-func (t *TEEFulfiller) UpdatePrice(ctx context.Context, dataFeedsHash, feedID string, price *big.Int, timestamp uint64) (string, error) {
+func (t *TEEFulfiller) UpdatePrice(ctx context.Context, neoFeedsHash, feedID string, price *big.Int, timestamp uint64) (string, error) {
 	nonce := t.nextNonce()
 
 	message := append([]byte(feedID), price.Bytes()...)
@@ -216,7 +216,7 @@ func (t *TEEFulfiller) UpdatePrice(ctx context.Context, dataFeedsHash, feedID st
 
 	txResult, err := t.client.InvokeFunctionWithSignerAndWait(
 		ctx,
-		dataFeedsHash,
+		neoFeedsHash,
 		"updatePrice",
 		params,
 		t.account,
@@ -230,9 +230,9 @@ func (t *TEEFulfiller) UpdatePrice(ctx context.Context, dataFeedsHash, feedID st
 	return txResult.TxHash, nil
 }
 
-// UpdatePrices batch updates multiple price feeds (DataFeeds push pattern).
+// UpdatePrices batch updates multiple price feeds (NeoFeeds push pattern).
 // Returns the transaction hash after waiting for execution (2 minute timeout).
-func (t *TEEFulfiller) UpdatePrices(ctx context.Context, dataFeedsHash string, feedIDs []string, prices []*big.Int, timestamps []uint64) (string, error) {
+func (t *TEEFulfiller) UpdatePrices(ctx context.Context, neoFeedsHash string, feedIDs []string, prices []*big.Int, timestamps []uint64) (string, error) {
 	if len(feedIDs) != len(prices) || len(feedIDs) != len(timestamps) {
 		return "", fmt.Errorf("array length mismatch")
 	}
@@ -272,7 +272,7 @@ func (t *TEEFulfiller) UpdatePrices(ctx context.Context, dataFeedsHash string, f
 
 	txResult, err := t.client.InvokeFunctionWithSignerAndWait(
 		ctx,
-		dataFeedsHash,
+		neoFeedsHash,
 		"updatePrices",
 		params,
 		t.account,
@@ -286,9 +286,9 @@ func (t *TEEFulfiller) UpdatePrices(ctx context.Context, dataFeedsHash string, f
 	return txResult.TxHash, nil
 }
 
-// ExecuteTrigger executes an automation trigger (Automation trigger pattern).
+// ExecuteTrigger executes an neoflow trigger (NeoFlow trigger pattern).
 // Returns the transaction hash after waiting for execution (2 minute timeout).
-func (t *TEEFulfiller) ExecuteTrigger(ctx context.Context, automationHash string, triggerID *big.Int, executionData []byte) (string, error) {
+func (t *TEEFulfiller) ExecuteTrigger(ctx context.Context, neoflowHash string, triggerID *big.Int, executionData []byte) (string, error) {
 	nonce := t.nextNonce()
 
 	message := append(triggerID.Bytes(), executionData...)
@@ -308,7 +308,7 @@ func (t *TEEFulfiller) ExecuteTrigger(ctx context.Context, automationHash string
 
 	txResult, err := t.client.InvokeFunctionWithSignerAndWait(
 		ctx,
-		automationHash,
+		neoflowHash,
 		"executeTrigger",
 		params,
 		t.account,
@@ -320,6 +320,49 @@ func (t *TEEFulfiller) ExecuteTrigger(ctx context.Context, automationHash string
 	}
 
 	return txResult.TxHash, nil
+}
+
+// =============================================================================
+// TEE Master Key Anchoring
+// =============================================================================
+
+// SetTEEMasterKey anchors the TEE master key to the Gateway contract.
+// This is called during initial setup to register the TEE's master public key.
+// Returns the transaction result after waiting for execution.
+func (t *TEEFulfiller) SetTEEMasterKey(ctx context.Context, pubKey, pubKeyHash, attestHash []byte) (*TxResult, error) {
+	nonce := t.nextNonce()
+
+	message := append(pubKey, pubKeyHash...)
+	message = append(message, attestHash...)
+	message = append(message, nonce.Bytes()...)
+
+	signature, err := t.legacyWallet.Sign(message)
+	if err != nil {
+		return nil, fmt.Errorf("sign master key: %w", err)
+	}
+
+	params := []ContractParam{
+		NewByteArrayParam(pubKey),
+		NewByteArrayParam(pubKeyHash),
+		NewByteArrayParam(attestHash),
+		NewIntegerParam(nonce),
+		NewByteArrayParam(signature),
+	}
+
+	txResult, err := t.client.InvokeFunctionWithSignerAndWait(
+		ctx,
+		t.gatewayHash,
+		"setTEEMasterKey",
+		params,
+		t.account,
+		transaction.CalledByEntry,
+		true,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return txResult, nil
 }
 
 // =============================================================================

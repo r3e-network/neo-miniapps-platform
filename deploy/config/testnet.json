@@ -9,9 +9,9 @@
   "contracts": {
     "ServiceLayerGateway": null,
     "VRFService": null,
-    "MixerService": null,
-    "DataFeedsService": null,
-    "AutomationService": null
+    "NeoVaultService": null,
+    "NeoFeedsService": null,
+    "NeoFlowService": null
   },
   "wallets": {
     "owner": {
@@ -27,10 +27,10 @@
   "service_fees": {
     "oracle": 10000000,
     "vrf": 10000000,
-    "mixer": 50000000,
-    "datafeeds": 5000000,
-    "automation": 20000000,
-    "confidential": 100000000
+    "neovault": 50000000,
+    "neofeeds": 5000000,
+    "neoflow": 20000000,
+    "neocompute": 100000000
   },
   "notes": [
     "Set environment variables before deployment:",

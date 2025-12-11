@@ -111,10 +111,10 @@ func listTransactionsHandler(db *database.Repository) http.HandlerFunc {
 // Service endpoint configuration from environment
 var serviceEndpoints = map[string]string{
 	"vrf":          getEnvOrDefault("VRF_SERVICE_URL", "http://localhost:8081"),
-	"mixer":        getEnvOrDefault("MIXER_SERVICE_URL", "http://localhost:8082"),
-	"datafeeds":    getEnvOrDefault("DATAFEEDS_SERVICE_URL", "http://localhost:8083"),
-	"automation":   getEnvOrDefault("AUTOMATION_SERVICE_URL", "http://localhost:8084"),
-	"confidential": getEnvOrDefault("CONFIDENTIAL_SERVICE_URL", "http://localhost:8085"),
+	"neovault":        getEnvOrDefault("NEOVAULT_SERVICE_URL", "http://localhost:8082"),
+	"neofeeds":    getEnvOrDefault("NEOFEEDS_SERVICE_URL", "http://localhost:8083"),
+	"neoflow":   getEnvOrDefault("NEOFLOW_SERVICE_URL", "http://localhost:8084"),
+	"neocompute": getEnvOrDefault("NEOCOMPUTE_SERVICE_URL", "http://localhost:8085"),
 }
 
 func getEnvOrDefault(key, defaultVal string) string {

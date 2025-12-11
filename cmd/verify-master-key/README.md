@@ -15,4 +15,4 @@ The tool:
 2) Reads `TEEMaster` anchor from the gateway (`pubkey`, `pubkey hash`, `attestation hash`).
 3) Prints both and exits non-zero if pubkey/hash differ.
 
-Note: attestation hash is displayed for operator review; this tool does not verify SGX quotes.
+Note: attestation hash is displayed for operator review; this tool does not verify MarbleRun attestation.
