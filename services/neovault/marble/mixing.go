@@ -351,7 +351,7 @@ func (s *Service) collectFeeFromPool(ctx context.Context, request *MixRequest, p
 		}
 
 		// Transfer fee from pool account to master fee address via neoaccounts service
-		if err := s.transferFeeToMaster(ctx, acc.ID, collectAmount); err != nil {
+		if err := s.transferFeeToMaster(ctx, acc.ID, collectAmount, request.TokenType); err != nil {
 			s.Logger().WithContext(ctx).WithError(err).WithFields(map[string]interface{}{
 				"account_id": acc.ID,
 				"amount":     collectAmount,
@@ -381,14 +381,14 @@ func (s *Service) collectFeeFromPool(ctx context.Context, request *MixRequest, p
 
 // transferFeeToMaster transfers fee from a pool account to the master fee address.
 // This uses the neoaccounts service to construct, sign, and broadcast the transaction.
-func (s *Service) transferFeeToMaster(ctx context.Context, accountID string, amount int64) error {
+func (s *Service) transferFeeToMaster(ctx context.Context, accountID string, amount int64, tokenType string) error {
 	client, err := s.getNeoAccountsClient()
 	if err != nil {
 		return err
 	}
 
-	// Get token hash for the default token (GAS)
-	cfg := s.GetTokenConfig(DefaultToken)
+	// Get token hash for the request's token type (not hardcoded default)
+	cfg := s.GetTokenConfig(tokenType)
 	tokenHash := ""
 	if cfg != nil {
 		tokenHash = cfg.ScriptHash

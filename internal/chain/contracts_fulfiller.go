@@ -79,8 +79,9 @@ func NewTEEFulfillerFromWallet(client *Client, gatewayHash string, w *Wallet) (*
 func (t *TEEFulfiller) FulfillRequest(ctx context.Context, requestID *big.Int, result []byte) (string, error) {
 	nonce := t.nextNonce()
 
-	message := append(requestID.Bytes(), result...)
-	message = append(message, nonce.Bytes()...)
+	// Use little-endian encoding to match .NET BigInteger.ToByteArray() in Neo N3 contracts
+	message := append(bigIntToLittleEndian(requestID), result...)
+	message = append(message, bigIntToLittleEndian(nonce)...)
 
 	signature, err := t.legacyWallet.Sign(message)
 	if err != nil {
@@ -116,8 +117,9 @@ func (t *TEEFulfiller) FulfillRequest(ctx context.Context, requestID *big.Int, r
 func (t *TEEFulfiller) FailRequest(ctx context.Context, requestID *big.Int, reason string) (string, error) {
 	nonce := t.nextNonce()
 
-	message := append(requestID.Bytes(), []byte(reason)...)
-	message = append(message, nonce.Bytes()...)
+	// Use little-endian encoding to match .NET BigInteger.ToByteArray() in Neo N3 contracts
+	message := append(bigIntToLittleEndian(requestID), []byte(reason)...)
+	message = append(message, bigIntToLittleEndian(nonce)...)
 
 	signature, err := t.legacyWallet.Sign(message)
 	if err != nil {
@@ -154,10 +156,12 @@ func (t *TEEFulfiller) FailRequest(ctx context.Context, requestID *big.Int, reas
 func (t *TEEFulfiller) ResolveDispute(ctx context.Context, neovaultHash string, requestHash, outputsHash []byte) (string, error) {
 	nonce := t.nextNonce()
 
-	message := make([]byte, 0, len(requestHash)+len(outputsHash)+len(nonce.Bytes()))
+	// Use little-endian encoding to match .NET BigInteger.ToByteArray() in Neo N3 contracts
+	nonceLE := bigIntToLittleEndian(nonce)
+	message := make([]byte, 0, len(requestHash)+len(outputsHash)+len(nonceLE))
 	message = append(message, requestHash...)
 	message = append(message, outputsHash...)
-	message = append(message, nonce.Bytes()...)
+	message = append(message, nonceLE...)
 
 	signature, err := t.legacyWallet.Sign(message)
 	if err != nil {
@@ -203,13 +207,14 @@ func (t *TEEFulfiller) nextNonce() *big.Int {
 func (t *TEEFulfiller) UpdatePrice(ctx context.Context, neoFeedsHash, feedID string, price *big.Int, timestamp uint64) (string, error) {
 	nonce := t.nextNonce()
 
-	message := append([]byte(feedID), price.Bytes()...)
+	// Use little-endian encoding to match .NET BigInteger.ToByteArray() in Neo N3 contracts
+	message := append([]byte(feedID), bigIntToLittleEndian(price)...)
 	ts, err := safeInt64FromUint64(timestamp)
 	if err != nil {
 		return "", err
 	}
-	message = append(message, big.NewInt(ts).Bytes()...)
-	message = append(message, nonce.Bytes()...)
+	message = append(message, bigIntToLittleEndian(big.NewInt(ts))...)
+	message = append(message, bigIntToLittleEndian(nonce)...)
 
 	signature, err := t.legacyWallet.Sign(message)
 	if err != nil {
@@ -249,17 +254,18 @@ func (t *TEEFulfiller) UpdatePrices(ctx context.Context, neoFeedsHash string, fe
 
 	nonce := t.nextNonce()
 
+	// Use little-endian encoding to match .NET BigInteger.ToByteArray() in Neo N3 contracts
 	var message []byte
 	for i := range feedIDs {
 		message = append(message, []byte(feedIDs[i])...)
-		message = append(message, prices[i].Bytes()...)
+		message = append(message, bigIntToLittleEndian(prices[i])...)
 		ts, err := safeInt64FromUint64(timestamps[i])
 		if err != nil {
 			return "", err
 		}
-		message = append(message, big.NewInt(ts).Bytes()...)
+		message = append(message, bigIntToLittleEndian(big.NewInt(ts))...)
 	}
-	message = append(message, nonce.Bytes()...)
+	message = append(message, bigIntToLittleEndian(nonce)...)
 
 	signature, err := t.legacyWallet.Sign(message)
 	if err != nil {
@@ -309,8 +315,9 @@ func (t *TEEFulfiller) UpdatePrices(ctx context.Context, neoFeedsHash string, fe
 func (t *TEEFulfiller) ExecuteTrigger(ctx context.Context, neoflowHash string, triggerID *big.Int, executionData []byte) (string, error) {
 	nonce := t.nextNonce()
 
-	message := append(triggerID.Bytes(), executionData...)
-	message = append(message, nonce.Bytes()...)
+	// Use little-endian encoding to match .NET BigInteger.ToByteArray() in Neo N3 contracts
+	message := append(bigIntToLittleEndian(triggerID), executionData...)
+	message = append(message, bigIntToLittleEndian(nonce)...)
 
 	signature, err := t.legacyWallet.Sign(message)
 	if err != nil {
@@ -350,11 +357,13 @@ func (t *TEEFulfiller) ExecuteTrigger(ctx context.Context, neoflowHash string, t
 func (t *TEEFulfiller) SetTEEMasterKey(ctx context.Context, pubKey, pubKeyHash, attestHash []byte) (*TxResult, error) {
 	nonce := t.nextNonce()
 
-	message := make([]byte, 0, len(pubKey)+len(pubKeyHash)+len(attestHash)+len(nonce.Bytes()))
+	// Use little-endian encoding to match .NET BigInteger.ToByteArray() in Neo N3 contracts
+	nonceLE := bigIntToLittleEndian(nonce)
+	message := make([]byte, 0, len(pubKey)+len(pubKeyHash)+len(attestHash)+len(nonceLE))
 	message = append(message, pubKey...)
 	message = append(message, pubKeyHash...)
 	message = append(message, attestHash...)
-	message = append(message, nonce.Bytes()...)
+	message = append(message, nonceLE...)
 
 	signature, err := t.legacyWallet.Sign(message)
 	if err != nil {
@@ -407,16 +416,18 @@ func NewFulfillmentSigner(privateKey []byte) *FulfillmentSigner {
 }
 
 // SignFulfillment signs a fulfillment message (requestId + result + nonce).
+// Uses little-endian encoding to match .NET BigInteger.ToByteArray() in Neo N3 contracts.
 func (f *FulfillmentSigner) SignFulfillment(requestID *big.Int, result []byte, nonce *big.Int) ([]byte, error) {
-	message := append(requestID.Bytes(), result...)
-	message = append(message, nonce.Bytes()...)
+	message := append(bigIntToLittleEndian(requestID), result...)
+	message = append(message, bigIntToLittleEndian(nonce)...)
 	return f.sign(message)
 }
 
 // SignFailure signs a failure message (requestId + reason + nonce).
+// Uses little-endian encoding to match .NET BigInteger.ToByteArray() in Neo N3 contracts.
 func (f *FulfillmentSigner) SignFailure(requestID *big.Int, reason string, nonce *big.Int) ([]byte, error) {
-	message := append(requestID.Bytes(), []byte(reason)...)
-	message = append(message, nonce.Bytes()...)
+	message := append(bigIntToLittleEndian(requestID), []byte(reason)...)
+	message = append(message, bigIntToLittleEndian(nonce)...)
 	return f.sign(message)
 }
 
@@ -430,4 +441,31 @@ func (f *FulfillmentSigner) sign(message []byte) ([]byte, error) {
 		keyPair.PrivateKey.Curve.ScalarBaseMult(f.privateKey)
 
 	return crypto.Sign(keyPair.PrivateKey, message)
+}
+
+// bigIntToLittleEndian converts a big.Int to little-endian byte array,
+// matching .NET's BigInteger.ToByteArray() format used by Neo N3 contracts.
+// This is critical for signature verification compatibility.
+func bigIntToLittleEndian(n *big.Int) []byte {
+	if n.Sign() == 0 {
+		return []byte{0}
+	}
+
+	// Get big-endian bytes
+	beBytes := n.Bytes()
+
+	// Reverse to little-endian
+	leBytes := make([]byte, len(beBytes))
+	for i := 0; i < len(beBytes); i++ {
+		leBytes[i] = beBytes[len(beBytes)-1-i]
+	}
+
+	// .NET BigInteger adds a 0x00 byte if the high bit is set (to indicate positive)
+	// For positive numbers, if the high bit of the last byte (most significant in LE) is set,
+	// we need to append 0x00
+	if n.Sign() > 0 && leBytes[len(leBytes)-1]&0x80 != 0 {
+		leBytes = append(leBytes, 0x00)
+	}
+
+	return leBytes
 }

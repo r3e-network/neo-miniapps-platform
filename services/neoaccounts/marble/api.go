@@ -20,4 +20,5 @@ func (s *Service) registerRoutes() {
 	router.HandleFunc("/sign", s.handleSignTransaction).Methods("POST")
 	router.HandleFunc("/batch-sign", s.handleBatchSign).Methods("POST")
 	router.HandleFunc("/balance", s.handleUpdateBalance).Methods("POST")
+	router.HandleFunc("/transfer", s.handleTransfer).Methods("POST")
 }

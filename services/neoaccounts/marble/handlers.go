@@ -203,6 +203,39 @@ func (s *Service) handleUpdateBalance(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleTransfer transfers tokens from a pool account to a target address.
+// This constructs, signs, and broadcasts the transaction.
+func (s *Service) handleTransfer(w http.ResponseWriter, r *http.Request) {
+	var input TransferInput
+	if !httputil.DecodeJSON(w, r, &input) {
+		return
+	}
+
+	serviceID, ok := resolveServiceID(w, r, input.ServiceID)
+	if !ok {
+		return
+	}
+	input.ServiceID = serviceID
+
+	if input.AccountID == "" || input.ToAddress == "" || input.Amount <= 0 {
+		httputil.BadRequest(w, "account_id, to_address, and positive amount required")
+		return
+	}
+
+	txHash, err := s.Transfer(r.Context(), input.ServiceID, input.AccountID, input.ToAddress, input.Amount, input.TokenHash)
+	if err != nil {
+		httputil.InternalError(w, err.Error())
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, TransferResponse{
+		TxHash:    txHash,
+		AccountID: input.AccountID,
+		ToAddress: input.ToAddress,
+		Amount:    input.Amount,
+	})
+}
+
 func resolveServiceID(w http.ResponseWriter, r *http.Request, requestedServiceID string) (string, bool) {
 	authenticatedServiceID := httputil.GetServiceID(r)
 	if authenticatedServiceID == "" {

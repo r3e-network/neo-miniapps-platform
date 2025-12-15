@@ -43,14 +43,15 @@ func (s *Service) pushPricesToChain(ctx context.Context) {
 			continue
 		}
 
-		timestampMillis := price.Timestamp.UnixMilli()
-		if timestampMillis < 0 {
+		// Use Unix seconds to match on-chain Runtime.Time (seconds, not milliseconds)
+		timestampSecs := price.Timestamp.Unix()
+		if timestampSecs < 0 {
 			continue
 		}
 
 		feedIDs = append(feedIDs, feed.ID)
 		prices = append(prices, big.NewInt(price.Price))
-		timestamps = append(timestamps, uint64(timestampMillis))
+		timestamps = append(timestamps, uint64(timestampSecs))
 	}
 
 	if len(feedIDs) == 0 {

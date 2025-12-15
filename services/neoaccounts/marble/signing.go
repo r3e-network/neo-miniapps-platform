@@ -95,3 +95,46 @@ func verifySignature(pub *ecdsa.PublicKey, hash, signature []byte) bool {
 
 	return ecdsa.Verify(pub, hash, r, s)
 }
+
+// Transfer transfers tokens from a pool account to a target address.
+// This is a stub implementation - actual chain interaction requires chain client integration.
+// The account must be locked by the requesting service.
+func (s *Service) Transfer(ctx context.Context, serviceID, accountID, toAddress string, amount int64, tokenHash string) (string, error) {
+	if s.repo == nil {
+		return "", fmt.Errorf("repository not configured")
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	acc, err := s.repo.GetByID(ctx, accountID)
+	if err != nil {
+		return "", fmt.Errorf("account not found: %w", err)
+	}
+
+	if acc.LockedBy != serviceID {
+		return "", fmt.Errorf("account not locked by service %s", serviceID)
+	}
+
+	// Default to GAS if no token hash specified
+	if tokenHash == "" {
+		tokenHash = "0xd2a4cff31913016155e38e474a2c06d08be276cf" // GAS script hash
+	}
+
+	// TODO: Implement actual chain transfer via chain client
+	// For now, return a placeholder indicating the transfer would be executed
+	// This requires integration with the chain client to:
+	// 1. Build NEP-17 transfer transaction
+	// 2. Sign with account's private key
+	// 3. Broadcast to network
+	// 4. Return transaction hash
+
+	s.Logger().WithContext(ctx).WithFields(map[string]interface{}{
+		"account_id": accountID,
+		"to_address": toAddress,
+		"amount":     amount,
+		"token_hash": tokenHash,
+	}).Info("transfer requested (chain integration pending)")
+
+	return "", fmt.Errorf("transfer not yet implemented: chain client integration required")
+}

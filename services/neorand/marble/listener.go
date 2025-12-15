@@ -23,7 +23,7 @@ func (s *Service) runEventListener(ctx context.Context) {
 	}
 
 	listener := s.eventListener
-	listener.On("NeoRandRequest", func(event *chain.ContractEvent) error {
+	listener.On("VRFRequest", func(event *chain.ContractEvent) error {
 		parsed, err := vrfchain.ParseVRFRequestEvent(event)
 		if err != nil {
 			return err

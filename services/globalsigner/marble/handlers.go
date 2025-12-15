@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/httputil"
+	"github.com/R3E-Network/service_layer/internal/middleware"
 )
 
 // =============================================================================
@@ -16,10 +17,13 @@ func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	// Standard endpoints (from BaseService)
 	s.BaseService.RegisterStandardRoutes()
 
-	// GlobalSigner-specific endpoints
-	mux.HandleFunc("/rotate", s.handleRotate)
-	mux.HandleFunc("/sign", s.handleSign)
-	mux.HandleFunc("/derive", s.handleDerive)
+	// SECURITY: Sensitive endpoints require service authentication
+	// These endpoints can sign data, rotate keys, or derive keys - must be protected
+	mux.Handle("/rotate", middleware.RequireServiceAuth(http.HandlerFunc(s.handleRotate)))
+	mux.Handle("/sign", middleware.RequireServiceAuth(http.HandlerFunc(s.handleSign)))
+	mux.Handle("/derive", middleware.RequireServiceAuth(http.HandlerFunc(s.handleDerive)))
+
+	// Public endpoints (read-only, safe to expose)
 	mux.HandleFunc("/attestation", s.handleAttestation)
 	mux.HandleFunc("/keys", s.handleListKeys)
 	mux.HandleFunc("/status", s.handleStatus)

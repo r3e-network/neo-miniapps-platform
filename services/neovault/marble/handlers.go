@@ -4,10 +4,12 @@ package neovaultmarble
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -341,8 +343,14 @@ func (s *Service) handleConfirmDeposit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Deposit verification: user deposits directly to pool account on-chain
-	// No gasbank involvement - preserves privacy (no link to service layer accounts)
+	// SECURITY: Verify deposit transaction via RPC before accepting
+	if err := s.verifyDeposit(r.Context(), request, input.TxHash); err != nil {
+		s.Logger().WithContext(r.Context()).WithError(err).WithField("tx_hash", input.TxHash).Warn("deposit verification failed")
+		httputil.BadRequest(w, fmt.Sprintf("deposit verification failed: %v", err))
+		return
+	}
+
+	// Deposit verified - update request status
 	request.DepositTxHash = input.TxHash
 	request.Status = StatusDeposited
 	request.DepositedAt = time.Now()
@@ -359,6 +367,158 @@ func (s *Service) handleConfirmDeposit(w http.ResponseWriter, r *http.Request) {
 		"status":  "deposited",
 		"message": "Mixing will begin shortly",
 	})
+}
+
+// verifyDeposit verifies a deposit transaction via RPC.
+// Checks: transaction exists, succeeded, has Transfer event to deposit address with correct amount and token.
+func (s *Service) verifyDeposit(ctx context.Context, request *MixRequest, txHash string) error {
+	if s.chainClient == nil {
+		// In development/test mode without chain client, skip verification
+		s.Logger().WithContext(ctx).Warn("chain client not configured, skipping deposit verification")
+		return nil
+	}
+
+	// Get token config for script hash
+	cfg := s.GetTokenConfig(request.TokenType)
+	if cfg == nil {
+		return fmt.Errorf("unknown token type: %s", request.TokenType)
+	}
+
+	// Fetch application log for the transaction
+	appLog, err := s.chainClient.GetApplicationLog(ctx, txHash)
+	if err != nil {
+		return fmt.Errorf("transaction not found or not yet confirmed: %w", err)
+	}
+
+	// Check transaction succeeded
+	if len(appLog.Executions) == 0 {
+		return fmt.Errorf("transaction has no executions")
+	}
+	if appLog.Executions[0].VMState != "HALT" {
+		return fmt.Errorf("transaction failed: %s", appLog.Executions[0].Exception)
+	}
+
+	// Look for Transfer event from the correct token contract to the deposit address
+	expectedScriptHash := cfg.ScriptHash
+	expectedRecipient := request.DepositAddress
+	expectedAmount := request.TotalAmount
+
+	var foundTransfer bool
+	var transferredAmount int64
+
+	for _, exec := range appLog.Executions {
+		for _, notif := range exec.Notifications {
+			// Check if this is a Transfer event from the expected token contract
+			if notif.EventName != "Transfer" {
+				continue
+			}
+			// Normalize script hash comparison (with or without 0x prefix)
+			contractHash := notif.Contract
+			if !hashesEqual(contractHash, expectedScriptHash) {
+				continue
+			}
+
+			// Parse Transfer event: [from, to, amount]
+			if notif.State.Type != "Array" || len(notif.State.Value) < 3 {
+				continue
+			}
+
+			// Get recipient address (index 1)
+			toItem := notif.State.Value[1]
+			toAddress, err := parseAddressFromStackItem(toItem)
+			if err != nil {
+				continue
+			}
+
+			// Check if recipient matches deposit address
+			if toAddress != expectedRecipient {
+				continue
+			}
+
+			// Get amount (index 2)
+			amountItem := notif.State.Value[2]
+			amount, err := parseIntegerFromStackItem(amountItem)
+			if err != nil {
+				continue
+			}
+
+			transferredAmount += amount
+			foundTransfer = true
+		}
+	}
+
+	if !foundTransfer {
+		return fmt.Errorf("no transfer to deposit address %s found in transaction", expectedRecipient)
+	}
+
+	if transferredAmount < expectedAmount {
+		return fmt.Errorf("insufficient deposit: expected %d, got %d", expectedAmount, transferredAmount)
+	}
+
+	return nil
+}
+
+// hashesEqual compares two script hashes, handling 0x prefix differences.
+func hashesEqual(a, b string) bool {
+	a = strings.TrimPrefix(strings.ToLower(a), "0x")
+	b = strings.TrimPrefix(strings.ToLower(b), "0x")
+	return a == b
+}
+
+// parseAddressFromStackItem extracts an address from a stack item.
+func parseAddressFromStackItem(item interface{}) (string, error) {
+	// Stack item can be a map with "type" and "value" fields
+	if m, ok := item.(map[string]interface{}); ok {
+		itemType, _ := m["type"].(string)
+		value := m["value"]
+
+		switch itemType {
+		case "ByteString":
+			// Base64 encoded script hash - decode and convert to address
+			if b64, ok := value.(string); ok {
+				// Try hex decoding first
+				decoded, err := hex.DecodeString(b64)
+				if err != nil {
+					// Try base64 decoding
+					decoded, err = base64.StdEncoding.DecodeString(b64)
+					if err != nil {
+						return "", err
+					}
+				}
+				// Convert script hash bytes to address
+				// Return hex representation for comparison
+				return hex.EncodeToString(decoded), nil
+			}
+		case "Hash160":
+			if addr, ok := value.(string); ok {
+				return strings.TrimPrefix(strings.ToLower(addr), "0x"), nil
+			}
+		}
+	}
+	return "", fmt.Errorf("cannot parse address from stack item")
+}
+
+// parseIntegerFromStackItem extracts an integer from a stack item.
+func parseIntegerFromStackItem(item interface{}) (int64, error) {
+	if m, ok := item.(map[string]interface{}); ok {
+		itemType, _ := m["type"].(string)
+		value := m["value"]
+
+		switch itemType {
+		case "Integer":
+			switch v := value.(type) {
+			case string:
+				var amount int64
+				_, err := fmt.Sscanf(v, "%d", &amount)
+				return amount, err
+			case float64:
+				return int64(v), nil
+			case int64:
+				return v, nil
+			}
+		}
+	}
+	return 0, fmt.Errorf("cannot parse integer from stack item")
 }
 
 // handleListRequests lists all requests for the current user.

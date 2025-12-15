@@ -51,9 +51,12 @@ func (s *Service) handleGetPrices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Use configured feeds, not hardcoded DefaultFeeds
+	enabledFeeds := s.GetEnabledFeeds()
 	var responses []PriceResponse
-	for _, feedID := range DefaultFeeds {
-		if latest, err := s.DB().GetLatestPrice(r.Context(), feedID); err == nil {
+	for i := range enabledFeeds {
+		feed := &enabledFeeds[i]
+		if latest, err := s.DB().GetLatestPrice(r.Context(), feed.ID); err == nil {
 			responses = append(responses, PriceResponse{
 				FeedID:    latest.FeedID,
 				Pair:      latest.Pair,
@@ -69,11 +72,16 @@ func (s *Service) handleGetPrices(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleListFeeds(w http.ResponseWriter, r *http.Request) {
-	feeds := make([]map[string]string, 0, len(s.sources))
-	for id, src := range s.sources {
-		feeds = append(feeds, map[string]string{
-			"id":   id,
-			"name": src.Name,
+	// Return configured feeds, not sources
+	enabledFeeds := s.GetEnabledFeeds()
+	feeds := make([]map[string]interface{}, 0, len(enabledFeeds))
+	for i := range enabledFeeds {
+		feed := &enabledFeeds[i]
+		feeds = append(feeds, map[string]interface{}{
+			"id":       feed.ID,
+			"pair":     feed.Pair,
+			"enabled":  feed.Enabled,
+			"decimals": feed.Decimals,
 		})
 	}
 	httputil.WriteJSON(w, http.StatusOK, feeds)

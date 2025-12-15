@@ -129,6 +129,23 @@ type ListAccountsResponse struct {
 	Accounts []AccountInfo `json:"accounts"`
 }
 
+// TransferInput for transferring tokens from a pool account.
+type TransferInput struct {
+	ServiceID   string `json:"service_id"`
+	AccountID   string `json:"account_id"`
+	ToAddress   string `json:"to_address"`
+	Amount      int64  `json:"amount"`
+	TokenHash   string `json:"token_hash,omitempty"` // NEP-17 script hash (defaults to GAS)
+}
+
+// TransferResponse returns the transfer result.
+type TransferResponse struct {
+	TxHash    string `json:"tx_hash"`
+	AccountID string `json:"account_id"`
+	ToAddress string `json:"to_address"`
+	Amount    int64  `json:"amount"`
+}
+
 // AccountInfoFromWithBalances converts AccountWithBalances to AccountInfo.
 func AccountInfoFromWithBalances(acc *neoaccountssupabase.AccountWithBalances) AccountInfo {
 	return AccountInfo{
