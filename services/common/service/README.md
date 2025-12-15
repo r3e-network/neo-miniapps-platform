@@ -137,7 +137,7 @@ type Service struct {
 }
 
 func New(cfg Config) (*Service, error) {
-    base := commonservice.NewBase(commonservice.BaseConfig{
+    base := commonservice.NewBase(&commonservice.BaseConfig{
         ID:      "myservice",
         Name:    "My Service",
         Version: "1.0.0",

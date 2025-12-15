@@ -1,0 +1,224 @@
+# Prometheus Helm Values
+# 使用 kube-prometheus-stack chart
+#
+# helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+# helm repo update
+#
+# helm install prometheus prometheus-community/kube-prometheus-stack \
+#   --namespace monitoring \
+#   --create-namespace \
+#   --values helm-values.yaml
+
+---
+# Helm 配置
+prometheus:
+  prometheusSpec:
+    # 资源配置 (架构文档: 0.2C / 1.5G)
+    resources:
+      requests:
+        cpu: 200m
+        memory: 1536Mi
+      limits:
+        cpu: 300m
+        memory: 2Gi
+
+    # 数据保留
+    retention: 15d
+    retentionSize: "9GB"
+
+    # 存储配置
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+    # ServiceMonitor 自动发现
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+
+    # PodMonitor 自动发现
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelector: {}
+    podMonitorNamespaceSelector: {}
+
+    # 抓取配置
+    scrapeInterval: 30s
+    evaluationInterval: 30s
+
+    # 外部标签
+    externalLabels:
+      cluster: neo-service-layer
+      environment: production
+
+    # Alertmanager 配置
+    alertingEndpoints:
+      - namespace: monitoring
+        name: alertmanager
+        port: web
+
+# Alertmanager 配置
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 100m
+        memory: 256Mi
+
+    # 存储
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
+
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ["alertname", "cluster", "service"]
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 12h
+      receiver: "null"
+      routes:
+        - match:
+            severity: critical
+          receiver: "critical"
+        - match:
+            severity: warning
+          receiver: "warning"
+
+    receivers:
+      - name: "null"
+      - name: "critical"
+        # TODO: 配置 Slack/Email/PagerDuty
+      - name: "warning"
+        # TODO: 配置 Slack/Email
+
+# Grafana 配置 (集成在同一个 chart)
+grafana:
+  enabled: true
+
+  # 资源配置 (架构文档: 0.15C / 0.8G)
+  resources:
+    requests:
+      cpu: 150m
+      memory: 800Mi
+    limits:
+      cpu: 200m
+      memory: 1Gi
+
+  # 持久化存储
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    size: 2Gi
+
+  # Admin 密码
+  # 生产环境必须使用 Kubernetes Secret 管理密码
+  # 生成密码: kubectl create secret generic grafana-admin \
+  #   --namespace monitoring \
+  #   --from-literal=admin-password=$(openssl rand -base64 32)
+  #
+  # 或从文件创建:
+  # openssl rand -base64 32 > admin-password.txt
+  # kubectl create secret generic grafana-admin \
+  #   --namespace monitoring \
+  #   --from-file=admin-password=admin-password.txt
+  # rm -f admin-password.txt
+  #
+  # 查看密码: kubectl get secret grafana-admin -n monitoring \
+  #   -o jsonpath="{.data.admin-password}" | base64 -d && echo
+  admin:
+    existingSecret: "grafana-admin"
+    userKey: admin-user
+    passwordKey: admin-password
+
+  # 数据源
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://prometheus-operated:9090
+          access: proxy
+          isDefault: true
+        - name: Loki
+          type: loki
+          url: http://loki:3100
+          access: proxy
+
+  # Dashboard providers
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: "default"
+          orgId: 1
+          folder: ""
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/default
+
+  # 预装 Dashboard
+  dashboards:
+    default:
+      kubernetes-cluster:
+        gnetId: 7249
+        revision: 1
+        datasource: Prometheus
+      nats-jetstream:
+        gnetId: 14892
+        revision: 1
+        datasource: Prometheus
+      node-exporter:
+        gnetId: 1860
+        revision: 27
+        datasource: Prometheus
+
+  # Ingress
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+    hosts:
+      - grafana.local # TODO: 替换为实际域名
+    tls:
+      - secretName: grafana-tls
+        hosts:
+          - grafana.local
+
+# Node Exporter (收集节点指标)
+nodeExporter:
+  enabled: true
+
+# Kube State Metrics (收集 k8s 资源指标)
+kubeStateMetrics:
+  enabled: true
+
+# Prometheus Operator
+prometheusOperator:
+  enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi

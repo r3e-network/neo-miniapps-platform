@@ -1,18 +1,20 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/database"
-	"github.com/R3E-Network/service_layer/internal/marble"
 	"github.com/google/uuid"
+
+	"github.com/R3E-Network/service_layer/internal/database"
+	"github.com/R3E-Network/service_layer/internal/httputil"
+	"github.com/R3E-Network/service_layer/internal/marble"
 )
 
 // =============================================================================
@@ -21,11 +23,50 @@ import (
 
 func healthHandler(m *marble.Marble) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
 			"status":    "healthy",
 			"service":   "gateway",
 			"version":   "1.0.0",
+			"enclave":   m.IsEnclave(),
+			"timestamp": time.Now().Format(time.RFC3339),
+		})
+	}
+}
+
+func readyHandler(db *database.Repository, m *marble.Marble) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if db == nil {
+			httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{
+				"status":    "not_ready",
+				"service":   "gateway",
+				"enclave":   m.IsEnclave(),
+				"timestamp": time.Now().Format(time.RFC3339),
+				"details": map[string]any{
+					"database": "not configured",
+				},
+			})
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		if err := db.HealthCheck(ctx); err != nil {
+			httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{
+				"status":    "not_ready",
+				"service":   "gateway",
+				"enclave":   m.IsEnclave(),
+				"timestamp": time.Now().Format(time.RFC3339),
+				"details": map[string]any{
+					"database": "unavailable",
+				},
+			})
+			return
+		}
+
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{
+			"status":    "ready",
+			"service":   "gateway",
 			"enclave":   m.IsEnclave(),
 			"timestamp": time.Now().Format(time.RFC3339),
 		})
@@ -40,8 +81,7 @@ func attestationHandler(m *marble.Marble) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
 			"enclave":          true,
 			"security_version": report.SecurityVersion,
 			"debug":            report.Debug,
@@ -58,8 +98,11 @@ func nonceHandler(db *database.Repository) http.HandlerFunc {
 		var req struct {
 			Address string `json:"address"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			jsonError(w, "invalid request", http.StatusBadRequest)
+		if !httputil.DecodeJSON(w, r, &req) {
+			return
+		}
+		if err := database.ValidateAddress(req.Address); err != nil {
+			jsonError(w, "invalid address", http.StatusBadRequest)
 			return
 		}
 
@@ -72,13 +115,17 @@ func nonceHandler(db *database.Repository) http.HandlerFunc {
 		// Get or create user
 		user, err := db.GetUserByAddress(r.Context(), req.Address)
 		if err != nil {
+			if !database.IsNotFound(err) {
+				jsonError(w, "failed to lookup user", http.StatusInternalServerError)
+				return
+			}
 			// Create new user
 			user = &database.User{
 				ID:        uuid.New().String(),
 				Address:   req.Address,
 				CreatedAt: time.Now(),
 			}
-			if err := db.CreateUser(r.Context(), user); err != nil {
+			if createErr := db.CreateUser(r.Context(), user); createErr != nil {
 				jsonError(w, "failed to create user", http.StatusInternalServerError)
 				return
 			}
@@ -92,8 +139,7 @@ func nonceHandler(db *database.Repository) http.HandlerFunc {
 
 		message := fmt.Sprintf("Sign this message to authenticate with Neo Service Layer.\n\nNonce: %s\nTimestamp: %d", nonce, time.Now().Unix())
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
 			"nonce":   nonce,
 			"message": message,
 		})
@@ -109,8 +155,7 @@ func registerHandler(db *database.Repository) http.HandlerFunc {
 			Message   string `json:"message"`
 			Nonce     string `json:"nonce"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			jsonError(w, "invalid request", http.StatusBadRequest)
+		if !httputil.DecodeJSON(w, r, &req) {
 			return
 		}
 
@@ -118,6 +163,10 @@ func registerHandler(db *database.Repository) http.HandlerFunc {
 		// All fields must be provided to prove wallet ownership
 		if req.PublicKey == "" || req.Signature == "" || req.Message == "" {
 			jsonError(w, "publicKey, signature, and message are required for wallet registration", http.StatusBadRequest)
+			return
+		}
+		if err := database.ValidateAddress(req.Address); err != nil {
+			jsonError(w, "invalid address", http.StatusBadRequest)
 			return
 		}
 
@@ -135,12 +184,16 @@ func registerHandler(db *database.Repository) http.HandlerFunc {
 		// Get or create user
 		user, err := db.GetUserByAddress(r.Context(), req.Address)
 		if err != nil {
+			if !database.IsNotFound(err) {
+				jsonError(w, "failed to lookup user", http.StatusInternalServerError)
+				return
+			}
 			user = &database.User{
 				ID:        uuid.New().String(),
 				Address:   req.Address,
 				CreatedAt: time.Now(),
 			}
-			if err := db.CreateUser(r.Context(), user); err != nil {
+			if createErr := db.CreateUser(r.Context(), user); createErr != nil {
 				jsonError(w, "failed to create user", http.StatusInternalServerError)
 				return
 			}
@@ -164,13 +217,13 @@ func registerHandler(db *database.Repository) http.HandlerFunc {
 			Verified:  true,
 			CreatedAt: time.Now(),
 		}
-		if err := db.CreateWallet(r.Context(), wallet); err != nil {
+		if walletErr := db.CreateWallet(r.Context(), wallet); walletErr != nil {
 			jsonError(w, "failed to create wallet", http.StatusInternalServerError)
 			return
 		}
 
 		// Create gas bank account
-		if _, err := db.GetOrCreateGasBankAccount(r.Context(), user.ID); err != nil {
+		if _, gasErr := db.GetOrCreateGasBankAccount(r.Context(), user.ID); gasErr != nil {
 			jsonError(w, "failed to create gas bank account", http.StatusInternalServerError)
 			return
 		}
@@ -187,7 +240,7 @@ func registerHandler(db *database.Repository) http.HandlerFunc {
 		session := &database.UserSession{
 			UserID:    user.ID,
 			TokenHash: tokenHash,
-			ExpiresAt: time.Now().Add(24 * time.Hour),
+			ExpiresAt: time.Now().Add(jwtExpiry),
 			CreatedAt: time.Now(),
 		}
 		if err := db.CreateSession(r.Context(), session); err != nil {
@@ -196,12 +249,17 @@ func registerHandler(db *database.Repository) http.HandlerFunc {
 		}
 
 		// Rotate nonce to prevent replay
-		if nextNonce, err := generateNonce(); err == nil {
-			_ = db.UpdateUserNonce(r.Context(), user.ID, nextNonce)
+		if nextNonce, nonceErr := generateNonce(); nonceErr == nil {
+			if updateErr := db.UpdateUserNonce(r.Context(), user.ID, nextNonce); updateErr != nil {
+				log.Printf("rotate nonce: %v", updateErr)
+			}
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		if isOAuthCookieMode() {
+			setAuthTokenCookie(w, token, isRequestSecure(r))
+		}
+
+		httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
 			"user_id": user.ID,
 			"address": user.Address,
 			"token":   token,
@@ -218,8 +276,7 @@ func loginHandler(db *database.Repository) http.HandlerFunc {
 			Message   string `json:"message"`
 			Nonce     string `json:"nonce"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			jsonError(w, "invalid request", http.StatusBadRequest)
+		if !httputil.DecodeJSON(w, r, &req) {
 			return
 		}
 
@@ -227,6 +284,10 @@ func loginHandler(db *database.Repository) http.HandlerFunc {
 		// All fields must be provided to prove wallet ownership
 		if req.PublicKey == "" || req.Signature == "" || req.Message == "" {
 			jsonError(w, "publicKey, signature, and message are required for wallet login", http.StatusBadRequest)
+			return
+		}
+		if err := database.ValidateAddress(req.Address); err != nil {
+			jsonError(w, "invalid address", http.StatusBadRequest)
 			return
 		}
 
@@ -238,7 +299,11 @@ func loginHandler(db *database.Repository) http.HandlerFunc {
 
 		user, err := db.GetUserByAddress(r.Context(), req.Address)
 		if err != nil {
-			jsonError(w, "user not found", http.StatusNotFound)
+			if database.IsNotFound(err) {
+				jsonError(w, "user not found", http.StatusNotFound)
+				return
+			}
+			jsonError(w, "failed to lookup user", http.StatusInternalServerError)
 			return
 		}
 
@@ -264,7 +329,7 @@ func loginHandler(db *database.Repository) http.HandlerFunc {
 		session := &database.UserSession{
 			UserID:    user.ID,
 			TokenHash: tokenHash,
-			ExpiresAt: time.Now().Add(24 * time.Hour),
+			ExpiresAt: time.Now().Add(jwtExpiry),
 			CreatedAt: time.Now(),
 		}
 		if err := db.CreateSession(r.Context(), session); err != nil {
@@ -273,12 +338,17 @@ func loginHandler(db *database.Repository) http.HandlerFunc {
 		}
 
 		// Rotate nonce to prevent replay
-		if nextNonce, err := generateNonce(); err == nil {
-			_ = db.UpdateUserNonce(r.Context(), user.ID, nextNonce)
+		if nextNonce, nonceErr := generateNonce(); nonceErr == nil {
+			if updateErr := db.UpdateUserNonce(r.Context(), user.ID, nextNonce); updateErr != nil {
+				log.Printf("rotate nonce: %v", updateErr)
+			}
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		if isOAuthCookieMode() {
+			setAuthTokenCookie(w, token, isRequestSecure(r))
+		}
+
+		httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
 			"user_id": user.ID,
 			"address": user.Address,
 			"token":   token,
@@ -288,21 +358,51 @@ func loginHandler(db *database.Repository) http.HandlerFunc {
 
 func logoutHandler(db *database.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		if authHeader != "" && len(authHeader) > 7 {
-			token := authHeader[7:]
-			tokenHash := hashToken(token)
-			_ = db.DeleteSession(r.Context(), tokenHash)
+		// Support both bearer-token and cookie-based auth.
+		var token string
+		authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
+		if strings.HasPrefix(authHeader, "Bearer ") && len(authHeader) > len("Bearer ") {
+			token = strings.TrimSpace(authHeader[len("Bearer "):])
+		} else if cookie, err := r.Cookie(oauthTokenCookieName); err == nil && cookie.Value != "" {
+			token = cookie.Value
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "logged out"})
+		if token != "" {
+			tokenHash := hashToken(token)
+			if err := db.DeleteSession(r.Context(), tokenHash); err != nil {
+				log.Printf("delete session: %v", err)
+			}
+		}
+
+		// Clear the auth cookie if present so browser-based OAuth sessions can be terminated.
+		secure := isRequestSecure(r)
+		sameSite := oauthTokenSameSite()
+		if sameSite == http.SameSiteNoneMode && !secure {
+			sameSite = http.SameSiteLaxMode
+		}
+		http.SetCookie(w, &http.Cookie{
+			Name:     oauthTokenCookieName,
+			Value:    "",
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   secure,
+			SameSite: sameSite,
+			MaxAge:   -1,
+			Expires:  time.Unix(0, 0),
+		})
+
+		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "logged out"})
 	}
 }
 
 func meHandler(db *database.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Header.Get("X-User-ID")
+		if userID == "" {
+			jsonError(w, "missing user id", http.StatusUnauthorized)
+			return
+		}
+
 		user, err := db.GetUser(r.Context(), userID)
 		if err != nil {
 			jsonError(w, "user not found", http.StatusNotFound)
@@ -318,8 +418,7 @@ func meHandler(db *database.Repository) http.HandlerFunc {
 			log.Printf("Failed to get gas bank account for user %s: %v", userID, err)
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
 			"user":    user,
 			"wallets": wallets,
 			"gasbank": account,

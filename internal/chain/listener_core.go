@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/R3E-Network/service_layer/internal/logging"
 )
 
 // EventListener listens for contract events on Neo N3.
@@ -19,6 +21,7 @@ type EventListener struct {
 	lastBlock      uint64
 	running        bool
 	stopCh         chan struct{}
+	logger         *logging.Logger
 }
 
 // EventHandler is a callback for contract events.
@@ -40,10 +43,15 @@ type ListenerConfig struct {
 	Contracts    ContractAddresses // All contract addresses to monitor
 	PollInterval time.Duration
 	StartBlock   uint64
+	Logger       *logging.Logger
 }
 
 // NewEventListener creates a new event listener.
-func NewEventListener(cfg ListenerConfig) *EventListener {
+func NewEventListener(cfg *ListenerConfig) *EventListener {
+	if cfg == nil {
+		return nil
+	}
+
 	interval := cfg.PollInterval
 	if interval == 0 {
 		interval = 5 * time.Second
@@ -67,6 +75,11 @@ func NewEventListener(cfg ListenerConfig) *EventListener {
 		contractHashes[cfg.Contracts.NeoFlow] = true
 	}
 
+	logger := cfg.Logger
+	if logger == nil {
+		logger = logging.NewFromEnv("chain")
+	}
+
 	return &EventListener{
 		client:         cfg.Client,
 		contractHashes: contractHashes,
@@ -74,6 +87,7 @@ func NewEventListener(cfg ListenerConfig) *EventListener {
 		pollInterval:   interval,
 		lastBlock:      cfg.StartBlock,
 		stopCh:         make(chan struct{}),
+		logger:         logger,
 	}
 }
 
@@ -148,8 +162,8 @@ func (l *EventListener) processNewBlocks(ctx context.Context) {
 		}
 
 		// Process each transaction in the block
-		for _, tx := range block.Tx {
-			l.processTransaction(ctx, tx.Hash, blockIndex)
+		for i := range block.Tx {
+			l.processTransaction(ctx, block.Tx[i].Hash, blockIndex)
 		}
 
 		l.mu.Lock()
@@ -160,12 +174,12 @@ func (l *EventListener) processNewBlocks(ctx context.Context) {
 
 // processTransaction processes a transaction for events.
 func (l *EventListener) processTransaction(ctx context.Context, txHash string, blockIndex uint64) {
-	log, err := l.client.GetApplicationLog(ctx, txHash)
+	appLog, err := l.client.GetApplicationLog(ctx, txHash)
 	if err != nil {
 		return
 	}
 
-	for _, exec := range log.Executions {
+	for _, exec := range appLog.Executions {
 		if exec.VMState != "HALT" {
 			continue
 		}
@@ -187,8 +201,9 @@ func (l *EventListener) processTransaction(ctx context.Context, txHash string, b
 			// Parse state array
 			if notif.State.Type == "Array" {
 				var items []StackItem
-				json.Unmarshal(notif.State.Value, &items)
-				event.State = items
+				if err := json.Unmarshal(notif.State.Value, &items); err == nil {
+					event.State = items
+				}
 			}
 
 			// Call handlers
@@ -197,7 +212,16 @@ func (l *EventListener) processTransaction(ctx context.Context, txHash string, b
 			l.mu.RUnlock()
 
 			for _, handler := range handlers {
-				go handler(event)
+				go func(h EventHandler, e *ContractEvent) {
+					if err := h(e); err != nil {
+						l.logger.WithFields(map[string]interface{}{
+							"event":     e.EventName,
+							"contract":  e.Contract,
+							"tx_hash":   e.TxHash,
+							"block_idx": e.BlockIndex,
+						}).WithError(err).Warn("event handler failed")
+					}
+				}(handler, event)
 			}
 		}
 	}

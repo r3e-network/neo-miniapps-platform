@@ -33,9 +33,9 @@ type EventParser interface {
 
 // registry holds all registered service chain modules
 var (
-	registryMu      sync.RWMutex
-	moduleRegistry  = make(map[string]ServiceChainModule)
-	parserRegistry  = make(map[string][]EventParser)
+	registryMu     sync.RWMutex
+	moduleRegistry = make(map[string]ServiceChainModule)
+	parserRegistry = make(map[string][]EventParser)
 )
 
 // RegisterServiceChain registers a service chain module.

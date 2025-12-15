@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/logging"
 	"golang.org/x/time/rate"
+
+	"github.com/R3E-Network/service_layer/internal/logging"
 )
 
 func TestNewRateLimiter(t *testing.T) {
@@ -221,7 +222,7 @@ func TestRateLimiter_Cleanup(t *testing.T) {
 	// Cleanup should reset if size > 10000
 	rl.Cleanup()
 
-	finalSize := len(rl.limiters)
+	finalSize := rl.LimiterCount()
 	if finalSize != 0 {
 		t.Errorf("Final size = %d, want 0", finalSize)
 	}
@@ -236,12 +237,12 @@ func TestRateLimiter_Cleanup_NoResetIfSmall(t *testing.T) {
 		rl.getLimiter(string(rune(i)))
 	}
 
-	initialSize := len(rl.limiters)
+	initialSize := rl.LimiterCount()
 
 	// Cleanup should not reset if size <= 10000
 	rl.Cleanup()
 
-	finalSize := len(rl.limiters)
+	finalSize := rl.LimiterCount()
 	if finalSize != initialSize {
 		t.Errorf("Size changed from %d to %d, should remain unchanged", initialSize, finalSize)
 	}
@@ -257,13 +258,14 @@ func TestRateLimiter_StartCleanup(t *testing.T) {
 	}
 
 	// Start cleanup with very short interval
-	rl.StartCleanup(10 * time.Millisecond)
+	stop := rl.StartCleanup(10 * time.Millisecond)
+	t.Cleanup(stop)
 
 	// Wait for cleanup to run
 	time.Sleep(50 * time.Millisecond)
 
 	// Limiters should be cleaned up
-	finalSize := len(rl.limiters)
+	finalSize := rl.LimiterCount()
 	if finalSize > 10000 {
 		t.Errorf("Final size = %d, expected cleanup to have run", finalSize)
 	}
@@ -316,8 +318,8 @@ func TestRateLimiter_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Should have 10 limiters
-	if len(rl.limiters) != 10 {
-		t.Errorf("limiters size = %d, want 10", len(rl.limiters))
+	if rl.LimiterCount() != 10 {
+		t.Errorf("limiters size = %d, want 10", rl.LimiterCount())
 	}
 }
 

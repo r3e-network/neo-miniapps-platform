@@ -39,7 +39,6 @@ The NeoRand Marble service generates cryptographically verifiable random numbers
 | File | Purpose |
 |------|---------|
 | `service.go` | Service initialization and configuration |
-| `lifecycle.go` | Service lifecycle (Start/Stop/Shutdown) |
 | `core.go` | VRF generation logic |
 | `fulfiller.go` | On-chain fulfillment |
 | `listener.go` | Event listener for requests |
@@ -64,9 +63,8 @@ type Service struct {
     teeFulfiller  *chain.TEEFulfiller
     eventListener *chain.EventListener
 
-    requests         map[string]*NeoRandRequest
-    pendingRequests  chan *NeoRandRequest
-    lastProcessedBlk uint64
+    requests        map[string]*Request
+    pendingRequests chan *Request
 }
 ```
 
@@ -115,7 +113,7 @@ The service uses ECDSA P-256 with a deterministic VRF construction:
 Monitors Neo N3 blockchain for `VRFRequest` events:
 
 ```go
-func (s *Service) runEventListener(ctx context.Context) error {
+func (s *Service) runEventListener(ctx context.Context) {
     // Subscribe to VRFRequest events
     // Parse events and queue for fulfillment
 }

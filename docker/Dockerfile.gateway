@@ -1,12 +1,18 @@
+# syntax=docker/dockerfile:1.7
 # =============================================================================
 # Gateway Marble Dockerfile
 # Uses EGo for SGX enclave execution
 # =============================================================================
 
-FROM ghcr.io/edgelesssys/ego-deploy:v1.8.0 AS runtime
+ARG EGO_VERSION=1.8.0
+ARG EGO_STRICT_SIGNING=0
+
+FROM ghcr.io/edgelesssys/ego-deploy:v${EGO_VERSION} AS runtime
 
 # Build stage
-FROM ghcr.io/edgelesssys/ego-dev:v1.8.0 AS builder
+FROM ghcr.io/edgelesssys/ego-dev:v${EGO_VERSION} AS builder
+
+ARG EGO_STRICT_SIGNING
 
 WORKDIR /app
 
@@ -21,7 +27,8 @@ COPY . .
 RUN ego-go build -o gateway ./cmd/gateway
 
 # Create enclave configuration
-RUN cat > enclave.json << 'EOF'
+RUN <<'EOF'
+cat > enclave.json <<'JSON'
 {
     "exe": "gateway",
     "key": "private.pem",
@@ -42,18 +49,61 @@ RUN cat > enclave.json << 'EOF'
         {"name": "EDG_MARBLE_DNS_NAMES", "fromHost": true},
         {"name": "EDG_MARBLE_UUID_FILE", "fromHost": true},
         {"name": "OE_SIMULATION", "fromHost": true},
+        {"name": "MARBLE_CERT", "fromHost": true},
+        {"name": "MARBLE_KEY", "fromHost": true},
+        {"name": "MARBLE_ROOT_CA", "fromHost": true},
+        {"name": "MARBLE_UUID", "fromHost": true},
         {"name": "SERVICE_TYPE", "fromHost": true},
         {"name": "MARBLE_TYPE", "fromHost": true},
         {"name": "PORT", "fromHost": true},
         {"name": "MARBLE_ENV", "fromHost": true},
+        {"name": "METRICS_ENABLED", "fromHost": true},
+        {"name": "METRICS_PORT", "fromHost": true},
         {"name": "JWT_SECRET", "fromHost": true},
+        {"name": "ADMIN_USER_IDS", "fromHost": true},
+        {"name": "SUPER_ADMIN_USER_IDS", "fromHost": true},
+        {"name": "JWT_EXPIRY", "fromHost": true},
+        {"name": "RATE_LIMIT_ENABLED", "fromHost": true},
+        {"name": "RATE_LIMIT_REQUESTS", "fromHost": true},
+        {"name": "RATE_LIMIT_WINDOW", "fromHost": true},
+        {"name": "RATE_LIMIT_BURST", "fromHost": true},
         {"name": "SUPABASE_URL", "fromHost": true},
         {"name": "SUPABASE_SERVICE_KEY", "fromHost": true},
         {"name": "NEO_RPC_URL", "fromHost": true},
         {"name": "MARBLE_SECRETS", "fromHost": true},
         {"name": "ACCOUNTPOOL_URL", "fromHost": true},
         {"name": "SECRETS_BASE_URL", "fromHost": true},
-        {"name": "ORACLE_HTTP_ALLOWLIST", "fromHost": true}
+        {"name": "ORACLE_HTTP_ALLOWLIST", "fromHost": true},
+        {"name": "LOG_LEVEL", "fromHost": true},
+        {"name": "LOG_FORMAT", "fromHost": true},
+        {"name": "CORS_ALLOWED_ORIGINS", "fromHost": true},
+        {"name": "CORS_ORIGINS", "fromHost": true},
+        {"name": "GATEWAY_TLS_MODE", "fromHost": true},
+        {"name": "NEORAND_SERVICE_URL", "fromHost": true},
+        {"name": "NEOVAULT_SERVICE_URL", "fromHost": true},
+        {"name": "NEOFEEDS_SERVICE_URL", "fromHost": true},
+        {"name": "NEOFLOW_SERVICE_URL", "fromHost": true},
+        {"name": "NEOACCOUNTS_SERVICE_URL", "fromHost": true},
+        {"name": "NEOCOMPUTE_SERVICE_URL", "fromHost": true},
+        {"name": "NEOSTORE_SERVICE_URL", "fromHost": true},
+        {"name": "NEOORACLE_SERVICE_URL", "fromHost": true},
+        {"name": "VRF_SERVICE_URL", "fromHost": true},
+        {"name": "MIXER_SERVICE_URL", "fromHost": true},
+        {"name": "DATAFEEDS_SERVICE_URL", "fromHost": true},
+        {"name": "AUTOMATION_SERVICE_URL", "fromHost": true},
+        {"name": "ACCOUNTPOOL_SERVICE_URL", "fromHost": true},
+        {"name": "CONFIDENTIAL_SERVICE_URL", "fromHost": true},
+        {"name": "SECRETS_SERVICE_URL", "fromHost": true},
+        {"name": "ORACLE_SERVICE_URL", "fromHost": true},
+        {"name": "OAUTH_REDIRECT_BASE", "fromHost": true},
+        {"name": "OAUTH_COOKIE_MODE", "fromHost": true},
+        {"name": "OAUTH_COOKIE_SAMESITE", "fromHost": true},
+        {"name": "OAUTH_TOKENS_MASTER_KEY", "fromHost": true},
+        {"name": "FRONTEND_URL", "fromHost": true},
+        {"name": "GOOGLE_CLIENT_ID", "fromHost": true},
+        {"name": "GOOGLE_CLIENT_SECRET", "fromHost": true},
+        {"name": "GITHUB_CLIENT_ID", "fromHost": true},
+        {"name": "GITHUB_CLIENT_SECRET", "fromHost": true}
     ],
     "files": [
         {
@@ -62,10 +112,17 @@ RUN cat > enclave.json << 'EOF'
         }
     ]
 }
+JSON
 EOF
 
 # Sign the enclave
-RUN ego sign enclave.json
+RUN --mount=type=secret,id=ego_private_key,target=/app/private.pem,required=false \
+    if [ "${EGO_STRICT_SIGNING:-0}" = "1" ] && [ ! -f /app/private.pem ]; then \
+      echo "ERROR: missing enclave signing key. Provide a BuildKit secret:" >&2; \
+      echo "  docker build --secret id=ego_private_key,src=/path/to/private.pem --build-arg EGO_STRICT_SIGNING=1 -f docker/Dockerfile.gateway -t service-layer/gateway:latest ." >&2; \
+      exit 1; \
+    fi; \
+    ego sign enclave.json
 
 # Final stage
 FROM runtime
@@ -74,8 +131,6 @@ WORKDIR /app
 
 # Copy signed enclave
 COPY --from=builder /app/gateway /app/
-COPY --from=builder /app/private.pem /app/
-COPY --from=builder /app/public.pem /app/
 
 # Create marble directory
 RUN mkdir -p /marble

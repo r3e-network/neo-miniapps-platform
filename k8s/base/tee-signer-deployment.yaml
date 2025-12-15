@@ -1,0 +1,142 @@
+# =============================================================================
+# TEE Signer Service (gRPC)
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tee-signer
+  namespace: service-layer
+  labels:
+    app: tee-signer
+    marblerun/inject: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tee-signer
+  template:
+    metadata:
+      labels:
+        app: tee-signer
+        marblerun/inject: "true"
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: marble-data
+        emptyDir: {}
+      - name: qcnl-config
+        configMap:
+          name: sgx-qcnl-config
+      containers:
+      - name: tee-signer
+        image: service-layer/tee-signer:latest
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+        ports:
+        - containerPort: 9090
+        - containerPort: 8080
+        env:
+        - name: EDG_MARBLE_COORDINATOR_ADDR
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: COORDINATOR_MESH_ADDR
+        - name: EDG_MARBLE_TYPE
+          value: "tee-signer"
+        - name: SERVICE_TYPE
+          value: "tee-signer"
+        - name: MARBLE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: MARBLE_ENV
+        - name: METRICS_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: METRICS_ENABLED
+              optional: true
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: LOG_LEVEL
+        - name: LOG_FORMAT
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: LOG_FORMAT
+        - name: EDG_MARBLE_DNS_NAMES
+          value: "tee-signer,tee-signer.service-layer.svc.cluster.local"
+        - name: EDG_MARBLE_UUID_FILE
+          value: /marble/uuid
+        - name: SUPABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: SUPABASE_URL
+        - name: SUPABASE_SERVICE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: service-layer-secrets
+              key: SUPABASE_SERVICE_KEY
+        - name: OE_SIMULATION
+          valueFrom:
+            configMapKeyRef:
+              name: service-layer-config
+              key: OE_SIMULATION
+        - name: PORT
+          value: "9090"
+        - name: INTERNAL_HTTP_PORT
+          value: "8080"
+        volumeMounts:
+        - name: marble-data
+          mountPath: /marble
+        - name: qcnl-config
+          mountPath: /etc/sgx_default_qcnl.conf
+          subPath: sgx_default_qcnl.conf
+          readOnly: true
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        # Probes use tcpSocket because MarbleRun mTLS requires client certificates.
+        readinessProbe:
+          tcpSocket:
+            port: 9090
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
+        livenessProbe:
+          tcpSocket:
+            port: 9090
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tee-signer
+  namespace: service-layer
+spec:
+  selector:
+    app: tee-signer
+  ports:
+  - port: 9090
+    targetPort: 9090
+  - port: 8080
+    targetPort: 8080

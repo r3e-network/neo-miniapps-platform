@@ -22,14 +22,17 @@ const (
 
 	// Service fee per request (in GAS smallest unit)
 	ServiceFeePerRequest = 100000 // 0.001 GAS
+
+	// MaxNumWords is the maximum number of random words supported per request.
+	MaxNumWords = 10
 )
 
 // =============================================================================
 // Request Types
 // =============================================================================
 
-// NeoRandRequest represents a randomness request from a user contract.
-type NeoRandRequest struct {
+// Request represents a randomness request from a user contract.
+type Request struct {
 	ID               string    `json:"id"`
 	RequestID        string    `json:"request_id"`        // On-chain request ID
 	UserID           string    `json:"user_id"`           // Service Layer user
@@ -45,6 +48,11 @@ type NeoRandRequest struct {
 	CreatedAt        time.Time `json:"created_at"`
 	FulfilledAt      time.Time `json:"fulfilled_at,omitempty"`
 }
+
+// NeoRandRequest is kept for backwards compatibility with earlier releases.
+//
+//revive:disable-next-line:exported
+type NeoRandRequest = Request
 
 // CreateRequestInput for API-initiated requests (off-chain trigger).
 type CreateRequestInput struct {
@@ -96,7 +104,7 @@ type RandomResponse = DirectRandomResponse
 // Type Converters
 // =============================================================================
 
-func neorandRecordFromReq(req *NeoRandRequest) *neorandsupabase.RequestRecord {
+func neorandRecordFromReq(req *Request) *neorandsupabase.RequestRecord {
 	return &neorandsupabase.RequestRecord{
 		ID:               req.ID,
 		RequestID:        req.RequestID,
@@ -115,8 +123,8 @@ func neorandRecordFromReq(req *NeoRandRequest) *neorandsupabase.RequestRecord {
 	}
 }
 
-func neorandReqFromRecord(rec *neorandsupabase.RequestRecord) *NeoRandRequest {
-	return &NeoRandRequest{
+func neorandReqFromRecord(rec *neorandsupabase.RequestRecord) *Request {
+	return &Request{
 		ID:               rec.ID,
 		RequestID:        rec.RequestID,
 		UserID:           rec.UserID,

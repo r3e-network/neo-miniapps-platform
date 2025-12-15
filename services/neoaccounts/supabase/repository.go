@@ -132,8 +132,9 @@ func (r *Repository) GetWithBalances(ctx context.Context, id string) (*AccountWi
 		return nil, fmt.Errorf("get balances: %w", err)
 	}
 
-	result := NewAccountWithBalances(*acc)
-	for _, bal := range balances {
+	result := NewAccountWithBalances(acc)
+	for i := range balances {
+		bal := &balances[i]
 		result.AddBalance(bal)
 	}
 
@@ -172,9 +173,10 @@ func (r *Repository) ListAvailableWithBalances(ctx context.Context, tokenType st
 	// Filter by token balance if specified
 	if tokenType != "" && minBalance != nil {
 		filtered := make([]AccountWithBalances, 0, len(accountsWithBalances))
-		for _, acc := range accountsWithBalances {
+		for i := range accountsWithBalances {
+			acc := &accountsWithBalances[i]
 			if acc.HasSufficientBalance(tokenType, *minBalance) {
-				filtered = append(filtered, acc)
+				filtered = append(filtered, *acc)
 				if len(filtered) >= limit {
 					break
 				}
@@ -205,7 +207,8 @@ func (r *Repository) ListByLockerWithBalances(ctx context.Context, lockerID stri
 func (r *Repository) hydrateAccountsWithBalances(ctx context.Context, accounts []Account) ([]AccountWithBalances, error) {
 	result := make([]AccountWithBalances, 0, len(accounts))
 
-	for _, acc := range accounts {
+	for i := range accounts {
+		acc := &accounts[i]
 		accWithBal := NewAccountWithBalances(acc)
 
 		balances, err := r.GetBalances(ctx, acc.ID)
@@ -214,7 +217,8 @@ func (r *Repository) hydrateAccountsWithBalances(ctx context.Context, accounts [
 			continue
 		}
 
-		for _, bal := range balances {
+		for j := range balances {
+			bal := &balances[j]
 			accWithBal.AddBalance(bal)
 		}
 
@@ -311,7 +315,8 @@ func (r *Repository) DeleteBalances(ctx context.Context, accountID string) error
 		return err
 	}
 
-	for _, bal := range balances {
+	for i := range balances {
+		bal := &balances[i]
 		query := database.NewQuery().
 			Eq("account_id", bal.AccountID).
 			Eq("token_type", bal.TokenType).
@@ -346,7 +351,8 @@ func (r *Repository) AggregateTokenStats(ctx context.Context, tokenType string) 
 		ScriptHash: scriptHash,
 	}
 
-	for _, acc := range accounts {
+	for i := range accounts {
+		acc := &accounts[i]
 		bal, err := r.GetBalance(ctx, acc.ID, tokenType)
 		if err != nil {
 			continue

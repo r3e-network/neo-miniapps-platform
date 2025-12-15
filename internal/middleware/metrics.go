@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/logging"
-	"github.com/R3E-Network/service_layer/internal/metrics"
 	"github.com/gorilla/mux"
+
+	"github.com/R3E-Network/service_layer/internal/metrics"
 )
 
 // MetricsMiddleware records HTTP metrics for each request
@@ -40,38 +40,6 @@ func MetricsMiddleware(serviceName string, m *metrics.Metrics) mux.MiddlewareFun
 			}
 
 			m.RecordHTTPRequest(serviceName, r.Method, path, status, duration)
-		})
-	}
-}
-
-// LoggingMiddleware logs HTTP requests with trace ID
-func LoggingMiddleware(logger *logging.Logger) mux.MiddlewareFunc {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			start := time.Now()
-
-			// Generate or extract trace ID
-			traceID := r.Header.Get("X-Trace-ID")
-			if traceID == "" {
-				traceID = logging.NewTraceID()
-			}
-
-			// Add trace ID to context
-			ctx := logging.WithTraceID(r.Context(), traceID)
-			r = r.WithContext(ctx)
-
-			// Add trace ID to response header
-			w.Header().Set("X-Trace-ID", traceID)
-
-			// Wrap response writer to capture status code
-			wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-
-			// Process request
-			next.ServeHTTP(wrapped, r)
-
-			// Log request
-			duration := time.Since(start)
-			logger.LogRequest(ctx, r.Method, r.URL.Path, wrapped.statusCode, duration)
 		})
 	}
 }

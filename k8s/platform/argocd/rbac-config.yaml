@@ -1,0 +1,88 @@
+# ArgoCD RBAC 配置
+# 限制 ArgoCD 权限仅管理 apps 和 platform namespace
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-rbac-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  # 默认策略: 只读
+  policy.default: role:readonly
+
+  # RBAC 策略
+  policy.csv: |
+    # Admin 角色: 完全访问
+    p, role:admin, applications, *, */*, allow
+    p, role:admin, clusters, *, *, allow
+    p, role:admin, repositories, *, *, allow
+    p, role:admin, projects, *, *, allow
+    p, role:admin, accounts, *, *, allow
+    p, role:admin, certificates, *, *, allow
+
+    # Developer 角色: 应用管理
+    p, role:developer, applications, get, */*, allow
+    p, role:developer, applications, sync, */*, allow
+    p, role:developer, applications, create, */*, allow
+    p, role:developer, applications, update, */*, allow
+    p, role:developer, applications, delete, */*, allow
+    p, role:developer, repositories, get, *, allow
+    p, role:developer, projects, get, *, allow
+
+    # Viewer 角色: 只读
+    p, role:viewer, applications, get, */*, allow
+    p, role:viewer, repositories, get, *, allow
+    p, role:viewer, projects, get, *, allow
+
+    # 分配角色给用户/组
+    g, admin, role:admin
+
+  # Scope 配置
+  scopes: "[groups, email]"
+
+---
+# AppProject 配置: 限制可管理的 namespace
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: neo-services
+  namespace: argocd
+spec:
+  description: Neo Service Layer Project
+
+  # 允许部署的目标
+  destinations:
+    - namespace: apps
+      server: https://kubernetes.default.svc
+    - namespace: platform
+      server: https://kubernetes.default.svc
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
+
+  # 允许的源仓库
+  sourceRepos:
+    - https://github.com/yourorg/service_layer.git # 替换为实际仓库
+    - "*"
+
+  # 允许的资源类型
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: "rbac.authorization.k8s.io"
+      kind: ClusterRole
+    - group: "rbac.authorization.k8s.io"
+      kind: ClusterRoleBinding
+    - group: "cert-manager.io"
+      kind: ClusterIssuer
+
+  # Namespace 级别资源
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  # 孤立资源策略
+  orphanedResources:
+    warn: true

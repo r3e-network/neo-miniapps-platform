@@ -7,6 +7,7 @@ import (
 
 	"github.com/R3E-Network/service_layer/internal/crypto"
 	"github.com/R3E-Network/service_layer/internal/marble"
+	"github.com/R3E-Network/service_layer/internal/serviceauth"
 	commonservice "github.com/R3E-Network/service_layer/services/common/service"
 	neostoresupabase "github.com/R3E-Network/service_layer/services/neostore/supabase"
 )
@@ -30,7 +31,7 @@ var allowedServiceCallers = map[string]struct{}{
 }
 
 // Required header for authenticated service-to-service calls.
-const ServiceIDHeader = "X-Service-ID"
+const ServiceIDHeader = serviceauth.ServiceIDHeader
 
 // Service implements the NeoStore service.
 type Service struct {
@@ -62,7 +63,7 @@ type Config struct {
 
 // New creates a new NeoStore service.
 func New(cfg Config) (*Service, error) {
-	base := commonservice.NewBase(commonservice.BaseConfig{
+	base := commonservice.NewBase(&commonservice.BaseConfig{
 		ID:      ServiceID,
 		Name:    ServiceName,
 		Version: Version,

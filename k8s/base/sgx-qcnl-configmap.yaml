@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sgx-qcnl-config
+data:
+  # Default Intel DCAP Quote Configuration.
+  # Override this ConfigMap in your overlay if you use a private PCCS.
+  sgx_default_qcnl.conf: |
+    {
+      "pccs_url": "https://api.trustedservices.intel.com/sgx/certification/v4/",
+      "use_secure_cert": true,
+      "collateral_service": "https://api.trustedservices.intel.com/sgx/certification/v4/",
+      "retry_times": 6,
+      "retry_delay": 10,
+      "pck_cache_expire_hours": 168,
+      "verify_collateral_cache_expire_hours": 168,
+      "local_cache_only": false
+    }

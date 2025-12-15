@@ -175,7 +175,7 @@ export function Dashboard() {
       <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
         <h2 className="text-xl font-semibold text-white mb-4">Services Overview</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          {['VRF', 'NeoVault', 'Oracle', 'Secrets', 'NeoFeeds', 'NeoFlow', 'NeoCompute', 'AccountPool', 'GasBank'].map((service) => (
+          {['NeoRand (VRF)', 'NeoVault', 'NeoOracle', 'NeoStore', 'NeoFeeds', 'NeoFlow', 'NeoCompute', 'NeoAccounts', 'GasBank'].map((service) => (
             <div key={service} className="bg-gray-700 rounded-lg p-4 text-center hover:bg-gray-600 transition-colors cursor-pointer">
               <div className="w-3 h-3 bg-green-500 rounded-full mx-auto mb-2" />
               <p className="text-sm text-gray-300">{service}</p>

@@ -1,0 +1,33 @@
+# PersistentVolumeClaim for NATS JetStream
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nats-jetstream-pvc
+  namespace: platform
+  labels:
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path # k3s 默认 StorageClass
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# 如果需要预创建 PV (可选，k3s local-path 会自动创建)
+# apiVersion: v1
+# kind: PersistentVolume
+# metadata:
+#   name: nats-jetstream-pv
+# spec:
+#   capacity:
+#     storage: 5Gi
+#   accessModes:
+#     - ReadWriteOnce
+#   persistentVolumeReclaimPolicy: Retain
+#   storageClassName: local-path
+#   hostPath:
+#     path: /var/lib/rancher/k3s/storage/nats-jetstream
+#     type: DirectoryOrCreate

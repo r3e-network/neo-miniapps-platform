@@ -33,6 +33,9 @@ namespace ServiceLayer.Gateway
         internal const byte PREFIX_REQUEST = 0x40;
         internal const byte PREFIX_REQUEST_COUNT = 0x41;
         internal const byte PREFIX_NONCE = 0x50;
+        internal const byte PREFIX_TEE_MASTER_PUBKEY = 0x60;
+        internal const byte PREFIX_TEE_MASTER_PUBKEY_HASH = 0x61;
+        internal const byte PREFIX_TEE_MASTER_ATTEST_HASH = 0x62;
 
         // Request status
         internal const byte STATUS_PENDING = 0;
@@ -61,6 +64,9 @@ namespace ServiceLayer.Gateway
 
         [DisplayName("ServiceRegistered")]
         public static event Action<string, UInt160> OnServiceRegistered;
+
+        [DisplayName("TEEMasterKeySet")]
+        public static event Action<byte[], byte[], byte[]> OnTEEMasterKeySet;
 
         // ============================================================================
         // Contract Lifecycle

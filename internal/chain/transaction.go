@@ -23,10 +23,10 @@ import (
 
 // TxBuilder builds and signs Neo N3 transactions.
 type TxBuilder struct {
-	client    *Client
-	netMagic  netmode.Magic
-	extraFee  int64 // Additional network fee buffer (in GAS fractions)
-	blockBuf  uint32 // ValidUntilBlock buffer (blocks ahead of current)
+	client   *Client
+	netMagic netmode.Magic
+	extraFee int64  // Additional network fee buffer (in GAS fractions)
+	blockBuf uint32 // ValidUntilBlock buffer (blocks ahead of current)
 }
 
 // NewTxBuilder creates a new transaction builder.
@@ -84,7 +84,11 @@ func (b *TxBuilder) BuildAndSignTx(
 	if err != nil {
 		return nil, fmt.Errorf("get block count: %w", err)
 	}
-	validUntilBlock := uint32(blockCount) + b.blockBuf
+	maxValidUntilBlock := uint64(^uint32(0) - b.blockBuf)
+	if blockCount > maxValidUntilBlock {
+		return nil, fmt.Errorf("block height %d overflows uint32", blockCount)
+	}
+	validUntilBlock := uint32(blockCount) + b.blockBuf // #nosec G115 -- range checked above
 
 	// 4. Create transaction
 	tx := transaction.New(script, systemFee)
@@ -107,10 +111,7 @@ func (b *TxBuilder) BuildAndSignTx(
 	}
 
 	// 7. Calculate network fee
-	networkFee, err := b.calculateNetworkFee(ctx, tx)
-	if err != nil {
-		return nil, fmt.Errorf("calculate network fee: %w", err)
-	}
+	networkFee := b.calculateNetworkFee(ctx, tx)
 	tx.NetworkFee = networkFee + b.extraFee
 
 	// 8. Sign transaction
@@ -123,7 +124,7 @@ func (b *TxBuilder) BuildAndSignTx(
 
 // calculateNetworkFee calculates the network fee for a transaction.
 // Uses the calculatenetworkfee RPC method.
-func (b *TxBuilder) calculateNetworkFee(ctx context.Context, tx *transaction.Transaction) (int64, error) {
+func (b *TxBuilder) calculateNetworkFee(ctx context.Context, tx *transaction.Transaction) int64 {
 	// Serialize transaction for RPC
 	txBytes := tx.Bytes()
 	txBase64 := base64.StdEncoding.EncodeToString(txBytes)
@@ -131,22 +132,22 @@ func (b *TxBuilder) calculateNetworkFee(ctx context.Context, tx *transaction.Tra
 	result, err := b.client.Call(ctx, "calculatenetworkfee", []interface{}{txBase64})
 	if err != nil {
 		// Fallback: estimate based on transaction size
-		return b.estimateNetworkFee(tx), nil
+		return b.estimateNetworkFee(tx)
 	}
 
 	var feeResult struct {
 		NetworkFee string `json:"networkfee"`
 	}
-	if err := json.Unmarshal(result, &feeResult); err != nil {
-		return b.estimateNetworkFee(tx), nil
+	if unmarshalErr := json.Unmarshal(result, &feeResult); unmarshalErr != nil {
+		return b.estimateNetworkFee(tx)
 	}
 
 	fee, err := strconv.ParseInt(feeResult.NetworkFee, 10, 64)
 	if err != nil {
-		return b.estimateNetworkFee(tx), nil
+		return b.estimateNetworkFee(tx)
 	}
 
-	return fee, nil
+	return fee
 }
 
 // estimateNetworkFee provides a fallback fee estimation.

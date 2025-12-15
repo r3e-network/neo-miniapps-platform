@@ -15,7 +15,7 @@ import (
 	"math/big"
 
 	"golang.org/x/crypto/hkdf"
-	"golang.org/x/crypto/ripemd160"
+	"golang.org/x/crypto/ripemd160" //nolint:staticcheck // NEO address derivation requires RIPEMD-160
 )
 
 // =============================================================================
@@ -37,7 +37,7 @@ import (
 //
 // As long as the manifest secrets remain unchanged, derived keys will be
 // identical regardless of enclave version, enabling seamless upgrades.
-func DeriveKey(masterKey []byte, salt []byte, info string, keyLen int) ([]byte, error) {
+func DeriveKey(masterKey, salt []byte, info string, keyLen int) ([]byte, error) {
 	hkdfReader := hkdf.New(sha256.New, masterKey, salt, []byte(info))
 	key := make([]byte, keyLen)
 	if _, err := io.ReadFull(hkdfReader, key); err != nil {
@@ -260,13 +260,11 @@ func PublicKeyToAddress(publicKey *ecdsa.PublicKey) string {
 func PublicKeyToScriptHash(publicKey []byte) []byte {
 	// Build verification script: PUSHDATA1 <pubkey> SYSCALL System.Crypto.CheckSig
 	script := make([]byte, 0, 40)
-	script = append(script, 0x0C) // PUSHDATA1
-	script = append(script, 33)   // Length (compressed public key)
+	script = append(script, 0x0C, 33) // PUSHDATA1, length (compressed public key)
 	script = append(script, publicKey...)
-	script = append(script, 0x41)                   // SYSCALL
-	script = append(script, 0x56, 0xe7, 0xb3, 0x27) // System.Crypto.CheckSig hash
+	script = append(script, 0x41, 0x56, 0xe7, 0xb3, 0x27) // SYSCALL + System.Crypto.CheckSig hash
 
-	// Hash160 = RIPEMD160(SHA256(script))
+	// Hash160 applies SHA256 then RIPEMD160 to the verification script.
 	sha256Hash := sha256.Sum256(script)
 	ripemd := ripemd160.New()
 	ripemd.Write(sha256Hash[:])
@@ -286,7 +284,9 @@ func ScriptHashToAddress(scriptHash []byte) string {
 	checksum := hash2[:4]
 
 	// Append checksum
-	addressBytes := append(data, checksum...)
+	addressBytes := make([]byte, len(data)+len(checksum))
+	copy(addressBytes, data)
+	copy(addressBytes[len(data):], checksum)
 
 	return base58Encode(addressBytes)
 }

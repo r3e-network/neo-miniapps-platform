@@ -7,21 +7,70 @@ The Neo Service Layer provides a comprehensive set of TEE-protected services for
 ## Base URL
 
 ```
-Production: https://api.service-layer.neo.org
-Staging: https://staging-api.service-layer.neo.org
+Production:  https://api.service-layer.neo.org
+Staging:     https://staging-api.service-layer.neo.org
 Development: http://localhost:8080
 ```
 
+Gateway API prefix:
+
+```
+/api/v1
+```
+
+The examples below use the Gateway and include the `/api/v1` prefix unless noted
+(e.g., `/health`, `/metrics`, `/attestation`).
+
 ## Authentication
 
-All API requests require JWT authentication via the Gateway service.
+The Gateway supports three authentication mechanisms:
+
+- **HTTP-only session cookie** (recommended for browsers): enabled when `OAUTH_COOKIE_MODE=true`. The gateway sets `sl_auth_token` and the browser sends it automatically with `credentials: "include"`.
+- **Bearer JWT** (good for CLI/server integrations): `Authorization: Bearer <jwt_token>`.
+- **API keys** (service-to-service / automation): `X-API-Key: <api_key>`.
 
 ### Headers
 
 ```
 Authorization: Bearer <jwt_token>
+X-API-Key: <api_key>
 Content-Type: application/json
 ```
+
+**Important:** `X-User-ID`, `X-User-Role`, `X-Service-ID`, and `X-Service-Token` are internal identity headers. Public clients should not send them. The gateway strips these headers from inbound requests and forwards only the derived identity to internal services.
+
+### Wallet Auth (Neo N3)
+
+1. Request a nonce + message to sign:
+
+```http
+POST /api/v1/auth/nonce
+```
+
+```json
+{
+    "address": "NXV7ZhHiyM1aHXwpVsRZC6BwNFP2jghXAq"
+}
+```
+
+2. Sign the returned `message` using your wallet, then login (or register):
+
+```http
+POST /api/v1/auth/login
+POST /api/v1/auth/register
+```
+
+```json
+{
+    "address": "NXV7ZhHiyM1aHXwpVsRZC6BwNFP2jghXAq",
+    "publicKey": "hex_or_base64_public_key",
+    "signature": "hex_or_base64_signature",
+    "message": "original_message_from_nonce_endpoint",
+    "nonce": "nonce_from_nonce_endpoint"
+}
+```
+
+On success, the gateway returns a JWT and (when `OAUTH_COOKIE_MODE=true`) also sets an HTTP-only cookie for browser-based sessions.
 
 ## Services
 
@@ -36,11 +85,14 @@ GET /health
 ```
 
 **Response:**
+
 ```json
 {
-  "status": "healthy",
-  "timestamp": "2025-12-10T10:00:00Z",
-  "version": "1.0.0"
+    "status": "healthy",
+    "service": "gateway",
+    "timestamp": "2025-12-10T10:00:00Z",
+    "version": "1.0.0",
+    "enclave": true
 }
 ```
 
@@ -52,130 +104,114 @@ GET /metrics
 
 Returns Prometheus metrics for monitoring.
 
+Production note: avoid exposing `/metrics` publicly. Scrape it from inside the cluster (or protect it behind an internal-only ingress/service).
+
 ---
 
-### 2. Oracle Service
+### 2. NeoOracle Service
 
-Provides external data fetching with TEE attestation.
+Provides external data fetching inside a MarbleRun enclave.
 
-#### Get Price Data
+#### Query External Data
 
 ```http
-POST /neooracle/price
+POST /api/v1/neooracle/query
 ```
 
 **Request:**
-```json
-{
-  "symbol": "NEO/USD",
-  "sources": ["binance", "coinbase"]
-}
-```
 
-**Response:**
 ```json
 {
-  "symbol": "NEO/USD",
-  "price": 15.42,
-  "timestamp": "2025-12-10T10:00:00Z",
-  "sources": [
-    {
-      "name": "binance",
-      "price": 15.41,
-      "timestamp": "2025-12-10T10:00:00Z"
-    },
-    {
-      "name": "coinbase",
-      "price": 15.43,
-      "timestamp": "2025-12-10T10:00:00Z"
+    "url": "https://api.coingecko.com/api/v3/simple/price?ids=neo&vs_currencies=usd",
+    "method": "GET",
+    "headers": {
+        "Accept": "application/json"
     }
-  ],
-  "attestation": "base64_encoded_attestation"
-}
-```
-
-#### Submit Data to Blockchain
-
-```http
-POST /neooracle/submit
-```
-
-**Request:**
-```json
-{
-  "contract_hash": "0x1234567890abcdef",
-  "method": "updatePrice",
-  "params": {
-    "symbol": "NEO/USD",
-    "price": 1542,
-    "decimals": 2
-  }
 }
 ```
 
 **Response:**
+
 ```json
 {
-  "tx_hash": "0xabcdef1234567890",
-  "status": "pending",
-  "submitted_at": "2025-12-10T10:00:00Z"
+    "status_code": 200,
+    "headers": {
+        "Content-Type": "application/json; charset=utf-8"
+    },
+    "body": "{\"neo\":{\"usd\":15.42}}"
 }
 ```
+
+**Notes:**
+
+- Backward-compatible alias: `POST /api/v1/neooracle/fetch` (same handler).
+- Legacy gateway alias: `POST /api/v1/oracle/query`.
+- In production/SGX (strict identity mode), only `https://` URLs are allowed.
+- Access to external URLs is restricted by `ORACLE_HTTP_ALLOWLIST`.
+- Optional secret injection fields: `secret_name` and `secret_as_key`.
 
 ---
 
-### 3. VRF Service
+### 3. VRF Service (NeoRand)
 
-Verifiable Random Function service for provably fair randomness.
+Verifiable Random Function (VRF) service for provably fair randomness.
 
-#### Generate Random Number
+#### Generate Randomness (Direct / Off-chain)
 
 ```http
-POST /neorand/generate
+POST /api/v1/neorand/random
 ```
 
 **Request:**
+
 ```json
 {
-  "seed": "user_provided_seed",
-  "min": 1,
-  "max": 100
+    "seed": "user_provided_seed",
+    "num_words": 3
 }
 ```
 
 **Response:**
+
 ```json
 {
-  "random_number": 42,
-  "proof": "base64_encoded_proof",
-  "public_key": "base64_encoded_public_key",
-  "attestation": "base64_encoded_attestation"
+    "request_id": "req_123456",
+    "seed": "user_provided_seed",
+    "random_words": ["0x...", "0x...", "0x..."],
+    "proof": "base64_or_hex_proof",
+    "public_key": "hex_public_key",
+    "timestamp": "2025-12-10T10:00:00Z"
 }
 ```
 
-#### Verify Random Number
+#### Verify Randomness
 
 ```http
-POST /neorand/verify
+POST /api/v1/neorand/verify
 ```
 
 **Request:**
+
 ```json
 {
-  "random_number": 42,
-  "proof": "base64_encoded_proof",
-  "public_key": "base64_encoded_public_key",
-  "seed": "user_provided_seed"
+    "seed": "user_provided_seed",
+    "random_words": ["0x..."],
+    "proof": "base64_or_hex_proof",
+    "public_key": "hex_public_key"
 }
 ```
 
 **Response:**
+
 ```json
 {
-  "valid": true,
-  "verified_at": "2025-12-10T10:00:00Z"
+    "valid": true
 }
 ```
+
+**Notes:**
+
+- Legacy gateway alias: `POST /api/v1/vrf/random` and `POST /api/v1/vrf/verify`.
 
 ---
 
@@ -183,136 +219,186 @@ POST /neorand/verify
 
 Privacy-preserving token mixing service.
 
+#### Registration (Required)
+
+NeoVault endpoints that create/execute mixes require an **approved registration**.
+
+##### Apply for access
+
+```http
+POST /api/v1/neovault/registration/apply
+```
+
+```json
+{
+    "email": "user@example.com",
+    "jurisdiction": "US",
+    "purpose": "personal_privacy",
+    "expected_volume": "low",
+    "accept_terms": true
+}
+```
+
+##### Check registration status
+
+```http
+GET /api/v1/neovault/registration/status
+```
+
+##### Admin review (operator-only)
+
+```http
+GET  /api/v1/neovault/admin/registrations
+POST /api/v1/neovault/admin/registrations/review
+```
+
+Admin endpoints require `X-User-Role: admin|super_admin` which is set by the gateway for allowlisted users (`ADMIN_USER_IDS`, `SUPER_ADMIN_USER_IDS`).
+
 #### Create Mix Request
 
 ```http
-POST /neovault/mix
+POST /api/v1/neovault/request
 ```
 
 **Request:**
+
 ```json
 {
-  "token_type": "GAS",
-  "amount": 100,
-  "deposit_address": "NSourceAddress123",
-  "withdrawal_address": "NDestAddress456",
-  "delay_hours": 24
+    "version": 1,
+    "token_type": "GAS",
+    "user_address": "NSourceAddress123",
+    "targets": [{ "address": "NDestAddress456", "amount": 100000000 }],
+    "mix_option": 3600000,
+    "timestamp": 1702209600
 }
 ```
 
 **Response:**
+
 ```json
 {
-  "mix_id": "mix_123456",
-  "deposit_address": "NNeoVaultDepositAddr",
-  "amount": 100,
-  "service_fee": 0.5,
-  "network_fee": 0.1,
-  "total_required": 100.6,
-  "status": "pending_deposit",
-  "created_at": "2025-12-10T10:00:00Z"
+    "request_id": "mix_123456",
+    "request_hash": "0x...",
+    "tee_signature": "0x...",
+    "deposit_address": "NNeoVaultDepositAddr",
+    "total_amount": 100000000,
+    "service_fee": 500000,
+    "net_amount": 99500000,
+    "deadline": 1702213200,
+    "expires_at": "2025-12-10T11:00:00Z"
 }
 ```
 
 #### Get Mix Status
 
 ```http
-GET /neovault/status/{mix_id}
+GET /api/v1/neovault/status/{request_id}
 ```
 
 **Response:**
+
 ```json
 {
-  "mix_id": "mix_123456",
-  "status": "completed",
-  "deposit_confirmed": true,
-  "withdrawal_tx": "0xabcdef1234567890",
-  "completed_at": "2025-12-11T10:00:00Z"
+    "request_id": "mix_123456",
+    "status": "delivered",
+    "request_hash": "0x...",
+    "deadline": 1702213200,
+    "created_at": "2025-12-10T10:00:00Z",
+    "delivered_at": "2025-12-10T10:30:00Z"
 }
 ```
 
 ---
 
-### 5. Account Pool Service
+### 5. NeoAccounts (Account Pool) Service (Internal)
 
-Manages a pool of funded accounts for service operations.
+Manages a pool of funded accounts for service operations. This service is
+intended for **internal service-to-service usage (mesh-only)** and is not
+proxied by the public Gateway by default.
 
 #### Request Accounts
 
 ```http
-POST /accountpool/request
+POST /request
 ```
 
 **Request:**
+
 ```json
 {
-  "service_id": "neovault",
-  "count": 5,
-  "purpose": "mixing_operation"
+    "service_id": "neovault",
+    "count": 5,
+    "purpose": "mixing_operation"
 }
 ```
 
 **Response:**
+
 ```json
 {
-  "accounts": [
-    {
-      "id": "acc_001",
-      "address": "NAccountAddr001",
-      "balance": 1000000,
-      "locked_by": "neovault",
-      "locked_at": "2025-12-10T10:00:00Z"
-    }
-  ],
-  "lock_id": "lock_123456"
+    "accounts": [
+        {
+            "id": "acc_001",
+            "address": "NAccountAddr001",
+            "balances": {
+                "GAS": { "amount": 1000000 }
+            },
+            "locked_by": "neovault"
+        }
+    ],
+    "lock_id": "lock_123456"
 }
 ```
 
 #### Release Accounts
 
 ```http
-POST /accountpool/release
+POST /release
 ```
 
 **Request:**
+
 ```json
 {
-  "service_id": "neovault",
-  "account_ids": ["acc_001", "acc_002"]
+    "service_id": "neovault",
+    "account_ids": ["acc_001", "acc_002"]
 }
 ```
 
 **Response:**
+
 ```json
 {
-  "released_count": 2,
-  "released_at": "2025-12-10T10:00:00Z"
+    "released_count": 2
 }
 ```
 
 #### Update Account Balance
 
 ```http
-POST /accountpool/balance
+POST /balance
 ```
 
 **Request:**
+
 ```json
 {
-  "service_id": "neovault",
-  "account_id": "acc_001",
-  "delta": -50000,
-  "absolute": null
+    "service_id": "neovault",
+    "account_id": "acc_001",
+    "token": "GAS",
+    "delta": -50000,
+    "absolute": null
 }
 ```
 
 **Response:**
+
 ```json
 {
-  "account_id": "acc_001",
-  "old_balance": 1000000,
-  "new_balance": 950000,
-  "updated_at": "2025-12-10T10:00:00Z"
+    "account_id": "acc_001",
+    "old_balance": 1000000,
+    "new_balance": 950000,
+    "tx_count": 42
 }
 ```
 
@@ -320,168 +406,127 @@ POST /accountpool/balance
 
 ### 6. NeoFlow Service
 
-Automated job execution with TEE protection.
+Trigger-based automation with TEE protection.
 
-#### Create Job
+#### Create Trigger
 
 ```http
-POST /neoflow/jobs
+POST /api/v1/neoflow/triggers
 ```
 
 **Request:**
+
 ```json
 {
-  "name": "daily_price_update",
-  "schedule": "0 0 * * *",
-  "action": {
-    "type": "oracle_submit",
-    "params": {
-      "symbol": "NEO/USD",
-      "contract": "0x1234567890abcdef"
+    "name": "daily_price_update",
+    "trigger_type": "cron",
+    "schedule": "0 0 * * *",
+    "action": {
+        "type": "webhook",
+        "url": "https://example.com/webhook",
+        "method": "POST",
+        "body": { "event": "daily_price_update" }
     }
-  },
-  "enabled": true
 }
 ```
 
 **Response:**
+
 ```json
 {
-  "job_id": "job_123456",
-  "name": "daily_price_update",
-  "schedule": "0 0 * * *",
-  "next_run": "2025-12-11T00:00:00Z",
-  "created_at": "2025-12-10T10:00:00Z"
+    "id": "trigger_123456",
+    "name": "daily_price_update",
+    "trigger_type": "cron",
+    "schedule": "0 0 * * *",
+    "enabled": true,
+    "created_at": "2025-12-10T10:00:00Z"
 }
 ```
 
-#### List Jobs
+#### List Triggers
 
 ```http
-GET /neoflow/jobs
+GET /api/v1/neoflow/triggers
 ```
 
 **Response:**
+
 ```json
-{
-  "jobs": [
+[
     {
-      "job_id": "job_123456",
-      "name": "daily_price_update",
-      "schedule": "0 0 * * *",
-      "enabled": true,
-      "last_run": "2025-12-10T00:00:00Z",
-      "next_run": "2025-12-11T00:00:00Z",
-      "status": "active"
+        "id": "trigger_123456",
+        "name": "daily_price_update",
+        "trigger_type": "cron",
+        "schedule": "0 0 * * *",
+        "enabled": true,
+        "created_at": "2025-12-10T10:00:00Z"
     }
-  ],
-  "total": 1
-}
+]
 ```
 
-#### Get Job Status
+#### List Trigger Executions
 
 ```http
-GET /neoflow/jobs/{job_id}
+GET /api/v1/neoflow/triggers/{id}/executions
 ```
 
 **Response:**
+
 ```json
-{
-  "job_id": "job_123456",
-  "name": "daily_price_update",
-  "schedule": "0 0 * * *",
-  "enabled": true,
-  "last_run": {
-    "timestamp": "2025-12-10T00:00:00Z",
-    "status": "success",
-    "duration_ms": 1234
-  },
-  "next_run": "2025-12-11T00:00:00Z",
-  "execution_history": [
-    {
-      "timestamp": "2025-12-10T00:00:00Z",
-      "status": "success",
-      "duration_ms": 1234
-    }
-  ]
-}
+[]
 ```
 
 ---
 
 ### 7. NeoCompute Service
 
-Secure data encryption and signing within TEE.
+Secure script execution within TEE.
 
-#### Encrypt Data
+#### Execute Script
 
 ```http
-POST /neocompute/encrypt
+POST /api/v1/neocompute/execute
 ```
 
 **Request:**
+
 ```json
 {
-  "data": "sensitive_data_to_encrypt",
-  "key_id": "user_key_001"
+    "script": "return { ok: true }",
+    "entry_point": "main",
+    "input": { "value": 1 },
+    "secret_refs": ["my_api_key"],
+    "timeout": 30
 }
 ```
+
+`secret_refs` entries are NeoStore secret names. The user must grant `neocompute`
+permission to read a secret via the NeoStore permissions API.
 
 **Response:**
+
 ```json
 {
-  "encrypted_data": "base64_encoded_encrypted_data",
-  "key_id": "user_key_001",
-  "nonce": "base64_encoded_nonce",
-  "attestation": "base64_encoded_attestation"
+    "job_id": "job_123456",
+    "status": "completed",
+    "output": { "ok": true },
+    "logs": [],
+    "gas_used": 1000,
+    "started_at": "2025-12-10T10:00:00Z",
+    "duration": "100ms"
 }
 ```
 
-#### Decrypt Data
+#### Get Job
 
 ```http
-POST /neocompute/decrypt
+GET /api/v1/neocompute/jobs/{id}
 ```
 
-**Request:**
-```json
-{
-  "encrypted_data": "base64_encoded_encrypted_data",
-  "key_id": "user_key_001",
-  "nonce": "base64_encoded_nonce"
-}
-```
-
-**Response:**
-```json
-{
-  "data": "sensitive_data_to_encrypt",
-  "decrypted_at": "2025-12-10T10:00:00Z"
-}
-```
-
-#### Sign Data
+#### List Jobs
 
 ```http
-POST /neocompute/sign
-```
-
-**Request:**
-```json
-{
-  "data": "data_to_sign",
-  "key_id": "signing_key_001"
-}
-```
-
-**Response:**
-```json
-{
-  "signature": "base64_encoded_signature",
-  "public_key": "base64_encoded_public_key",
-  "attestation": "base64_encoded_attestation"
-}
+GET /api/v1/neocompute/jobs
 ```
 
 ---
@@ -492,136 +537,94 @@ All services return consistent error responses:
 
 ```json
 {
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human-readable error message",
+    "code": "SVC_5006",
+    "message": "Rate limit exceeded",
     "details": {
-      "field": "Additional context"
-    }
-  },
-  "timestamp": "2025-12-10T10:00:00Z"
+        "limit": 100,
+        "window": "1m0s"
+    },
+    "trace_id": "..."
 }
 ```
 
 ### Common Error Codes
 
-| Code | HTTP Status | Description |
-|------|-------------|-------------|
-| `UNAUTHORIZED` | 401 | Invalid or missing authentication token |
-| `FORBIDDEN` | 403 | Insufficient permissions |
-| `NOT_FOUND` | 404 | Resource not found |
-| `INVALID_REQUEST` | 400 | Invalid request parameters |
-| `RATE_LIMIT_EXCEEDED` | 429 | Too many requests |
-| `INTERNAL_ERROR` | 500 | Internal server error |
-| `SERVICE_UNAVAILABLE` | 503 | Service temporarily unavailable |
+| Code            | HTTP Status | Description                             |
+| --------------- | ----------- | --------------------------------------- |
+| `HTTP_<status>` | varies      | Generic HTTP errors written by handlers |
+| `AUTH_1001`     | 401         | Unauthorized                            |
+| `AUTH_1002`     | 401         | Invalid token                           |
+| `AUTH_1003`     | 401         | Token expired                           |
+| `SVC_5006`      | 429         | Rate limit exceeded                     |
 
 ---
 
 ## Rate Limiting
 
-Rate limits are enforced per API key:
+When enabled (`RATE_LIMIT_ENABLED=true`), rate limits are enforced per user ID
+(authenticated) or client IP (unauthenticated). The gateway returns `429` with a
+`Retry-After` header.
 
-- **Default**: 100 requests per minute
-- **Burst**: 200 requests per minute
-- **Daily**: 10,000 requests per day
+Configure with:
 
-Rate limit headers are included in all responses:
-
-```
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 95
-X-RateLimit-Reset: 1702209600
-```
+- `RATE_LIMIT_REQUESTS` (budget, default 100)
+- `RATE_LIMIT_WINDOW` (duration, default `1m`)
+- `RATE_LIMIT_BURST` (optional burst budget; defaults to `RATE_LIMIT_REQUESTS`)
 
 ---
 
 ## Attestation
 
-All critical operations include TEE attestation data that can be verified independently:
+MarbleRun establishes enclave identity and service-to-service trust boundaries
+via a signed manifest and mTLS between marbles.
 
-```json
-{
-  "attestation": {
-    "quote": "base64_encoded_attestation_quote",
-    "manifest_signature": "base64_encoded_signature",
-    "timestamp": "2025-12-10T10:00:00Z"
-  }
-}
+To validate that the gateway is running inside an enclave (or in simulation),
+use:
+
+```http
+GET /attestation
 ```
 
-To verify attestation:
+For SGX hardware deployments, ensure:
 
-1. Extract the MarbleRun quote
-2. Verify the quote with Intel Attestation Service (IAS) or DCAP
-3. Verify the manifest signature matches the expected MarbleRun manifest
-4. Check the timestamp is recent
+1. Enclave images are signed with stable keys and `SignerID`s match `manifests/manifest.json`.
+2. Services communicate over MarbleRun-provisioned mTLS (verified chains).
+3. Coordinator state is healthy (`marblerun status`).
 
 ---
 
 ## SDK Support
 
-Official SDKs are available for:
+This repository includes a minimal TypeScript client used by the Vercel UI:
+`frontend/src/api/client.ts`.
 
-- **Go**: `github.com/R3E-Network/service-layer-sdk-go`
-- **TypeScript**: `@r3e-network/service-layer-sdk`
-- **Python**: `service-layer-sdk` (coming soon)
-
-Example usage (TypeScript):
+Example (TypeScript, API key):
 
 ```typescript
-import { ServiceLayerClient } from '@r3e-network/service-layer-sdk';
+const baseUrl = "https://api.service-layer.neo.org/api/v1";
+const apiKey = "your_api_key";
 
-const client = new ServiceLayerClient({
-  baseUrl: 'https://api.service-layer.neo.org',
-  apiKey: 'your_api_key'
+const resp = await fetch(`${baseUrl}/neorand/random`, {
+    method: "POST",
+    headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": apiKey,
+    },
+    body: JSON.stringify({ seed: "my_seed", num_words: 1 }),
 });
 
-// Generate random number
-const result = await client.vrf.generate({
-  seed: 'my_seed',
-  min: 1,
-  max: 100
-});
-
-console.log('Random number:', result.random_number);
-console.log('Proof:', result.proof);
+console.log(await resp.json());
 ```
 
 ---
 
 ## Webhooks
 
-Services can send webhook notifications for asynchronous operations:
+NeoFlow supports executing **webhook actions** as part of triggers.
 
-### Webhook Configuration
+**Security note:** In production/SGX (strict identity mode), webhook targets must be `https://` URLs. Internal service-to-service webhooks should use mesh DNS names and will be dispatched over HTTPS+mTLS when MarbleRun credentials are available. External webhooks are blocked from targeting private/loopback/link-local networks by default; override with `NEOFLOW_WEBHOOK_ALLOW_PRIVATE_NETWORKS=true` only if required.
 
-```http
-POST /webhooks
-```
-
-**Request:**
-```json
-{
-  "url": "https://your-app.com/webhook",
-  "events": ["mix.completed", "job.executed"],
-  "secret": "webhook_secret_for_verification"
-}
-```
-
-### Webhook Payload
-
-```json
-{
-  "event": "mix.completed",
-  "timestamp": "2025-12-10T10:00:00Z",
-  "data": {
-    "mix_id": "mix_123456",
-    "status": "completed",
-    "withdrawal_tx": "0xabcdef1234567890"
-  },
-  "signature": "hmac_sha256_signature"
-}
-```
+Webhook URLs are configured inside a NeoFlow trigger’s `action` payload.
 
 ---
 

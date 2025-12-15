@@ -42,7 +42,10 @@ This guide covers deploying the Neo Service Layer in production environments wit
    echo 'deb [arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu jammy main' | sudo tee /etc/apt/sources.list.d/intel-sgx.list
    wget -qO - https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key | sudo apt-key add -
    sudo apt update
-   sudo apt install -y libsgx-enclave-common libsgx-dcap-ql
+   sudo apt install -y libsgx-enclave-common libsgx-dcap-ql sgx-aesm-service
+
+   # Verify AESM is running (required by many SGX/DCAP setups)
+   sudo systemctl status aesmd --no-pager
    ```
 
 4. **Verify MarbleRun Installation**
@@ -73,43 +76,76 @@ cp .env.example .env
 nano .env
 ```
 
+Note: `scripts/up.sh` (and Docker Compose) will load `./.env` by default. To use a
+different env file, run `./scripts/up.sh --env-file PATH`. To ignore `./.env`,
+run `./scripts/up.sh --no-env-file`.
+
 Required environment variables:
 
 ```bash
+# Runtime
+MARBLE_ENV=development  # development|testing|production
+
 # MarbleRun Coordinator
-MARBLE_COORDINATOR_ADDR=coordinator-mesh-api.marblerun:2001
-MARBLE_TYPE=gateway  # or service name
+# Docker Compose: marbles reach the coordinator via service DNS (bridge network)
+COORDINATOR_MESH_ADDR=coordinator:2001
+COORDINATOR_CLIENT_ADDR=localhost:4433
+OE_SIMULATION=1  # 1=simulation (dev), 0=SGX hardware
 
 # Database
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-supabase-anon-key
 SUPABASE_SERVICE_KEY=your-supabase-service-key
 
 # Neo N3 Network
 NEO_RPC_URL=https://mainnet1.neo.org:443
 NEO_NETWORK_MAGIC=860833102
 
-# Security
+# Gateway
+# JWT secret is generated/injected by MarbleRun in Compose/K8s.
+# For non-Marblerun local runs: set JWT_SECRET (min 32 bytes).
 JWT_SECRET=your-jwt-secret-min-32-chars
-ENCRYPTION_KEY=your-encryption-key-32-bytes
+# Optional admin allowlists (comma-separated Supabase user IDs).
+# When set, the gateway attaches `X-User-Role: admin|super_admin` to proxied
+# service requests to unlock admin endpoints (e.g. NeoVault registration review).
+ADMIN_USER_IDS=
+SUPER_ADMIN_USER_IDS=
+GATEWAY_TLS_MODE=off  # off|tls|mtls
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+
+# OAuth (optional)
+FRONTEND_URL=http://localhost:3000
+OAUTH_REDIRECT_BASE=http://localhost:8080
+OAUTH_COOKIE_MODE=true
+OAUTH_COOKIE_SAMESITE=lax  # strict|lax|none (none requires HTTPS)
 
 # Services
-ACCOUNTPOOL_URL=http://accountpool:8081
-ORACLE_URL=http://neooracle:8082
-VRF_URL=http://neorand:8083
+NEORAND_SERVICE_URL=http://neorand:8081
+NEOVAULT_SERVICE_URL=http://neovault:8082
+NEOFEEDS_SERVICE_URL=http://neofeeds:8083
+NEOFLOW_SERVICE_URL=http://neoflow:8084
+NEOACCOUNTS_SERVICE_URL=http://neoaccounts:8085
+NEOCOMPUTE_SERVICE_URL=http://neocompute:8086
+NEOSTORE_SERVICE_URL=http://neostore:8087
+NEOORACLE_SERVICE_URL=http://neooracle:8088
+
+# Service-to-service URLs (used by marbles)
+ACCOUNTPOOL_URL=http://neoaccounts:8085
+SECRETS_BASE_URL=http://neostore:8087
 ```
 
 #### 3. Start Services
 
 ```bash
-# Simulation mode (no MarbleRun required)
+# Simulation mode (OE_SIMULATION=1): no SGX hardware required (MarbleRun still runs in simulation)
 make docker-up
 
-# With MarbleRun hardware
-make docker-up-tee
+# SGX hardware mode (OE_SIMULATION=0)
+make docker-up-sgx
 ```
 
-#### 4. Set MarbleRun Manifest
+#### 4. Set / Re-apply MarbleRun Manifest (optional)
+
+`make docker-up` / `make docker-up-sgx` already applies the manifest via `scripts/up.sh`. Run this only if you need to re-apply:
 
 ```bash
 make marblerun-manifest
@@ -122,7 +158,7 @@ make marblerun-manifest
 curl http://localhost:8080/health
 
 # Check MarbleRun status
-marblerun status --coordinator-addr localhost:4433
+marblerun status localhost:4433 --insecure
 ```
 
 ---
@@ -162,10 +198,13 @@ kubectl create namespace service-layer
 #### 4. Configure Secrets
 
 ```bash
-# Create neostore from .env file
-kubectl create secret generic service-layer-neostore \
-  --from-env-file=.env \
-  --namespace=service-layer
+# Create the runtime Secret used by the services (Supabase service key, OAuth client secrets, ...)
+cp k8s/secrets.yaml.template k8s/secrets.yaml
+# edit k8s/secrets.yaml
+kubectl apply -f k8s/secrets.yaml
+#
+# Alternatively, if you manage secrets in `.env`, you can generate/apply the Secret directly:
+#   ./scripts/apply_k8s_secrets_from_env.sh --namespace service-layer --name service-layer-secrets
 
 # Create TLS certificates (if not using cert-manager)
 kubectl create secret tls service-layer-tls \
@@ -177,23 +216,40 @@ kubectl create secret tls service-layer-tls \
 #### 5. Deploy Services
 
 ```bash
-# Apply Kubernetes manifests
-kubectl apply -f k8s/ --namespace=service-layer
+# Apply Kubernetes manifests via Kustomize overlays
+kubectl apply -k k8s/overlays/simulation
+# production settings (replicas/env); for real SGX hardware, prefer the SGX overlay below
+kubectl apply -k k8s/overlays/production
+# SGX hardware (adds SGX device-plugin limits and mounts AESM socket)
+kubectl apply -k k8s/overlays/sgx-hardware
+# Optional: hardened variants (read-only root filesystem + writable /tmp)
+# Pick ONE of these instead of the corresponding non-hardened overlay above.
+kubectl apply -k k8s/overlays/production-hardened
+kubectl apply -k k8s/overlays/sgx-hardware-hardened
 
 # Or use the deployment script
-./scripts/deploy_k8s.sh
+# - dev: deploys the simulation overlay (OE_SIMULATION=1)
+# - test: deploys the test overlay (OE_SIMULATION=1, MARBLE_ENV=testing)
+# - prod: deploys the production overlay (OE_SIMULATION=0) and requires signed images that match `manifests/manifest.json`
+./scripts/deploy_k8s.sh --env dev
 ```
+
+Production security notes:
+
+- The production overlay applies NetworkPolicies for both ingress and egress.
+  - If your ingress controller runs in a different namespace, update `k8s/overlays/production/networkpolicy.yaml`.
+  - If your node CIDR(s) are not RFC1918 ranges, update the `allow-node-health-probes` rule in `k8s/overlays/production/networkpolicy.yaml`.
+  - If you require outbound ports other than 443 (not recommended), update `k8s/overlays/production/networkpolicy-egress.yaml`.
+  - External HTTPS egress (443) is allowed by default, but private/link-local/loopback ranges are excluded to reduce SSRF risk; adjust if you use PrivateLink/VPC endpoints.
 
 #### 6. Set MarbleRun Manifest
 
 ```bash
-# Get coordinator address
-COORDINATOR=$(kubectl get svc -n marblerun coordinator-mesh-api -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+# Get coordinator client API address (4433)
+COORDINATOR_CLIENT_ADDR=$(kubectl get svc -n marblerun coordinator-client-api -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
 # Set manifest
-marblerun manifest set manifests/manifest.json \
-  --coordinator-addr $COORDINATOR:4433 \
-  --era-config era-config.json
+marblerun manifest set manifests/manifest.json "$COORDINATOR_CLIENT_ADDR:4433"
 ```
 
 #### 7. Verify Deployment
@@ -252,45 +308,65 @@ The manifest defines the trusted execution environment topology:
 }
 ```
 
-### Service Configuration
+**Signer IDs and build keys:** `SignerID` is derived from the enclave signing key (MRSIGNER). For production deployments you must use a stable signing key (stored securely in CI/build secrets) so rebuilt images continue to match the manifest. Never ship or commit the enclave signing private key (`private.pem`) in runtime images or source control.
 
-Each service can be configured via environment variables or config files:
+#### Building signed images (SGX hardware / production)
 
-**Gateway (`config/gateway.yaml`):**
+The Docker images sign enclaves during build (`ego sign`). In SGX hardware mode this must use **stable signing keys** that match `Packages.*.SignerID`, otherwise the MarbleRun Coordinator will refuse to activate marbles.
 
-```yaml
-server:
-  port: 8080
-  read_timeout: 30s
-  write_timeout: 30s
+Docker Compose cannot pass BuildKit secrets, so for SGX hardware you should build images via `docker build` (or CI) and start Compose with `--no-build`.
 
-auth:
-  jwt_secret: ${JWT_SECRET}
-  token_expiry: 24h
+Example (local build with BuildKit secrets):
 
-rate_limit:
-  requests_per_minute: 100
-  burst: 200
+```bash
+# Gateway
+DOCKER_BUILDKIT=1 docker build \
+  --secret id=ego_private_key,src=/path/to/gateway-private.pem \
+  --build-arg EGO_STRICT_SIGNING=1 \
+  -f docker/Dockerfile.gateway \
+  -t service-layer/gateway:latest \
+  .
 
-services:
-  neooracle: http://neooracle:8082
-  neorand: http://neorand:8083
-  neovault: http://neovault:8084
+# Service (example: neorand uses SERVICE=vrf)
+DOCKER_BUILDKIT=1 docker build \
+  --secret id=ego_private_key,src=/path/to/neorand-private.pem \
+  --build-arg EGO_STRICT_SIGNING=1 \
+  --build-arg SERVICE=vrf \
+  -f docker/Dockerfile.service \
+  -t service-layer/neorand:latest \
+  .
+
+# Start without building (uses the images you built/pulled)
+docker compose -f docker/docker-compose.yaml up -d --no-build
 ```
 
-**Oracle (`config/neooracle.yaml`):**
+Helper (recommended): `./scripts/up.sh` supports `--signing-key` / `--signing-key-dir` to build signed images and verify `SignerID`s against `manifests/manifest.json` before starting the stack.
 
-```yaml
-sources:
-  - name: binance
-    url: https://api.binance.com
-    weight: 1.0
-  - name: coinbase
-    url: https://api.coinbase.com
-    weight: 1.0
+### Service Configuration
 
-update_interval: 60s
-price_deviation_threshold: 0.05
+Services are configured via environment variables (see `.env.example`, `config/*.env`, and `k8s/base/configmap.yaml`). Sensitive values should live in Kubernetes Secrets (`k8s/secrets.yaml.template`) or MarbleRun manifest secrets.
+
+Example (gateway):
+
+```bash
+JWT_SECRET=your-jwt-secret-min-32-chars
+JWT_EXPIRY=24h
+GATEWAY_TLS_MODE=off
+CORS_ALLOWED_ORIGINS=https://your-frontend.example
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your-supabase-service-key
+# OAuth token at-rest encryption key.
+# In MarbleRun deployments this is provided via `manifests/manifest.json` as a generated secret
+# (OAUTH_TOKENS_MASTER_KEY). For non-Marblerun deployments, set your own key:
+# OAUTH_TOKENS_MASTER_KEY=$(openssl rand -hex 32)
+```
+
+Example (oracle):
+
+```bash
+SECRETS_BASE_URL=https://neostore:8087
+# Required in production/SGX mode (non-empty, valid prefixes). Requests only allow `https://` targets in strict identity mode.
+ORACLE_HTTP_ALLOWLIST=https://api.binance.com,https://api.coinbase.com
 ```
 
 ---
@@ -299,7 +375,13 @@ price_deviation_threshold: 0.05
 
 ### Prometheus Metrics
 
-All services expose Prometheus metrics at `/metrics`:
+All services expose Prometheus metrics at `/metrics`.
+
+Production notes:
+
+- The `k8s/overlays/production/ingress.yaml` template intentionally does **not** route `/metrics` via the public Ingress.
+- In MarbleRun SGX mode, service endpoints (including `/metrics`) are typically protected by MarbleRun mTLS, which means a standard Prometheus instance cannot scrape them unless it can present a valid client certificate (or you run Prometheus inside the mesh).
+- The gateway may run behind the ingress in HTTP mode; scraping it should be done from inside the cluster (e.g. `monitoring` namespace) rather than publicly.
 
 ```yaml
 # prometheus.yml
@@ -313,16 +395,12 @@ scrape_configs:
     relabel_configs:
       - source_labels: [__meta_kubernetes_pod_label_app]
         action: keep
-        regex: service-layer-.*
+        regex: gateway|neorand|neovault|neofeeds|neoflow|neoaccounts|neocompute|neostore|neooracle
 ```
 
 ### Grafana Dashboards
 
-Import pre-built dashboards from `monitoring/grafana/`:
-
-- `service-layer-overview.json` - Overall system health
-- `service-layer-performance.json` - Performance metrics
-- `service-layer-security.json` - Security and attestation metrics
+Create dashboards in Grafana using the exported Prometheus metrics.
 
 ### Logging
 
@@ -361,20 +439,50 @@ psql -h your-db-host -U postgres -d service_layer < backup.sql
 ### Secrets Backup
 
 ```bash
-# Export Kubernetes neostore
-kubectl get neostore -n service-layer -o yaml > neostore-backup.yaml
+# Export Kubernetes runtime Secret (contains Supabase service key, JWT secret, etc.)
+kubectl get secret service-layer-secrets -n service-layer -o yaml > service-layer-secrets-backup.yaml
 
 # Backup MarbleRun manifest
-marblerun manifest get --coordinator-addr $COORDINATOR:4433 > manifest-backup.json
+marblerun manifest get "$COORDINATOR_CLIENT_ADDR:4433" > manifest-backup.json
+```
+
+### MarbleRun Coordinator PVC Backup (Seal State)
+
+The Coordinator stores its sealed state under `/coordinator/data` on a RWO PVC (`coordinator-pvc`) in the `marblerun` namespace.
+Back up this PVC before upgrades and during regular DR drills.
+
+```bash
+# Create a local backup tarball (+ .sha256) under ./backups/
+./scripts/coordinator_backup.sh
+
+# Optional: upload to S3 (requires aws CLI + credentials)
+./scripts/coordinator_backup.sh --s3-uri s3://<bucket>/<prefix>/
+```
+
+### MarbleRun Coordinator PVC Restore
+
+Restoring the PVC is a destructive operation for the existing seal dir contents. The restore script will:
+scale down `deployment/coordinator`, mount the PVC via a helper pod, restore the archive, then scale the Deployment back up.
+
+```bash
+# Restore from a local backup
+./scripts/coordinator_restore.sh ./backups/coordinator-pvc-<timestamp>.tar.gz
+
+# Or restore directly from S3
+./scripts/coordinator_restore.sh --s3-uri s3://<bucket>/<prefix>/coordinator-pvc-<timestamp>.tar.gz
+
+# Verify coordinator comes back
+kubectl rollout status deployment/coordinator -n marblerun --timeout=10m
 ```
 
 ### Disaster Recovery
 
 1. **Restore Kubernetes cluster**
 2. **Reinstall MarbleRun coordinator**
-3. **Restore neostore**: `kubectl apply -f neostore-backup.yaml`
-4. **Restore manifest**: `marblerun manifest set manifest-backup.json`
-5. **Redeploy services**: `kubectl apply -f k8s/`
+3. **Restore Coordinator PVC (seal state)**: `./scripts/coordinator_restore.sh <backup.tar.gz>`
+4. **Restore Secret**: `kubectl apply -f service-layer-secrets-backup.yaml`
+5. **Restore manifest**: `marblerun manifest set manifest-backup.json "$COORDINATOR_CLIENT_ADDR:4433"`
+6. **Redeploy services**: `kubectl apply -k k8s/overlays/production` (or `k8s/overlays/simulation`)
 
 ---
 
@@ -389,14 +497,15 @@ sudo ufw allow 4433/tcp  # MarbleRun coordinator
 sudo ufw enable
 
 # Use network policies in Kubernetes
-kubectl apply -f k8s/network-policies.yaml
+# Provide your own NetworkPolicies (not shipped by default)
+# kubectl apply -f network-policies.yaml
 ```
 
 ### Secret Management
 
 ```bash
-# Use sealed neostore for GitOps
-kubeseal --format yaml < neostore.yaml > sealed-neostore.yaml
+# Use sealed secrets for GitOps workflows
+# kubeseal --format yaml < k8s/secrets.yaml > sealed-secrets.yaml
 
 # Or use external secret managers
 # - HashiCorp Vault

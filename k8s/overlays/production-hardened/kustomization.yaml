@@ -1,0 +1,31 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: service-layer
+
+resources:
+  - ../production
+
+# Optional hardening overlay:
+# - read-only root filesystem
+# - dedicated writable /tmp (emptyDir)
+#
+# This overlay is intentionally separate from `production` because some enclave
+# runtimes may require additional writable paths depending on the platform.
+patches:
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: tmp
+          emptyDir: {}
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: tmp
+          mountPath: /tmp
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext/readOnlyRootFilesystem
+        value: true

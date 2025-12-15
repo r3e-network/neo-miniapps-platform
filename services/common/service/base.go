@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/database"
+	"github.com/R3E-Network/service_layer/internal/logging"
 	"github.com/R3E-Network/service_layer/internal/marble"
 )
 
@@ -21,6 +23,7 @@ type BaseConfig struct {
 	Version string
 	Marble  *marble.Marble
 	DB      database.RepositoryInterface
+	Logger  *logging.Logger
 	// RequiredSecrets defines secrets that must be present for the service to be healthy.
 	RequiredSecrets []string
 }
@@ -52,27 +55,61 @@ type BaseService struct {
 	secretsLoaded   bool
 	lastHealthCheck time.Time
 	startTime       time.Time
+
+	logger *logging.Logger
 }
 
 // NewBase constructs a BaseService from shared config.
-func NewBase(cfg BaseConfig) *BaseService {
-	requiredSecrets := mergeUniqueStrings(cfg.RequiredSecrets)
-	if cfg.DB != nil {
+func NewBase(cfg *BaseConfig) *BaseService {
+	cfgValue := BaseConfig{}
+	if cfg != nil {
+		cfgValue = *cfg
+	}
+
+	requiredSecrets := mergeUniqueStrings(cfgValue.RequiredSecrets)
+	if cfgValue.DB != nil {
 		requiredSecrets = mergeUniqueStrings(requiredSecrets, defaultDBSecrets...)
 	}
+
+	logger := cfgValue.Logger
+	if logger == nil {
+		serviceName := cfgValue.ID
+		if serviceName == "" {
+			serviceName = "service"
+		}
+		logger = logging.NewFromEnv(serviceName)
+	}
+
 	return &BaseService{
 		Service: marble.NewService(marble.ServiceConfig{
-			ID:      cfg.ID,
-			Name:    cfg.Name,
-			Version: cfg.Version,
-			Marble:  cfg.Marble,
-			DB:      cfg.DB,
+			ID:      cfgValue.ID,
+			Name:    cfgValue.Name,
+			Version: cfgValue.Version,
+			Marble:  cfgValue.Marble,
+			DB:      cfgValue.DB,
 		}),
 		stopCh:          make(chan struct{}),
 		requiredSecrets: requiredSecrets,
-		dbHealthy:       cfg.DB == nil,
+		dbHealthy:       cfgValue.DB == nil,
 		secretsLoaded:   len(requiredSecrets) == 0,
+		logger:          logger,
 	}
+}
+
+// Logger returns the service's structured logger.
+func (b *BaseService) Logger() *logging.Logger {
+	if b == nil {
+		return logging.NewFromEnv("service")
+	}
+	if b.logger != nil {
+		return b.logger
+	}
+	serviceName := b.ID()
+	if serviceName == "" {
+		serviceName = "service"
+	}
+	b.logger = logging.NewFromEnv(serviceName)
+	return b.logger
 }
 
 // WithHydrate sets an optional hydrate hook executed during Start.
@@ -98,11 +135,67 @@ func (b *BaseService) AddWorker(fn func(context.Context)) *BaseService {
 	return b
 }
 
+type tickerWorkerConfig struct {
+	name           string
+	runImmediately bool
+}
+
+// TickerWorkerOption configures AddTickerWorker behavior.
+type TickerWorkerOption func(*tickerWorkerConfig)
+
+// WithTickerWorkerName sets a friendly name used in error logs.
+func WithTickerWorkerName(name string) TickerWorkerOption {
+	return func(cfg *tickerWorkerConfig) {
+		cfg.name = name
+	}
+}
+
+// WithTickerWorkerImmediate causes the worker to run once immediately on start
+// (before waiting for the first ticker interval).
+func WithTickerWorkerImmediate() TickerWorkerOption {
+	return func(cfg *tickerWorkerConfig) {
+		cfg.runImmediately = true
+	}
+}
+
 // AddTickerWorker registers a periodic background worker.
 // This is a convenience method that wraps the common ticker loop pattern.
 // The worker function is called at the specified interval until Stop() is called.
-func (b *BaseService) AddTickerWorker(interval time.Duration, fn func(context.Context) error) *BaseService {
+func (b *BaseService) AddTickerWorker(interval time.Duration, fn func(context.Context) error, opts ...TickerWorkerOption) *BaseService {
+	cfg := tickerWorkerConfig{}
+	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
+		opt(&cfg)
+	}
+
 	worker := func(ctx context.Context) {
+		logWorkerError := func(err error) {
+			if err == nil {
+				return
+			}
+			entry := b.Logger().WithContext(ctx).WithError(err)
+			if cfg.name != "" {
+				entry = entry.WithField("worker", cfg.name)
+			}
+			entry.Warn("worker error")
+		}
+
+		if cfg.runImmediately {
+			select {
+			case <-ctx.Done():
+				return
+			case <-b.stopCh:
+				return
+			default:
+			}
+
+			if err := fn(ctx); err != nil {
+				logWorkerError(err)
+			}
+		}
+
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
@@ -115,7 +208,7 @@ func (b *BaseService) AddTickerWorker(interval time.Duration, fn func(context.Co
 			case <-ticker.C:
 				if err := fn(ctx); err != nil {
 					// Log error but continue - worker should handle its own errors
-					fmt.Printf("[%s] worker error: %v\n", b.Name(), err)
+					logWorkerError(err)
 				}
 			}
 		}
@@ -182,19 +275,24 @@ func (b *BaseService) CheckHealth() {
 
 	secretsLoaded := true
 	if len(b.requiredSecrets) > 0 {
-		secretsLoaded = false
-		if m := b.Marble(); m != nil {
-			secretsLoaded = true
-			for _, name := range b.requiredSecrets {
-				if len(name) == 0 {
+		secretsLoaded = true
+		for _, name := range b.requiredSecrets {
+			if name == "" {
+				continue
+			}
+
+			if m := b.Marble(); m != nil {
+				if secret, ok := m.Secret(name); ok && len(secret) > 0 {
 					continue
 				}
-				secret, ok := m.Secret(name)
-				if !ok || len(secret) == 0 {
-					secretsLoaded = false
-					break
-				}
 			}
+
+			if envValue := os.Getenv(name); envValue != "" {
+				continue
+			}
+
+			secretsLoaded = false
+			break
 		}
 	}
 

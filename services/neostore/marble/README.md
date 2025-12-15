@@ -40,10 +40,11 @@ The NeoStore Marble service implements encrypted secrets management:
 | File | Purpose |
 |------|---------|
 | `service.go` | Service initialization and encryption |
-| `lifecycle.go` | Service lifecycle (Start/Stop) |
 | `handlers.go` | HTTP request handlers |
 | `api.go` | Route registration |
 | `types.go` | Request/response types |
+
+Lifecycle is handled by the shared `commonservice.BaseService` (start/stop hooks, workers, standard routes).
 
 ## Key Components
 
@@ -91,13 +92,18 @@ Allowed internal services:
 - `neovault`
 - `neorand`
 
+Internal services are **read-only** callers:
+- Services may only fetch a permitted secret via `GET /secrets/{name}`.
+- Listing, creating/updating, deleting, managing permissions, and reading audit logs
+  are **user-only** operations and must go through the gateway.
+
 ### Policy Enforcement
 
 Users can grant specific services access to individual secrets:
 
 ```go
 // Set allowed services for a secret
-POST /neostore/{name}/permissions
+PUT /secrets/{name}/permissions
 {
     "services": ["neoflow", "neocompute"]
 }
@@ -113,18 +119,21 @@ All secret operations are logged:
 
 ## API Endpoints
 
+NeoStore is exposed directly with the paths below. When accessed through the gateway,
+prefix with `/api/v1/neostore` (e.g. `GET /api/v1/neostore/secrets`).
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/health` | GET | Service health check |
 | `/info` | GET | Service status |
-| `/neostore` | GET | List secrets (metadata) |
-| `/neostore` | POST | Create/update secret |
-| `/neostore/{name}` | GET | Get secret value |
-| `/neostore/{name}` | DELETE | Delete secret |
-| `/neostore/{name}/permissions` | GET | Get allowed services |
-| `/neostore/{name}/permissions` | PUT | Set allowed services |
-| `/neostore/audit` | GET | Get audit logs |
-| `/neostore/{name}/audit` | GET | Get secret audit logs |
+| `/secrets` | GET | List secrets (metadata) *(user-only)* |
+| `/secrets` | POST | Create/update secret *(user-only)* |
+| `/secrets/{name}` | GET | Get secret value *(user + permitted services)* |
+| `/secrets/{name}` | DELETE | Delete secret *(user-only)* |
+| `/secrets/{name}/permissions` | GET | Get allowed services *(user-only)* |
+| `/secrets/{name}/permissions` | PUT | Set allowed services *(user-only)* |
+| `/audit` | GET | Get audit logs *(user-only)* |
+| `/secrets/{name}/audit` | GET | Get secret audit logs *(user-only)* |
 
 ## Request/Response Types
 
@@ -182,7 +191,7 @@ type Config struct {
 | `ServiceID` | `neostore` | Service identifier |
 | `ServiceName` | `NeoStore Service` | Display name |
 | `Version` | `1.0.0` | Service version |
-| `ServiceIDHeader` | `X-Service-ID` | Service auth header |
+| `ServiceIDHeader` | `X-Service-ID` | Service auth header (dev fallback; production uses verified mTLS identity) |
 
 ## Dependencies
 

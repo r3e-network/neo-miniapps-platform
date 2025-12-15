@@ -13,7 +13,7 @@ import (
 
 // SignTransaction signs a transaction hash with an account's private key.
 // The account must be locked by the requesting service.
-func (s *Service) SignTransaction(ctx context.Context, serviceID string, accountID string, txHash []byte) (*SignTransactionResponse, error) {
+func (s *Service) SignTransaction(ctx context.Context, serviceID, accountID string, txHash []byte) (*SignTransactionResponse, error) {
 	if s.repo == nil {
 		return nil, fmt.Errorf("repository not configured")
 	}

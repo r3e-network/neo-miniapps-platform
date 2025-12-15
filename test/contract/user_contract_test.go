@@ -14,8 +14,8 @@ import (
 
 	"github.com/R3E-Network/service_layer/internal/marble"
 	neoaccounts "github.com/R3E-Network/service_layer/services/neoaccounts/marble"
-	neovault "github.com/R3E-Network/service_layer/services/neovault/marble"
 	vrf "github.com/R3E-Network/service_layer/services/neorand/marble"
+	neovault "github.com/R3E-Network/service_layer/services/neovault/marble"
 )
 
 // ============================================================================
@@ -183,7 +183,7 @@ func TestNeoVaultClientContractFlow(t *testing.T) {
 	neovaultMarble, _ := marble.New(marble.Config{MarbleType: "neovault"})
 	neovaultMarble.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("neovault-client-test-neovault-key-32b!"))
 
-	neovaultSvc, err := neovault.New(neovault.Config{
+	neovaultSvc, err := neovault.New(&neovault.Config{
 		Marble:         neovaultMarble,
 		NeoAccountsURL: apServer.URL,
 	})
@@ -460,7 +460,7 @@ func TestFullServiceLayerContractIntegration(t *testing.T) {
 
 	neovaultMarble, _ := marble.New(marble.Config{MarbleType: "neovault"})
 	neovaultMarble.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("full-integration-neovault-key-32b!!"))
-	neovaultSvc, _ := neovault.New(neovault.Config{
+	neovaultSvc, _ := neovault.New(&neovault.Config{
 		Marble:         neovaultMarble,
 		NeoAccountsURL: apServer.URL,
 	})

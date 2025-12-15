@@ -1,0 +1,39 @@
+# cert-manager Helm 安装说明
+# 使用 Helm 安装 cert-manager:
+#
+# helm repo add jetstack https://charts.jetstack.io
+# helm repo update
+#
+# helm install cert-manager jetstack/cert-manager \
+#   --namespace cert-manager \
+#   --create-namespace \
+#   --version v1.13.3 \
+#   --set installCRDs=true \
+#   --set global.leaderElection.namespace=cert-manager \
+#   --set prometheus.enabled=true \
+#   --set webhook.timeoutSeconds=30
+#
+# 验证安装:
+# kubectl get pods -n cert-manager
+# kubectl get crd | grep cert-manager
+
+---
+# cert-manager webhook service
+apiVersion: v1
+kind: Service
+metadata:
+  name: cert-manager-webhook
+  namespace: cert-manager
+  labels:
+    app: webhook
+    app.kubernetes.io/name: webhook
+    app.kubernetes.io/instance: cert-manager
+spec:
+  type: ClusterIP
+  ports:
+    - name: https
+      port: 443
+      targetPort: 10250
+  selector:
+    app.kubernetes.io/name: webhook
+    app.kubernetes.io/instance: cert-manager

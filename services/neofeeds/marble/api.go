@@ -9,8 +9,8 @@ package neofeeds
 // Note: /health and /info are registered by BaseService.RegisterStandardRoutes()
 func (s *Service) registerRoutes() {
 	router := s.Router()
-	// Use path pattern that matches feed IDs with slashes (e.g., BTC/USD)
-	router.PathPrefix("/price/").HandlerFunc(s.handleGetPrice).Methods("GET")
+	// Match both feed IDs with slashes (e.g., BTC/USD) and pairs without (e.g., BTCUSDT).
+	router.HandleFunc("/price/{pair:.+}", s.handleGetPrice).Methods("GET")
 	router.HandleFunc("/prices", s.handleGetPrices).Methods("GET")
 	router.HandleFunc("/feeds", s.handleListFeeds).Methods("GET")
 	router.HandleFunc("/config", s.handleGetConfig).Methods("GET")

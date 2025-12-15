@@ -7,12 +7,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/database"
-	"github.com/R3E-Network/service_layer/internal/marble"
 	"github.com/gorilla/mux"
+
+	"github.com/R3E-Network/service_layer/internal/marble"
 )
 
 func TestNew(t *testing.T) {
@@ -143,29 +144,48 @@ func TestExecuteEmptyScript(t *testing.T) {
 
 func TestExecuteWithSecretRefs(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neocompute"})
-	mockDB := database.NewMockRepository()
-	// Pre-populate mock with secrets
-	mockDB.CreateSecret(context.Background(), &database.Secret{
-		UserID:         "user-123",
-		Name:           "API_KEY",
-		EncryptedValue: []byte("encrypted-api-key"),
+	secretSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-User-ID") != "user-123" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/secrets/API_KEY":
+			_ = json.NewEncoder(w).Encode(map[string]any{"name": "API_KEY", "value": "api-key", "version": 1})
+		case "/secrets/DB_PASSWORD":
+			_ = json.NewEncoder(w).Encode(map[string]any{"name": "DB_PASSWORD", "value": "db-password", "version": 1})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer secretSrv.Close()
+
+	svc, _ := New(Config{
+		Marble:            m,
+		SecretsBaseURL:    secretSrv.URL,
+		SecretsHTTPClient: secretSrv.Client(),
 	})
-	mockDB.CreateSecret(context.Background(), &database.Secret{
-		UserID:         "user-123",
-		Name:           "DB_PASSWORD",
-		EncryptedValue: []byte("encrypted-db-password"),
-	})
-	svc, _ := New(Config{Marble: m, DB: mockDB})
 
 	ctx := context.Background()
 	req := &ExecuteRequest{
 		Script:     "function main() { return secret; }",
-		SecretRefs: []string{"API_KEY", "DB_PASSWORD"},
+		SecretRefs: []string{"neostore:API_KEY", "DB_PASSWORD"},
 	}
 
 	resp, _ := svc.Execute(ctx, "user-123", req)
-	if len(resp.Logs) < 2 {
-		t.Error("Should have logs for secret loading")
+	foundAPI := false
+	foundDB := false
+	for _, line := range resp.Logs {
+		if strings.Contains(line, "Loaded secret: API_KEY") {
+			foundAPI = true
+		}
+		if strings.Contains(line, "Loaded secret: DB_PASSWORD") {
+			foundDB = true
+		}
+	}
+	if !foundAPI || !foundDB {
+		t.Fatalf("expected secret loading logs; got=%v", resp.Logs)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/nspcc-dev/neo-go/pkg/core/transaction"
@@ -15,7 +16,7 @@ import (
 // =============================================================================
 
 // InvokeFunction invokes a contract function (read-only).
-func (c *Client) InvokeFunction(ctx context.Context, scriptHash string, method string, params []ContractParam) (*InvokeResult, error) {
+func (c *Client) InvokeFunction(ctx context.Context, scriptHash, method string, params []ContractParam) (*InvokeResult, error) {
 	args := []interface{}{scriptHash, method, params}
 	result, err := c.Call(ctx, "invokefunction", args)
 	if err != nil {
@@ -115,7 +116,7 @@ func (c *Client) SendRawTransactionAndWait(ctx context.Context, txHex string, po
 }
 
 // InvokeFunctionAndWait invokes a contract function and optionally waits for execution.
-// DEPRECATED: This method only simulates the transaction and does NOT broadcast it.
+// Deprecated: This method only simulates the transaction and does NOT broadcast it.
 // Use InvokeFunctionWithSignerAndWait for actual on-chain transactions.
 // If wait is true, it waits for the transaction to be included in a block and returns the application log.
 // If wait is false, it returns immediately after broadcasting with only the TxHash populated.
@@ -257,4 +258,59 @@ func (c *Client) InvokeFunctionWithSigners(ctx context.Context, scriptHash, meth
 		return nil, err
 	}
 	return &invokeResult, nil
+}
+
+// =============================================================================
+// Invoke Helpers (Read-Only)
+// =============================================================================
+
+func invokeFirstStackItem(ctx context.Context, client *Client, scriptHash, method string, params ...ContractParam) (StackItem, error) {
+	result, err := client.InvokeFunction(ctx, scriptHash, method, params)
+	if err != nil {
+		return StackItem{}, fmt.Errorf("%s: invoke failed: %w", method, err)
+	}
+	if err := requireHalt(method, result); err != nil {
+		return StackItem{}, err
+	}
+	return firstStackItem(method, result)
+}
+
+// InvokeBool invokes a method and parses the first stack item as a bool.
+func InvokeBool(ctx context.Context, client *Client, scriptHash, method string, params ...ContractParam) (bool, error) {
+	item, err := invokeFirstStackItem(ctx, client, scriptHash, method, params...)
+	if err != nil {
+		return false, err
+	}
+	value, err := ParseBoolean(item)
+	if err != nil {
+		return false, fmt.Errorf("%s: parse result: %w", method, err)
+	}
+	return value, nil
+}
+
+// InvokeInt invokes a method and parses the first stack item as an Integer.
+func InvokeInt(ctx context.Context, client *Client, scriptHash, method string, params ...ContractParam) (*big.Int, error) {
+	item, err := invokeFirstStackItem(ctx, client, scriptHash, method, params...)
+	if err != nil {
+		return nil, err
+	}
+	value, err := ParseInteger(item)
+	if err != nil {
+		return nil, fmt.Errorf("%s: parse result: %w", method, err)
+	}
+	return value, nil
+}
+
+// InvokeStruct invokes a method and parses the first stack item using the provided parser.
+func InvokeStruct[T any](ctx context.Context, client *Client, scriptHash, method string, parser func(StackItem) (T, error), params ...ContractParam) (T, error) {
+	var zero T
+	item, err := invokeFirstStackItem(ctx, client, scriptHash, method, params...)
+	if err != nil {
+		return zero, err
+	}
+	value, err := parser(item)
+	if err != nil {
+		return zero, fmt.Errorf("%s: parse result: %w", method, err)
+	}
+	return value, nil
 }

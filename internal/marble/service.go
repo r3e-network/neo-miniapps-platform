@@ -9,8 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/database"
 	"github.com/gorilla/mux"
+
+	"github.com/R3E-Network/service_layer/internal/database"
+	"github.com/R3E-Network/service_layer/internal/httputil"
 )
 
 // Service represents a base service that runs as a Marble.
@@ -162,6 +164,8 @@ type Handler interface {
 // =============================================================================
 
 // AuthMiddleware validates JWT tokens.
+//
+// Deprecated: use `internal/middleware.AuthMiddleware` (or a service-specific auth middleware).
 func AuthMiddleware(marble *Marble) mux.MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -172,8 +176,8 @@ func AuthMiddleware(marble *Marble) mux.MiddlewareFunc {
 				return
 			}
 
-			// Validate token (simplified - production should use proper JWT validation)
-			// Token validation happens inside the enclave for security
+			// Legacy minimal check: only validates Bearer prefix.
+			// Use `internal/middleware.AuthMiddleware` for full JWT validation.
 			if len(authHeader) < 7 || authHeader[:7] != "Bearer " {
 				http.Error(w, "invalid authorization header", http.StatusUnauthorized)
 				return
@@ -186,6 +190,8 @@ func AuthMiddleware(marble *Marble) mux.MiddlewareFunc {
 }
 
 // LoggingMiddleware logs requests.
+//
+// Deprecated: use `internal/middleware.LoggingMiddleware`.
 func LoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -195,6 +201,8 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 }
 
 // RecoveryMiddleware recovers from panics.
+//
+// Deprecated: use `internal/middleware.NewRecoveryMiddleware(logger).Handler`.
 func RecoveryMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
@@ -231,7 +239,6 @@ func HealthHandler(s *Service) http.HandlerFunc {
 			Timestamp: time.Now().Format(time.RFC3339),
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		httputil.WriteJSON(w, http.StatusOK, resp)
 	}
 }

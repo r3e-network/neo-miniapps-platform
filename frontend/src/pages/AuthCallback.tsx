@@ -24,7 +24,7 @@ export function AuthCallback() {
         api.setToken(null);
 
         // Cookie-based auth: fetch profile which relies on secure HTTP-only cookie set during callback
-        const profile = await api.getMeWithCookie();
+        const profile = await api.getMe();
 
         login(
           {
@@ -32,7 +32,7 @@ export function AuthCallback() {
             address: profile.user.address || '',
             email: profile.user.email
           },
-          ''
+          null
         );
 
         navigate('/');

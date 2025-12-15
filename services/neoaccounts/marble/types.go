@@ -94,9 +94,9 @@ type BatchSignResponse struct {
 type UpdateBalanceInput struct {
 	ServiceID string `json:"service_id"`
 	AccountID string `json:"account_id"`
-	Token     string `json:"token"`               // Token type: "NEO", "GAS", or custom NEP-17
-	Delta     int64  `json:"delta"`               // Positive to add, negative to subtract
-	Absolute  *int64 `json:"absolute,omitempty"`  // Or set absolute value
+	Token     string `json:"token"`              // Token type: "NEO", "GAS", or custom NEP-17
+	Delta     int64  `json:"delta"`              // Positive to add, negative to subtract
+	Absolute  *int64 `json:"absolute,omitempty"` // Or set absolute value
 }
 
 // UpdateBalanceResponse confirms balance update.

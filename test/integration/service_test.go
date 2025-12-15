@@ -266,6 +266,6 @@ func TestContextCancellation(t *testing.T) {
 	case <-ctx.Done():
 		// Expected
 	case <-time.After(200 * time.Millisecond):
-		t.Error("Context should have been cancelled")
+		t.Error("Context should have been canceled")
 	}
 }

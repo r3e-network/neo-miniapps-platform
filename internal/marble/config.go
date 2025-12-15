@@ -21,12 +21,12 @@ type CommonConfig struct {
 	EventListener *chain.EventListener
 
 	// Contract hashes (optional)
-	GatewayHash    string
-	ServiceHash    string // Service-specific contract hash
-	NeoFeedsHash  string
-	VRFHash        string
-	NeoVaultHash      string
-	NeoFlowHash string
+	GatewayHash  string
+	ServiceHash  string // Service-specific contract hash
+	NeoFeedsHash string
+	VRFHash      string
+	NeoVaultHash string
+	NeoFlowHash  string
 }
 
 // LoadContractHashesFromEnv loads contract hashes from environment variables.

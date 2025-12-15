@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/marble"
+	"github.com/R3E-Network/service_layer/internal/testutil"
 	neoaccounts "github.com/R3E-Network/service_layer/services/neoaccounts/marble"
 	neovaultsupabase "github.com/R3E-Network/service_layer/services/neovault/supabase"
 )
@@ -21,7 +22,7 @@ import (
 func TestNew(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neovault"})
 
-	svc, err := New(Config{
+	svc, err := New(&Config{
 		Marble: m,
 		DB:     nil,
 	})
@@ -82,7 +83,7 @@ func TestStatusConstants(t *testing.T) {
 
 func TestRandomSplitSumsToTotal(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neovault"})
-	svc, _ := New(Config{Marble: m})
+	svc, _ := New(&Config{Marble: m})
 
 	total := int64(1_000_000)
 	parts := svc.randomSplit(total, 5)
@@ -103,7 +104,7 @@ func TestRandomSplitSumsToTotal(t *testing.T) {
 
 func TestRandomSplitSinglePart(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neovault"})
-	svc, _ := New(Config{Marble: m})
+	svc, _ := New(&Config{Marble: m})
 
 	total := int64(1_000_000)
 	parts := svc.randomSplit(total, 1)
@@ -117,7 +118,7 @@ func TestRandomSplitSinglePart(t *testing.T) {
 
 func TestRandomSplitManyParts(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neovault"})
-	svc, _ := New(Config{Marble: m})
+	svc, _ := New(&Config{Marble: m})
 
 	total := int64(10_000_000)
 	parts := svc.randomSplit(total, 10)
@@ -136,7 +137,7 @@ func TestRandomSplitManyParts(t *testing.T) {
 
 func TestRandomSplitSmallAmount(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neovault"})
-	svc, _ := New(Config{Marble: m})
+	svc, _ := New(&Config{Marble: m})
 
 	total := int64(100)
 	parts := svc.randomSplit(total, 3)
@@ -195,7 +196,7 @@ func TestNeoAccountsClientCreation(t *testing.T) {
 
 func TestGetTokenConfig(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neovault"})
-	svc, _ := New(Config{Marble: m})
+	svc, _ := New(&Config{Marble: m})
 
 	// Test default token (GAS)
 	cfg := svc.GetTokenConfig(DefaultToken)
@@ -212,7 +213,7 @@ func TestGetTokenConfig(t *testing.T) {
 
 func TestGetSupportedTokens(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neovault"})
-	svc, _ := New(Config{Marble: m})
+	svc, _ := New(&Config{Marble: m})
 
 	tokens := svc.GetSupportedTokens()
 	if len(tokens) == 0 {
@@ -306,7 +307,7 @@ func TestConvertTargetsToDB(t *testing.T) {
 // =============================================================================
 
 func TestNeoAccountsClientGetPoolInfo(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/info" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
@@ -337,7 +338,7 @@ func TestNeoAccountsClientGetPoolInfo(t *testing.T) {
 }
 
 func TestNeoAccountsClientRequestAccounts(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/request" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
@@ -376,7 +377,7 @@ func TestNeoAccountsClientRequestAccounts(t *testing.T) {
 }
 
 func TestNeoAccountsClientReleaseAccounts(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/release" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
@@ -392,7 +393,7 @@ func TestNeoAccountsClientReleaseAccounts(t *testing.T) {
 }
 
 func TestNeoAccountsClientUpdateBalance(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/balance" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
@@ -425,7 +426,7 @@ func TestNeoAccountsClientWithHTTPClient(t *testing.T) {
 }
 
 func TestNeoAccountsClientErrorHandling(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("internal error"))
 	}))
@@ -591,7 +592,7 @@ func TestDisputeResponseJSON(t *testing.T) {
 
 func TestHandleHealthEndpoint(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neovault"})
-	svc, _ := New(Config{Marble: m})
+	svc, _ := New(&Config{Marble: m})
 
 	req := httptest.NewRequest("GET", "/health", nil)
 	rr := httptest.NewRecorder()
@@ -616,7 +617,7 @@ func TestHandleHealthEndpoint(t *testing.T) {
 
 func BenchmarkRandomSplit(b *testing.B) {
 	m, _ := marble.New(marble.Config{MarbleType: "neovault"})
-	svc, _ := New(Config{Marble: m})
+	svc, _ := New(&Config{Marble: m})
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -675,7 +676,7 @@ func BenchmarkMixRequestMarshal(b *testing.B) {
 // =============================================================================
 
 func TestNeoAccountsClientGetLockedAccounts(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/accounts" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
@@ -703,7 +704,7 @@ func TestNeoAccountsClientGetLockedAccounts(t *testing.T) {
 }
 
 func TestNeoAccountsClientGetLockedAccountsWithMinBalance(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("min_balance") != "1000" {
 			t.Errorf("min_balance = %s, want 1000", r.URL.Query().Get("min_balance"))
 		}
@@ -728,7 +729,7 @@ func TestNeoAccountsClientGetLockedAccountsWithMinBalance(t *testing.T) {
 }
 
 func TestNeoAccountsClientSignTransaction(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/sign" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
@@ -758,7 +759,7 @@ func TestNeoAccountsClientSignTransaction(t *testing.T) {
 }
 
 func TestNeoAccountsClientTransfer(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/transfer" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
@@ -798,7 +799,7 @@ func TestNeoAccountsClientTransfer(t *testing.T) {
 }
 
 func TestNeoAccountsClientTransferError(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("insufficient balance"))
 	}))
@@ -812,7 +813,7 @@ func TestNeoAccountsClientTransferError(t *testing.T) {
 }
 
 func TestNeoAccountsClientSignTransactionError(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		w.Write([]byte("account not locked by service"))
 	}))
@@ -826,7 +827,7 @@ func TestNeoAccountsClientSignTransactionError(t *testing.T) {
 }
 
 func TestNeoAccountsClientUpdateBalanceWithAbsolute(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]interface{}
 		json.NewDecoder(r.Body).Decode(&body)
 		if body["absolute"] == nil {
@@ -850,7 +851,7 @@ func TestNeoAccountsClientUpdateBalanceWithAbsolute(t *testing.T) {
 
 func TestHandleCreateRequestUnauthorized(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neovault"})
-	svc, _ := New(Config{Marble: m})
+	svc, _ := New(&Config{Marble: m})
 
 	reqBody, _ := json.Marshal(CreateRequestInput{
 		TokenType:   "GAS",
@@ -872,7 +873,7 @@ func TestHandleCreateRequestUnauthorized(t *testing.T) {
 
 func TestHandleCreateRequestInvalidJSON(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neovault"})
-	svc, _ := New(Config{Marble: m})
+	svc, _ := New(&Config{Marble: m})
 
 	req := httptest.NewRequest("POST", "/request", bytes.NewReader([]byte("invalid json")))
 	req.Header.Set("Content-Type", "application/json")
@@ -888,7 +889,7 @@ func TestHandleCreateRequestInvalidJSON(t *testing.T) {
 
 func TestHandleCreateRequestMissingTargets(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neovault"})
-	svc, _ := New(Config{Marble: m})
+	svc, _ := New(&Config{Marble: m})
 
 	reqBody, _ := json.Marshal(CreateRequestInput{
 		TokenType:   "GAS",
@@ -910,7 +911,7 @@ func TestHandleCreateRequestMissingTargets(t *testing.T) {
 
 func TestHandleListRequestsUnauthorized(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neovault"})
-	svc, _ := New(Config{Marble: m})
+	svc, _ := New(&Config{Marble: m})
 
 	req := httptest.NewRequest("GET", "/requests", nil)
 	// No X-User-ID header

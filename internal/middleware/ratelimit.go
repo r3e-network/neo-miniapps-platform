@@ -2,13 +2,17 @@
 package middleware
 
 import (
+	"math"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/errors"
-	"github.com/R3E-Network/service_layer/internal/logging"
 	"golang.org/x/time/rate"
+
+	"github.com/R3E-Network/service_layer/internal/errors"
+	internalhttputil "github.com/R3E-Network/service_layer/internal/httputil"
+	"github.com/R3E-Network/service_layer/internal/logging"
 )
 
 // RateLimiter provides rate limiting functionality
@@ -17,15 +21,50 @@ type RateLimiter struct {
 	mu       sync.RWMutex
 	rate     rate.Limit
 	burst    int
+	limit    int
+	window   time.Duration
 	logger   *logging.Logger
 }
 
+// LimiterCount returns the number of active limiters.
+func (rl *RateLimiter) LimiterCount() int {
+	if rl == nil {
+		return 0
+	}
+	rl.mu.RLock()
+	defer rl.mu.RUnlock()
+	return len(rl.limiters)
+}
+
 // NewRateLimiter creates a new rate limiter
-func NewRateLimiter(requestsPerSecond int, burst int, logger *logging.Logger) *RateLimiter {
+func NewRateLimiter(requestsPerSecond, burst int, logger *logging.Logger) *RateLimiter {
 	return &RateLimiter{
 		limiters: make(map[string]*rate.Limiter),
 		rate:     rate.Limit(requestsPerSecond),
 		burst:    burst,
+		limit:    requestsPerSecond,
+		window:   time.Second,
+		logger:   logger,
+	}
+}
+
+// NewRateLimiterWithWindow creates a rate limiter configured by a fixed window
+// and request budget, e.g. 100 requests per 1 minute.
+func NewRateLimiterWithWindow(limit int, window time.Duration, burst int, logger *logging.Logger) *RateLimiter {
+	if window <= 0 {
+		window = time.Second
+	}
+	requestsPerSecond := float64(limit) / window.Seconds()
+	if requestsPerSecond < 0 {
+		requestsPerSecond = 0
+	}
+
+	return &RateLimiter{
+		limiters: make(map[string]*rate.Limiter),
+		rate:     rate.Limit(requestsPerSecond),
+		burst:    burst,
+		limit:    limit,
+		window:   window,
 		logger:   logger,
 	}
 }
@@ -50,21 +89,32 @@ func (rl *RateLimiter) Handler(next http.Handler) http.Handler {
 		// Use user ID if authenticated, otherwise use IP address
 		key := GetUserID(r.Context())
 		if key == "" {
-			key = r.RemoteAddr
+			key = internalhttputil.ClientIP(r)
+		}
+		if key == "" {
+			key = "unknown"
 		}
 
 		limiter := rl.getLimiter(key)
 
 		if !limiter.Allow() {
-			rl.logger.LogSecurityEvent(r.Context(), "rate_limit_exceeded", map[string]interface{}{
-				"key":    key,
-				"path":   r.URL.Path,
-				"method": r.Method,
-			})
+			if rl.logger != nil {
+				rl.logger.LogSecurityEvent(r.Context(), "rate_limit_exceeded", map[string]interface{}{
+					"key":    key,
+					"path":   r.URL.Path,
+					"method": r.Method,
+				})
+			}
 
-			serviceErr := errors.RateLimitExceeded(int(rl.rate), "1s")
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(serviceErr.HTTPStatus)
+			window := rl.window
+			if window <= 0 {
+				window = time.Second
+			}
+			serviceErr := errors.RateLimitExceeded(rl.limit, window.String())
+			if seconds := int(math.Ceil(window.Seconds())); seconds > 0 {
+				w.Header().Set("Retry-After", strconv.Itoa(seconds))
+			}
+			internalhttputil.WriteErrorResponse(w, r, serviceErr.HTTPStatus, string(serviceErr.Code), serviceErr.Message, serviceErr.Details)
 			return
 		}
 
@@ -86,11 +136,30 @@ func (rl *RateLimiter) Cleanup() {
 }
 
 // StartCleanup starts a background goroutine to periodically cleanup old limiters
-func (rl *RateLimiter) StartCleanup(interval time.Duration) {
+func (rl *RateLimiter) StartCleanup(interval time.Duration) (stop func()) {
+	if interval <= 0 {
+		interval = time.Minute
+	}
+
 	ticker := time.NewTicker(interval)
+	done := make(chan struct{})
+	var once sync.Once
+
 	go func() {
-		for range ticker.C {
-			rl.Cleanup()
+		for {
+			select {
+			case <-ticker.C:
+				rl.Cleanup()
+			case <-done:
+				return
+			}
 		}
 	}()
+
+	return func() {
+		once.Do(func() {
+			ticker.Stop()
+			close(done)
+		})
+	}
 }

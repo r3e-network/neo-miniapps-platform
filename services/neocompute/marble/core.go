@@ -7,12 +7,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/crypto"
-	"github.com/R3E-Network/service_layer/internal/database"
 	"github.com/dop251/goja"
 	"github.com/google/uuid"
+
+	"github.com/R3E-Network/service_layer/internal/crypto"
 )
 
 // =============================================================================
@@ -40,7 +41,12 @@ func (s *Service) Execute(ctx context.Context, userID string, req *ExecuteReques
 
 	// Validate input size
 	if req.Input != nil {
-		inputJSON, _ := json.Marshal(req.Input)
+		inputJSON, err := json.Marshal(req.Input)
+		if err != nil {
+			response.Status = "failed"
+			response.Error = fmt.Sprintf("input is not JSON serializable: %v", err)
+			return response, nil
+		}
 		if len(inputJSON) > MaxInputSize {
 			response.Status = "failed"
 			response.Error = fmt.Sprintf("input exceeds maximum size of %d bytes", MaxInputSize)
@@ -63,6 +69,25 @@ func (s *Service) Execute(ctx context.Context, userID string, req *ExecuteReques
 		return response, nil
 	}
 
+	execCtx := ctx
+	if _, ok := ctx.Deadline(); !ok {
+		timeout := DefaultTimeout
+		if req.Timeout > 0 {
+			requested := time.Duration(req.Timeout) * time.Second
+			if requested < time.Second {
+				requested = time.Second
+			}
+			if requested > 2*time.Minute {
+				requested = 2 * time.Minute
+			}
+			timeout = requested
+		}
+
+		var cancel context.CancelFunc
+		execCtx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
 	// Log execution start
 	response.Logs = append(response.Logs,
 		fmt.Sprintf("[%s] Starting execution", startTime.Format(time.RFC3339)),
@@ -70,47 +95,44 @@ func (s *Service) Execute(ctx context.Context, userID string, req *ExecuteReques
 	)
 
 	// Load secrets if referenced
-	secrets := make(map[string][]byte)
-	if len(req.SecretRefs) > 0 && s.DB() != nil {
-		userSecrets, err := s.DB().GetSecrets(ctx, userID)
-		if err != nil {
+	secrets := make(map[string]string)
+	if len(req.SecretRefs) > 0 {
+		if s.secretClient == nil {
 			response.Logs = append(response.Logs,
-				fmt.Sprintf("[%s] Warning: failed to load secrets: %v", time.Now().Format(time.RFC3339), err),
+				fmt.Sprintf("[%s] Warning: secret store not configured (set SECRETS_BASE_URL); skipping secret injection", time.Now().Format(time.RFC3339)),
 			)
 		} else {
-			secretMap := make(map[string]*database.Secret)
-			for i := range userSecrets {
-				secretMap[userSecrets[i].Name] = &userSecrets[i]
-			}
-
 			for _, ref := range req.SecretRefs {
-				secret, ok := secretMap[ref]
-				if !ok {
+				secretName := strings.TrimSpace(ref)
+				if secretName == "" {
+					continue
+				}
+				// Backward-compatible: allow `neostore:<name>` / `secrets:<name>` references.
+				if prefix, name, ok := strings.Cut(secretName, ":"); ok {
+					prefix = strings.ToLower(strings.TrimSpace(prefix))
+					name = strings.TrimSpace(name)
+					if name != "" && (prefix == "neostore" || prefix == "secrets") {
+						secretName = name
+					}
+				}
+
+				secretValue, err := s.secretClient.GetSecret(execCtx, userID, secretName)
+				if err != nil {
 					response.Logs = append(response.Logs,
-						fmt.Sprintf("[%s] Warning: secret not found: %s", time.Now().Format(time.RFC3339), ref),
+						fmt.Sprintf("[%s] Warning: failed to fetch secret %s: %v", time.Now().Format(time.RFC3339), secretName, err),
 					)
 					continue
 				}
-				if secret != nil && len(secret.EncryptedValue) > 0 {
-					// Decrypt the secret value using master key
-					decrypted := secret.EncryptedValue
-					if s.masterKey != nil && len(s.masterKey) > 0 {
-						dec, err := crypto.Decrypt(s.masterKey, secret.EncryptedValue)
-						if err == nil {
-							decrypted = dec
-						}
-					}
-					secrets[ref] = decrypted
-					response.Logs = append(response.Logs,
-						fmt.Sprintf("[%s] Loaded secret: %s", time.Now().Format(time.RFC3339), ref),
-					)
-				}
+				secrets[secretName] = secretValue
+				response.Logs = append(response.Logs,
+					fmt.Sprintf("[%s] Loaded secret: %s", time.Now().Format(time.RFC3339), secretName),
+				)
 			}
 		}
 	}
 
 	// Execute JavaScript using goja runtime
-	output, err := s.executeScript(ctx, req.Script, req.EntryPoint, req.Input, secrets)
+	output, err := s.executeScript(execCtx, req.Script, req.EntryPoint, req.Input, secrets)
 	if err != nil {
 		response.Status = "failed"
 		response.Error = err.Error()
@@ -120,7 +142,13 @@ func (s *Service) Execute(ctx context.Context, userID string, req *ExecuteReques
 
 	// Validate output size
 	if output != nil {
-		outputJSON, _ := json.Marshal(output)
+		outputJSON, err := json.Marshal(output)
+		if err != nil {
+			response.Status = "failed"
+			response.Error = fmt.Sprintf("output is not JSON serializable: %v", err)
+			response.Duration = time.Since(startTime).String()
+			return response, nil
+		}
 		if len(outputJSON) > MaxOutputSize {
 			response.Status = "failed"
 			response.Error = fmt.Sprintf("output exceeds maximum size of %d bytes", MaxOutputSize)
@@ -131,7 +159,7 @@ func (s *Service) Execute(ctx context.Context, userID string, req *ExecuteReques
 
 	response.Status = "completed"
 	response.Output = output
-	response.GasUsed = int64(len(req.Script) * 10) // Simplified gas calculation
+	response.GasUsed = int64(len(req.Script)) * GasPerScriptByte
 	response.Duration = time.Since(startTime).String()
 
 	// Encrypt and sign the output if keys are available
@@ -155,7 +183,7 @@ func (s *Service) Execute(ctx context.Context, userID string, req *ExecuteReques
 
 // protectOutput encrypts the output and generates a signature to prove TEE origin.
 func (s *Service) protectOutput(response *ExecuteResponse) error {
-	if response.Output == nil || len(response.Output) == 0 {
+	if len(response.Output) == 0 {
 		return nil
 	}
 
@@ -188,7 +216,7 @@ func (s *Service) protectOutput(response *ExecuteResponse) error {
 }
 
 // executeScript executes a JavaScript script inside the enclave using goja runtime.
-func (s *Service) executeScript(ctx context.Context, script, entryPoint string, input map[string]interface{}, secrets map[string][]byte) (map[string]interface{}, error) {
+func (s *Service) executeScript(ctx context.Context, script, entryPoint string, input map[string]interface{}, secrets map[string]string) (map[string]interface{}, error) {
 	// Validate script size
 	if len(script) > MaxScriptSize {
 		return nil, fmt.Errorf("script exceeds maximum size of %d bytes", MaxScriptSize)
@@ -219,22 +247,20 @@ func (s *Service) executeScript(ctx context.Context, script, entryPoint string, 
 			return nil, fmt.Errorf("failed to set input: %w", err)
 		}
 	} else {
-		vm.Set("input", map[string]interface{}{})
+		if err := vm.Set("input", map[string]interface{}{}); err != nil {
+			return nil, fmt.Errorf("failed to set input: %w", err)
+		}
 	}
 
 	// Inject secrets as global 'secrets' object (values as strings)
-	secretsMap := make(map[string]string)
-	for k, v := range secrets {
-		secretsMap[k] = string(v)
-	}
-	if err := vm.Set("secrets", secretsMap); err != nil {
+	if err := vm.Set("secrets", secrets); err != nil {
 		return nil, fmt.Errorf("failed to set secrets: %w", err)
 	}
 
 	// Provide console.log for debugging with limits
 	console := vm.NewObject()
 	logs := make([]string, 0, MaxLogEntries)
-	console.Set("log", func(call goja.FunctionCall) goja.Value {
+	if err := console.Set("log", func(call goja.FunctionCall) goja.Value {
 		// Enforce log entry limit
 		if len(logs) >= MaxLogEntries {
 			return goja.Undefined()
@@ -250,20 +276,26 @@ func (s *Service) executeScript(ctx context.Context, script, entryPoint string, 
 		}
 		logs = append(logs, entry)
 		return goja.Undefined()
-	})
-	vm.Set("console", console)
+	}); err != nil {
+		return nil, fmt.Errorf("failed to set console.log: %w", err)
+	}
+	if err := vm.Set("console", console); err != nil {
+		return nil, fmt.Errorf("failed to set console: %w", err)
+	}
 
 	// Provide crypto utilities
 	cryptoObj := vm.NewObject()
-	cryptoObj.Set("sha256", func(call goja.FunctionCall) goja.Value {
+	if err := cryptoObj.Set("sha256", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			return goja.Undefined()
 		}
 		data := call.Arguments[0].String()
 		hash := crypto.Hash256([]byte(data))
 		return vm.ToValue(fmt.Sprintf("%x", hash))
-	})
-	cryptoObj.Set("randomBytes", func(call goja.FunctionCall) goja.Value {
+	}); err != nil {
+		return nil, fmt.Errorf("failed to set crypto.sha256: %w", err)
+	}
+	if err := cryptoObj.Set("randomBytes", func(call goja.FunctionCall) goja.Value {
 		n := 32
 		if len(call.Arguments) > 0 {
 			n = int(call.Arguments[0].ToInteger())
@@ -276,8 +308,12 @@ func (s *Service) executeScript(ctx context.Context, script, entryPoint string, 
 			return goja.Undefined()
 		}
 		return vm.ToValue(fmt.Sprintf("%x", bytes))
-	})
-	vm.Set("crypto", cryptoObj)
+	}); err != nil {
+		return nil, fmt.Errorf("failed to set crypto.randomBytes: %w", err)
+	}
+	if err := vm.Set("crypto", cryptoObj); err != nil {
+		return nil, fmt.Errorf("failed to set crypto: %w", err)
+	}
 
 	// Execute the script
 	_, err := vm.RunString(script)

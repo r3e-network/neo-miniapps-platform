@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/R3E-Network/service_layer/internal/errors"
-	"github.com/R3E-Network/service_layer/internal/logging"
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/R3E-Network/service_layer/internal/errors"
+	internalhttputil "github.com/R3E-Network/service_layer/internal/httputil"
+	"github.com/R3E-Network/service_layer/internal/logging"
 )
 
 // Claims represents JWT claims
@@ -126,8 +128,7 @@ func (m *AuthMiddleware) respondError(w http.ResponseWriter, r *http.Request, er
 		serviceErr = errors.Internal("Authentication failed", err)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(serviceErr.HTTPStatus)
+	internalhttputil.WriteErrorResponse(w, r, serviceErr.HTTPStatus, string(serviceErr.Code), serviceErr.Message, serviceErr.Details)
 
 	// Log the error
 	m.logger.WithContext(r.Context()).WithError(err).WithFields(map[string]interface{}{
@@ -152,7 +153,7 @@ func RequireUserID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID := GetUserID(r.Context())
 		if userID == "" {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			internalhttputil.Unauthorized(w, "")
 			return
 		}
 		next.ServeHTTP(w, r)

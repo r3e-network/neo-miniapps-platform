@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/logging"
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/R3E-Network/service_layer/internal/logging"
 )
 
 func generateTestKeys(t *testing.T) (*rsa.PrivateKey, *rsa.PublicKey) {
@@ -160,7 +161,7 @@ func TestAuthMiddleware_Handler_ValidToken(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	token := generateTestToken(t, privateKey, "user-123", false)
+	token := generateTestToken(t, privateKey, "user-456", false)
 
 	req := httptest.NewRequest("GET", "/api/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -172,8 +173,8 @@ func TestAuthMiddleware_Handler_ValidToken(t *testing.T) {
 		t.Errorf("Status code = %d, want %d", rec.Code, http.StatusOK)
 	}
 
-	if capturedUserID != "user-123" {
-		t.Errorf("User ID = %v, want user-123", capturedUserID)
+	if capturedUserID != "user-456" {
+		t.Errorf("User ID = %v, want user-456", capturedUserID)
 	}
 }
 

@@ -4,8 +4,9 @@ package neocomputemarble
 import (
 	"net/http"
 
-	"github.com/R3E-Network/service_layer/internal/httputil"
 	"github.com/gorilla/mux"
+
+	"github.com/R3E-Network/service_layer/internal/httputil"
 )
 
 // =============================================================================

@@ -76,17 +76,19 @@ check_go_mod() {
     cd "$PROJECT_ROOT"
 
     # Check if go.mod is tidy
+    cp go.mod go.mod.backup 2>/dev/null || true
     cp go.sum go.sum.backup 2>/dev/null || true
     go mod tidy 2>/dev/null
 
-    if ! diff -q go.sum go.sum.backup >/dev/null 2>&1; then
-        echo -e "${YELLOW}[WARNING] go.sum changed after 'go mod tidy'${NC}"
+    if ! diff -q go.mod go.mod.backup >/dev/null 2>&1 || ! diff -q go.sum go.sum.backup >/dev/null 2>&1; then
+        echo -e "${YELLOW}[WARNING] go.mod/go.sum changed after 'go mod tidy'${NC}"
         echo "  Run: go mod tidy"
         WARNINGS=$((WARNINGS + 1))
     else
         echo -e "${GREEN}[OK] Go modules are tidy${NC}"
     fi
 
+    mv go.mod.backup go.mod 2>/dev/null || true
     mv go.sum.backup go.sum 2>/dev/null || true
     echo ""
 }
@@ -129,13 +131,21 @@ check_config_consistency() {
     local issues=0
 
     if [[ -d "$config_dir" ]]; then
-        # Check that all environment configs have same keys
+        # Check that environment configs have the same top-level keys.
+        #
+        # Note: deploy/config also contains generated contract output files
+        # (e.g. *_contracts.json) which intentionally have different schemas.
         local base_keys=""
         local first_file=""
 
         for config in "$config_dir"/*.json; do
             [[ -f "$config" ]] || continue
             local filename=$(basename "$config")
+            case "$filename" in
+                *_contracts.json|fairy_contracts.json)
+                    continue
+                    ;;
+            esac
 
             # Extract top-level keys
             local keys=$(jq -r 'keys[]' "$config" 2>/dev/null | sort | tr '\n' ' ')
@@ -170,12 +180,14 @@ check_contract_consistency() {
     local issues=0
 
     if [[ -d "$contracts_dir" ]]; then
-        # Check Gateway contract has required methods (C# syntax: public static)
-        local gateway="$contracts_dir/gateway/ServiceLayerGateway.cs"
-        if [[ -f "$gateway" ]]; then
+        # Check Gateway contract has required methods (C# syntax: public static).
+        # The Gateway is implemented as a partial class split across multiple files,
+        # so scan the whole directory rather than a single source file.
+        local gateway_dir="$contracts_dir/gateway"
+        if [[ -d "$gateway_dir" ]]; then
             local required_methods=("RequestService" "FulfillRequest" "RegisterService")
             for method in "${required_methods[@]}"; do
-                if ! grep -q "public static.*$method\|public.*static.*$method" "$gateway"; then
+                if ! grep -R --include="*.cs" -q "public[[:space:]]\\+static.*${method}\\|public.*static.*${method}" "$gateway_dir"; then
                     echo -e "${RED}[ERROR] Gateway missing method: $method${NC}"
                     issues=$((issues + 1))
                 fi
@@ -272,34 +284,69 @@ check_error_handling() {
 check_logging_consistency() {
     echo -e "${BLUE}=== Logging Consistency ===${NC}"
 
-    # Check for mixed logging packages
-    local std_log=$(find "$PROJECT_ROOT" -name "*.go" \
-        ! -path "*/vendor/*" \
-        ! -path "*/.git/*" \
-        -exec grep -l '"log"' {} \; 2>/dev/null | wc -l)
+    # Check for mixed logging packages.
+    #
+    # Preferred: internal/logging wrapper (structured logs).
+    # Allowed: standard log in entrypoints/scripts.
+    # Disallowed: direct logrus usage outside internal/logging.
+    # Only treat `log` as "standard log usage" when it is imported as a package,
+    # not when the string literal "log" appears in code (e.g. console.Set("log", ...)).
+    local log_import_pattern='(^import[[:space:]]+"log"[[:space:]]*(//.*)?$|^[[:space:]]*"log"[[:space:]]*(//.*)?$)'
 
-    local zap_log=$(find "$PROJECT_ROOT" -name "*.go" \
+    # Count standard `log` usage outside entrypoints.
+    local std_log_files
+    std_log_files=$(find "$PROJECT_ROOT" -name "*.go" \
         ! -path "*/vendor/*" \
         ! -path "*/.git/*" \
-        -exec grep -l '"go.uber.org/zap"' {} \; 2>/dev/null | wc -l)
+        ! -path "*/internal/logging/*" \
+        ! -path "*/cmd/*" \
+        ! -path "*/test/*" \
+        ! -name "*_test.go" \
+        -exec grep -lE "$log_import_pattern" {} \; 2>/dev/null | sort || true)
+    local std_log
+    if [[ -n "$std_log_files" ]]; then
+        std_log=$(echo "$std_log_files" | wc -l)
+    else
+        std_log=0
+    fi
 
-    local logrus=$(find "$PROJECT_ROOT" -name "*.go" \
+    # Count standard `log` usage inside entrypoints (informational).
+    local std_log_cmd=0
+    if [[ -d "$PROJECT_ROOT/cmd" ]]; then
+        std_log_cmd=$(find "$PROJECT_ROOT/cmd" -name "*.go" \
+            ! -path "*/vendor/*" \
+            ! -path "*/.git/*" \
+            -exec grep -lE "$log_import_pattern" {} \; 2>/dev/null | wc -l)
+    fi
+
+    local internal_logging=$(find "$PROJECT_ROOT" -name "*.go" \
         ! -path "*/vendor/*" \
         ! -path "*/.git/*" \
+        -exec grep -l '"github.com/R3E-Network/service_layer/internal/logging"' {} \; 2>/dev/null | wc -l)
+
+    local direct_logrus=$(find "$PROJECT_ROOT" -name "*.go" \
+        ! -path "*/vendor/*" \
+        ! -path "*/.git/*" \
+        ! -path "*/internal/logging/*" \
         -exec grep -l '"github.com/sirupsen/logrus"' {} \; 2>/dev/null | wc -l)
 
-    echo "  Standard log: $std_log files"
-    echo "  Zap: $zap_log files"
-    echo "  Logrus: $logrus files"
+    echo "  Standard log (entrypoints): $std_log_cmd files"
+    echo "  Standard log (non-entrypoints): $std_log files"
+    echo "  internal/logging: $internal_logging files"
+    echo "  direct logrus: $direct_logrus files"
 
-    local total=$((std_log + zap_log + logrus))
-    local packages=0
-    [[ $std_log -gt 0 ]] && packages=$((packages + 1))
-    [[ $zap_log -gt 0 ]] && packages=$((packages + 1))
-    [[ $logrus -gt 0 ]] && packages=$((packages + 1))
-
-    if [[ $packages -gt 1 ]]; then
-        echo -e "${YELLOW}[WARNING] Multiple logging packages in use${NC}"
+    if [[ $direct_logrus -gt 0 ]]; then
+        echo -e "${YELLOW}[WARNING] Direct logrus imports found outside internal/logging${NC}"
+        WARNINGS=$((WARNINGS + 1))
+    elif [[ $std_log -gt 0 ]]; then
+        echo -e "${YELLOW}[WARNING] Standard log imports found outside entrypoints; prefer internal/logging for structured logs${NC}"
+        echo "$std_log_files" | head -10 | while read -r file; do
+            [[ -n "$file" ]] || continue
+            echo "  ${file#$PROJECT_ROOT/}"
+        done
+        if [[ $std_log -gt 10 ]]; then
+            echo "  ... (showing first 10)"
+        fi
         WARNINGS=$((WARNINGS + 1))
     else
         echo -e "${GREEN}[OK] Logging is consistent${NC}"

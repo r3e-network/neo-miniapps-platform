@@ -1,0 +1,131 @@
+# Grafana Dashboard ConfigMaps
+# 预配置 Neo Service Layer 仪表盘
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: neo-service-layer-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  neo-service-layer.json: |
+    {
+      "dashboard": {
+        "title": "NEO Service Layer Overview",
+        "tags": ["neo", "service-layer"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "CPU Usage by Service",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "sum(rate(container_cpu_usage_seconds_total{namespace='apps'}[5m])) by (pod)",
+                "legendFormat": "{{pod}}"
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "title": "Memory Usage by Service",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "sum(container_memory_working_set_bytes{namespace='apps'}) by (pod)",
+                "legendFormat": "{{pod}}"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "title": "HTTP Request Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "sum(rate(http_requests_total{namespace='apps'}[5m])) by (service)",
+                "legendFormat": "{{service}}"
+              }
+            ]
+          },
+          {
+            "id": 4,
+            "title": "HTTP Error Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "sum(rate(http_requests_total{namespace='apps',status=~'5..'}[5m])) by (service)",
+                "legendFormat": "{{service}}"
+              }
+            ]
+          },
+          {
+            "id": 5,
+            "title": "NATS JetStream Messages",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "nats_jetstream_stream_messages{stream_name='neo-events'}",
+                "legendFormat": "Pending Messages"
+              }
+            ]
+          }
+        ]
+      }
+    }
+
+---
+# Kubernetes Cluster Dashboard
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubernetes-cluster-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  kubernetes-cluster.json: |
+    {
+      "dashboard": {
+        "title": "Kubernetes Cluster Overview",
+        "tags": ["kubernetes", "cluster"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Node CPU Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode='idle'}[5m])) * 100)",
+                "legendFormat": "{{instance}}"
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "title": "Node Memory Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100",
+                "legendFormat": "{{instance}}"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "title": "Pod Count by Namespace",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "count(kube_pod_info) by (namespace)",
+                "legendFormat": "{{namespace}}"
+              }
+            ]
+          }
+        ]
+      }
+    }

@@ -1,0 +1,193 @@
+# Prometheus Alerting Rules
+# 根据 PRD 非功能需求定义告警阈值
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: neo-service-layer-alerts
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    # CPU 告警
+    - name: cpu-alerts
+      interval: 30s
+      rules:
+        - alert: HighCPUUsage
+          expr: |
+            (sum(rate(container_cpu_usage_seconds_total{namespace=~"apps|platform"}[5m])) by (namespace, pod)
+            / sum(container_spec_cpu_quota{namespace=~"apps|platform"} / container_spec_cpu_period{namespace=~"apps|platform"}) by (namespace, pod))
+            > 0.80
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High CPU usage detected"
+            description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} has CPU usage above 80% for 5 minutes."
+
+        - alert: CriticalCPUUsage
+          expr: |
+            (sum(rate(container_cpu_usage_seconds_total{namespace=~"apps|platform"}[5m])) by (namespace, pod)
+            / sum(container_spec_cpu_quota{namespace=~"apps|platform"} / container_spec_cpu_period{namespace=~"apps|platform"}) by (namespace, pod))
+            > 0.95
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Critical CPU usage detected"
+            description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} has CPU usage above 95% for 2 minutes."
+
+    # 内存告警
+    - name: memory-alerts
+      interval: 30s
+      rules:
+        - alert: HighMemoryUsage
+          expr: |
+            (sum(container_memory_working_set_bytes{namespace=~"apps|platform"}) by (namespace, pod)
+            / sum(container_spec_memory_limit_bytes{namespace=~"apps|platform"}) by (namespace, pod))
+            > 0.85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High memory usage detected"
+            description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} has memory usage above 85% for 5 minutes."
+
+        - alert: CriticalMemoryUsage
+          expr: |
+            (sum(container_memory_working_set_bytes{namespace=~"apps|platform"}) by (namespace, pod)
+            / sum(container_spec_memory_limit_bytes{namespace=~"apps|platform"}) by (namespace, pod))
+            > 0.95
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Critical memory usage detected"
+            description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} has memory usage above 95% for 2 minutes."
+
+    # 错误率告警
+    - name: error-rate-alerts
+      interval: 30s
+      rules:
+        - alert: HighErrorRate
+          expr: |
+            sum(rate(http_requests_total{status=~"5.."}[5m])) by (service)
+            / sum(rate(http_requests_total[5m])) by (service)
+            > 0.05
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High error rate detected"
+            description: "Service {{ $labels.service }} has error rate above 5% for 5 minutes."
+
+        - alert: CriticalErrorRate
+          expr: |
+            sum(rate(http_requests_total{status=~"5.."}[5m])) by (service)
+            / sum(rate(http_requests_total[5m])) by (service)
+            > 0.10
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Critical error rate detected"
+            description: "Service {{ $labels.service }} has error rate above 10% for 2 minutes."
+
+    # Pod 健康告警
+    - name: pod-health-alerts
+      interval: 30s
+      rules:
+        - alert: PodNotReady
+          expr: |
+            kube_pod_status_phase{namespace=~"apps|platform", phase!="Running"} > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod not ready"
+            description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} is not running for 5 minutes."
+
+        - alert: PodCrashLooping
+          expr: |
+            rate(kube_pod_container_status_restarts_total{namespace=~"apps|platform"}[15m]) > 0.1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Pod crash looping"
+            description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} is crash looping."
+
+    # NATS JetStream 告警
+    - name: nats-alerts
+      interval: 30s
+      rules:
+        - alert: NATSStreamHighPending
+          expr: |
+            nats_jetstream_stream_messages{stream_name="neo-events"} > 10000
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "NATS stream has high pending messages"
+            description: "Stream neo-events has more than 10k pending messages for 10 minutes."
+
+        - alert: NATSConsumerLag
+          expr: |
+            nats_jetstream_consumer_num_pending > 1000
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "NATS consumer has high lag"
+            description: "Consumer {{ $labels.consumer_name }} has more than 1k pending messages."
+
+    # 磁盘告警
+    - name: disk-alerts
+      interval: 30s
+      rules:
+        - alert: DiskSpaceLow
+          expr: |
+            (node_filesystem_avail_bytes{mountpoint="/var/lib/rancher/k3s"}
+            / node_filesystem_size_bytes{mountpoint="/var/lib/rancher/k3s"}) < 0.20
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Disk space running low"
+            description: "Disk space on node {{ $labels.instance }} is below 20%."
+
+        - alert: PVCSpaceLow
+          expr: |
+            (kubelet_volume_stats_available_bytes / kubelet_volume_stats_capacity_bytes) < 0.20
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "PVC space running low"
+            description: "PVC {{ $labels.persistentvolumeclaim }} in {{ $labels.namespace }} is below 20% free."
+
+    # API 延迟告警
+    - name: latency-alerts
+      interval: 30s
+      rules:
+        - alert: HighAPILatency
+          expr: |
+            histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service)) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High API latency detected"
+            description: "Service {{ $labels.service }} has p99 latency above 500ms for 5 minutes."
+
+        - alert: CriticalAPILatency
+          expr: |
+            histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service)) > 1.0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Critical API latency detected"
+            description: "Service {{ $labels.service }} has p99 latency above 1s for 2 minutes."

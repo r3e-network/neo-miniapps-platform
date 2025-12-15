@@ -1,9 +1,10 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
+export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
 
 interface RequestOptions {
   method?: string;
   body?: unknown;
   headers?: Record<string, string>;
+  credentials?: RequestCredentials;
 }
 
 // =============================================================================
@@ -88,6 +89,14 @@ export interface NonceResponse {
   message: string;
 }
 
+export interface WalletAuthPayload {
+  address: string;
+  publicKey: string;
+  signature: string;
+  message: string;
+  nonce: string;
+}
+
 export interface MeResponse {
   user: User;
   wallets: Wallet[];
@@ -133,13 +142,17 @@ class ApiClient {
 
     const response = await fetch(`${API_BASE}${endpoint}`, {
       method: options.method || 'GET',
+      credentials: options.credentials ?? 'include',
       headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
-      throw new Error(error.error || `HTTP ${response.status}`);
+      const errorPayload = await response
+        .json()
+        .catch(() => ({ message: `HTTP ${response.status}` }) as { error?: string; message?: string });
+      const message = errorPayload?.error || errorPayload?.message || `HTTP ${response.status}`;
+      throw new Error(message);
     }
 
     // Handle 204 No Content
@@ -161,17 +174,17 @@ class ApiClient {
     });
   }
 
-  async register(address: string, signature: string, message: string): Promise<AuthResponse> {
+  async register(payload: WalletAuthPayload): Promise<AuthResponse> {
     return this.request<AuthResponse>('/auth/register', {
       method: 'POST',
-      body: { address, signature, message },
+      body: payload,
     });
   }
 
-  async login(address: string, signature: string, message: string): Promise<AuthResponse> {
+  async login(payload: WalletAuthPayload): Promise<AuthResponse> {
     return this.request<AuthResponse>('/auth/login', {
       method: 'POST',
-      body: { address, signature, message },
+      body: payload,
     });
   }
 
@@ -182,23 +195,6 @@ class ApiClient {
 
   async getMe(): Promise<MeResponse> {
     return this.request<MeResponse>('/me');
-  }
-
-  // getMeWithCookie fetches user profile using HTTP-only cookie authentication.
-  // Used after OAuth callback when token is set via cookie instead of URL.
-  async getMeWithCookie(): Promise<MeResponse & { token?: string }> {
-    const response = await fetch(`${API_BASE}/me`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include', // Include cookies in request
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
-      throw new Error(error.error || `HTTP ${response.status}`);
-    }
-
-    return response.json();
   }
 
   // =============================================================================
@@ -228,10 +224,10 @@ class ApiClient {
     return this.request<Wallet[]>('/wallets');
   }
 
-  async addWallet(address: string, label: string, signature: string, message: string): Promise<Wallet> {
+  async addWallet(address: string, label: string, signature: string, message: string, publicKey: string): Promise<Wallet> {
     return this.request<Wallet>('/wallets', {
       method: 'POST',
-      body: { address, label, signature, message },
+      body: { address, label, signature, message, publicKey },
     });
   }
 
@@ -239,10 +235,10 @@ class ApiClient {
     await this.request(`/wallets/${walletId}/primary`, { method: 'POST' });
   }
 
-  async verifyWallet(walletId: string, signature: string): Promise<void> {
+  async verifyWallet(walletId: string, signature: string, message: string, publicKey: string): Promise<void> {
     await this.request(`/wallets/${walletId}/verify`, {
       method: 'POST',
-      body: { signature },
+      body: { signature, message, publicKey },
     });
   }
 
@@ -323,6 +319,18 @@ class ApiClient {
     });
   }
 
+  async neorandVerify(seed: string, randomWords: string[], proof: string, publicKey: string) {
+    return this.request<{ valid: boolean; error?: string }>('/neorand/verify', {
+      method: 'POST',
+      body: {
+        seed,
+        random_words: randomWords,
+        proof,
+        public_key: publicKey,
+      },
+    });
+  }
+
   // Secrets
   async listSecrets() {
     return this.request<Array<{ id: string; name: string; version: number; created_at: string; last_accessed?: string }>>('/neostore/secrets');
@@ -336,37 +344,58 @@ class ApiClient {
   }
 
   async deleteSecret(name: string) {
-    return this.request(`/secrets/secrets/${name}`, {
+    return this.request(`/neostore/secrets/${name}`, {
       method: 'DELETE',
     });
   }
 
-  async getSecretPermissions(name: string) {
-    return this.request<Array<{ service_name: string; granted_at: string }>>(`/secrets/secrets/${name}/permissions`);
+  async getSecretPermissions(name: string): Promise<string[]> {
+    const res = await this.request<{ services: string[] }>(`/neostore/secrets/${name}/permissions`);
+    return res.services ?? [];
   }
 
-  async grantSecretPermission(name: string, serviceName: string) {
-    return this.request(`/secrets/secrets/${name}/permissions`, {
-      method: 'POST',
-      body: { service_name: serviceName },
+  async setSecretPermissions(name: string, services: string[]): Promise<string[]> {
+    const res = await this.request<{ services: string[] }>(`/neostore/secrets/${name}/permissions`, {
+      method: 'PUT',
+      body: { services },
     });
+    return res.services ?? [];
   }
 
-  async revokeSecretPermission(name: string, serviceName: string) {
-    return this.request(`/secrets/secrets/${name}/permissions/${serviceName}`, {
-      method: 'DELETE',
-    });
+  async grantSecretPermission(name: string, serviceName: string): Promise<string[]> {
+    const normalized = serviceName.trim();
+    if (!normalized) return this.getSecretPermissions(name);
+
+    const current = await this.getSecretPermissions(name);
+    const alreadyIncluded = current.some((s) => s.toLowerCase() === normalized.toLowerCase());
+    if (alreadyIncluded) return current;
+
+    return this.setSecretPermissions(name, [...current, normalized]);
+  }
+
+  async revokeSecretPermission(name: string, serviceName: string): Promise<string[]> {
+    const normalized = serviceName.trim();
+    if (!normalized) return this.getSecretPermissions(name);
+
+    const current = await this.getSecretPermissions(name);
+    const next = current.filter((s) => s.toLowerCase() !== normalized.toLowerCase());
+
+    return this.setSecretPermissions(name, next);
   }
 
   async getSecretAuditLog(name: string) {
     return this.request<Array<{
       id: string;
+      user_id: string;
       secret_name: string;
       action: string;
-      service_name?: string;
-      timestamp: string;
-      details?: string;
-    }>>(`/secrets/secrets/${name}/audit`);
+      service_id?: string;
+      ip_address?: string;
+      user_agent?: string;
+      success: boolean;
+      error_message?: string;
+      created_at: string;
+    }>>(`/neostore/secrets/${name}/audit`);
   }
 
   // NeoFlow

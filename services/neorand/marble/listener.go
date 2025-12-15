@@ -3,13 +3,13 @@ package neorand
 import (
 	"context"
 	"encoding/hex"
-	"log"
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/R3E-Network/service_layer/internal/chain"
 	vrfchain "github.com/R3E-Network/service_layer/services/neorand/chain"
-	"github.com/google/uuid"
 )
 
 // =============================================================================
@@ -32,7 +32,9 @@ func (s *Service) runEventListener(ctx context.Context) {
 		return nil
 	})
 
-	go listener.Start(ctx)
+	if err := listener.Start(ctx); err != nil {
+		s.Logger().WithContext(ctx).WithError(err).Warn("failed to start event listener")
+	}
 }
 
 // handleVRFRequestEvent processes a single VRF request event.
@@ -45,13 +47,28 @@ func (s *Service) handleVRFRequestEvent(ctx context.Context, event *vrfchain.VRF
 	s.mu.Unlock()
 
 	reqID := strconv.FormatUint(event.RequestID, 10)
-	request := &NeoRandRequest{
+
+	numWordsUint64 := event.NumWords
+	if numWordsUint64 == 0 {
+		numWordsUint64 = 1
+	}
+	if numWordsUint64 > uint64(MaxNumWords) {
+		s.Logger().WithContext(ctx).WithFields(map[string]interface{}{
+			"request_id": reqID,
+			"num_words":  numWordsUint64,
+			"max_words":  MaxNumWords,
+		}).Warn("ignoring VRF request: numWords exceeds max")
+		return
+	}
+	numWords := int(numWordsUint64)
+
+	request := &Request{
 		ID:               uuid.New().String(),
 		RequestID:        reqID,
 		UserID:           "", // not provided by event; can be mapped via gateway if needed
 		RequesterAddress: event.UserContract,
 		Seed:             hex.EncodeToString(event.Seed),
-		NumWords:         int(event.NumWords),
+		NumWords:         numWords,
 		CallbackGasLimit: 100000,
 		Status:           StatusPending,
 		CreatedAt:        time.Now(),
@@ -59,7 +76,7 @@ func (s *Service) handleVRFRequestEvent(ctx context.Context, event *vrfchain.VRF
 
 	if s.repo != nil {
 		if err := s.repo.Create(ctx, neorandRecordFromReq(request)); err != nil {
-			log.Printf("[neorand] failed to persist VRF request %s: %v", request.RequestID, err)
+			s.Logger().WithContext(ctx).WithError(err).WithField("request_id", request.RequestID).Warn("failed to persist VRF request")
 		}
 	}
 

@@ -4,16 +4,22 @@ package neostoremarble
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/httputil"
-	neostoresupabase "github.com/R3E-Network/service_layer/services/neostore/supabase"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+
+	"github.com/R3E-Network/service_layer/internal/httputil"
+	neostoresupabase "github.com/R3E-Network/service_layer/services/neostore/supabase"
+)
+
+const (
+	maxSecretNameLen        = 128
+	maxSecretValueBytes     = 64 * 1024
+	maxAllowedServicesCount = 16
 )
 
 // =============================================================================
@@ -30,7 +36,8 @@ func (s *Service) handleListSecrets(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !s.authorizeServiceCaller(w, r) {
+	if callerServiceID(r) != "" {
+		httputil.Unauthorized(w, "only user may list secrets")
 		return
 	}
 
@@ -41,7 +48,8 @@ func (s *Service) handleListSecrets(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result := make([]SecretRecord, 0, len(records))
-	for _, rec := range records {
+	for i := range records {
+		rec := &records[i]
 		result = append(result, SecretRecord{
 			ID:        rec.ID,
 			Name:      rec.Name,
@@ -64,7 +72,8 @@ func (s *Service) handleCreateSecret(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !s.authorizeServiceCaller(w, r) {
+	if callerServiceID(r) != "" {
+		httputil.Unauthorized(w, "only user may create or update secrets")
 		return
 	}
 
@@ -75,6 +84,14 @@ func (s *Service) handleCreateSecret(w http.ResponseWriter, r *http.Request) {
 	input.Name = strings.TrimSpace(input.Name)
 	if input.Name == "" || input.Value == "" {
 		httputil.BadRequest(w, "name and value required")
+		return
+	}
+	if len(input.Name) > maxSecretNameLen {
+		httputil.BadRequest(w, "name too long")
+		return
+	}
+	if len(input.Value) > maxSecretValueBytes {
+		httputil.BadRequest(w, "value too large")
 		return
 	}
 
@@ -132,7 +149,7 @@ func (s *Service) handleCreateSecret(w http.ResponseWriter, r *http.Request) {
 		}
 		// Reset permissions to empty on create
 		if err := s.db.SetAllowedServices(r.Context(), userID, input.Name, nil); err != nil {
-			log.Printf("[neostore] failed to reset permissions for secret: %v", err)
+			s.Logger().WithContext(r.Context()).WithError(err).WithField("secret_name", input.Name).Warn("failed to reset permissions for secret")
 		}
 		statusCode = http.StatusCreated
 	}
@@ -168,31 +185,23 @@ func (s *Service) handleGetSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	records, err := s.db.GetSecrets(r.Context(), userID)
+	serviceID := callerServiceID(r)
+	rec, err := s.db.GetSecretByName(r.Context(), userID, name)
 	if err != nil {
-		s.logAudit(r.Context(), userID, name, "read", r.Header.Get(ServiceIDHeader), false, "database error", r)
-		httputil.InternalError(w, "failed to load secrets")
+		s.logAudit(r.Context(), userID, name, "read", serviceID, false, "database error", r)
+		httputil.InternalError(w, "failed to load secret")
 		return
 	}
-
-	var rec *neostoresupabase.Secret
-	for i := range records {
-		if records[i].Name == name {
-			rec = &records[i]
-			break
-		}
-	}
 	if rec == nil {
-		s.logAudit(r.Context(), userID, name, "read", r.Header.Get(ServiceIDHeader), false, "secret not found", r)
+		s.logAudit(r.Context(), userID, name, "read", serviceID, false, "secret not found", r)
 		httputil.NotFound(w, "secret not found")
 		return
 	}
 
 	// If a service is calling, enforce per-secret policy.
-	serviceID := r.Header.Get(ServiceIDHeader)
 	if serviceID != "" {
-		allowed, err := s.isServiceAllowedForSecret(r.Context(), userID, name, serviceID)
-		if err != nil {
+		allowed, allowedErr := s.isServiceAllowedForSecret(r.Context(), userID, name, serviceID)
+		if allowedErr != nil {
 			s.logAudit(r.Context(), userID, name, "read", serviceID, false, "permission check failed", r)
 			httputil.InternalError(w, "failed to check permissions")
 			return
@@ -210,6 +219,11 @@ func (s *Service) handleGetSecret(w http.ResponseWriter, r *http.Request) {
 		httputil.InternalError(w, "failed to decrypt secret")
 		return
 	}
+	if len(plain) > maxSecretValueBytes {
+		s.logAudit(r.Context(), userID, name, "read", serviceID, false, "secret too large", r)
+		httputil.InternalError(w, "secret value too large")
+		return
+	}
 
 	// Log successful read
 	s.logAudit(r.Context(), userID, name, "read", serviceID, true, "", r)
@@ -221,10 +235,19 @@ func (s *Service) handleGetSecret(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func callerServiceID(r *http.Request) string {
+	serviceID := httputil.GetServiceID(r)
+	// Treat the gateway as the user-facing edge, not an internal caller service.
+	if strings.EqualFold(serviceID, "gateway") {
+		return ""
+	}
+	return serviceID
+}
+
 // authorizeServiceCaller enforces that service-to-service calls present an allowed service ID.
 // Users calling directly may omit the header, but if the header is present it must be allowed.
 func (s *Service) authorizeServiceCaller(w http.ResponseWriter, r *http.Request) bool {
-	svc := r.Header.Get(ServiceIDHeader)
+	svc := callerServiceID(r)
 	if svc == "" {
 		// User-originated calls (through gateway) may not set a service ID.
 		return true
@@ -262,7 +285,7 @@ func (s *Service) handleGetSecretPermissions(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	if r.Header.Get(ServiceIDHeader) != "" {
+	if callerServiceID(r) != "" {
 		httputil.Unauthorized(w, "only user may manage permissions")
 		return
 	}
@@ -289,7 +312,7 @@ func (s *Service) handleSetSecretPermissions(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	if r.Header.Get(ServiceIDHeader) != "" {
+	if callerServiceID(r) != "" {
 		httputil.Unauthorized(w, "only user may manage permissions")
 		return
 	}
@@ -304,11 +327,42 @@ func (s *Service) handleSetSecretPermissions(w http.ResponseWriter, r *http.Requ
 	if !httputil.DecodeJSON(w, r, &body) {
 		return
 	}
-	if err := s.db.SetAllowedServices(r.Context(), userID, name, body.Services); err != nil {
+	if len(body.Services) > maxAllowedServicesCount {
+		httputil.BadRequest(w, "too many services")
+		return
+	}
+
+	canonicalize := func(raw string) (string, bool) {
+		svc := httputil.CanonicalizeServiceID(raw)
+		if svc == "" {
+			return "", false
+		}
+		if _, ok := allowedServiceCallers[svc]; !ok {
+			return "", false
+		}
+		return svc, true
+	}
+
+	normalized := make([]string, 0, len(body.Services))
+	seen := make(map[string]struct{})
+	for _, raw := range body.Services {
+		svc, ok := canonicalize(raw)
+		if !ok {
+			httputil.BadRequest(w, "invalid service id")
+			return
+		}
+		if _, ok := seen[svc]; ok {
+			continue
+		}
+		seen[svc] = struct{}{}
+		normalized = append(normalized, svc)
+	}
+
+	if err := s.db.SetAllowedServices(r.Context(), userID, name, normalized); err != nil {
 		httputil.InternalError(w, "failed to set permissions")
 		return
 	}
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{"services": body.Services})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"services": normalized})
 }
 
 // handleDeleteSecret deletes a secret (user only).
@@ -321,7 +375,7 @@ func (s *Service) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if r.Header.Get(ServiceIDHeader) != "" {
+	if callerServiceID(r) != "" {
 		httputil.Unauthorized(w, "only user may delete secrets")
 		return
 	}
@@ -346,7 +400,7 @@ func (s *Service) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 
 	// Delete associated permissions first
 	if err := s.db.SetAllowedServices(r.Context(), userID, name, nil); err != nil {
-		log.Printf("[neostore] failed to delete permissions for secret: %v", err)
+		s.Logger().WithContext(r.Context()).WithError(err).WithField("secret_name", name).Warn("failed to delete permissions for secret")
 	}
 
 	// Delete the secret
@@ -372,7 +426,7 @@ func (s *Service) handleGetAuditLogs(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if r.Header.Get(ServiceIDHeader) != "" {
+	if callerServiceID(r) != "" {
 		httputil.Unauthorized(w, "only user may view audit logs")
 		return
 	}
@@ -404,7 +458,7 @@ func (s *Service) handleGetSecretAuditLogs(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	if r.Header.Get(ServiceIDHeader) != "" {
+	if callerServiceID(r) != "" {
 		httputil.Unauthorized(w, "only user may view audit logs")
 		return
 	}
@@ -437,6 +491,9 @@ func (s *Service) logAudit(ctx context.Context, userID, secretName, action, serv
 	if s.db == nil {
 		return
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	auditLog := &neostoresupabase.AuditLog{
 		ID:           uuid.New().String(),
 		UserID:       userID,
@@ -454,33 +511,22 @@ func (s *Service) logAudit(ctx context.Context, userID, secretName, action, serv
 	}
 
 	// Log asynchronously to avoid blocking the main operation
-	go func() {
-		if err := s.db.CreateAuditLog(context.Background(), auditLog); err != nil {
-			// Log error but don't fail the operation
-			fmt.Printf("[neostore] failed to create audit log: %v\n", err)
+	go func(ctx context.Context, auditLog *neostoresupabase.AuditLog) {
+		auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if err := s.db.CreateAuditLog(auditCtx, auditLog); err != nil {
+			s.Logger().WithContext(auditCtx).WithError(err).WithFields(map[string]any{
+				"user_id":     auditLog.UserID,
+				"secret_name": auditLog.SecretName,
+				"action":      auditLog.Action,
+				"service_id":  auditLog.ServiceID,
+				"success":     auditLog.Success,
+			}).Warn("failed to create audit log")
 		}
-	}()
+	}(ctx, auditLog)
 }
 
 // getClientIP extracts the client IP address from the request.
 func getClientIP(r *http.Request) string {
-	// Check X-Forwarded-For header first
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// Take the first IP in the list
-		if idx := strings.Index(xff, ","); idx > 0 {
-			return strings.TrimSpace(xff[:idx])
-		}
-		return strings.TrimSpace(xff)
-	}
-
-	// Check X-Real-IP header
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return strings.TrimSpace(xri)
-	}
-
-	// Fall back to RemoteAddr
-	if idx := strings.LastIndex(r.RemoteAddr, ":"); idx > 0 {
-		return r.RemoteAddr[:idx]
-	}
-	return r.RemoteAddr
+	return httputil.ClientIP(r)
 }

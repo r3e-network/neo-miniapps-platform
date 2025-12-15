@@ -1,13 +1,13 @@
-# AccountPool Master Key Attestation & Anchoring
+# NeoAccounts (AccountPool) Master Key Attestation & Anchoring
 
-This flow lets operators bind the AccountPool master key to Coordinator attestation, anchor the hash on-chain (gateway), and give users everything needed for off-chain verification.
+This flow lets operators bind the NeoAccounts (AccountPool) master key to Coordinator attestation, anchor the hash on-chain (gateway), and give users everything needed for off-chain verification.
 
-## Secrets (Coordinator → AccountPool)
+## Secrets (Coordinator → NeoAccounts)
 - `POOL_MASTER_KEY` (32 bytes) **or** `COORD_MASTER_SEED` (>=16 bytes) to deterministically derive the master key.
-- `POOL_MASTER_KEY_HASH` — SHA-256 of the master key (raw 32 bytes or hex). Required in TEE mode to pin the key.
+- `POOL_MASTER_KEY_HASH` — SHA-256 of the **compressed master pubkey** (raw 32 bytes or hex). Required in TEE mode to pin the key.
 - `POOL_MASTER_ATTESTATION_HASH` (optional) — hash of the attestation bundle embedding `POOL_MASTER_KEY_HASH`.
 
-## Attestation bundle (AccountPool `/master-key`)
+## Attestation bundle (NeoAccounts `/master-key`)
 `GET /master-key` (RA-TLS) returns:
 ```json
 {
@@ -19,7 +19,7 @@ This flow lets operators bind the AccountPool master key to Coordinator attestat
   "prod_id": 1,
   "isvsvn": 3,
   "timestamp": "<rfc3339>",
-  "source": "accountpool",
+  "source": "neoaccounts",
   "simulated": false
 }
 ```

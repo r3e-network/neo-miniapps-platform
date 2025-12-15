@@ -56,40 +56,40 @@ func DefaultServicesConfig() *plugin.ServicesConfig {
 				Port:        8081,
 				Description: "Verifiable random number generation",
 			},
-			"neooracle": {
+			"neovault": {
 				Enabled:     true,
 				Port:        8082,
-				Description: "External data delivery with proofs",
+				Description: "Secure cryptographic operations",
 			},
 			"neofeeds": {
 				Enabled:     true,
 				Port:        8083,
 				Description: "Decentralized market data",
 			},
-			"neoaccounts": {
+			"neoflow": {
 				Enabled:     true,
 				Port:        8084,
-				Description: "Account pool management",
+				Description: "Automated smart contract execution",
 			},
-			"neovault": {
+			"neoaccounts": {
 				Enabled:     true,
 				Port:        8085,
-				Description: "Secure cryptographic operations",
+				Description: "Account pool management",
 			},
 			"neocompute": {
 				Enabled:     true,
 				Port:        8086,
 				Description: "Secure JavaScript execution",
 			},
-			"neoflow": {
-				Enabled:     true,
-				Port:        8087,
-				Description: "Automated smart contract execution",
-			},
 			"neostore": {
 				Enabled:     true,
-				Port:        8088,
+				Port:        8087,
 				Description: "Encrypted data management",
+			},
+			"neooracle": {
+				Enabled:     true,
+				Port:        8088,
+				Description: "External data delivery with proofs",
 			},
 		},
 	}
@@ -97,14 +97,14 @@ func DefaultServicesConfig() *plugin.ServicesConfig {
 
 // ServiceNameMapping provides mapping from old service names to new Neo names
 var ServiceNameMapping = map[string]string{
-	"vrf":          "neorand",
-	"oracle":       "neooracle",
+	"vrf":         "neorand",
+	"oracle":      "neooracle",
 	"neofeeds":    "neofeeds",
-	"neoaccounts":  "neoaccounts",
-	"neovault":        "neovault",
-	"neocompute": "neocompute",
-	"neoflow":   "neoflow",
-	"secrets":      "neostore",
+	"neoaccounts": "neoaccounts",
+	"neovault":    "neovault",
+	"neocompute":  "neocompute",
+	"neoflow":     "neoflow",
+	"secrets":     "neostore",
 }
 
 // GetNeoServiceName converts old service name to new Neo name

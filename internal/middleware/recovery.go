@@ -7,6 +7,7 @@ import (
 	"runtime/debug"
 
 	"github.com/R3E-Network/service_layer/internal/errors"
+	"github.com/R3E-Network/service_layer/internal/httputil"
 	"github.com/R3E-Network/service_layer/internal/logging"
 )
 
@@ -30,17 +31,16 @@ func (m *RecoveryMiddleware) Handler(next http.Handler) http.Handler {
 				// Log the panic with stack trace
 				stack := debug.Stack()
 				m.logger.WithContext(r.Context()).WithFields(map[string]interface{}{
-					"panic":      fmt.Sprintf("%v", err),
-					"stack":      string(stack),
-					"path":       r.URL.Path,
-					"method":     r.Method,
+					"panic":       fmt.Sprintf("%v", err),
+					"stack":       string(stack),
+					"path":        r.URL.Path,
+					"method":      r.Method,
 					"remote_addr": r.RemoteAddr,
 				}).Error("Panic recovered")
 
 				// Send error response
 				serviceErr := errors.Internal("Internal server error", fmt.Errorf("%v", err))
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(serviceErr.HTTPStatus)
+				httputil.WriteErrorResponse(w, r, serviceErr.HTTPStatus, string(serviceErr.Code), serviceErr.Message, serviceErr.Details)
 			}
 		}()
 

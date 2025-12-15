@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"math/big"
 	"sync"
 
@@ -30,7 +31,7 @@ type TEEFulfiller struct {
 
 // NewTEEFulfiller creates a new TEE fulfiller.
 // The privateKeyHex should be a hex-encoded private key (without 0x prefix).
-func NewTEEFulfiller(client *Client, gatewayHash string, privateKeyHex string) (*TEEFulfiller, error) {
+func NewTEEFulfiller(client *Client, gatewayHash, privateKeyHex string) (*TEEFulfiller, error) {
 	// Create neo-go account for transaction signing
 	account, err := AccountFromPrivateKey(privateKeyHex)
 	if err != nil {
@@ -53,12 +54,15 @@ func NewTEEFulfiller(client *Client, gatewayHash string, privateKeyHex string) (
 }
 
 // NewTEEFulfillerFromWallet creates a TEE fulfiller from an existing Wallet.
-// DEPRECATED: Use NewTEEFulfiller with private key hex instead.
-func NewTEEFulfillerFromWallet(client *Client, gatewayHash string, w *Wallet) *TEEFulfiller {
+// Deprecated: Use NewTEEFulfiller with private key hex instead.
+func NewTEEFulfillerFromWallet(client *Client, gatewayHash string, w *Wallet) (*TEEFulfiller, error) {
 	// Extract private key from wallet and create account
 	// Note: This is a compatibility shim - the wallet's private key bytes are needed
 	privateKeyHex := hex.EncodeToString(w.privateKey.D.Bytes())
-	account, _ := AccountFromPrivateKey(privateKeyHex)
+	account, err := AccountFromPrivateKey(privateKeyHex)
+	if err != nil {
+		return nil, fmt.Errorf("create account: %w", err)
+	}
 
 	return &TEEFulfiller{
 		client:       client,
@@ -66,7 +70,7 @@ func NewTEEFulfillerFromWallet(client *Client, gatewayHash string, w *Wallet) *T
 		account:      account,
 		legacyWallet: w,
 		nonceCounter: big.NewInt(0),
-	}
+	}, nil
 }
 
 // FulfillRequest fulfills a service request via the Gateway contract.
@@ -150,7 +154,9 @@ func (t *TEEFulfiller) FailRequest(ctx context.Context, requestID *big.Int, reas
 func (t *TEEFulfiller) ResolveDispute(ctx context.Context, neovaultHash string, requestHash, outputsHash []byte) (string, error) {
 	nonce := t.nextNonce()
 
-	message := append(requestHash, outputsHash...)
+	message := make([]byte, 0, len(requestHash)+len(outputsHash)+len(nonce.Bytes()))
+	message = append(message, requestHash...)
+	message = append(message, outputsHash...)
 	message = append(message, nonce.Bytes()...)
 
 	signature, err := t.legacyWallet.Sign(message)
@@ -198,7 +204,11 @@ func (t *TEEFulfiller) UpdatePrice(ctx context.Context, neoFeedsHash, feedID str
 	nonce := t.nextNonce()
 
 	message := append([]byte(feedID), price.Bytes()...)
-	message = append(message, big.NewInt(int64(timestamp)).Bytes()...)
+	ts, err := safeInt64FromUint64(timestamp)
+	if err != nil {
+		return "", err
+	}
+	message = append(message, big.NewInt(ts).Bytes()...)
 	message = append(message, nonce.Bytes()...)
 
 	signature, err := t.legacyWallet.Sign(message)
@@ -209,7 +219,7 @@ func (t *TEEFulfiller) UpdatePrice(ctx context.Context, neoFeedsHash, feedID str
 	params := []ContractParam{
 		NewStringParam(feedID),
 		NewIntegerParam(price),
-		NewIntegerParam(big.NewInt(int64(timestamp))),
+		NewIntegerParam(big.NewInt(ts)),
 		NewIntegerParam(nonce),
 		NewByteArrayParam(signature),
 	}
@@ -243,7 +253,11 @@ func (t *TEEFulfiller) UpdatePrices(ctx context.Context, neoFeedsHash string, fe
 	for i := range feedIDs {
 		message = append(message, []byte(feedIDs[i])...)
 		message = append(message, prices[i].Bytes()...)
-		message = append(message, big.NewInt(int64(timestamps[i])).Bytes()...)
+		ts, err := safeInt64FromUint64(timestamps[i])
+		if err != nil {
+			return "", err
+		}
+		message = append(message, big.NewInt(ts).Bytes()...)
 	}
 	message = append(message, nonce.Bytes()...)
 
@@ -259,7 +273,11 @@ func (t *TEEFulfiller) UpdatePrices(ctx context.Context, neoFeedsHash string, fe
 	for i := range feedIDs {
 		feedIDParams[i] = NewStringParam(feedIDs[i])
 		priceParams[i] = NewIntegerParam(prices[i])
-		timestampParams[i] = NewIntegerParam(big.NewInt(int64(timestamps[i])))
+		ts, tsErr := safeInt64FromUint64(timestamps[i])
+		if tsErr != nil {
+			return "", tsErr
+		}
+		timestampParams[i] = NewIntegerParam(big.NewInt(ts))
 	}
 
 	params := []ContractParam{
@@ -332,7 +350,9 @@ func (t *TEEFulfiller) ExecuteTrigger(ctx context.Context, neoflowHash string, t
 func (t *TEEFulfiller) SetTEEMasterKey(ctx context.Context, pubKey, pubKeyHash, attestHash []byte) (*TxResult, error) {
 	nonce := t.nextNonce()
 
-	message := append(pubKey, pubKeyHash...)
+	message := make([]byte, 0, len(pubKey)+len(pubKeyHash)+len(attestHash)+len(nonce.Bytes()))
+	message = append(message, pubKey...)
+	message = append(message, pubKeyHash...)
 	message = append(message, attestHash...)
 	message = append(message, nonce.Bytes()...)
 
@@ -363,6 +383,13 @@ func (t *TEEFulfiller) SetTEEMasterKey(ctx context.Context, pubKey, pubKeyHash, 
 	}
 
 	return txResult, nil
+}
+
+func safeInt64FromUint64(v uint64) (int64, error) {
+	if v > uint64(math.MaxInt64) {
+		return 0, fmt.Errorf("value %d overflows int64", v)
+	}
+	return int64(v), nil
 }
 
 // =============================================================================

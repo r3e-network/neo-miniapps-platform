@@ -11,4 +11,6 @@ func (s *Service) registerRoutes() {
 	s.RegisterStandardRoutes()
 	r := s.Router()
 	r.HandleFunc("/query", s.handleQuery).Methods("POST")
+	// Backward-compatible alias used by older clients/UI.
+	r.HandleFunc("/fetch", s.handleQuery).Methods("POST")
 }

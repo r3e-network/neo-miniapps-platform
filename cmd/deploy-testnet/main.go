@@ -80,15 +80,15 @@ func main() {
 		nefPath := filepath.Join(*buildDir, name+".nef")
 		manifestPath := filepath.Join(*buildDir, name+".manifest.json")
 
-		if _, err := os.Stat(nefPath); os.IsNotExist(err) {
+		if _, statErr := os.Stat(nefPath); os.IsNotExist(statErr) {
 			log.Printf("  Skipping %s (not built)", name)
 			continue
 		}
 
 		log.Printf("Simulating %s...", name)
-		deployed, err := deployer.DeployContract(nefPath, manifestPath)
-		if err != nil {
-			log.Printf("  ERROR: %v", err)
+		deployed, deployErr := deployer.DeployContract(nefPath, manifestPath)
+		if deployErr != nil {
+			log.Printf("  ERROR: %v", deployErr)
 			continue
 		}
 
@@ -107,15 +107,15 @@ func main() {
 			nefPath := filepath.Join(*buildDir, name+".nef")
 			manifestPath := filepath.Join(*buildDir, name+".manifest.json")
 
-			if _, err := os.Stat(nefPath); os.IsNotExist(err) {
+			if _, statErr := os.Stat(nefPath); os.IsNotExist(statErr) {
 				log.Printf("  Skipping %s (not built)", name)
 				continue
 			}
 
 			log.Printf("Simulating %s...", name)
-			deployed, err := deployer.DeployContract(nefPath, manifestPath)
-			if err != nil {
-				log.Printf("  ERROR: %v", err)
+			deployed, deployErr := deployer.DeployContract(nefPath, manifestPath)
+			if deployErr != nil {
+				log.Printf("  ERROR: %v", deployErr)
 				continue
 			}
 
@@ -145,19 +145,23 @@ func main() {
 		for _, name := range contracts {
 			nefPath := filepath.Join(*buildDir, name+".nef")
 			manifestPath := filepath.Join(*buildDir, name+".manifest.json")
-			if _, err := os.Stat(nefPath); err == nil {
+			if _, statErr := os.Stat(nefPath); statErr == nil {
 				log.Printf("neo-go contract deploy -i %s -m %s -r %s -w wallet.json", nefPath, manifestPath, *rpcURL)
 			}
 		}
 		return
 	}
 
-	if err := os.MkdirAll(filepath.Dir(*outputFile), 0755); err != nil {
-		log.Printf("Warning: Failed to create output directory: %v", err)
+	if mkdirErr := os.MkdirAll(filepath.Dir(*outputFile), 0o755); mkdirErr != nil {
+		log.Printf("Warning: Failed to create output directory: %v", mkdirErr)
 	}
 
-	data, _ := json.MarshalIndent(result, "", "  ")
-	if err := os.WriteFile(*outputFile, data, 0644); err != nil {
+	data, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		log.Printf("Warning: Failed to marshal output: %v", err)
+		data = []byte("{}")
+	}
+	if err := os.WriteFile(*outputFile, data, 0o600); err != nil {
 		log.Printf("Warning: Failed to write output file: %v", err)
 	}
 
@@ -174,6 +178,8 @@ func main() {
 
 func parseGas(gasConsumed string) float64 {
 	var gas int64
-	fmt.Sscanf(gasConsumed, "%d", &gas)
+	if _, err := fmt.Sscanf(gasConsumed, "%d", &gas); err != nil {
+		return 0
+	}
 	return float64(gas) / 1e8
 }

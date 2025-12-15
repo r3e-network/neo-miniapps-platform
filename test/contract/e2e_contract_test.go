@@ -4,7 +4,6 @@ package contract
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -34,7 +33,7 @@ func TestE2EFullMixingFlow(t *testing.T) {
 	neovaultMarble, _ := marble.New(marble.Config{MarbleType: "neovault"})
 	neovaultMarble.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("e2e-full-flow-neovault-key-32bytes!"))
 
-	neovaultSvc, err := neovault.New(neovault.Config{
+	neovaultSvc, err := neovault.New(&neovault.Config{
 		Marble:         neovaultMarble,
 		NeoAccountsURL: apServer.URL,
 	})
@@ -178,30 +177,48 @@ func TestE2EVRFFlow(t *testing.T) {
 	defer server.Close()
 
 	t.Run("vrf request-response flow", func(t *testing.T) {
-		type VRFRequest struct {
-			RequestID int64  `json:"request_id"`
-			Seed      []byte `json:"seed"`
-			NumWords  int    `json:"num_words"`
+		request := vrf.DirectRandomRequest{
+			Seed:     "user-provided-seed-for-randomness",
+			NumWords: 3,
 		}
 
-		type VRFResponse struct {
-			RequestID   int64    `json:"request_id"`
-			RandomWords [][]byte `json:"random_words"`
-			Proof       []byte   `json:"proof"`
-		}
-
-		request := VRFRequest{
-			RequestID: 100,
-			Seed:      []byte("user-provided-seed-for-randomness"),
-			NumWords:  3,
-		}
-
-		if len(request.Seed) == 0 {
+		if request.Seed == "" {
 			t.Error("seed should not be empty")
 		}
 
-		t.Logf("VRF request: id=%d, seed=%s, num_words=%d",
-			request.RequestID, hex.EncodeToString(request.Seed), request.NumWords)
+		body, err := json.Marshal(request)
+		if err != nil {
+			t.Fatalf("marshal request: %v", err)
+		}
+
+		resp, err := http.Post(server.URL+"/random", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("post /random: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected status %d, got %d", http.StatusOK, resp.StatusCode)
+		}
+
+		var vrfResp vrf.DirectRandomResponse
+		if err := json.NewDecoder(resp.Body).Decode(&vrfResp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+
+		if vrfResp.Seed != request.Seed {
+			t.Fatalf("expected seed %q, got %q", request.Seed, vrfResp.Seed)
+		}
+		if len(vrfResp.RandomWords) != request.NumWords {
+			t.Fatalf("expected %d random words, got %d", request.NumWords, len(vrfResp.RandomWords))
+		}
+		if vrfResp.Proof == "" {
+			t.Fatal("expected proof to be non-empty")
+		}
+		if vrfResp.PublicKey == "" {
+			t.Fatal("expected public_key to be non-empty")
+		}
+
+		t.Logf("VRF response: seed=%s words=%d", vrfResp.Seed, len(vrfResp.RandomWords))
 	})
 }
 
@@ -267,7 +284,7 @@ func TestE2EConcurrentServiceOperations(t *testing.T) {
 	apServer := httptest.NewServer(apSvc.Router())
 	defer apServer.Close()
 
-	neovaultSvc, _ := neovault.New(neovault.Config{
+	neovaultSvc, _ := neovault.New(&neovault.Config{
 		Marble:         neovaultMarble,
 		NeoAccountsURL: apServer.URL,
 	})
@@ -343,7 +360,7 @@ func TestE2EErrorRecovery(t *testing.T) {
 		neovaultMarble, _ := marble.New(marble.Config{MarbleType: "neovault"})
 		neovaultMarble.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("recovery-test-neovault-key-32bytes!"))
 
-		neovaultSvc, err := neovault.New(neovault.Config{
+		neovaultSvc, err := neovault.New(&neovault.Config{
 			Marble:         neovaultMarble,
 			NeoAccountsURL: "http://localhost:59999",
 		})

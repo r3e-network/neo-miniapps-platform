@@ -4,17 +4,20 @@ package chain
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"sync"
+	"net/url"
+	"strings"
 	"time"
+
+	"github.com/R3E-Network/service_layer/internal/httputil"
+	"github.com/R3E-Network/service_layer/internal/runtime"
 )
 
 // Client provides Neo N3 RPC client functionality.
 type Client struct {
-	mu         sync.RWMutex
 	rpcURL     string
 	httpClient *http.Client
 	networkID  uint32
@@ -22,9 +25,10 @@ type Client struct {
 
 // Config holds client configuration.
 type Config struct {
-	RPCURL    string
-	NetworkID uint32 // MainNet: 860833102, TestNet: 894710606
-	Timeout   time.Duration
+	RPCURL     string
+	NetworkID  uint32 // MainNet: 860833102, TestNet: 894710606
+	Timeout    time.Duration
+	HTTPClient *http.Client // Optional custom HTTP client (e.g. Marble.ExternalHTTPClient()).
 }
 
 // NewClient creates a new Neo N3 client.
@@ -33,17 +37,56 @@ func NewClient(cfg Config) (*Client, error) {
 		return nil, fmt.Errorf("RPC URL required")
 	}
 
+	parsed, err := url.Parse(cfg.RPCURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return nil, fmt.Errorf("invalid RPC URL")
+	}
+	if parsed.User != nil {
+		return nil, fmt.Errorf("RPC URL must not contain credentials")
+	}
+
+	if runtime.StrictIdentityMode() && !strings.EqualFold(parsed.Scheme, "https") {
+		return nil, fmt.Errorf("RPC URL must use https in strict identity mode")
+	}
+
 	timeout := cfg.Timeout
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}
 
+	httpClient := cfg.HTTPClient
+	if httpClient == nil {
+		transport := http.DefaultTransport
+		if base, ok := http.DefaultTransport.(*http.Transport); ok {
+			cloned := base.Clone()
+			if cloned.TLSClientConfig != nil {
+				cloned.TLSClientConfig = cloned.TLSClientConfig.Clone()
+				if cloned.TLSClientConfig.MinVersion == 0 || cloned.TLSClientConfig.MinVersion < tls.VersionTLS12 {
+					cloned.TLSClientConfig.MinVersion = tls.VersionTLS12
+				}
+			} else {
+				cloned.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+			}
+			transport = cloned
+		}
+
+		httpClient = &http.Client{
+			Timeout:   timeout,
+			Transport: transport,
+		}
+	} else {
+		// Avoid mutating a caller-supplied client.
+		copied := *httpClient
+		if copied.Timeout == 0 || cfg.Timeout != 0 {
+			copied.Timeout = timeout
+		}
+		httpClient = &copied
+	}
+
 	return &Client{
-		rpcURL: cfg.RPCURL,
-		httpClient: &http.Client{
-			Timeout: timeout,
-		},
-		networkID: cfg.NetworkID,
+		rpcURL:     cfg.RPCURL,
+		httpClient: httpClient,
+		networkID:  cfg.NetworkID,
 	}, nil
 }
 
@@ -77,7 +120,19 @@ func (c *Client) Call(ctx context.Context, method string, params []interface{}) 
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, truncated, readErr := httputil.ReadAllWithLimit(resp.Body, 32<<10)
+		if readErr != nil {
+			return nil, fmt.Errorf("read error response: %w", readErr)
+		}
+		msg := strings.TrimSpace(string(respBody))
+		if truncated {
+			msg += "...(truncated)"
+		}
+		return nil, fmt.Errorf("rpc http error %d: %s", resp.StatusCode, msg)
+	}
+
+	respBody, err := httputil.ReadAllStrict(resp.Body, 8<<20)
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}

@@ -228,10 +228,10 @@ func TestRegistrationResponseJSON(t *testing.T) {
 func TestAdminApproveInputJSON(t *testing.T) {
 	maxDaily := int64(1000000)
 	input := AdminApproveInput{
-		RegistrationID:   "reg-123",
-		Action:           "approve",
-		Notes:            "Verified user",
-		MaxDailyAmount:   &maxDaily,
+		RegistrationID: "reg-123",
+		Action:         "approve",
+		Notes:          "Verified user",
+		MaxDailyAmount: &maxDaily,
 	}
 
 	data, err := json.Marshal(input)

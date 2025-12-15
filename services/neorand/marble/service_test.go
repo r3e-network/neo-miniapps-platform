@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gorilla/mux"
+
 	"github.com/R3E-Network/service_layer/internal/marble"
 	neorandsupabase "github.com/R3E-Network/service_layer/services/neorand/supabase"
 )
@@ -923,6 +925,7 @@ func TestHandleGetRequestNotFound(t *testing.T) {
 	svc, _ := New(Config{Marble: m})
 
 	req := httptest.NewRequest("GET", "/request/nonexistent-id", nil)
+	req = mux.SetURLVars(req, map[string]string{"id": "nonexistent-id"})
 	rr := httptest.NewRecorder()
 
 	svc.handleGetRequest(rr, req)
@@ -951,6 +954,7 @@ func TestHandleGetRequestFromMemory(t *testing.T) {
 	svc.mu.Unlock()
 
 	req := httptest.NewRequest("GET", "/request/req-123", nil)
+	req = mux.SetURLVars(req, map[string]string{"id": "req-123"})
 	rr := httptest.NewRecorder()
 
 	svc.handleGetRequest(rr, req)

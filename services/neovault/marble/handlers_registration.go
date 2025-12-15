@@ -2,6 +2,7 @@
 package neovaultmarble
 
 import (
+	"context"
 	"net/http"
 	"regexp"
 	"strings"
@@ -55,8 +56,8 @@ func (s *Service) handleRegistrationApply(w http.ResponseWriter, r *http.Request
 	}
 
 	// Check for existing registration
-	existing, err := s.repo.GetRegistrationByUserID(r.Context(), userID)
-	if err == nil && existing != nil {
+	existing, lookupErr := s.repo.GetRegistrationByUserID(r.Context(), userID)
+	if lookupErr == nil && existing != nil {
 		// User already has a registration
 		switch existing.Status {
 		case neovaultsupabase.RegStatusApproved:
@@ -104,7 +105,7 @@ func (s *Service) handleRegistrationApply(w http.ResponseWriter, r *http.Request
 			httputil.WriteError(w, http.StatusForbidden, "your access has been suspended or revoked, contact support")
 			return
 		}
-	} else if err != nil && !database.IsNotFound(err) {
+	} else if lookupErr != nil && !database.IsNotFound(lookupErr) {
 		httputil.InternalError(w, "failed to check existing registration")
 		return
 	}
@@ -220,7 +221,8 @@ func (s *Service) handleAdminListRegistrations(w http.ResponseWriter, r *http.Re
 	}
 
 	summaries := make([]RegistrationSummary, 0, len(registrations))
-	for _, reg := range registrations {
+	for i := range registrations {
+		reg := &registrations[i]
 		summaries = append(summaries, RegistrationSummary{
 			ID:             reg.ID,
 			UserID:         reg.UserID,
@@ -379,7 +381,11 @@ func (s *Service) requireApprovedRegistration(w http.ResponseWriter, r *http.Req
 
 // logAudit creates an audit log entry asynchronously.
 func (s *Service) logAudit(r *http.Request, userID, adminID, action, entityType, entityID string, details map[string]interface{}) {
-	log := &neovaultsupabase.AuditLog{
+	if s.repo == nil || r == nil {
+		return
+	}
+
+	auditLog := &neovaultsupabase.AuditLog{
 		UserID:      userID,
 		AdminID:     adminID,
 		Action:      action,
@@ -390,17 +396,22 @@ func (s *Service) logAudit(r *http.Request, userID, adminID, action, entityType,
 	}
 
 	// Extract IP and User-Agent
-	if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
-		log.IPAddress = strings.Split(ip, ",")[0]
-	} else {
-		log.IPAddress = r.RemoteAddr
-	}
-	log.UserAgent = r.Header.Get("User-Agent")
+	auditLog.IPAddress = httputil.ClientIP(r)
+	auditLog.UserAgent = r.UserAgent()
 
 	// Create audit log asynchronously (don't block request)
-	go func() {
-		_ = s.repo.CreateAuditLog(r.Context(), log)
-	}()
+	go func(ctx context.Context, auditLog *neovaultsupabase.AuditLog) {
+		ctxNoCancel := context.WithoutCancel(ctx)
+		auditCtx, cancel := context.WithTimeout(ctxNoCancel, 5*time.Second)
+		defer cancel()
+		if err := s.repo.CreateAuditLog(auditCtx, auditLog); err != nil {
+			logging.Default().Error(ctxNoCancel, "failed to create neovault audit log", err, map[string]interface{}{
+				"action":      action,
+				"entity_type": entityType,
+				"entity_id":   entityID,
+			})
+		}
+	}(r.Context(), auditLog)
 }
 
 // =============================================================================

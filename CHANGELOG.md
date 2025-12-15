@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - Sprint 1: Code quality baseline and security improvements
 - Environment isolation configuration (development, testing, production)
 - Unified error handling package (`internal/errors`)
@@ -15,21 +16,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Kubernetes secrets template (`k8s/secrets.yaml.template`)
 
 ### Changed
+
 - Updated README.md with production-ready architecture
 - Improved security across all services with JWT authentication
 - Enhanced NeoVault service with ownership verification
 - Added rate limiting to NeoFlow service
 
 ### Removed
+
 - Deprecated review documents (12 files)
 - Deprecated scripts: `find_duplications.sh`, `split_large_files.sh`
 
 ### Fixed
-- Security vulnerabilities in VRF, NeoVault, and NeoFlow services
+
+- Security vulnerabilities in NeoRand (VRF), NeoVault, and NeoFlow services
 - Authentication bypass issues
 - Ownership verification in NeoVault service
 
 ### Security
+
 - Added JWT authentication middleware to all services
 - Implemented rate limiting for resource-intensive endpoints
 - Enhanced authorization checks across all service handlers
@@ -37,8 +42,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2024-12-10
 
 ### Added
-- Initial release with MarbleRun + EGo + Supabase + Netlify architecture
-- 9 core services: Gateway, VRF, NeoVault, Oracle, NeoFlow, AccountPool, NeoCompute, Secrets, NeoFeeds
+
+- Initial release with MarbleRun + EGo + Supabase + Vercel architecture
+- 9 core services: Gateway, NeoRand (VRF), NeoVault, NeoOracle, NeoFlow, NeoAccounts (AccountPool), NeoCompute, NeoStore (Secrets), NeoFeeds
 - Neo N3 smart contracts for service integration
 - TEE protection with MarbleRun/EGo
 - Remote attestation via MarbleRun
@@ -46,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deterministic Shared Seed Privacy NeoVault (v4.1)
 
 ### Security
+
 - All services run inside EGo MarbleRun TEE
 - Secrets never leave the TEE
 - TLS termination inside TEE

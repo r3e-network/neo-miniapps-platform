@@ -1,16 +1,20 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/R3E-Network/service_layer/internal/httputil"
 )
 
 // Verifies a master-key attestation bundle hash matches the expected on-chain attestation hash.
@@ -55,16 +59,45 @@ func fetch(uri string) ([]byte, error) {
 		path := strings.TrimPrefix(uri, "file://")
 		return os.ReadFile(path)
 	}
-	resp, err := http.Get(uri)
+
+	u, err := url.Parse(uri)
+	if err != nil {
+		return nil, err
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, fmt.Errorf("unsupported URL scheme: %s", u.Scheme)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("http %d: %s", resp.StatusCode, string(b))
+	if resp.StatusCode != http.StatusOK {
+		b, truncated, readErr := httputil.ReadAllWithLimit(resp.Body, 32<<10)
+		if readErr != nil {
+			return nil, fmt.Errorf("http %d (failed to read body: %v)", resp.StatusCode, readErr)
+		}
+		msg := string(b)
+		if truncated {
+			msg += "...(truncated)"
+		}
+		return nil, fmt.Errorf("http %d: %s", resp.StatusCode, msg)
 	}
-	return io.ReadAll(resp.Body)
+	body, err := httputil.ReadAllStrict(resp.Body, 64<<20)
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
 }
 
 func trim0x(s string) string {

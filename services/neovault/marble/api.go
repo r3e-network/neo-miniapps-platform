@@ -56,4 +56,3 @@ func (s *Service) withRegistrationCheck(next http.HandlerFunc) http.HandlerFunc 
 		next(w, r)
 	}
 }
-

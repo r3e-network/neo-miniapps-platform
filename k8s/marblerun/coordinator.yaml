@@ -15,6 +15,8 @@ metadata:
     app: coordinator
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: coordinator
@@ -23,9 +25,19 @@ spec:
       labels:
         app: coordinator
     spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: coordinator
           image: ghcr.io/edgelesssys/marblerun/coordinator:v1.8.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 4433
               name: client

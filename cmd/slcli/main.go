@@ -21,16 +21,19 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/R3E-Network/service_layer/internal/httputil"
 )
 
 const (
-	defaultAPIURL     = "http://localhost:8080/api/v1"
-	credentialsFile   = ".slcli/credentials"
-	configFile        = ".slcli/config"
-	envTokenKey       = "SLCLI_TOKEN"
-	envAPIURLKey      = "SLCLI_API_URL"
+	defaultAPIURL   = "http://localhost:8080/api/v1"
+	credentialsFile = ".slcli/credentials" // #nosec G101 -- file path, not credentials
+	configFile      = ".slcli/config"
+	envTokenKey     = "SLCLI_TOKEN" // #nosec G101 -- env var name, not a credential
+	envAPIURLKey    = "SLCLI_API_URL"
 )
 
 // Credentials stores user authentication information
@@ -137,54 +140,9 @@ func cmdLogin(args []string) {
 		os.Exit(1)
 	}
 
-	// Verify token by calling /me endpoint
-	apiURL := getAPIURL()
-	req, err := http.NewRequest("GET", apiURL+"/me", nil)
+	creds, err := loginWithToken(token)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: Failed to create request: %v\n", err)
-		os.Exit(1)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: Failed to verify token: %v\n", err)
-		os.Exit(1)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		fmt.Fprintf(os.Stderr, "Error: Invalid token (HTTP %d): %s\n", resp.StatusCode, string(body))
-		os.Exit(1)
-	}
-
-	// Parse user info
-	var meResp struct {
-		User struct {
-			ID      string `json:"id"`
-			Address string `json:"address"`
-			Email   string `json:"email"`
-		} `json:"user"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&meResp); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: Failed to parse response: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Save credentials
-	creds := Credentials{
-		Token:     token,
-		UserID:    meResp.User.ID,
-		Address:   meResp.User.Address,
-		Email:     meResp.User.Email,
-		ExpiresAt: time.Now().Add(24 * time.Hour), // Assume 24h expiry
-		CreatedAt: time.Now(),
-	}
-
-	if err := saveCredentials(creds); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: Failed to save credentials: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -197,7 +155,69 @@ func cmdLogin(args []string) {
 	fmt.Printf("Expires:  %s\n", creds.ExpiresAt.Format(time.RFC3339))
 }
 
+func loginWithToken(token string) (*Credentials, error) {
+	// Verify token by calling /me endpoint
+	apiURL := getAPIURL()
+	req, err := http.NewRequest(http.MethodGet, apiURL+"/me", http.NoBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, truncated, readErr := httputil.ReadAllWithLimit(resp.Body, 32<<10)
+		if readErr != nil {
+			return nil, fmt.Errorf("invalid token (HTTP %d): failed to read body: %w", resp.StatusCode, readErr)
+		}
+		msg := string(body)
+		if truncated {
+			msg += "...(truncated)"
+		}
+		return nil, fmt.Errorf("invalid token (HTTP %d): %s", resp.StatusCode, msg)
+	}
+
+	// Parse user info
+	var meResp struct {
+		User struct {
+			ID      string `json:"id"`
+			Address string `json:"address"`
+			Email   string `json:"email"`
+		} `json:"user"`
+	}
+	data, err := httputil.ReadAllStrict(resp.Body, 1<<20)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+	if err := json.Unmarshal(data, &meResp); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// Save credentials
+	creds := &Credentials{
+		Token:     token,
+		UserID:    meResp.User.ID,
+		Address:   meResp.User.Address,
+		Email:     meResp.User.Email,
+		ExpiresAt: time.Now().Add(24 * time.Hour), // Assume 24h expiry
+		CreatedAt: time.Now(),
+	}
+
+	if err := saveCredentials(creds); err != nil {
+		return nil, fmt.Errorf("failed to save credentials: %w", err)
+	}
+
+	return creds, nil
+}
+
 func cmdLogout(args []string) {
+	_ = args
 	credsPath := getCredentialsPath()
 	if err := os.Remove(credsPath); err != nil && !os.IsNotExist(err) {
 		fmt.Fprintf(os.Stderr, "Error: Failed to remove credentials: %v\n", err)
@@ -208,6 +228,7 @@ func cmdLogout(args []string) {
 }
 
 func cmdWhoami(args []string) {
+	_ = args
 	creds, err := loadCredentials()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error: Not logged in. Use 'slcli login --token <TOKEN>' to login.")
@@ -240,6 +261,7 @@ func cmdWhoami(args []string) {
 // =============================================================================
 
 func cmdBalance(args []string) {
+	_ = args
 	data, err := apiRequest("GET", "/gasbank/account", nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -289,8 +311,51 @@ func cmdNeoVaultRequest(args []string) {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Creating neovault request for %s GAS...\n", args[1])
-	fmt.Println("Note: This is a placeholder. Full implementation requires contract integration.")
+	amount, err := strconv.ParseInt(args[1], 10, 64)
+	if err != nil || amount <= 0 {
+		fmt.Fprintln(os.Stderr, "Error: amount must be a positive integer (in smallest units, e.g. 100000000 = 1 GAS)")
+		os.Exit(1)
+	}
+
+	address, err := getUserAddress()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to resolve user address: %v\n", err)
+		os.Exit(1)
+	}
+
+	payload := map[string]interface{}{
+		"user_address": address,
+		"total_amount": amount,
+	}
+
+	data, err := apiRequest("POST", "/neovault/request", payload)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	var resp struct {
+		RequestID      string `json:"request_id"`
+		DepositAddress string `json:"deposit_address"`
+		TotalAmount    int64  `json:"total_amount"`
+		ServiceFee     int64  `json:"service_fee"`
+		NetAmount      int64  `json:"net_amount"`
+		Deadline       int64  `json:"deadline"`
+		ExpiresAt      string `json:"expires_at"`
+	}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		fmt.Println(string(data))
+		return
+	}
+
+	fmt.Println("✓ Neovault request created")
+	fmt.Printf("Request ID:      %s\n", resp.RequestID)
+	fmt.Printf("Deposit Address: %s\n", resp.DepositAddress)
+	fmt.Printf("Total Amount:    %d\n", resp.TotalAmount)
+	fmt.Printf("Service Fee:     %d\n", resp.ServiceFee)
+	fmt.Printf("Net Amount:      %d\n", resp.NetAmount)
+	fmt.Printf("Deadline:        %d\n", resp.Deadline)
+	fmt.Printf("Expires At:      %s\n", resp.ExpiresAt)
 }
 
 func cmdNeoVaultStatus(args []string) {
@@ -310,6 +375,7 @@ func cmdNeoVaultStatus(args []string) {
 }
 
 func cmdNeoVaultList(args []string) {
+	_ = args
 	data, err := apiRequest("GET", "/neovault/requests", nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -442,6 +508,7 @@ func cmdSecretsCreate(args []string) {
 }
 
 func cmdSecretsList(args []string) {
+	_ = args
 	data, err := apiRequest("GET", "/secrets/secrets", nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -523,12 +590,12 @@ func getConfigPath() string {
 	return filepath.Join(home, configFile)
 }
 
-func saveCredentials(creds Credentials) error {
+func saveCredentials(creds *Credentials) error {
 	credsPath := getCredentialsPath()
 	credsDir := filepath.Dir(credsPath)
 
 	// Create directory if it doesn't exist
-	if err := os.MkdirAll(credsDir, 0700); err != nil {
+	if err := os.MkdirAll(credsDir, 0o700); err != nil {
 		return fmt.Errorf("failed to create credentials directory: %w", err)
 	}
 
@@ -539,7 +606,7 @@ func saveCredentials(creds Credentials) error {
 	}
 
 	// Write to file with restricted permissions
-	if err := os.WriteFile(credsPath, data, 0600); err != nil {
+	if err := os.WriteFile(credsPath, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write credentials file: %w", err)
 	}
 
@@ -570,6 +637,34 @@ func loadCredentials() (*Credentials, error) {
 	return &creds, nil
 }
 
+func getUserAddress() (string, error) {
+	creds, err := loadCredentials()
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(creds.Address) != "" {
+		return creds.Address, nil
+	}
+
+	// When running via SLCLI_TOKEN without a stored profile, resolve address via /me.
+	data, err := apiRequest(http.MethodGet, "/me", nil)
+	if err != nil {
+		return "", err
+	}
+	var meResp struct {
+		User struct {
+			Address string `json:"address"`
+		} `json:"user"`
+	}
+	if err := json.Unmarshal(data, &meResp); err != nil {
+		return "", fmt.Errorf("parse /me response: %w", err)
+	}
+	if meResp.User.Address == "" {
+		return "", fmt.Errorf("missing address in /me response")
+	}
+	return meResp.User.Address, nil
+}
+
 func getAPIURL() string {
 	// Check environment variable
 	if url := os.Getenv(envAPIURLKey); url != "" {
@@ -597,11 +692,11 @@ func apiRequest(method, endpoint string, payload interface{}) ([]byte, error) {
 	apiURL := getAPIURL()
 	var body io.Reader
 	if payload != nil {
-		data, err := json.Marshal(payload)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal payload: %w", err)
+		payloadBytes, marshalErr := json.Marshal(payload)
+		if marshalErr != nil {
+			return nil, fmt.Errorf("failed to marshal payload: %w", marshalErr)
 		}
-		body = strings.NewReader(string(data))
+		body = strings.NewReader(string(payloadBytes))
 	}
 
 	req, err := http.NewRequest(method, apiURL+endpoint, body)
@@ -619,13 +714,21 @@ func apiRequest(method, endpoint string, payload interface{}) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, truncated, readErr := httputil.ReadAllWithLimit(resp.Body, 32<<10)
+		if readErr != nil {
+			return nil, fmt.Errorf("failed to read response: %w", readErr)
+		}
+		msg := string(respBody)
+		if truncated {
+			msg += "...(truncated)"
+		}
+		return nil, fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, msg)
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(respBody))
+	respBody, err := httputil.ReadAllStrict(resp.Body, 8<<20)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	return respBody, nil

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -17,11 +18,16 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/R3E-Network/service_layer/internal/chain"
 	"github.com/R3E-Network/service_layer/internal/config"
 	"github.com/R3E-Network/service_layer/internal/database"
+	sllogging "github.com/R3E-Network/service_layer/internal/logging"
 	"github.com/R3E-Network/service_layer/internal/marble"
+	slmetrics "github.com/R3E-Network/service_layer/internal/metrics"
+	slmiddleware "github.com/R3E-Network/service_layer/internal/middleware"
+	"github.com/R3E-Network/service_layer/internal/runtime"
 
 	// Neo service imports
 	neoaccounts "github.com/R3E-Network/service_layer/services/neoaccounts/marble"
@@ -53,9 +59,30 @@ var availableServices = []string{
 	"neooracle", "neorand", "neostore", "neovault",
 }
 
+func normalizeServiceURLForMTLS(m *marble.Marble, raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+
+	useMTLS := m != nil && m.TLSConfig() != nil
+	if !useMTLS {
+		return raw
+	}
+
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	if parsed.Scheme == "http" {
+		parsed.Scheme = "https"
+		return parsed.String()
+	}
+	return raw
+}
+
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := context.Background()
 
 	// Get service type from environment (injected by MarbleRun manifest)
 	serviceType := os.Getenv("MARBLE_TYPE")
@@ -87,12 +114,31 @@ func main() {
 	}
 
 	// Initialize Marble with Coordinator
-	if err := m.Initialize(ctx); err != nil {
-		log.Fatalf("Failed to initialize marble: %v", err)
+	if initErr := m.Initialize(ctx); initErr != nil {
+		log.Fatalf("Failed to initialize marble: %v", initErr)
+	}
+
+	// In production/SGX mode, require MarbleRun-injected mTLS credentials.
+	// This ensures service-to-service identity headers can be trusted and prevents
+	// accidentally deploying plaintext HTTP within the mesh.
+	if (runtime.StrictIdentityMode() || m.IsEnclave()) && m.TLSConfig() == nil {
+		log.Fatalf("CRITICAL: MarbleRun TLS credentials are required in production/SGX mode (missing MARBLE_CERT/MARBLE_KEY/MARBLE_ROOT_CA)")
 	}
 
 	// Initialize database
-	dbClient, err := database.NewClient(database.Config{})
+	supabaseURL := strings.TrimSpace(os.Getenv("SUPABASE_URL"))
+	if secret, ok := m.Secret("SUPABASE_URL"); ok && len(secret) > 0 {
+		supabaseURL = strings.TrimSpace(string(secret))
+	}
+	supabaseServiceKey := strings.TrimSpace(os.Getenv("SUPABASE_SERVICE_KEY"))
+	if secret, ok := m.Secret("SUPABASE_SERVICE_KEY"); ok && len(secret) > 0 {
+		supabaseServiceKey = strings.TrimSpace(string(secret))
+	}
+
+	dbClient, err := database.NewClient(database.Config{
+		URL:        supabaseURL,
+		ServiceKey: supabaseServiceKey,
+	})
 	if err != nil {
 		log.Fatalf("Failed to create database client: %v", err)
 	}
@@ -104,21 +150,6 @@ func main() {
 	neovaultRepo := neovaultsupabase.NewRepository(db)
 	neoflowRepo := neoflowsupabase.NewRepository(db)
 	neostoreRepo := newNeoStoreRepositoryAdapter(db)
-
-	// Load service-specific configuration
-	accountPoolURL := strings.TrimSpace(os.Getenv("ACCOUNTPOOL_URL"))
-	if accountPoolURL == "" {
-		log.Printf("Warning: ACCOUNTPOOL_URL not set; NeoVault pool integration disabled")
-	}
-	secretsBaseURL := strings.TrimSpace(os.Getenv("SECRETS_BASE_URL"))
-	if secretsBaseURL == "" {
-		log.Printf("Warning: SECRETS_BASE_URL not set; NeoOracle cannot reach NeoStore API")
-	}
-	oracleAllowlistRaw := strings.TrimSpace(os.Getenv("ORACLE_HTTP_ALLOWLIST"))
-	oracleAllowlist := neooracle.URLAllowlist{Prefixes: splitAndTrimCSV(oracleAllowlistRaw)}
-	if len(oracleAllowlist.Prefixes) == 0 {
-		log.Printf("Warning: ORACLE_HTTP_ALLOWLIST not set; allowing all outbound URLs")
-	}
 
 	// Chain configuration
 	neoRPCURL := strings.TrimSpace(os.Getenv("NEO_RPC_URL"))
@@ -134,7 +165,7 @@ func main() {
 	var chainClient *chain.Client
 	if neoRPCURL == "" {
 		log.Printf("Warning: NEO_RPC_URL not set; chain integration disabled")
-	} else if client, clientErr := chain.NewClient(chain.Config{RPCURL: neoRPCURL, NetworkID: networkMagic}); clientErr != nil {
+	} else if client, clientErr := chain.NewClient(chain.Config{RPCURL: neoRPCURL, NetworkID: networkMagic, HTTPClient: m.ExternalHTTPClient()}); clientErr != nil {
 		log.Printf("Warning: failed to initialize chain client: %v", clientErr)
 	} else {
 		chainClient = client
@@ -174,6 +205,7 @@ func main() {
 	enableChainPush := chainClient != nil && teeFulfiller != nil && neoFeedsHash != ""
 	enableChainExec := chainClient != nil && teeFulfiller != nil && neoflowHash != ""
 	arbitrumRPC := strings.TrimSpace(os.Getenv("ARBITRUM_RPC"))
+	secretsBaseURL := normalizeServiceURLForMTLS(m, strings.TrimSpace(os.Getenv("SECRETS_BASE_URL")))
 
 	// Create service based on type
 	var svc ServiceRunner
@@ -186,9 +218,17 @@ func main() {
 			ChainClient:     chainClient,
 		})
 	case "neocompute":
-		svc, err = neocompute.New(neocompute.Config{Marble: m, DB: db})
+		if secretsBaseURL == "" {
+			log.Printf("Warning: SECRETS_BASE_URL not set; NeoCompute cannot inject NeoStore secrets")
+		}
+		svc, err = neocompute.New(neocompute.Config{
+			Marble:            m,
+			DB:                db,
+			SecretsBaseURL:    secretsBaseURL,
+			SecretsHTTPClient: m.HTTPClient(),
+		})
 	case "neofeeds":
-		svc, err = neofeeds.New(neofeeds.Config{
+		svc, err = neofeeds.New(&neofeeds.Config{
 			Marble:          m,
 			DB:              db,
 			ArbitrumRPC:     arbitrumRPC,
@@ -209,6 +249,19 @@ func main() {
 			EnableChainExec:  enableChainExec,
 		})
 	case "neooracle":
+		if secretsBaseURL == "" {
+			log.Printf("Warning: SECRETS_BASE_URL not set; NeoOracle cannot reach NeoStore API")
+		}
+
+		oracleAllowlistRaw := strings.TrimSpace(os.Getenv("ORACLE_HTTP_ALLOWLIST"))
+		oracleAllowlist := neooracle.URLAllowlist{Prefixes: splitAndTrimCSV(oracleAllowlistRaw)}
+		if len(oracleAllowlist.Prefixes) == 0 {
+			if runtime.StrictIdentityMode() || m.IsEnclave() {
+				log.Fatalf("CRITICAL: ORACLE_HTTP_ALLOWLIST is required for NeoOracle in strict identity/SGX mode")
+			}
+			log.Printf("Warning: ORACLE_HTTP_ALLOWLIST not set; allowing all outbound URLs (development/testing only)")
+		}
+
 		svc, err = neooracle.New(neooracle.Config{
 			Marble:            m,
 			SecretsBaseURL:    secretsBaseURL,
@@ -230,7 +283,13 @@ func main() {
 			DB:     neostoreRepo,
 		})
 	case "neovault":
-		svc, err = neovault.New(neovault.Config{
+		accountPoolURL := strings.TrimSpace(os.Getenv("ACCOUNTPOOL_URL"))
+		if accountPoolURL == "" {
+			log.Printf("Warning: ACCOUNTPOOL_URL not set; NeoVault pool integration disabled")
+		}
+		accountPoolURL = normalizeServiceURLForMTLS(m, accountPoolURL)
+
+		svc, err = neovault.New(&neovault.Config{
 			Marble:         m,
 			DB:             db,
 			NeoVaultRepo:   neovaultRepo,
@@ -245,6 +304,21 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create service: %v", err)
 	}
+
+	// Standard middleware applied to all services.
+	// - Logging: ensures X-Trace-ID is present and logs structured request entries.
+	// - Recovery: prevents panics from crashing the process.
+	logger := sllogging.NewFromEnv(serviceType)
+	svc.Router().Use(slmiddleware.LoggingMiddleware(logger))
+	svc.Router().Use(slmiddleware.NewRecoveryMiddleware(logger).Handler)
+	if slmetrics.Enabled() {
+		metricsCollector := slmetrics.Init(serviceType)
+		svc.Router().Use(slmiddleware.MetricsMiddleware(serviceType, metricsCollector))
+		svc.Router().Handle("/metrics", promhttp.Handler()).Methods(http.MethodGet)
+	}
+	// Cap request bodies to reduce memory/CPU DoS risk. Services are typically
+	// accessed via the gateway, but this also protects internal mesh calls.
+	svc.Router().Use(slmiddleware.NewBodyLimitMiddleware(0).Handler)
 
 	// Start service
 	if err := svc.Start(ctx); err != nil {
@@ -263,12 +337,14 @@ func main() {
 
 	// Create HTTP server
 	server := &http.Server{
-		Addr:         ":" + port,
-		Handler:      svc.Router(),
-		TLSConfig:    m.TLSConfig(),
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		Addr:              ":" + port,
+		Handler:           svc.Router(),
+		TLSConfig:         m.TLSConfig(),
+		ReadTimeout:       30 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1MB
 	}
 
 	// Start server

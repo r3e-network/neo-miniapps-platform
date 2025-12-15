@@ -1,0 +1,53 @@
+#
+# Template: this manifest contains `${VARS}` that must be substituted before applying.
+# Example:
+#   envsubst < k8s/overlays/production/ingress.yaml | kubectl apply -f -
+#
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: service-layer-ingress
+  namespace: service-layer
+  annotations:
+    kubernetes.io/ingress.class: ${INGRESS_CLASS}
+    cert-manager.io/cluster-issuer: ${CERT_MANAGER_CLUSTER_ISSUER}
+    # By default the gateway runs HTTP (GATEWAY_TLS_MODE=off) behind the ingress,
+    # and the ingress terminates public TLS.
+    #
+    # If you explicitly run the gateway with TLS (GATEWAY_TLS_MODE=tls), you can
+    # enable HTTPS upstream by adding controller-specific annotations such as:
+    # - nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    # - traefik.ingress.kubernetes.io/service.serversscheme: https
+spec:
+  ingressClassName: ${INGRESS_CLASS}
+  tls:
+    - hosts:
+        - ${GATEWAY_HOSTNAME}
+      secretName: ${GATEWAY_TLS_SECRET}
+  rules:
+    - host: ${GATEWAY_HOSTNAME}
+      http:
+        paths:
+          # Only expose the public API surface via Ingress.
+          # Intentionally NOT exposed: `/metrics` (scrape internally in-cluster).
+          - path: /api/v1
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 8080
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 8080
+          - path: /attestation
+            pathType: Exact
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 8080

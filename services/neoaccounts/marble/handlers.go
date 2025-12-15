@@ -2,9 +2,9 @@
 package neoaccountsmarble
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/R3E-Network/service_layer/internal/httputil"
 )
@@ -25,9 +25,9 @@ func (s *Service) handleInfo(w http.ResponseWriter, r *http.Request) {
 
 // handleListAccounts returns accounts locked by a service with optional token filtering.
 func (s *Service) handleListAccounts(w http.ResponseWriter, r *http.Request) {
-	serviceID := r.URL.Query().Get("service_id")
-	if serviceID == "" {
-		httputil.BadRequest(w, "service_id required")
+	requestedServiceID := r.URL.Query().Get("service_id")
+	serviceID, ok := resolveServiceID(w, r, requestedServiceID)
+	if !ok {
 		return
 	}
 
@@ -61,10 +61,11 @@ func (s *Service) handleRequestAccounts(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if input.ServiceID == "" {
-		httputil.BadRequest(w, "service_id required")
+	serviceID, ok := resolveServiceID(w, r, input.ServiceID)
+	if !ok {
 		return
 	}
+	input.ServiceID = serviceID
 	if input.Count <= 0 {
 		input.Count = 1
 	}
@@ -88,10 +89,11 @@ func (s *Service) handleReleaseAccounts(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if input.ServiceID == "" {
-		httputil.BadRequest(w, "service_id required")
+	serviceID, ok := resolveServiceID(w, r, input.ServiceID)
+	if !ok {
 		return
 	}
+	input.ServiceID = serviceID
 
 	var released int
 	var err error
@@ -119,8 +121,14 @@ func (s *Service) handleSignTransaction(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if input.ServiceID == "" || input.AccountID == "" || len(input.TxHash) == 0 {
-		httputil.BadRequest(w, "service_id, account_id, and tx_hash required")
+	serviceID, ok := resolveServiceID(w, r, input.ServiceID)
+	if !ok {
+		return
+	}
+	input.ServiceID = serviceID
+
+	if input.AccountID == "" || len(input.TxHash) == 0 {
+		httputil.BadRequest(w, "account_id and tx_hash required")
 		return
 	}
 
@@ -136,15 +144,15 @@ func (s *Service) handleSignTransaction(w http.ResponseWriter, r *http.Request) 
 // handleBatchSign signs multiple transactions.
 func (s *Service) handleBatchSign(w http.ResponseWriter, r *http.Request) {
 	var input BatchSignInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		httputil.BadRequest(w, "invalid JSON")
+	if !httputil.DecodeJSON(w, r, &input) {
 		return
 	}
 
-	if input.ServiceID == "" {
-		httputil.BadRequest(w, "service_id required")
+	serviceID, ok := resolveServiceID(w, r, input.ServiceID)
+	if !ok {
 		return
 	}
+	input.ServiceID = serviceID
 
 	resp := s.BatchSign(r.Context(), input.ServiceID, input.Requests)
 	httputil.WriteJSON(w, http.StatusOK, resp)
@@ -157,8 +165,14 @@ func (s *Service) handleUpdateBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if input.ServiceID == "" || input.AccountID == "" {
-		httputil.BadRequest(w, "service_id and account_id required")
+	serviceID, ok := resolveServiceID(w, r, input.ServiceID)
+	if !ok {
+		return
+	}
+	input.ServiceID = serviceID
+
+	if input.AccountID == "" {
+		httputil.BadRequest(w, "account_id required")
 		return
 	}
 
@@ -187,4 +201,26 @@ func (s *Service) handleUpdateBalance(w http.ResponseWriter, r *http.Request) {
 		NewBalance: newBalance,
 		TxCount:    txCount,
 	})
+}
+
+func resolveServiceID(w http.ResponseWriter, r *http.Request, requestedServiceID string) (string, bool) {
+	authenticatedServiceID := httputil.GetServiceID(r)
+	if authenticatedServiceID == "" {
+		if httputil.StrictIdentityMode() {
+			httputil.Unauthorized(w, "service authentication required")
+			return "", false
+		}
+		if requestedServiceID == "" {
+			httputil.BadRequest(w, "service_id required")
+			return "", false
+		}
+		return requestedServiceID, true
+	}
+
+	if requestedServiceID != "" && !strings.EqualFold(requestedServiceID, authenticatedServiceID) {
+		httputil.Forbidden(w, "service_id does not match authenticated service")
+		return "", false
+	}
+
+	return authenticatedServiceID, true
 }

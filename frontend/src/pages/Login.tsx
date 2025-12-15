@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Shield, Wallet, AlertCircle, ExternalLink } from 'lucide-react';
 import { useAuthStore } from '../stores/auth';
-import { api } from '../api/client';
+import { api, API_BASE, type WalletAuthPayload } from '../api/client';
 
 // NeoLine wallet types
 declare global {
@@ -22,7 +22,13 @@ declare global {
   }
 }
 
-type WalletType = 'neoline' | 'o3' | 'demo';
+type WalletType = 'neoline' | 'o3';
+
+const normalizeHex = (value: string) => {
+  const trimmed = value.trim();
+  if (/^0x[0-9a-fA-F]+$/.test(trimmed)) return trimmed.slice(2);
+  return trimmed;
+};
 
 export function Login() {
   const navigate = useNavigate();
@@ -67,7 +73,7 @@ export function Login() {
     }
   }, [isAuthenticated, navigate]);
 
-  const connectNeoLine = async (): Promise<{ address: string; signature: string; message: string }> => {
+  const connectNeoLine = async (): Promise<WalletAuthPayload> => {
     const neoline = window.NEOLineN3 || window.NEOLine;
     if (!neoline) {
       throw new Error('NeoLine wallet not found. Please install NeoLine extension.');
@@ -85,12 +91,14 @@ export function Login() {
 
     return {
       address,
-      signature: signResult.data,
+      signature: normalizeHex(signResult.data),
       message: nonceResponse.message,
+      publicKey: normalizeHex(signResult.publicKey),
+      nonce: nonceResponse.nonce,
     };
   };
 
-  const connectO3 = async (): Promise<{ address: string; signature: string; message: string }> => {
+  const connectO3 = async (): Promise<WalletAuthPayload> => {
     const o3 = window.neo3Dapi;
     if (!o3) {
       throw new Error('O3 wallet not found. Please install O3 extension.');
@@ -108,28 +116,15 @@ export function Login() {
 
     return {
       address,
-      signature: signResult.data,
+      signature: normalizeHex(signResult.data),
       message: nonceResponse.message,
-    };
-  };
-
-  const connectDemo = async (): Promise<{ address: string; signature: string; message: string }> => {
-    // Demo mode for development/testing
-    const demoAddress = 'NXV7ZhHiyM1aHXwpVsRZC6BwNFP2jghXAq';
-
-    // Get nonce from server
-    const nonceResponse = await api.getNonce(demoAddress);
-
-    return {
-      address: demoAddress,
-      signature: 'demo_signature_' + Date.now(),
-      message: nonceResponse.message,
+      publicKey: normalizeHex(signResult.publicKey),
+      nonce: nonceResponse.nonce,
     };
   };
 
   const handleOAuthLogin = (provider: 'google' | 'github') => {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-    window.location.href = `${apiUrl}/api/v1/auth/${provider}`;
+    window.location.href = `${API_BASE}/auth/${provider}`;
   };
 
   const handleConnect = async (walletType: WalletType) => {
@@ -137,7 +132,7 @@ export function Login() {
     setError('');
 
     try {
-      let walletData: { address: string; signature: string; message: string };
+      let walletData: WalletAuthPayload;
 
       switch (walletType) {
         case 'neoline':
@@ -146,9 +141,6 @@ export function Login() {
         case 'o3':
           walletData = await connectO3();
           break;
-        case 'demo':
-          walletData = await connectDemo();
-          break;
         default:
           throw new Error('Unknown wallet type');
       }
@@ -156,14 +148,29 @@ export function Login() {
       // Try to login first, if user doesn't exist, register
       let result;
       try {
-        result = await api.login(walletData.address, walletData.signature, walletData.message);
+        result = await api.login(walletData);
       } catch {
         // User doesn't exist, register
-        result = await api.register(walletData.address, walletData.signature, walletData.message);
+        result = await api.register(walletData);
       }
 
-      api.setToken(result.token);
-      login({ id: result.user_id, address: result.address }, result.token);
+      // Prefer cookie-based auth if available (more secure in browsers). If it
+      // fails (e.g. server has cookie auth disabled), fall back to bearer JWT.
+      api.setToken(null);
+      try {
+        const profile = await api.getMe();
+        login(
+          {
+            id: profile.user.id,
+            address: profile.user.address || result.address,
+            email: profile.user.email,
+          },
+          null
+        );
+      } catch {
+        api.setToken(result.token);
+        login({ id: result.user_id, address: result.address }, result.token);
+      }
 
       navigate('/');
     } catch (err) {
@@ -256,25 +263,6 @@ export function Login() {
               {walletAvailable.o3 && loading && (
                 <span className="text-sm">Connecting...</span>
               )}
-            </button>
-
-            {/* Divider */}
-            <div className="relative my-4">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-700"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-gray-800 text-gray-500">or</span>
-              </div>
-            </div>
-
-            {/* Demo Mode Button */}
-            <button
-              onClick={() => handleConnect('demo')}
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-3 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white font-medium py-3 px-4 rounded-lg transition-colors"
-            >
-              <span>{loading ? 'Connecting...' : 'Demo Mode (No Wallet)'}</span>
             </button>
 
             {/* OAuth Divider */}

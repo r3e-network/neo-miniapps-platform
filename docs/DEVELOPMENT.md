@@ -16,7 +16,7 @@ This guide covers setting up your development environment and working with the N
 
 ### Required Software
 
-- **Go 1.21+**: Programming language
+- **Go 1.24+**: Programming language
 - **Docker**: Container runtime
 - **kubectl**: Kubernetes CLI
 - **k3s**: Lightweight Kubernetes (for local development)
@@ -61,8 +61,8 @@ sudo apt-get update
 sudo apt-get install -y build-essential libssl-dev curl wget
 
 # Install Go
-wget https://go.dev/dl/go1.21.0.linux-amd64.tar.gz
-sudo tar -C /usr/local -xzf go1.21.0.linux-amd64.tar.gz
+wget https://go.dev/dl/go1.24.11.linux-amd64.tar.gz
+sudo tar -C /usr/local -xzf go1.24.11.linux-amd64.tar.gz
 echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
 
 # Install Docker
@@ -264,7 +264,7 @@ kubectl -n service-layer logs -f deployment/gateway
 ### Test Environment
 
 ```bash
-# Deploy to test environment
+# Deploy to test environment (OE simulation mode + MARBLE_ENV=testing)
 ./scripts/deploy_k8s.sh --env test --registry docker.io/myorg --push
 
 # Perform rolling update
@@ -274,12 +274,14 @@ kubectl -n service-layer logs -f deployment/gateway
 ### Production Environment
 
 ```bash
-# Build and push images
-./scripts/deploy_k8s.sh --env prod --registry docker.io/myorg build
-./scripts/deploy_k8s.sh --env prod --registry docker.io/myorg push
+# Production (SGX hardware) requires enclave images to be signed with stable keys
+# that match `manifests/manifest.json` SignerIDs.
+#
+# Build + push signed images (recommended: one key per service in a directory)
+./scripts/deploy_k8s.sh --env prod --registry docker.io/myorg --signing-key-dir /path/to/signing-keys --push
 
 # Deploy to production
-./scripts/deploy_k8s.sh --env prod deploy
+./scripts/deploy_k8s.sh --env prod --skip-build deploy
 
 # Perform rolling update
 ./scripts/deploy_k8s.sh --env prod --rolling-update update

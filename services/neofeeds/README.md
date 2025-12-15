@@ -118,7 +118,7 @@ sources:
 
 | Secret | Description |
 |--------|-------------|
-| `DATAFEEDS_SIGNING_KEY` | ECDSA key for signing prices |
+| `NEOFEEDS_SIGNING_KEY` | ECDSA key for signing prices |
 
 ### Environment Variables
 

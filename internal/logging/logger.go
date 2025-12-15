@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,7 +34,7 @@ type Logger struct {
 }
 
 // New creates a new Logger instance
-func New(service string, level string, format string) *Logger {
+func New(service, level, format string) *Logger {
 	logger := logrus.New()
 
 	// Set log level
@@ -66,6 +67,20 @@ func New(service string, level string, format string) *Logger {
 		Logger:  logger,
 		service: service,
 	}
+}
+
+// NewFromEnv constructs a logger using LOG_LEVEL and LOG_FORMAT environment variables.
+// Defaults to "info" and "json" when unset.
+func NewFromEnv(service string) *Logger {
+	level := strings.TrimSpace(os.Getenv("LOG_LEVEL"))
+	if level == "" {
+		level = "info"
+	}
+	format := strings.TrimSpace(os.Getenv("LOG_FORMAT"))
+	if format == "" {
+		format = "json"
+	}
+	return New(service, level, format)
 }
 
 // WithContext creates a new logger entry with context values
@@ -108,6 +123,9 @@ func (l *Logger) WithUserID(userID string) *logrus.Entry {
 
 // WithFields creates a new logger entry with custom fields
 func (l *Logger) WithFields(fields map[string]interface{}) *logrus.Entry {
+	if fields == nil {
+		fields = make(map[string]interface{})
+	}
 	fields["service"] = l.service
 	return l.Logger.WithFields(fields)
 }
@@ -139,8 +157,8 @@ func WithTraceID(ctx context.Context, traceID string) context.Context {
 
 // GetTraceID retrieves the trace ID from context
 func GetTraceID(ctx context.Context) string {
-	if traceID := ctx.Value(TraceIDKey); traceID != nil {
-		return traceID.(string)
+	if traceID, ok := ctx.Value(TraceIDKey).(string); ok {
+		return traceID
 	}
 	return ""
 }
@@ -152,8 +170,8 @@ func WithUserID(ctx context.Context, userID string) context.Context {
 
 // GetUserID retrieves the user ID from context
 func GetUserID(ctx context.Context) string {
-	if userID := ctx.Value(UserIDKey); userID != nil {
-		return userID.(string)
+	if userID, ok := ctx.Value(UserIDKey).(string); ok {
+		return userID
 	}
 	return ""
 }
@@ -165,8 +183,8 @@ func WithRole(ctx context.Context, role string) context.Context {
 
 // GetRole retrieves the user role from context
 func GetRole(ctx context.Context) string {
-	if role := ctx.Value(RoleKey); role != nil {
-		return role.(string)
+	if role, ok := ctx.Value(RoleKey).(string); ok {
+		return role
 	}
 	return ""
 }
@@ -178,8 +196,8 @@ func WithService(ctx context.Context, service string) context.Context {
 
 // GetService retrieves the service name from context
 func GetService(ctx context.Context) string {
-	if service := ctx.Value(ServiceKey); service != nil {
-		return service.(string)
+	if serviceName, ok := ctx.Value(ServiceKey).(string); ok {
+		return serviceName
 	}
 	return ""
 }
@@ -211,7 +229,7 @@ func (l *Logger) LogDatabaseQuery(ctx context.Context, query string, duration ti
 }
 
 // LogBlockchainTx logs a blockchain transaction
-func (l *Logger) LogBlockchainTx(ctx context.Context, txHash string, operation string, err error) {
+func (l *Logger) LogBlockchainTx(ctx context.Context, txHash, operation string, err error) {
 	entry := l.WithContext(ctx).WithFields(logrus.Fields{
 		"tx_hash":   txHash,
 		"operation": operation,
@@ -239,7 +257,7 @@ func (l *Logger) LogCryptoOperation(ctx context.Context, operation string, succe
 }
 
 // LogServiceCall logs a service-to-service call
-func (l *Logger) LogServiceCall(ctx context.Context, targetService string, method string, duration time.Duration, err error) {
+func (l *Logger) LogServiceCall(ctx context.Context, targetService, method string, duration time.Duration, err error) {
 	entry := l.WithContext(ctx).WithFields(logrus.Fields{
 		"target_service": targetService,
 		"method":         method,
@@ -267,7 +285,7 @@ func (l *Logger) LogSecurityEvent(ctx context.Context, eventType string, details
 }
 
 // LogAudit logs an audit event
-func (l *Logger) LogAudit(ctx context.Context, action string, resource string, resourceID string, result string) {
+func (l *Logger) LogAudit(ctx context.Context, action, resource, resourceID, result string) {
 	l.WithContext(ctx).WithFields(logrus.Fields{
 		"action":      action,
 		"resource":    resource,
@@ -348,7 +366,7 @@ func (l *Logger) Error(ctx context.Context, message string, err error, fields ma
 var defaultLogger *Logger
 
 // InitDefault initializes the default logger
-func InitDefault(service string, level string, format string) {
+func InitDefault(service, level, format string) {
 	defaultLogger = New(service, level, format)
 }
 

@@ -82,10 +82,10 @@ user, err := repo.GetUserByAddress(ctx, "NAddr123...")
 
 Service-specific database operations have been moved to each service's own `supabase/` package following the **Interface Segregation Principle (ISP)**.
 
-### VRF Service
+### NeoRand (VRF) Service
 
 ```go
-import vrfsupabase "github.com/R3E-Network/service_layer/services/vrf/supabase"
+import vrfsupabase "github.com/R3E-Network/service_layer/services/neorand/supabase"
 
 // Create service-specific repository
 vrfRepo := vrfsupabase.NewRepository(baseRepo)
@@ -120,28 +120,28 @@ triggers, err := neoflowRepo.GetTriggers(ctx, userID)
 err := neoflowRepo.CreateExecution(ctx, &neoflowsupabase.Execution{...})
 ```
 
-### AccountPool Service
+### NeoAccounts (AccountPool) Service
 
 ```go
-import accountpoolsupabase "github.com/R3E-Network/service_layer/services/accountpool/supabase"
+import neoaccountssupabase "github.com/R3E-Network/service_layer/services/neoaccounts/supabase"
 
-poolRepo := accountpoolsupabase.NewRepository(baseRepo)
+poolRepo := neoaccountssupabase.NewRepository(baseRepo)
 
-err := poolRepo.Create(ctx, &accountpoolsupabase.Account{...})
+err := poolRepo.Create(ctx, &neoaccountssupabase.Account{...})
 accounts, err := poolRepo.ListAvailable(ctx, 10)
 err := poolRepo.Update(ctx, account)
 ```
 
-### Secrets Service
+### NeoStore (Secrets) Service
 
 ```go
-import secretssupabase "github.com/R3E-Network/service_layer/services/secrets/supabase"
+import secretssupabase "github.com/R3E-Network/service_layer/services/neostore/supabase"
 
 secretsRepo := secretssupabase.NewRepository(baseRepo)
 
 err := secretsRepo.CreateSecret(ctx, &secretssupabase.Secret{...})
 secrets, err := secretsRepo.GetSecrets(ctx, userID)
-err := secretsRepo.SetAllowedServices(ctx, userID, secretName, []string{"vrf", "neoflow"})
+err := secretsRepo.SetAllowedServices(ctx, userID, secretName, []string{"neorand", "neoflow"})
 ```
 
 ## Shared Operations

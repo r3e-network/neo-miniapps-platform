@@ -83,9 +83,10 @@ func TestHandleOAuthCallbackSetsCookie(t *testing.T) {
 	}
 
 	req := httptest.NewRequest("GET", "/auth/google/callback", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
 	res := httptest.NewRecorder()
 
-	handleOAuthCallback(res, req, repo, "google", "provider-1", "user@example.com", "User", "", "access", "refresh", 3600, true)
+	handleOAuthCallback(res, req, repo, "google", "provider-1", "user@example.com", "User", "", "access", "refresh", 3600)
 
 	result := res.Result()
 	defer result.Body.Close()
@@ -108,7 +109,7 @@ func TestHandleOAuthCallbackSetsCookie(t *testing.T) {
 	if authCookie == nil {
 		t.Fatal("auth cookie not set")
 	}
-	if !authCookie.HttpOnly || !authCookie.Secure || authCookie.MaxAge != 3600 || authCookie.SameSite != http.SameSiteStrictMode {
+	if !authCookie.HttpOnly || !authCookie.Secure || authCookie.MaxAge != 86400 || authCookie.SameSite != http.SameSiteLaxMode {
 		t.Fatalf("auth cookie missing security attributes: %+v", authCookie)
 	}
 	if stateCookie == nil || stateCookie.MaxAge >= 0 {
@@ -136,7 +137,7 @@ func TestHandleOAuthCallbackLegacyRedirect(t *testing.T) {
 	req := httptest.NewRequest("GET", "/auth/google/callback", nil)
 	res := httptest.NewRecorder()
 
-	handleOAuthCallback(res, req, repo, "google", "provider-1", "user@example.com", "User", "", "access", "", 3600, false)
+	handleOAuthCallback(res, req, repo, "google", "provider-1", "user@example.com", "User", "", "access", "", 3600)
 
 	result := res.Result()
 	defer result.Body.Close()
@@ -159,9 +160,10 @@ func TestHandleOAuthCallbackCreatesUser(t *testing.T) {
 
 	repo := &mockOAuthRepo{}
 	req := httptest.NewRequest("GET", "/auth/github/callback", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
 	res := httptest.NewRecorder()
 
-	handleOAuthCallback(res, req, repo, "github", "provider-2", "new@example.com", "New User", "", "access", "", 0, true)
+	handleOAuthCallback(res, req, repo, "github", "provider-2", "new@example.com", "New User", "", "access", "", 0)
 
 	if len(repo.createdUsers) != 1 {
 		t.Fatalf("expected user to be created")

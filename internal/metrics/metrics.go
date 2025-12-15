@@ -2,6 +2,8 @@
 package metrics
 
 import (
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,9 +21,9 @@ type Metrics struct {
 	ErrorsTotal *prometheus.CounterVec
 
 	// Business metrics
-	BlockchainTxTotal    *prometheus.CounterVec
-	BlockchainTxDuration *prometheus.HistogramVec
-	VRFRequestsTotal     *prometheus.CounterVec
+	BlockchainTxTotal       *prometheus.CounterVec
+	BlockchainTxDuration    *prometheus.HistogramVec
+	VRFRequestsTotal        *prometheus.CounterVec
 	NeoVaultOperationsTotal *prometheus.CounterVec
 
 	// Database metrics
@@ -225,9 +227,33 @@ func (m *Metrics) DecrementInFlight() {
 // Helper functions
 
 func getEnvironment() string {
-	env := "development"
-	// Can be set via environment variable
+	env := strings.TrimSpace(os.Getenv("MARBLE_ENV"))
+	if env == "" {
+		env = strings.TrimSpace(os.Getenv("ENVIRONMENT"))
+	}
+	if env == "" {
+		env = "development"
+	}
 	return env
+}
+
+// Enabled returns whether Prometheus metrics should be exposed.
+//
+// Defaults:
+// - production: disabled unless explicitly enabled via METRICS_ENABLED
+// - non-production: enabled unless explicitly disabled via METRICS_ENABLED
+func Enabled() bool {
+	raw := strings.ToLower(strings.TrimSpace(os.Getenv("METRICS_ENABLED")))
+	if raw == "" {
+		env := strings.ToLower(strings.TrimSpace(os.Getenv("MARBLE_ENV")))
+		return env != "production"
+	}
+	switch raw {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 // Global metrics instance

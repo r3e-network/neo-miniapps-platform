@@ -1,0 +1,115 @@
+# NATS Helm 安装说明
+#
+# helm repo add nats https://nats-io.github.io/k8s/helm/charts/
+# helm repo update
+#
+# helm install nats nats/nats \
+#   --namespace platform \
+#   --create-namespace \
+#   --values helm-values.yaml
+#
+# 验证安装:
+# kubectl get pods -n platform -l app.kubernetes.io/name=nats
+# kubectl logs -n platform -l app.kubernetes.io/name=nats
+
+---
+# Helm Values for NATS with JetStream
+# 这些值应用于: helm install nats nats/nats --values helm-values.yaml
+
+# NATS configuration
+nats:
+  image:
+    repository: nats
+    tag: 2.10.7-alpine
+
+  # JetStream 配置
+  jetstream:
+    enabled: true
+
+    # 内存存储配置
+    memStorage:
+      enabled: true
+      size: 1Gi
+
+    # 文件存储配置 (持久化)
+    fileStorage:
+      enabled: true
+      size: 5Gi
+      storageClassName: local-path # k3s 默认 StorageClass
+      accessModes:
+        - ReadWriteOnce
+      existingClaim: ""
+
+    # 域配置
+    domain: neo-jetstream
+
+  # 资源限制 (架构文档: 0.2C / 0.8G)
+  resources:
+    requests:
+      cpu: 200m
+      memory: 800Mi
+    limits:
+      cpu: 300m
+      memory: 1Gi
+
+  # 日志级别
+  logging:
+    debug: false
+    trace: false
+    logtime: true
+
+  # TLS 配置 (可选)
+  tls:
+    enabled: false
+
+# 集群配置 (单节点模式)
+cluster:
+  enabled: false
+  replicas: 1
+
+# 监控配置
+exporter:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring
+    labels:
+      release: prometheus
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# 认证配置
+auth:
+  enabled: true
+  # 生产环境强制启用认证以防止数据篡改
+  # 用户名和密码从 Kubernetes Secret 中读取
+  # 创建 Secret: kubectl create secret generic nats-auth \
+  #   --namespace platform \
+  #   --from-literal=user=<username> \
+  #   --from-literal=password=<secure-password>
+  #
+  # 或使用更安全的方式:
+  # echo -n 'your-username' > ./user.txt
+  # echo -n 'your-secure-password' > ./password.txt
+  # kubectl create secret generic nats-auth \
+  #   --namespace platform \
+  #   --from-file=user=./user.txt \
+  #   --from-file=password=./password.txt
+  # rm -f ./user.txt ./password.txt
+  #
+  # NATS 将从以下 Secret 读取凭据
+  secret:
+    name: nats-auth
+
+# Service 配置
+service:
+  type: ClusterIP
+  ports:
+    client: 4222
+    monitor: 8222
+    metrics: 7777

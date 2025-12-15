@@ -9,9 +9,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/middleware"
+	"github.com/R3E-Network/service_layer/internal/serviceauth"
 )
 
 // =============================================================================
@@ -22,7 +23,7 @@ import (
 // It automatically attaches service tokens and user IDs to requests.
 type ServiceClient struct {
 	httpClient     *http.Client
-	tokenGenerator *middleware.ServiceTokenGenerator
+	tokenGenerator *serviceauth.ServiceTokenGenerator
 	baseURL        string
 	maxRetries     int
 }
@@ -48,9 +49,9 @@ func NewServiceClient(cfg ServiceClientConfig) *ServiceClient {
 		maxRetries = 2
 	}
 
-	var tokenGen *middleware.ServiceTokenGenerator
+	var tokenGen *serviceauth.ServiceTokenGenerator
 	if cfg.PrivateKey != nil && cfg.ServiceID != "" {
-		tokenGen = middleware.NewServiceTokenGenerator(cfg.PrivateKey, cfg.ServiceID, time.Hour)
+		tokenGen = serviceauth.NewServiceTokenGenerator(cfg.PrivateKey, cfg.ServiceID, time.Hour)
 	}
 
 	return &ServiceClient{
@@ -94,16 +95,16 @@ func (c *ServiceClient) doWithRetry(ctx context.Context, method, path string, bo
 
 	// Attach service token
 	if c.tokenGenerator != nil {
-		token, err := c.tokenGenerator.GenerateToken()
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate service token: %w", err)
+		token, tokenErr := c.tokenGenerator.GenerateToken()
+		if tokenErr != nil {
+			return nil, fmt.Errorf("failed to generate service token: %w", tokenErr)
 		}
-		req.Header.Set(middleware.ServiceTokenHeader, token)
+		req.Header.Set(serviceauth.ServiceTokenHeader, token)
 	}
 
 	// Attach user ID from context
-	if userID := middleware.GetUserIDFromContext(ctx); userID != "" {
-		req.Header.Set(middleware.UserIDHeader, userID)
+	if userID := serviceauth.GetUserID(ctx); userID != "" {
+		req.Header.Set(serviceauth.UserIDHeader, userID)
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -145,14 +146,30 @@ func DecodeResponse(resp *http.Response, target interface{}) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("request failed with status %d: %s", resp.StatusCode, string(body))
+		body, truncated, err := ReadAllWithLimit(resp.Body, 64<<10)
+		if err != nil {
+			return fmt.Errorf("read error response body: %w", err)
+		}
+		msg := strings.TrimSpace(string(body))
+		if truncated {
+			msg += "...(truncated)"
+		}
+		return fmt.Errorf("request failed with status %d: %s", resp.StatusCode, msg)
 	}
 
-	if target != nil {
-		if err := json.NewDecoder(resp.Body).Decode(target); err != nil {
-			return fmt.Errorf("failed to decode response: %w", err)
+	if target == nil {
+		if _, err := io.Copy(io.Discard, io.LimitReader(resp.Body, 8<<20)); err != nil {
+			return fmt.Errorf("discard response body: %w", err)
 		}
+		return nil
+	}
+
+	body, err := ReadAllStrict(resp.Body, 8<<20)
+	if err != nil {
+		return fmt.Errorf("read response body: %w", err)
+	}
+	if err := json.Unmarshal(body, target); err != nil {
+		return fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	return nil

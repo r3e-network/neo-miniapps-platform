@@ -57,8 +57,8 @@ func main() {
 
 	if !*keepSession {
 		defer func() {
-			if err := client.DeleteSession(sessionID); err != nil {
-				log.Printf("Warning: DeleteSession failed: %v", err)
+			if deleteErr := client.DeleteSession(sessionID); deleteErr != nil {
+				log.Printf("Warning: DeleteSession failed: %v", deleteErr)
 			} else {
 				log.Println("Session deleted.")
 			}
@@ -76,15 +76,15 @@ func main() {
 		nefPath := filepath.Join(*buildDir, name+".nef")
 		manifestPath := filepath.Join(*buildDir, name+".manifest.json")
 
-		if _, err := os.Stat(nefPath); os.IsNotExist(err) {
+		if _, statErr := os.Stat(nefPath); os.IsNotExist(statErr) {
 			log.Printf("  Skipping %s (not built)", name)
 			continue
 		}
 
 		log.Printf("Deploying %s...", name)
-		deployed, err := client.VirtualDeploy(sessionID, nefPath, manifestPath)
-		if err != nil {
-			log.Printf("  ERROR: %v", err)
+		deployed, deployErr := client.VirtualDeploy(sessionID, nefPath, manifestPath)
+		if deployErr != nil {
+			log.Printf("  ERROR: %v", deployErr)
 			continue
 		}
 
@@ -105,11 +105,15 @@ func main() {
 		}
 	}
 
-	if err := os.MkdirAll(filepath.Dir(*outputFile), 0755); err != nil {
-		log.Printf("Warning: create output dir: %v", err)
+	if mkdirErr := os.MkdirAll(filepath.Dir(*outputFile), 0o755); mkdirErr != nil {
+		log.Printf("Warning: create output dir: %v", mkdirErr)
 	}
-	data, _ := json.MarshalIndent(result, "", "  ")
-	if err := os.WriteFile(*outputFile, data, 0644); err != nil {
+	data, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		log.Printf("Warning: marshal output: %v", err)
+		data = []byte("{}")
+	}
+	if err := os.WriteFile(*outputFile, data, 0o600); err != nil {
 		log.Printf("Warning: write output: %v", err)
 	}
 

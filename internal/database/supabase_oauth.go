@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/R3E-Network/service_layer/internal/crypto"
 )
 
 // =============================================================================
@@ -20,7 +22,27 @@ func (r *Repository) CreateOAuthProvider(ctx context.Context, provider *OAuthPro
 		return err
 	}
 
-	data, err := r.client.request(ctx, "POST", "oauth_providers", provider, "")
+	payload := *provider
+	if key, ok, err := r.oauthTokensMasterKeyOptional(); err != nil {
+		return fmt.Errorf("%w: oauth token encryption key: %v", ErrInvalidInput, err)
+	} else if ok {
+		if payload.AccessToken != "" {
+			enc, err := crypto.EncryptEnvelope(key, []byte(provider.UserID), oauthTokensEnvelopeInfo, []byte(payload.AccessToken))
+			if err != nil {
+				return fmt.Errorf("%w: encrypt access token: %v", ErrDatabaseError, err)
+			}
+			payload.AccessToken = string(enc)
+		}
+		if payload.RefreshToken != "" {
+			enc, err := crypto.EncryptEnvelope(key, []byte(provider.UserID), oauthTokensEnvelopeInfo, []byte(payload.RefreshToken))
+			if err != nil {
+				return fmt.Errorf("%w: encrypt refresh token: %v", ErrDatabaseError, err)
+			}
+			payload.RefreshToken = string(enc)
+		}
+	}
+
+	data, err := r.client.request(ctx, "POST", "oauth_providers", &payload, "")
 	if err != nil {
 		return fmt.Errorf("%w: create oauth provider: %v", ErrDatabaseError, err)
 	}
@@ -88,10 +110,34 @@ func (r *Repository) UpdateOAuthProvider(ctx context.Context, provider *OAuthPro
 	if err := ValidateID(provider.ID); err != nil {
 		return err
 	}
+	if err := ValidateUserID(provider.UserID); err != nil {
+		return err
+	}
+
+	accessToken := provider.AccessToken
+	refreshToken := provider.RefreshToken
+	if key, ok, err := r.oauthTokensMasterKeyOptional(); err != nil {
+		return fmt.Errorf("%w: oauth token encryption key: %v", ErrInvalidInput, err)
+	} else if ok {
+		if accessToken != "" {
+			enc, err := crypto.EncryptEnvelope(key, []byte(provider.UserID), oauthTokensEnvelopeInfo, []byte(accessToken))
+			if err != nil {
+				return fmt.Errorf("%w: encrypt access token: %v", ErrDatabaseError, err)
+			}
+			accessToken = string(enc)
+		}
+		if refreshToken != "" {
+			enc, err := crypto.EncryptEnvelope(key, []byte(provider.UserID), oauthTokensEnvelopeInfo, []byte(refreshToken))
+			if err != nil {
+				return fmt.Errorf("%w: encrypt refresh token: %v", ErrDatabaseError, err)
+			}
+			refreshToken = string(enc)
+		}
+	}
 
 	update := map[string]interface{}{
-		"access_token":  provider.AccessToken,
-		"refresh_token": provider.RefreshToken,
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
 		"expires_at":    provider.ExpiresAt,
 		"updated_at":    time.Now(),
 	}

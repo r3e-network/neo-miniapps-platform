@@ -7,13 +7,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
-	"strings"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/httputil"
 	"github.com/google/uuid"
+	"github.com/gorilla/mux"
+
+	"github.com/R3E-Network/service_layer/internal/httputil"
 )
 
 // =============================================================================
@@ -28,7 +28,12 @@ func (s *Service) handleInfo(w http.ResponseWriter, r *http.Request) {
 	cfg := s.GetTokenConfig(DefaultToken)
 
 	// Get pool info from neoaccounts service
-	client := s.getNeoAccountsClient()
+	client, err := s.getNeoAccountsClient()
+	if err != nil {
+		s.Logger().WithContext(ctx).WithError(err).Warn("failed to create neoaccounts client")
+		httputil.ServiceUnavailable(w, "neoaccounts client unavailable")
+		return
+	}
 	poolInfo, err := client.GetPoolInfo(ctx)
 	if err != nil {
 		httputil.InternalError(w, "failed to get pool info from neoaccounts")
@@ -37,15 +42,15 @@ func (s *Service) handleInfo(w http.ResponseWriter, r *http.Request) {
 
 	pendingReqs, err := s.repo.ListByStatus(ctx, string(StatusPending))
 	if err != nil {
-		log.Printf("Failed to list pending requests: %v", err)
+		s.Logger().WithContext(ctx).WithError(err).WithField("status", string(StatusPending)).Warn("failed to list requests")
 	}
 	depositedReqs, err := s.repo.ListByStatus(ctx, string(StatusDeposited))
 	if err != nil {
-		log.Printf("Failed to list deposited requests: %v", err)
+		s.Logger().WithContext(ctx).WithError(err).WithField("status", string(StatusDeposited)).Warn("failed to list requests")
 	}
 	mixingReqs, err := s.repo.ListByStatus(ctx, string(StatusMixing))
 	if err != nil {
-		log.Printf("Failed to list mixing requests: %v", err)
+		s.Logger().WithContext(ctx).WithError(err).WithField("status", string(StatusMixing)).Warn("failed to list requests")
 	}
 
 	pendingRequests := len(pendingReqs) + len(depositedReqs)
@@ -186,7 +191,7 @@ func (s *Service) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 		UserAddress: input.UserAddress,
 		InputTxs:    input.InputTxs,
 		Targets:     targets,
-		MixOption:   int64(mixingDuration.Milliseconds()),
+		MixOption:   mixingDuration.Milliseconds(),
 		Timestamp:   input.Timestamp,
 		TokenType:   tokenType,
 	}
@@ -242,14 +247,14 @@ func (s *Service) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleGetStatus returns the status of a mix request (simplified endpoint).
+// handleGetStatus returns a lightweight status view of a mix request.
 func (s *Service) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	userID, ok := httputil.RequireUserID(w, r)
 	if !ok {
 		return
 	}
 
-	requestID := httputil.PathParam(r.URL.Path, "/status/", "")
+	requestID := mux.Vars(r)["id"]
 
 	rec, err := s.repo.GetByID(r.Context(), requestID)
 	if err != nil {
@@ -281,7 +286,7 @@ func (s *Service) handleGetRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestID := httputil.PathParam(r.URL.Path, "/request/", "")
+	requestID := mux.Vars(r)["id"]
 
 	rec, err := s.repo.GetByID(r.Context(), requestID)
 	if err != nil {
@@ -306,13 +311,7 @@ func (s *Service) handleConfirmDeposit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	path := strings.TrimPrefix(r.URL.Path, "/request/")
-	parts := strings.Split(path, "/")
-	if len(parts) < 2 {
-		httputil.BadRequest(w, "invalid path")
-		return
-	}
-	requestID := parts[0]
+	requestID := mux.Vars(r)["id"]
 
 	var input ConfirmDepositInput
 	if !httputil.DecodeJSON(w, r, &input) {
@@ -390,7 +389,7 @@ func (s *Service) handleResumeRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestID := httputil.PathParam(r.URL.Path, "/request/", "/resume")
+	requestID := mux.Vars(r)["id"]
 
 	rec, err := s.repo.GetByID(r.Context(), requestID)
 	if err != nil {
@@ -426,20 +425,11 @@ func (s *Service) handleDispute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	path := strings.TrimPrefix(r.URL.Path, "/request/")
-	parts := strings.Split(path, "/")
-	if len(parts) < 2 {
-		httputil.BadRequest(w, "invalid path")
-		return
-	}
-	requestID := parts[0]
+	requestID := mux.Vars(r)["id"]
 
 	var input DisputeInput
-	if r.ContentLength > 0 {
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			httputil.BadRequest(w, "invalid JSON body")
-			return
-		}
+	if !httputil.DecodeJSONOptional(w, r, &input) {
+		return
 	}
 
 	rec, err := s.repo.GetByID(r.Context(), requestID)
@@ -508,13 +498,7 @@ func (s *Service) handleGetCompletionProof(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	path := strings.TrimPrefix(r.URL.Path, "/request/")
-	parts := strings.Split(path, "/")
-	if len(parts) < 2 {
-		httputil.BadRequest(w, "invalid path")
-		return
-	}
-	requestID := parts[0]
+	requestID := mux.Vars(r)["id"]
 
 	rec, err := s.repo.GetByID(r.Context(), requestID)
 	if err != nil {

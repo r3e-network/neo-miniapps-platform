@@ -161,15 +161,26 @@ func ParseServiceRequest(item StackItem) (*ContractServiceRequest, error) {
 		return nil, fmt.Errorf("parse createdAt: %w", err)
 	}
 	// result and error can be null, so we don't fail on parse errors
-	result, _ := ParseByteArray(items[10])
-	errorStr, _ := ParseStringFromItem(items[11])
+	var result []byte
+	if v, parseErr := ParseByteArray(items[10]); parseErr == nil {
+		result = v
+	}
+	var errorStr string
+	if v, parseErr := ParseStringFromItem(items[11]); parseErr == nil {
+		errorStr = v
+	}
 
 	var completedAt uint64
 	if len(items) > 12 {
-		ca, err := ParseInteger(items[12])
-		if err == nil && ca != nil {
+		ca, parseErr := ParseInteger(items[12])
+		if parseErr == nil && ca != nil {
 			completedAt = ca.Uint64()
 		}
+	}
+
+	statusU8, err := uint8FromBigInt(status)
+	if err != nil {
+		return nil, fmt.Errorf("parse status: %w", err)
 	}
 
 	return &ContractServiceRequest{
@@ -180,7 +191,7 @@ func ParseServiceRequest(item StackItem) (*ContractServiceRequest, error) {
 		ServiceContract: serviceContract,
 		Payload:         payload,
 		CallbackMethod:  callbackMethod,
-		Status:          uint8(status.Int64()),
+		Status:          statusU8,
 		Fee:             fee,
 		CreatedAt:       createdAt.Uint64(),
 		Result:          result,
@@ -354,7 +365,10 @@ func ParseTrigger(item StackItem) (*Trigger, error) {
 		return nil, fmt.Errorf("parse condition: %w", err)
 	}
 	// callbackData can be null
-	callbackData, _ := ParseByteArray(items[7])
+	var callbackData []byte
+	if v, parseErr := ParseByteArray(items[7]); parseErr == nil {
+		callbackData = v
+	}
 	maxExecutions, err := ParseInteger(items[8])
 	if err != nil {
 		return nil, fmt.Errorf("parse maxExecutions: %w", err)
@@ -380,22 +394,42 @@ func ParseTrigger(item StackItem) (*Trigger, error) {
 		return nil, fmt.Errorf("parse expiresAt: %w", err)
 	}
 
+	triggerTypeU8, err := uint8FromBigInt(triggerType)
+	if err != nil {
+		return nil, fmt.Errorf("parse triggerType: %w", err)
+	}
+	statusU8, err := uint8FromBigInt(status)
+	if err != nil {
+		return nil, fmt.Errorf("parse status: %w", err)
+	}
+
 	return &Trigger{
 		TriggerID:      triggerID,
 		RequestID:      requestID,
 		Owner:          owner,
 		TargetContract: targetContract,
 		CallbackMethod: callbackMethod,
-		TriggerType:    uint8(triggerType.Int64()),
+		TriggerType:    triggerTypeU8,
 		Condition:      condition,
 		CallbackData:   callbackData,
 		MaxExecutions:  maxExecutions,
 		ExecutionCount: executionCount,
-		Status:         uint8(status.Int64()),
+		Status:         statusU8,
 		CreatedAt:      createdAt.Uint64(),
 		LastExecutedAt: lastExecutedAt.Uint64(),
 		ExpiresAt:      expiresAt.Uint64(),
 	}, nil
+}
+
+func uint8FromBigInt(v *big.Int) (uint8, error) {
+	if v == nil {
+		return 0, fmt.Errorf("nil value")
+	}
+	if v.Sign() < 0 || v.BitLen() > 8 {
+		return 0, fmt.Errorf("value %s out of uint8 range", v.String())
+	}
+	// Range checked via BitLen/Sign above.
+	return uint8(v.Uint64()), nil // #nosec G115
 }
 
 func ParseExecutionRecord(item StackItem) (*ExecutionRecord, error) {

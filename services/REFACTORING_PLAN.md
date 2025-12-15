@@ -8,24 +8,26 @@
 
 ### Services Inventory
 
-| Service | Base Type | Workers | Hydration | stopCh | Standard Routes |
-|---------|-----------|---------|-----------|--------|-----------------|
-| neoaccounts | `commonservice.BaseService` | ✓ | ✓ | ✓ (via Base) | ✓ |
-| neocompute | `marble.Service` | Manual | ✗ | Manual | ✓ |
-| neofeeds | `marble.Service` | Manual | ✗ | Manual | ✓ |
-| neoflow | `marble.Service` | Manual | Manual | Manual | ✓ |
-| neooracle | `marble.Service` | ✗ | ✗ | ✗ | ✓ |
-| neorand | `commonservice.BaseService` | ✓ | ✓ | ✓ (via Base) | ✓ |
-| neostore | `marble.Service` | ✗ | ✗ | ✗ | Custom |
-| neovault | `marble.Service` | Manual | Manual | Manual | ✓ |
+| Service     | Base Type                   | Workers | Hydration | stopCh       | Standard Routes |
+| ----------- | --------------------------- | ------- | --------- | ------------ | --------------- |
+| neoaccounts | `commonservice.BaseService` | ✓       | ✓         | ✓ (via Base) | ✓               |
+| neocompute  | `marble.Service`            | Manual  | ✗         | Manual       | ✓               |
+| neofeeds    | `marble.Service`            | Manual  | ✗         | Manual       | ✓               |
+| neoflow     | `marble.Service`            | Manual  | Manual    | Manual       | ✓               |
+| neooracle   | `marble.Service`            | ✗       | ✗         | ✗            | ✓               |
+| neorand     | `commonservice.BaseService` | ✓       | ✓         | ✓ (via Base) | ✓               |
+| neostore    | `marble.Service`            | ✗       | ✗         | ✗            | Custom          |
+| neovault    | `marble.Service`            | Manual  | Manual    | Manual       | ✓               |
 
 ### Key Issues Identified
 
 #### 1. Inconsistent Base Service Usage
+
 - Only `neoaccounts` and `neorand` use `commonservice.BaseService`
 - Other services directly embed `marble.Service`, duplicating lifecycle code
 
 #### 2. Duplicated stopCh Management
+
 ```go
 // Repeated in: neofeeds, neovault, neoflow, neocompute
 stopCh chan struct{}
@@ -37,6 +39,7 @@ func (s *Service) Stop() error {
 ```
 
 #### 3. Duplicated Worker Loop Pattern
+
 ```go
 // Repeated in: neoflow, neofeeds, neovault, neorand
 go s.runXXXLoop(ctx)
@@ -55,11 +58,13 @@ func (s *Service) runXXXLoop(ctx context.Context) {
 ```
 
 #### 4. Inconsistent /info Endpoint
+
 - Each service implements `handleInfo` differently
 - No standard response structure
 - neostore uses custom `marbleHealth` instead of `marble.HealthHandler`
 
 #### 5. Duplicated Hydration Pattern
+
 ```go
 // Repeated in: neoaccounts, neorand, neovault, neoflow
 func (s *Service) hydrate(ctx context.Context) error {
@@ -70,6 +75,7 @@ func (s *Service) hydrate(ctx context.Context) error {
 ## Proposed Architecture
 
 ### Directory Structure
+
 ```
 services/common/
 ├── service/
@@ -123,25 +129,31 @@ type BaseConfig struct {
     Version string
     Marble  *marble.Marble
     DB      database.RepositoryInterface
+
+    // RequiredSecrets defines secrets that must be present for the service to be healthy.
+    RequiredSecrets []string
 }
 
 type BaseService struct {
     *marble.Service
 
     // Lifecycle management
-    stopOnce sync.Once
     stopCh   chan struct{}
+    stopOnce sync.Once
 
     // Extensibility hooks
-    hydrateFn func(context.Context) error
+    hydrate func(context.Context) error
     statsFn   func() map[string]any
 
     // Worker management
-    workers *marble.WorkerGroup
+    workers []func(context.Context)
+
+    // Health tracking
+    requiredSecrets []string
 }
 
 // NewBase creates a BaseService with proper initialization.
-func NewBase(cfg BaseConfig) *BaseService
+func NewBase(cfg *BaseConfig) *BaseService
 
 // WithHydrate sets the hydration hook (called during Start).
 func (b *BaseService) WithHydrate(fn func(context.Context) error) *BaseService
@@ -152,8 +164,8 @@ func (b *BaseService) WithStats(fn func() map[string]any) *BaseService
 // AddWorker adds a background worker goroutine.
 func (b *BaseService) AddWorker(fn func(context.Context)) *BaseService
 
-// AddTickerWorker adds a periodic worker with named lifecycle.
-func (b *BaseService) AddTickerWorker(name string, interval time.Duration, fn func(ctx context.Context) error) *BaseService
+// AddTickerWorker adds a periodic worker with optional metadata.
+func (b *BaseService) AddTickerWorker(interval time.Duration, fn func(ctx context.Context) error, opts ...TickerWorkerOption) *BaseService
 
 // StopChan returns the stop channel for custom workers.
 func (b *BaseService) StopChan() <-chan struct{}
@@ -205,9 +217,11 @@ func InfoHandler(s *BaseService) http.HandlerFunc {
 ### Phase 1: Enhance Base Infrastructure (Priority: HIGH)
 
 **Files to modify:**
+
 - `services/common/service/base.go` - Enhance with stopOnce, stats, workers
 
 **New files to create:**
+
 - `services/common/service/interfaces.go`
 - `services/common/service/routes.go`
 
@@ -218,15 +232,18 @@ func InfoHandler(s *BaseService) http.HandlerFunc {
 Start with services that have minimal custom logic:
 
 #### 2.1 neostore (Simplest)
+
 - Remove custom `marbleHealth` function
 - Use `BaseService` with `RegisterStandardRoutes()`
 - No workers to migrate
 
 #### 2.2 neooracle
+
 - Migrate to `BaseService`
 - Remove direct `marble.Service` embedding
 
 #### 2.3 neocompute
+
 - Migrate to `BaseService`
 - Use `AddWorker` for cleanup worker
 - Remove manual stopCh management
@@ -236,16 +253,19 @@ Start with services that have minimal custom logic:
 ### Phase 3: Migrate Complex Services (Priority: MEDIUM)
 
 #### 3.1 neofeeds
+
 - Migrate to `BaseService`
 - Convert `runChainPushLoop` to `AddTickerWorker`
 - Use standard stopCh via `StopChan()`
 
 #### 3.2 neoflow
+
 - Migrate to `BaseService`
 - Convert scheduler workers to `AddWorker`
 - Simplify `hydrateSchedulerCache` via `WithHydrate`
 
 #### 3.3 neovault
+
 - Migrate to `BaseService`
 - Convert mixing/delivery workers to `AddWorker`
 - Use `WithHydrate` for `resumeRequests`
@@ -255,11 +275,13 @@ Start with services that have minimal custom logic:
 ### Phase 4: Standardize Existing Services (Priority: LOW)
 
 #### 4.1 neoaccounts
+
 - Already uses `BaseService`
 - Add `WithStats` for pool statistics
 - Ensure consistent with new interfaces
 
 #### 4.2 neorand
+
 - Already uses `BaseService`
 - Add `WithStats` for VRF statistics
 - Ensure consistent with new interfaces
@@ -268,39 +290,42 @@ Start with services that have minimal custom logic:
 
 ## Code Reduction Summary
 
-| Pattern | Current Lines | After Refactoring | Lines Saved |
-|---------|---------------|-------------------|-------------|
-| stopCh management | ~30 lines × 5 services | 0 (in BaseService) | ~150 lines |
-| Worker loop boilerplate | ~15 lines × 8 workers | ~5 lines × 8 | ~80 lines |
-| handleInfo duplication | ~20 lines × 8 services | ~5 lines × 8 | ~120 lines |
-| Custom health handlers | ~10 lines × 1 service | 0 | ~10 lines |
-| **Total** | | | **~360 lines** |
+| Pattern                 | Current Lines          | After Refactoring  | Lines Saved    |
+| ----------------------- | ---------------------- | ------------------ | -------------- |
+| stopCh management       | ~30 lines × 5 services | 0 (in BaseService) | ~150 lines     |
+| Worker loop boilerplate | ~15 lines × 8 workers  | ~5 lines × 8       | ~80 lines      |
+| handleInfo duplication  | ~20 lines × 8 services | ~5 lines × 8       | ~120 lines     |
+| Custom health handlers  | ~10 lines × 1 service  | 0                  | ~10 lines      |
+| **Total**               |                        |                    | **~360 lines** |
 
 ## Testing Strategy
 
 ### Unit Tests
+
 - Test `BaseService` lifecycle (Start/Stop idempotency)
 - Test `sync.Once` stop behavior (no panic on double-stop)
 - Test worker registration and shutdown
 
 ### Integration Tests
+
 - Verify `/health` endpoint consistency across all services
 - Verify `/info` endpoint response structure
 - Test service startup order with hydration
 
 ### Migration Validation
+
 - Before/after comparison of API responses
 - Performance benchmarks for startup time
 - Memory usage comparison
 
 ## Risk Assessment
 
-| Risk | Mitigation |
-|------|------------|
-| Breaking existing API contracts | Keep response fields, only add structure |
-| Double-stop panics during migration | sync.Once guarantees safety |
-| Worker shutdown order issues | WorkerGroup handles graceful shutdown |
-| Test coverage gaps | Add unit tests before migration |
+| Risk                                | Mitigation                               |
+| ----------------------------------- | ---------------------------------------- |
+| Breaking existing API contracts     | Keep response fields, only add structure |
+| Double-stop panics during migration | sync.Once guarantees safety              |
+| Worker shutdown order issues        | WorkerGroup handles graceful shutdown    |
+| Test coverage gaps                  | Add unit tests before migration          |
 
 ## Success Criteria
 
@@ -312,18 +337,19 @@ Start with services that have minimal custom logic:
 
 ## Timeline
 
-| Phase | Duration | Dependencies |
-|-------|----------|--------------|
-| Phase 1 | 2-3 hours | None |
-| Phase 2 | 3-6 hours | Phase 1 |
-| Phase 3 | 6-9 hours | Phase 2 |
-| Phase 4 | 1 hour | Phase 3 |
-| Testing | 2-3 hours | All phases |
-| **Total** | **14-22 hours** | |
+| Phase     | Duration        | Dependencies |
+| --------- | --------------- | ------------ |
+| Phase 1   | 2-3 hours       | None         |
+| Phase 2   | 3-6 hours       | Phase 1      |
+| Phase 3   | 6-9 hours       | Phase 2      |
+| Phase 4   | 1 hour          | Phase 3      |
+| Testing   | 2-3 hours       | All phases   |
+| **Total** | **14-22 hours** |              |
 
 ## Appendix: File-by-File Changes
 
 ### services/common/service/base.go
+
 - Add `stopOnce sync.Once` field
 - Add `statsFn func() map[string]any` field
 - Add `WithStats()` method
@@ -331,22 +357,147 @@ Start with services that have minimal custom logic:
 - Update `Stop()` to use `sync.Once`
 
 ### services/common/service/interfaces.go (NEW)
+
 - Define `MarbleService` interface
 - Define `StatisticsProvider` interface
 - Define `Hydratable` interface
 - Define `ChainIntegrated` interface
 
 ### services/common/service/routes.go (NEW)
+
 - Define `ServiceInfoResponse` struct
 - Implement `InfoHandler()` function
 - Implement `RegisterStandardRoutes()` method
 
 ### services/neoXXX/marble/service.go (each service)
+
 - Change embedding to `*commonservice.BaseService`
 - Remove manual `stopCh` field
 - Use `WithStats()` for statistics
 - Use `AddWorker()` or `AddTickerWorker()` for background tasks
 
 ### services/neoXXX/marble/lifecycle.go (each service)
+
 - Simplify to delegate to `BaseService.Start/Stop`
 - Remove duplicated ticker loop implementations
+
+---
+
+## Implementation Progress (Sprint 4-12)
+
+### Completed Work
+
+#### Sprint 4: TxSubmitter Service (TEE) ✅
+
+- `services/txsubmitter/marble/types.go` - Service types and authorization config
+- `services/txsubmitter/marble/service.go` - Core service with queue processing
+- `services/txsubmitter/marble/handlers.go` - HTTP handlers and routes
+- `services/txsubmitter/marble/ratelimit.go` - Dual-bucket token rate limiter
+- `services/txsubmitter/supabase/models.go` - ChainTxRecord models
+- `services/txsubmitter/supabase/repository.go` - Repository for chain_txs audit
+- `services/txsubmitter/client/client.go` - Client SDK for other services
+- `services/txsubmitter/README.md` - Documentation
+- `internal/chain/rpcpool.go` - RPC pool with health checking and failover
+
+#### Sprint 5-6: GlobalSigner Service (TEE) ✅
+
+- `services/globalsigner/marble/types.go` - Service type definitions
+- `services/globalsigner/marble/service.go` - Core with key rotation and signing
+- `services/globalsigner/marble/handlers.go` - HTTP handler routes
+- `services/globalsigner/supabase/repository.go` - Repository interface and mock
+- `services/globalsigner/client/client.go` - Client SDK
+- `services/globalsigner/README.md` - Documentation
+
+#### Sprint 7-12: Business Service Migration ✅
+
+- `services/neofeeds/marble/txsubmitter_adapter.go` - TxSubmitter adapter for price push
+- `services/neorand/marble/txsubmitter_adapter.go` - TxSubmitter adapter for VRF fulfillment
+- `services/neovault/marble/txsubmitter_adapter.go` - Combined TxSubmitter + GlobalSigner adapter
+- `services/gasaccounting/marble/types.go` - GAS ledger type definitions
+- `services/gasaccounting/marble/service.go` - Core ledger and reservation service
+- `services/gasaccounting/marble/handlers.go` - HTTP handlers
+- `services/gasaccounting/supabase/repository.go` - Repository interface and mock
+- `services/gasaccounting/client/client.go` - Client SDK
+- `services/gasaccounting/README.md` - Documentation
+- `services/common/service/gasaccounting.go` - Common GasAccounting adapter
+
+### Architecture Changes
+
+#### Centralized Chain Write Authority
+
+All services now submit transactions through TxSubmitter instead of direct TEEFulfiller calls:
+
+```
+Before: Service → TEEFulfiller → Chain
+After:  Service → TxSubmitter → Chain
+```
+
+#### Centralized Signing Authority
+
+Services use GlobalSigner for cryptographic operations:
+
+```
+Before: Service → Local masterKey signing
+After:  Service → GlobalSigner → Domain-separated signing
+```
+
+#### GAS Accounting Integration
+
+Services can now track GAS usage through GasAccounting:
+
+```
+Service → GasAccounting.Reserve() → Operation → GasAccounting.Release()
+```
+
+### New Service Dependencies
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Business Services                            │
+│  NeoFeeds  NeoRand  NeoVault  NeoOracle  NeoFlow  NeoCompute    │
+└─────────────────────────────────────────────────────────────────┘
+                    │           │           │
+                    ▼           ▼           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     Infrastructure Services                      │
+│         TxSubmitter      GlobalSigner      GasAccounting         │
+└─────────────────────────────────────────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     Chain Layer                                  │
+│              Neo N3 RPC Pool (with failover)                    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Sprint 13-14: Hardening & Operations ✅
+
+- `services/common/service/healthcheck.go` - Deep health check framework
+  - Component-level health checks with parallel execution
+  - HTTP and database health check helpers
+  - Aggregated health status (healthy/degraded/unhealthy)
+
+- `services/common/service/probes.go` - Kubernetes probe support
+  - Liveness probe (`/healthz`)
+  - Readiness probe (`/readyz`)
+  - Startup probe (`/startupz`)
+  - Startup grace period handling
+
+- `services/common/service/metrics.go` - Service metrics collection
+  - Request counters (total/success/failed)
+  - Latency histogram buckets
+  - Error tracking by type
+  - Custom gauges
+  - Metrics middleware for automatic tracking
+
+### Remaining Work
+
+1. **Integration Testing**
+   - End-to-end tests for TxSubmitter flow
+   - GlobalSigner key rotation tests
+   - GasAccounting reservation lifecycle tests
+
+2. **Production Deployment**
+   - Kubernetes manifests update
+   - Monitoring dashboards
+   - Alerting rules

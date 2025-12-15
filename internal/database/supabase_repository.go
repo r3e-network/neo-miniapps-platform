@@ -15,11 +15,43 @@ import (
 // Repository provides data access methods.
 type Repository struct {
 	client *Client
+
+	// oauthTokensMasterKey optionally enables at-rest encryption for OAuth
+	// access/refresh tokens stored in Supabase. When unset, the repository falls
+	// back to reading OAUTH_TOKENS_MASTER_KEY from the environment.
+	oauthTokensMasterKey []byte
 }
 
 // NewRepository creates a new repository.
 func NewRepository(client *Client) *Repository {
 	return &Repository{client: client}
+}
+
+// SetOAuthTokensMasterKey configures an explicit OAuth token master key.
+// The key must be exactly 32 bytes (AES-256).
+func (r *Repository) SetOAuthTokensMasterKey(key []byte) error {
+	if r == nil {
+		return fmt.Errorf("%w: repository cannot be nil", ErrInvalidInput)
+	}
+	if len(key) == 0 {
+		r.oauthTokensMasterKey = nil
+		return nil
+	}
+	if len(key) != oauthTokensMasterKeyLength {
+		return fmt.Errorf("%w: OAUTH_TOKENS_MASTER_KEY must be %d bytes, got %d", ErrInvalidInput, oauthTokensMasterKeyLength, len(key))
+	}
+
+	copied := make([]byte, len(key))
+	copy(copied, key)
+	r.oauthTokensMasterKey = copied
+	return nil
+}
+
+func (r *Repository) oauthTokensMasterKeyOptional() (key []byte, ok bool, err error) {
+	if r != nil && len(r.oauthTokensMasterKey) > 0 {
+		return r.oauthTokensMasterKey, true, nil
+	}
+	return oauthTokensMasterKeyOptional()
 }
 
 // Request makes an HTTP request to the Supabase REST API.

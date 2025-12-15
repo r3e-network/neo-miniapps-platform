@@ -7,13 +7,14 @@ The Neo Service Layer is a production-ready, TEE-protected service platform buil
 - **MarbleRun**: NeoCompute computing orchestration
 - **EGo**: Go MarbleRun TEE runtime
 - **Supabase**: PostgreSQL database with RLS
-- **Netlify**: Frontend hosting
+- **Vercel**: Frontend hosting
 
 ## Core Principles
 
 ### 1. Defense in Depth
 
 Every layer provides security:
+
 - Network: mTLS between all services
 - Compute: MarbleRun TEEs for all code execution
 - Storage: Encrypted at rest, RLS policies
@@ -54,6 +55,7 @@ The Coordinator is the trust anchor:
 ```
 
 **Responsibilities:**
+
 - Verify Marble attestation quotes
 - Inject secrets based on manifest
 - Issue TLS certificates
@@ -83,6 +85,7 @@ type Marble struct {
 ```
 
 **Key Features:**
+
 - Automatic TLS configuration
 - Secret access via callback pattern
 - TEE self-report for attestation
@@ -185,7 +188,7 @@ TEE upgrades (changing MRENCLAVE) must NOT affect business keys. All cryptograph
 1. **Global Master Keys from MarbleRun** - All business keys derived from manifest-defined secrets
 2. **No TEE Identity in Derivation** - HKDF context uses only business identifiers (account IDs, service names)
 3. **No MarbleRun Sealing Keys** - Application never uses `sgx_seal_data()` for business data
-4. **Manifest-Defined Persistence** - Secrets defined in manifest persist across TEE versions
+4. **Manifest-Defined Persistence** - Secrets defined in the manifest persist across TEE versions and activations (`"Shared": true`)
 
 ### Key Architecture
 
@@ -195,8 +198,8 @@ TEE upgrades (changing MRENCLAVE) must NOT affect business keys. All cryptograph
 │  ┌─────────────────────────────────────────────────────────┐    │
 │  │  manifest.json                                           │    │
 │  │  - VRF_PRIVATE_KEY (persist across upgrades)            │    │
-│  │  - MIXER_MASTER_KEY (persist across upgrades)           │    │
-│  │  - DATAFEEDS_SIGNING_KEY                                │    │
+│  │  - NEOVAULT_MASTER_KEY (persist across upgrades)        │    │
+│  │  - NEOFEEDS_SIGNING_KEY                                 │    │
 │  └─────────────────────────────────────────────────────────┘    │
 └───────────────────────────┬─────────────────────────────────────┘
                             │ Secret Injection (after attestation)
@@ -205,8 +208,8 @@ TEE upgrades (changing MRENCLAVE) must NOT affect business keys. All cryptograph
 │                    TEE TEE (Marble)                          │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │  Marble.Secret("VRF_PRIVATE_KEY")      → VRF signing      │  │
-│  │  Marble.Secret("MIXER_MASTER_KEY")     → Pool derivation  │  │
-│  │  Marble.Secret("DATAFEEDS_SIGNING_KEY") → Price signing   │  │
+│  │  Marble.Secret("NEOVAULT_MASTER_KEY")  → Pool derivation  │  │
+│  │  Marble.Secret("NEOFEEDS_SIGNING_KEY") → Price signing    │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                            │                                     │
 │                            ▼                                     │
@@ -222,6 +225,12 @@ TEE upgrades (changing MRENCLAVE) must NOT affect business keys. All cryptograph
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+### MarbleRun Secret Sharing
+
+For keys used to **verify** signatures (e.g. `JWT_SECRET`) or **decrypt** data written by other replicas (e.g. `SECRETS_MASTER_KEY`), the MarbleRun manifest should mark them as `"Shared": true`. Otherwise MarbleRun will generate distinct secret values per activation, which breaks upgrade safety and causes signature/decryption failures after restarts or scale-out.
+
+The service layer's AES-GCM encryption uses a fresh random nonce per encryption and prepends it to the ciphertext (`internal/crypto/crypto.go`), so sharing the key across replicas does not reuse nonces.
+
 ### HKDF Key Derivation
 
 The `DeriveKey` function uses HKDF-SHA256 without any TEE identity:
@@ -235,22 +244,22 @@ func DeriveKey(masterKey []byte, salt []byte, info string, keyLen int) ([]byte, 
 }
 ```
 
-| Parameter | Source | Upgrade Impact |
-|-----------|--------|----------------|
-| masterKey | MarbleRun injection | Stable (manifest-defined) |
-| salt | Business identifier (accountID) | Stable |
-| info | Service name ("neovault-account") | Stable |
-| keyLen | Constant (32) | Stable |
+| Parameter | Source                            | Upgrade Impact            |
+| --------- | --------------------------------- | ------------------------- |
+| masterKey | MarbleRun injection               | Stable (manifest-defined) |
+| salt      | Business identifier (accountID)   | Stable                    |
+| info      | Service name ("neovault-account") | Stable                    |
+| keyLen    | Constant (32)                     | Stable                    |
 
 ### Service Key Sources
 
-| Service | Key | Source | Derivation |
-|---------|-----|--------|------------|
-| VRF | Private Key | `Marble.Secret("VRF_PRIVATE_KEY")` | Direct use |
-| NeoVault | Pool Keys | `Marble.Secret("MIXER_MASTER_KEY")` | HKDF with accountID |
-| NeoFeeds | Signing Key | `Marble.Secret("DATAFEEDS_SIGNING_KEY")` | Direct use |
-| NeoFlow | Signing Key | `Marble.Secret("AUTOMATION_SIGNING_KEY")` | Direct use |
-| TLS | Certificates | MarbleRun PKI | Auto-provisioned |
+| Service  | Key           | Source                                                     | Derivation          |
+| -------- | ------------- | ---------------------------------------------------------- | ------------------- |
+| VRF      | Private Key   | `Marble.Secret("VRF_PRIVATE_KEY")`                         | Direct use          |
+| NeoVault | Pool Keys     | `Marble.Secret("NEOVAULT_MASTER_KEY")`                     | HKDF with accountID |
+| NeoFeeds | Signing Key   | `Marble.Secret("NEOFEEDS_SIGNING_KEY")`                    | Direct use          |
+| NeoFlow  | Fulfiller Key | `Marble.Secret("TEE_PRIVATE_KEY")` / env `TEE_PRIVATE_KEY` | Direct use (shared) |
+| TLS      | Certificates  | MarbleRun PKI                                              | Auto-provisioned    |
 
 ### Upgrade Process
 
@@ -265,29 +274,33 @@ func DeriveKey(masterKey []byte, salt []byte, info string, keyLen int) ([]byte, 
 
 ### What Breaks Upgrade Safety
 
-| Operation | Risk Level | Impact |
-|-----------|------------|--------|
-| Using `sgx_seal_data()` for business keys | CRITICAL | Keys lost on upgrade |
-| Including MRENCLAVE in HKDF context | CRITICAL | Keys change on upgrade |
-| Hardcoding keys in TEE binary | HIGH | Keys change on rebuild |
-| Using TEE report fields in derivation | HIGH | Keys change on upgrade |
+| Operation                                 | Risk Level | Impact                 |
+| ----------------------------------------- | ---------- | ---------------------- |
+| Using `sgx_seal_data()` for business keys | CRITICAL   | Keys lost on upgrade   |
+| Including MRENCLAVE in HKDF context       | CRITICAL   | Keys change on upgrade |
+| Hardcoding keys in TEE binary             | HIGH       | Keys change on rebuild |
+| Using TEE report fields in derivation     | HIGH       | Keys change on upgrade |
 
 ## Deployment
 
 ### Simulation Mode
 
-For development without MarbleRun hardware:
+For development without SGX hardware, run in EGo simulation mode and let the stack
+apply the MarbleRun manifest before starting marbles:
 
 ```bash
-OE_SIMULATION=1 docker compose up
+make docker-up
+# or: ./scripts/up.sh --insecure
 ```
 
 ### Production Mode
 
-With MarbleRun hardware:
+On SGX hardware (DCAP/PCCS configured on the host), start the hardware compose
+stack and apply the manifest:
 
 ```bash
-OE_SIMULATION=0 docker compose up
+make docker-up-sgx
+# or: ./scripts/up.sh
 ```
 
 ### Kubernetes
@@ -298,18 +311,18 @@ MarbleRun supports Kubernetes deployment:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: gateway
+    name: gateway
 spec:
-  template:
-    spec:
-      containers:
-      - name: gateway
-        image: service-layer/gateway
-        env:
-        - name: EDG_MARBLE_COORDINATOR_ADDR
-          value: "coordinator:2001"
-        - name: EDG_MARBLE_TYPE
-          value: "gateway"
+    template:
+        spec:
+            containers:
+                - name: gateway
+                  image: service-layer/gateway
+                  env:
+                      - name: EDG_MARBLE_COORDINATOR_ADDR
+                        value: "coordinator:2001"
+                      - name: EDG_MARBLE_TYPE
+                        value: "gateway"
 ```
 
 ## Monitoring
@@ -320,11 +333,11 @@ Each service exposes `/health`:
 
 ```json
 {
-  "status": "healthy",
-  "service": "gateway",
-  "version": "1.0.0",
-  "enclave": true,
-  "timestamp": "2024-12-05T12:00:00Z"
+    "status": "healthy",
+    "service": "gateway",
+    "version": "1.0.0",
+    "enclave": true,
+    "timestamp": "2024-12-05T12:00:00Z"
 }
 ```
 
@@ -334,9 +347,9 @@ Gateway exposes `/attestation`:
 
 ```json
 {
-  "enclave": true,
-  "security_version": 1,
-  "debug": false
+    "enclave": true,
+    "security_version": 1,
+    "debug": false
 }
 ```
 
@@ -348,11 +361,11 @@ The Service Layer integrates with Neo N3 smart contracts for on-chain operations
 
 The Service Layer supports three different service patterns:
 
-| Pattern | Services | Description |
-|---------|----------|-------------|
-| **Request-Response** | VRF, NeoVault, NeoCompute | User initiates request → TEE processes → Callback |
-| **Push (Auto-Update)** | NeoFeeds | TEE periodically updates on-chain data, no user request needed |
-| **Trigger-Based** | NeoFlow | User registers trigger → TEE monitors conditions → Periodic callbacks |
+| Pattern                | Services                  | Description                                                           |
+| ---------------------- | ------------------------- | --------------------------------------------------------------------- |
+| **Request-Response**   | VRF, NeoVault, NeoCompute | User initiates request → TEE processes → Callback                     |
+| **Push (Auto-Update)** | NeoFeeds                  | TEE periodically updates on-chain data, no user request needed        |
+| **Trigger-Based**      | NeoFlow                   | User registers trigger → TEE monitors conditions → Periodic callbacks |
 
 ### Pattern 1: Request-Response Flow
 
@@ -404,19 +417,19 @@ The following diagram shows the complete flow from User to Callback:
 
 ### Step-by-Step Flow
 
-| Step | Component | Method | Description |
-|------|-----------|--------|-------------|
-| 1 | User | - | User initiates transaction to their contract |
-| 2 | User Contract | `RequestPrice()` | Builds payload, calls Gateway |
-| 3 | ServiceLayerGateway | `RequestService()` | Validates request, charges fee, routes to service |
-| 4 | Service Contract | `OnRequest()` | Stores request data, emits service-specific event |
-| 5 | Service Layer (TEE) | - | Monitors blockchain for events |
-| 6 | Service Layer (TEE) | - | Processes request off-chain (HTTP/VRF/Mix) |
-| 7 | Service Layer (TEE) | - | Signs result with TEE private key |
-| 8 | Service Contract | `OnFulfill()` | Receives fulfillment, cleans up request data |
-| 9 | ServiceLayerGateway | `FulfillRequest()` | Verifies TEE signature, updates request status |
-| 10 | User Contract | `Callback()` | Receives result, updates application state |
-| 11 | User | - | Transaction confirmed on blockchain |
+| Step | Component           | Method             | Description                                       |
+| ---- | ------------------- | ------------------ | ------------------------------------------------- |
+| 1    | User                | -                  | User initiates transaction to their contract      |
+| 2    | User Contract       | `RequestPrice()`   | Builds payload, calls Gateway                     |
+| 3    | ServiceLayerGateway | `RequestService()` | Validates request, charges fee, routes to service |
+| 4    | Service Contract    | `OnRequest()`      | Stores request data, emits service-specific event |
+| 5    | Service Layer (TEE) | -                  | Monitors blockchain for events                    |
+| 6    | Service Layer (TEE) | -                  | Processes request off-chain (HTTP/VRF/Mix)        |
+| 7    | Service Layer (TEE) | -                  | Signs result with TEE private key                 |
+| 8    | Service Contract    | `OnFulfill()`      | Receives fulfillment, cleans up request data      |
+| 9    | ServiceLayerGateway | `FulfillRequest()` | Verifies TEE signature, updates request status    |
+| 10   | User Contract       | `Callback()`       | Receives result, updates application state        |
+| 11   | User                | -                  | Transaction confirmed on blockchain               |
 
 ### Contract Architecture
 
@@ -538,12 +551,12 @@ Users register triggers, TEE monitors conditions and invokes callbacks periodica
 
 **NeoFlow Trigger Examples:**
 
-| Trigger Type | Example | Use Case |
-|--------------|---------|----------|
-| Time-based | `cron: "0 0 * * FRI"` | Weekly token distribution |
-| Price-based | `price: BTC > 100000` | Auto-sell when price target hit |
-| Threshold | `balance < 10 GAS` | Auto-refill gas bank |
-| Event-based | `event: LiquidityAdded` | React to on-chain events |
+| Trigger Type | Example                 | Use Case                        |
+| ------------ | ----------------------- | ------------------------------- |
+| Time-based   | `cron: "0 0 * * FRI"`   | Weekly token distribution       |
+| Price-based  | `price: BTC > 100000`   | Auto-sell when price target hit |
+| Threshold    | `balance < 10 GAS`      | Auto-refill gas bank            |
+| Event-based  | `event: LiquidityAdded` | React to on-chain events        |
 
 ### NeoVault Service (v3.0 - Off-Chain First)
 
@@ -585,6 +598,7 @@ The NeoVault implements an **Off-Chain Mixing with On-Chain Dispute** pattern:
 ```
 
 **Key Design Principles:**
+
 - **Privacy-First**: User NEVER transacts with any known service layer account
 - **Implicit Fee**: Fee deducted from delivery, no separate fee transaction
 - **Off-Chain First**: Normal flow has ZERO on-chain link between user and service layer
@@ -595,6 +609,7 @@ The NeoVault implements an **Off-Chain Mixing with On-Chain Dispute** pattern:
 - **AccountPool-owned keys**: AccountPool service derives/holds pool keys; neovault only locks/updates balances via API
 
 **NeoVault API Endpoints:**
+
 ```
 POST /request              - Create mix request, returns RequestProof
 POST /request/{id}/deposit - Confirm deposit, start mixing
@@ -605,10 +620,10 @@ POST /request/{id}/dispute - Submit dispute (ONLY on-chain call)
 
 **Proofs:**
 
-| Proof | When Generated | Purpose | On-Chain? |
-|-------|---------------|---------|-----------|
-| RequestProof | On request creation | User can prove they requested mix | Only if disputed |
-| CompletionProof | On delivery | TEE can prove mix was completed | Only if disputed |
+| Proof           | When Generated      | Purpose                           | On-Chain?        |
+| --------------- | ------------------- | --------------------------------- | ---------------- |
+| RequestProof    | On request creation | User can prove they requested mix | Only if disputed |
+| CompletionProof | On delivery         | TEE can prove mix was completed   | Only if disputed |
 
 ### Event Listening
 
@@ -665,20 +680,20 @@ services/*/supabase/         # Service-specific database operations
 
 ### Service-Specific Packages
 
-| Service | Package | Models |
-|---------|---------|--------|
-| VRF | `services/vrf/supabase` | `Request`, `Response` |
-| NeoVault | `services/neovault/supabase` | `Request`, `MixOperation` |
-| NeoFlow | `services/neoflow/supabase` | `Trigger`, `Execution` |
-| AccountPool | `services/accountpool/supabase` | `Account`, `Lock` |
-| Secrets | `services/secrets/supabase` | `Secret`, `AllowedService` |
+| Service                   | Package                         | Models                     |
+| ------------------------- | ------------------------------- | -------------------------- |
+| VRF (NeoRand)             | `services/neorand/supabase`     | `Request`, `Response`      |
+| NeoVault                  | `services/neovault/supabase`    | `Request`, `MixOperation`  |
+| NeoFlow                   | `services/neoflow/supabase`     | `Trigger`, `Execution`     |
+| AccountPool (NeoAccounts) | `services/neoaccounts/supabase` | `Account`, `Lock`          |
+| Secrets (NeoStore)        | `services/neostore/supabase`    | `Secret`, `AllowedService` |
 
 ### Usage Pattern
 
 ```go
 import (
     "github.com/R3E-Network/service_layer/internal/database"
-    vrfsupabase "github.com/R3E-Network/service_layer/services/vrf/supabase"
+    vrfsupabase "github.com/R3E-Network/service_layer/services/neorand/supabase"
 )
 
 // Create base repository
@@ -728,22 +743,22 @@ All fee management has moved from on-chain smart contracts to the off-chain Supa
 
 ### Database Tables
 
-| Table | Purpose |
-|-------|---------|
-| `gasbank_accounts` | User/contract balances (balance, reserved) |
+| Table                  | Purpose                                        |
+| ---------------------- | ---------------------------------------------- |
+| `gasbank_accounts`     | User/contract balances (balance, reserved)     |
 | `gasbank_transactions` | Transaction history (deposits, fees, sponsors) |
-| `deposit_requests` | Pending deposit confirmations |
+| `deposit_requests`     | Pending deposit confirmations                  |
 
 ### Transaction Types
 
-| Type | Description |
-|------|-------------|
-| `deposit` | GAS deposited to account |
-| `withdraw` | GAS withdrawn from account |
-| `service_fee` | Fee charged for service usage |
-| `refund` | Service fee refunded (on failure) |
-| `sponsor` | Sponsor payment debit |
-| `sponsor_credit` | Sponsor payment credit |
+| Type             | Description                       |
+| ---------------- | --------------------------------- |
+| `deposit`        | GAS deposited to account          |
+| `withdraw`       | GAS withdrawn from account        |
+| `service_fee`    | Fee charged for service usage     |
+| `refund`         | Service fee refunded (on failure) |
+| `sponsor`        | Sponsor payment debit             |
+| `sponsor_credit` | Sponsor payment credit            |
 
 ### CLI Usage
 
@@ -771,10 +786,10 @@ slcli fees
 
 The on-chain fee methods in `GatewayContract` are deprecated:
 
-| Deprecated Method | Replacement |
-|-------------------|-------------|
-| `GatewayContract.GetServiceFee()` | `gasbank.GetServiceFee()` |
-| `GatewayContract.BalanceOf()` | `gasbank.Manager.GetBalance()` |
-| `ServiceRequest.Fee` | Managed via `gasbank_transactions` |
+| Deprecated Method                 | Replacement                        |
+| --------------------------------- | ---------------------------------- |
+| `GatewayContract.GetServiceFee()` | `gasbank.GetServiceFee()`          |
+| `GatewayContract.BalanceOf()`     | `gasbank.Manager.GetBalance()`     |
+| `ServiceRequest.Fee`              | Managed via `gasbank_transactions` |
 
 Smart contracts should no longer handle fee logic. All fee operations are managed by the Service Layer via Supabase.

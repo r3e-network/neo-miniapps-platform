@@ -24,18 +24,19 @@ interface Secret {
   last_accessed?: string;
 }
 
-interface Permission {
-  service_name: string;
-  granted_at: string;
-}
+type Permission = string;
 
 interface AuditLog {
   id: string;
+  user_id: string;
   secret_name: string;
   action: string;
-  service_name?: string;
-  timestamp: string;
-  details?: string;
+  service_id?: string;
+  ip_address?: string;
+  user_agent?: string;
+  success: boolean;
+  error_message?: string;
+  created_at: string;
 }
 
 export function Secrets() {
@@ -349,19 +350,16 @@ export function Secrets() {
               <h3 className="text-sm font-medium text-gray-400 mb-3">Authorized Services</h3>
               {permissions && permissions.length > 0 ? (
                 <div className="space-y-2">
-                  {permissions.map((perm: Permission) => (
+                  {permissions.map((serviceId: Permission) => (
                     <div
-                      key={perm.service_name}
+                      key={serviceId}
                       className="flex items-center justify-between p-3 bg-gray-700/50 rounded-lg"
                     >
                       <div>
-                        <div className="text-white font-medium">{perm.service_name}</div>
-                        <div className="text-xs text-gray-500">
-                          Granted: {formatDate(perm.granted_at)}
-                        </div>
+                        <div className="text-white font-medium">{serviceId}</div>
                       </div>
                       <button
-                        onClick={() => handleRevokePermission(perm.service_name)}
+                        onClick={() => handleRevokePermission(serviceId)}
                         disabled={revokePermissionMutation.isPending}
                         className="text-red-500 hover:text-red-400 disabled:opacity-50"
                       >
@@ -410,24 +408,24 @@ export function Secrets() {
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className={`px-2 py-1 rounded text-xs font-medium ${
-                          log.action === 'created' ? 'bg-green-500/20 text-green-400' :
-                          log.action === 'accessed' ? 'bg-blue-500/20 text-blue-400' :
-                          log.action === 'deleted' ? 'bg-red-500/20 text-red-400' :
+                          log.action === 'create' || log.action === 'update' ? 'bg-green-500/20 text-green-400' :
+                          log.action === 'read' ? 'bg-blue-500/20 text-blue-400' :
+                          log.action === 'delete' ? 'bg-red-500/20 text-red-400' :
                           'bg-gray-500/20 text-gray-400'
                         }`}>
                           {log.action.toUpperCase()}
                         </span>
-                        {log.service_name && (
-                          <span className="text-gray-400 text-sm">by {log.service_name}</span>
+                        {log.service_id && (
+                          <span className="text-gray-400 text-sm">by {log.service_id}</span>
                         )}
                       </div>
                       <div className="flex items-center gap-1 text-gray-500 text-xs">
                         <Clock className="w-3 h-3" />
-                        {formatDate(log.timestamp)}
+                        {formatDate(log.created_at)}
                       </div>
                     </div>
-                    {log.details && (
-                      <p className="text-gray-400 text-sm">{log.details}</p>
+                    {!log.success && log.error_message && (
+                      <p className="text-red-400 text-sm">{log.error_message}</p>
                     )}
                   </div>
                 ))}

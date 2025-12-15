@@ -3,19 +3,54 @@ package middleware
 
 import (
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 )
 
 // CORSMiddleware handles Cross-Origin Resource Sharing
 type CORSMiddleware struct {
-	allowedOrigins []string
-	allowAll       bool
+	cfg      CORSConfig
+	allowAll bool
+}
+
+// CORSConfig configures CORS behavior.
+type CORSConfig struct {
+	AllowedOrigins         []string
+	AllowedMethods         []string
+	AllowedHeaders         []string
+	ExposedHeaders         []string
+	AllowCredentials       bool
+	MaxAgeSeconds          int
+	PreflightStatus        int
+	RejectDisallowedOrigin bool
 }
 
 // NewCORSMiddleware creates a new CORS middleware
-func NewCORSMiddleware(allowedOrigins []string) *CORSMiddleware {
+func NewCORSMiddleware(cfg *CORSConfig) *CORSMiddleware {
+	cfgValue := CORSConfig{}
+	if cfg != nil {
+		cfgValue = *cfg
+	}
+
+	if len(cfgValue.AllowedMethods) == 0 {
+		cfgValue.AllowedMethods = []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions}
+	}
+	if len(cfgValue.AllowedHeaders) == 0 {
+		cfgValue.AllowedHeaders = []string{"Content-Type", "Authorization", "X-Trace-ID"}
+	}
+	if len(cfgValue.ExposedHeaders) == 0 {
+		cfgValue.ExposedHeaders = []string{"X-Trace-ID"}
+	}
+	if cfgValue.MaxAgeSeconds == 0 {
+		cfgValue.MaxAgeSeconds = 3600
+	}
+	if cfgValue.PreflightStatus == 0 {
+		cfgValue.PreflightStatus = http.StatusNoContent
+	}
+
 	allowAll := false
-	for _, origin := range allowedOrigins {
+	for _, origin := range cfgValue.AllowedOrigins {
 		if origin == "*" {
 			allowAll = true
 			break
@@ -23,8 +58,8 @@ func NewCORSMiddleware(allowedOrigins []string) *CORSMiddleware {
 	}
 
 	return &CORSMiddleware{
-		allowedOrigins: allowedOrigins,
-		allowAll:       allowAll,
+		cfg:      cfgValue,
+		allowAll: allowAll,
 	}
 }
 
@@ -34,17 +69,29 @@ func (m *CORSMiddleware) Handler(next http.Handler) http.Handler {
 		origin := r.Header.Get("Origin")
 
 		// Check if origin is allowed
-		if m.allowAll || m.isOriginAllowed(origin) {
+		allowed := origin != "" && (m.allowAll || m.isOriginAllowed(origin))
+		if allowed {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Trace-ID")
-			w.Header().Set("Access-Control-Expose-Headers", "X-Trace-ID")
-			w.Header().Set("Access-Control-Max-Age", "3600")
+			w.Header().Add("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Methods", strings.Join(m.cfg.AllowedMethods, ", "))
+			w.Header().Set("Access-Control-Allow-Headers", strings.Join(m.cfg.AllowedHeaders, ", "))
+			w.Header().Set("Access-Control-Expose-Headers", strings.Join(m.cfg.ExposedHeaders, ", "))
+			w.Header().Set("Access-Control-Max-Age", strconv.Itoa(m.cfg.MaxAgeSeconds))
+			if m.cfg.AllowCredentials {
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
+		} else if origin != "" && m.cfg.RejectDisallowedOrigin {
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			http.Error(w, "CORS origin not allowed", http.StatusForbidden)
+			return
 		}
 
 		// Handle preflight requests
 		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
+			w.WriteHeader(m.cfg.PreflightStatus)
 			return
 		}
 
@@ -54,9 +101,35 @@ func (m *CORSMiddleware) Handler(next http.Handler) http.Handler {
 
 // isOriginAllowed checks if an origin is in the allowed list
 func (m *CORSMiddleware) isOriginAllowed(origin string) bool {
-	for _, allowed := range m.allowedOrigins {
-		if allowed == origin || strings.HasSuffix(origin, allowed) {
+	parsed, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	host := parsed.Hostname()
+	if host == "" {
+		return false
+	}
+
+	for _, allowed := range m.cfg.AllowedOrigins {
+		allowed = strings.TrimSpace(allowed)
+		if allowed == "" {
+			continue
+		}
+		if allowed == origin {
 			return true
+		}
+		if strings.HasPrefix(allowed, ".") {
+			suffix := strings.TrimPrefix(allowed, ".")
+			if suffix == "" {
+				continue
+			}
+			if strings.HasSuffix(host, suffix) {
+				idx := len(host) - len(suffix)
+				if idx > 0 && host[idx-1] == '.' {
+					return true
+				}
+			}
+			continue
 		}
 	}
 	return false

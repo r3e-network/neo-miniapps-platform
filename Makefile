@@ -1,13 +1,27 @@
 # =============================================================================
 # Neo Service Layer - Makefile
-# MarbleRun + EGo + Supabase + Netlify Architecture
+# MarbleRun + EGo + Supabase + Vercel Architecture
 # =============================================================================
 
 .PHONY: all build test clean docker frontend deploy help
 
 # Variables
 SERVICES := gateway neooracle neorand neovault neostore neofeeds gasbank neoflow neocompute neoaccounts ccip datalink datastreams dta cre
-DOCKER_COMPOSE := docker compose -f docker/docker-compose.yaml
+DOCKER_COMPOSE_SIM := docker compose -f docker/docker-compose.simulation.yaml
+DOCKER_COMPOSE_SGX := docker compose -f docker/docker-compose.yaml
+# Default to simulation mode for local development.
+DOCKER_COMPOSE := $(DOCKER_COMPOSE_SIM)
+
+GOBIN ?= $(shell go env GOPATH)/bin
+GOLANGCI_LINT_VERSION ?= v1.64.8
+GOLANGCI_LINT ?= $(GOBIN)/golangci-lint
+
+COORDINATOR_CLIENT_ADDR ?= localhost:4433
+INSECURE ?= 1
+MARBLERUN_FLAGS :=
+ifneq ($(filter 1 true yes,$(INSECURE)),)
+  MARBLERUN_FLAGS += --insecure
+endif
 
 # =============================================================================
 # Build
@@ -82,10 +96,12 @@ docker-build: ## Build all Docker images
 	$(DOCKER_COMPOSE) build
 
 docker-up: ## Start all services in simulation mode
-	OE_SIMULATION=1 $(DOCKER_COMPOSE) up -d
+	./scripts/up.sh --insecure
 
 docker-up-sgx: ## Start all services with SGX hardware
-	OE_SIMULATION=0 $(DOCKER_COMPOSE) up -d
+	./scripts/up.sh
+
+docker-up-tee: docker-up-sgx ## Alias for docker-up-sgx
 
 docker-down: ## Stop all services
 	$(DOCKER_COMPOSE) down
@@ -108,13 +124,13 @@ marblerun-install: ## Install MarbleRun CLI
 	chmod +x /usr/local/bin/marblerun
 
 marblerun-manifest: ## Set MarbleRun manifest
-	marblerun manifest set manifests/manifest.json localhost:4433 --insecure
+	marblerun manifest set manifests/manifest.json $(COORDINATOR_CLIENT_ADDR) $(MARBLERUN_FLAGS)
 
 marblerun-status: ## Check MarbleRun status
-	marblerun status localhost:4433 --insecure
+	marblerun status $(COORDINATOR_CLIENT_ADDR) $(MARBLERUN_FLAGS)
 
 marblerun-recover: ## Recover MarbleRun coordinator
-	marblerun recover manifests/recovery-key.json localhost:4433 --insecure
+	marblerun recover manifests/recovery-key.json $(COORDINATOR_CLIENT_ADDR) $(MARBLERUN_FLAGS)
 
 # =============================================================================
 # Database
@@ -141,8 +157,9 @@ frontend-dev: ## Start frontend development server
 frontend-build: ## Build frontend for production
 	cd frontend && npm run build
 
-frontend-deploy: ## Deploy frontend to Netlify
-	cd frontend && netlify deploy --prod
+frontend-deploy: ## Deploy frontend to Vercel
+	cd frontend && npm ci && npm run build
+	vercel deploy --prod
 
 # =============================================================================
 # Development
@@ -154,7 +171,7 @@ dev: ## Start development environment
 	OE_SIMULATION=1 $(DOCKER_COMPOSE) up -d coordinator
 	@sleep 5
 	@echo "Setting manifest..."
-	marblerun manifest set manifests/manifest.json localhost:4433 --insecure || true
+	INSECURE=1 $(MAKE) marblerun-manifest || true
 	@echo "Starting gateway..."
 	OE_SIMULATION=1 go run ./cmd/gateway
 
@@ -170,7 +187,8 @@ dev-gateway: ## Run gateway in development mode
 	OE_SIMULATION=1 go run ./cmd/gateway
 
 lint: ## Run linter
-	golangci-lint run ./...
+	@test -x $(GOLANGCI_LINT) || (echo "Installing golangci-lint..." && GOBIN=$(GOBIN) go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION))
+	$(GOLANGCI_LINT) run ./...
 
 fmt: ## Format code
 	go fmt ./...
@@ -218,7 +236,7 @@ docs: ## Generate documentation
 
 version: ## Show version
 	@echo "Neo Service Layer v1.0.0"
-	@echo "MarbleRun + EGo + Supabase + Netlify"
+	@echo "MarbleRun + EGo + Supabase + Vercel"
 
 install-tools: ## Install development tools
 	@echo "Installing development tools..."

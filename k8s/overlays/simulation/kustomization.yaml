@@ -10,17 +10,14 @@ resources:
 patches:
   - patch: |-
       - op: replace
-        path: /spec/template/spec/containers/0/env
-        value:
-          - name: EDG_MARBLE_COORDINATOR_ADDR
-            value: "marblerun-coordinator.marblerun:2001"
-          - name: EDG_MARBLE_TYPE
-            value: "$(MARBLE_TYPE)"
-          - name: OE_SIMULATION
-            value: "1"
+        path: /data/OE_SIMULATION
+        value: "1"
     target:
-      kind: Deployment
-      labelSelector: "marblerun/inject=true"
+      kind: ConfigMap
+      name: service-layer-config
 
-commonLabels:
-  environment: simulation
+labels:
+  - includeSelectors: true
+    includeTemplates: true
+    pairs:
+      environment: simulation

@@ -1,15 +1,30 @@
 package chain
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"math/big"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 )
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func newResponse(payload []byte) *http.Response {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(bytes.NewReader(payload)),
+	}
+}
 
 func TestNewClient(t *testing.T) {
 	tests := []struct {
@@ -40,10 +55,14 @@ func TestNewClient(t *testing.T) {
 }
 
 func TestClientCall(t *testing.T) {
-	// Create mock server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client, err := NewClient(Config{RPCURL: "http://example"})
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+
+	client.httpClient.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		var req RPCRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req)
 
 		resp := RPCResponse{
 			JSONRPC: "2.0",
@@ -59,14 +78,9 @@ func TestClientCall(t *testing.T) {
 			resp.Error = &RPCError{Code: -1, Message: "unknown method"}
 		}
 
-		json.NewEncoder(w).Encode(resp)
-	}))
-	defer server.Close()
-
-	client, err := NewClient(Config{RPCURL: server.URL})
-	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
-	}
+		payload, _ := json.Marshal(resp)
+		return newResponse(payload), nil
+	})
 
 	ctx := context.Background()
 
@@ -84,17 +98,12 @@ func TestClientCall(t *testing.T) {
 }
 
 func TestGetBlockCount(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := RPCResponse{
-			JSONRPC: "2.0",
-			ID:      1,
-			Result:  json.RawMessage(`12345`),
-		}
-		json.NewEncoder(w).Encode(resp)
-	}))
-	defer server.Close()
-
-	client, _ := NewClient(Config{RPCURL: server.URL})
+	client, _ := NewClient(Config{RPCURL: "http://example"})
+	client.httpClient.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		resp := RPCResponse{JSONRPC: "2.0", ID: 1, Result: json.RawMessage(`12345`)}
+		payload, _ := json.Marshal(resp)
+		return newResponse(payload), nil
+	})
 	ctx := context.Background()
 
 	count, err := client.GetBlockCount(ctx)
@@ -107,7 +116,8 @@ func TestGetBlockCount(t *testing.T) {
 }
 
 func TestInvokeFunction(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client, _ := NewClient(Config{RPCURL: "http://example"})
+	client.httpClient.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		resp := RPCResponse{
 			JSONRPC: "2.0",
 			ID:      1,
@@ -118,11 +128,9 @@ func TestInvokeFunction(t *testing.T) {
 				"stack": [{"type": "Integer", "value": "42"}]
 			}`),
 		}
-		json.NewEncoder(w).Encode(resp)
-	}))
-	defer server.Close()
-
-	client, _ := NewClient(Config{RPCURL: server.URL})
+		payload, _ := json.Marshal(resp)
+		return newResponse(payload), nil
+	})
 	ctx := context.Background()
 
 	result, err := client.InvokeFunction(ctx, "0x1234", "test", nil)
@@ -228,29 +236,33 @@ func TestParseByteArray(t *testing.T) {
 
 func TestSendRawTransactionAndWait(t *testing.T) {
 	callCount := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+	client, _ := NewClient(Config{RPCURL: "http://example"})
+	client.httpClient.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		var req RPCRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req)
 		callCount++
 
+		resp := RPCResponse{JSONRPC: "2.0", ID: req.ID}
 		switch req.Method {
 		case "sendrawtransaction":
-			json.NewEncoder(w).Encode(RPCResponse{JSONRPC: "2.0", ID: req.ID, Result: json.RawMessage(`{"hash":"0xabc"}`)})
+			resp.Result = json.RawMessage(`{"hash":"0xabc"}`)
 		case "getapplicationlog":
 			if callCount < 3 {
-				json.NewEncoder(w).Encode(RPCResponse{JSONRPC: "2.0", ID: req.ID, Error: &RPCError{Code: -100, Message: "Unknown transaction"}})
-				return
+				resp.Error = &RPCError{Code: -100, Message: "Unknown transaction"}
+				break
 			}
 			log := ApplicationLog{TxID: "0xabc", Executions: []Execution{{VMState: "HALT"}}}
 			raw, _ := json.Marshal(log)
-			json.NewEncoder(w).Encode(RPCResponse{JSONRPC: "2.0", ID: req.ID, Result: raw})
+			resp.Result = raw
 		default:
-			json.NewEncoder(w).Encode(RPCResponse{JSONRPC: "2.0", ID: req.ID, Error: &RPCError{Code: -1, Message: "unknown"}})
+			resp.Error = &RPCError{Code: -1, Message: "unknown"}
 		}
-	}))
-	defer server.Close()
 
-	client, _ := NewClient(Config{RPCURL: server.URL})
+		payload, _ := json.Marshal(resp)
+		return newResponse(payload), nil
+	})
+
 	ctx := context.Background()
 	log, err := client.SendRawTransactionAndWait(ctx, "deadbeef", time.Millisecond*10, time.Second)
 	if err != nil {
@@ -262,18 +274,22 @@ func TestSendRawTransactionAndWait(t *testing.T) {
 }
 
 func TestWaitForApplicationLogTimeout(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client, _ := NewClient(Config{RPCURL: "http://example"})
+	client.httpClient.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		var req RPCRequest
-		json.NewDecoder(r.Body).Decode(&req)
-		if req.Method == "getapplicationlog" {
-			json.NewEncoder(w).Encode(RPCResponse{JSONRPC: "2.0", ID: req.ID, Error: &RPCError{Code: -100, Message: "Unknown transaction"}})
-			return
-		}
-		json.NewEncoder(w).Encode(RPCResponse{JSONRPC: "2.0", ID: req.ID, Result: json.RawMessage(`{"hash":"0xabc"}`)})
-	}))
-	defer server.Close()
+		_ = json.NewDecoder(r.Body).Decode(&req)
 
-	client, _ := NewClient(Config{RPCURL: server.URL})
+		resp := RPCResponse{JSONRPC: "2.0", ID: req.ID}
+		if req.Method == "getapplicationlog" {
+			resp.Error = &RPCError{Code: -100, Message: "Unknown transaction"}
+		} else {
+			resp.Result = json.RawMessage(`{"hash":"0xabc"}`)
+		}
+
+		payload, _ := json.Marshal(resp)
+		return newResponse(payload), nil
+	})
+
 	wctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*50)
 	defer cancel()
 	_, err := client.WaitForApplicationLog(wctx, "0xabc", time.Millisecond*10)

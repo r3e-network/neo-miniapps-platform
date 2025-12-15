@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/database"
+	"github.com/R3E-Network/service_layer/internal/testutil"
 )
 
 // =============================================================================
@@ -20,7 +21,7 @@ import (
 // newTestRepository creates a repository with a mock HTTP server.
 func newTestRepository(t *testing.T, handler http.HandlerFunc) (*Repository, *httptest.Server) {
 	t.Helper()
-	server := httptest.NewServer(handler)
+	server := testutil.NewHTTPTestServer(t, handler)
 	client, err := database.NewClient(database.Config{
 		URL:        server.URL,
 		ServiceKey: "test-api-key",

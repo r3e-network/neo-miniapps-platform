@@ -18,7 +18,7 @@ const (
 	ErrCodeInvalidSignature ErrorCode = "AUTH_1004"
 
 	// Authorization errors (2xxx)
-	ErrCodeForbidden        ErrorCode = "AUTHZ_2001"
+	ErrCodeForbidden         ErrorCode = "AUTHZ_2001"
 	ErrCodeInsufficientFunds ErrorCode = "AUTHZ_2002"
 	ErrCodeOwnershipRequired ErrorCode = "AUTHZ_2003"
 
@@ -34,17 +34,17 @@ const (
 	ErrCodeConflict      ErrorCode = "RES_4003"
 
 	// Service errors (5xxx)
-	ErrCodeInternal         ErrorCode = "SVC_5001"
-	ErrCodeDatabaseError    ErrorCode = "SVC_5002"
-	ErrCodeBlockchainError  ErrorCode = "SVC_5003"
-	ErrCodeExternalAPI      ErrorCode = "SVC_5004"
-	ErrCodeTimeout          ErrorCode = "SVC_5005"
+	ErrCodeInternal          ErrorCode = "SVC_5001"
+	ErrCodeDatabaseError     ErrorCode = "SVC_5002"
+	ErrCodeBlockchainError   ErrorCode = "SVC_5003"
+	ErrCodeExternalAPI       ErrorCode = "SVC_5004"
+	ErrCodeTimeout           ErrorCode = "SVC_5005"
 	ErrCodeRateLimitExceeded ErrorCode = "SVC_5006"
 
 	// Cryptographic errors (6xxx)
-	ErrCodeEncryptionFailed ErrorCode = "CRYPTO_6001"
-	ErrCodeDecryptionFailed ErrorCode = "CRYPTO_6002"
-	ErrCodeSigningFailed    ErrorCode = "CRYPTO_6003"
+	ErrCodeEncryptionFailed   ErrorCode = "CRYPTO_6001"
+	ErrCodeDecryptionFailed   ErrorCode = "CRYPTO_6002"
+	ErrCodeSigningFailed      ErrorCode = "CRYPTO_6003"
 	ErrCodeVerificationFailed ErrorCode = "CRYPTO_6004"
 
 	// TEE errors (7xxx)
@@ -157,11 +157,11 @@ func InvalidFormat(field, expected string) *ServiceError {
 		WithDetails("expected", expected)
 }
 
-func OutOfRange(field string, min, max interface{}) *ServiceError {
+func OutOfRange(field string, minValue, maxValue interface{}) *ServiceError {
 	return New(ErrCodeOutOfRange, "Value out of range", http.StatusBadRequest).
 		WithDetails("field", field).
-		WithDetails("min", min).
-		WithDetails("max", max)
+		WithDetails("min", minValue).
+		WithDetails("max", maxValue)
 }
 
 // Resource Errors

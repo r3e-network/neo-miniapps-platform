@@ -1,20 +1,15 @@
 import { Server, ExternalLink } from 'lucide-react';
 
 const services = [
-  { id: 'neooracle', name: 'NeoOracle', description: 'Fetch external data securely', status: 'active' },
-  { id: 'neorand', name: 'NeoRand', description: 'Verifiable random function', status: 'active' },
-  { id: 'neovault', name: 'NeoVault', description: 'Privacy-preserving transactions', status: 'active' },
-  { id: 'neostore', name: 'NeoStore', description: 'Secure secret management', status: 'active' },
-  { id: 'neofeeds', name: 'NeoFeeds', description: 'Price feed aggregation', status: 'active' },
-  { id: 'gasbank', name: 'GasBank', description: 'Gas fee management', status: 'active' },
-  { id: 'neoflow', name: 'NeoFlow', description: 'Task neoflow', status: 'active' },
-  { id: 'neocompute', name: 'NeoCompute', description: 'NeoCompute compute', status: 'active' },
-  { id: 'accounts', name: 'Accounts', description: 'User account management', status: 'active' },
-  { id: 'ccip', name: 'CCIP', description: 'Cross-chain interoperability', status: 'active' },
-  { id: 'datalink', name: 'DataLink', description: 'Data linking service', status: 'active' },
-  { id: 'datastreams', name: 'DataStreams', description: 'Real-time data streams', status: 'active' },
-  { id: 'dta', name: 'DTA', description: 'Data trust authority', status: 'active' },
-  { id: 'cre', name: 'CRE', description: 'Chainlink runtime environment', status: 'active' },
+  { id: 'neooracle', name: 'NeoOracle', description: 'Allowlisted HTTP fetch with TEE proofs', status: 'active' },
+  { id: 'neorand', name: 'NeoRand', description: 'Verifiable randomness (VRF) with proofs', status: 'active' },
+  { id: 'neovault', name: 'NeoVault', description: 'Privacy-preserving transactions and dispute proofs', status: 'active' },
+  { id: 'neostore', name: 'NeoStore', description: 'Encrypted secrets & permissioned injection', status: 'active' },
+  { id: 'neofeeds', name: 'NeoFeeds', description: 'Price feed aggregation & signed updates', status: 'active' },
+  { id: 'neoflow', name: 'NeoFlow', description: 'Trigger-based automation & webhooks', status: 'active' },
+  { id: 'neocompute', name: 'NeoCompute', description: 'TEE-secured JavaScript execution', status: 'active' },
+  { id: 'neoaccounts', name: 'NeoAccounts', description: 'HD-derived account pool & signing', status: 'active' },
+  { id: 'gasbank', name: 'GasBank', description: 'Off-chain fee balance management (via Gateway)', status: 'active' },
 ];
 
 export function Services() {

@@ -39,7 +39,6 @@ The NeoAccounts Marble service manages a pool of Neo N3 accounts derived from a 
 | File | Purpose |
 |------|---------|
 | `service.go` | Service initialization, key derivation |
-| `lifecycle.go` | Service lifecycle (Start/Stop) |
 | `pool.go` | Pool management, request/release |
 | `signing.go` | Transaction signing |
 | `masterkey.go` | Master key handling |
@@ -47,6 +46,8 @@ The NeoAccounts Marble service manages a pool of Neo N3 accounts derived from a 
 | `handlers.go` | HTTP request handlers |
 | `api.go` | Route registration |
 | `types.go` | Request/response types |
+
+Lifecycle is handled by the shared `commonservice.BaseService` (start/stop hooks, workers, standard routes).
 
 ## Key Components
 

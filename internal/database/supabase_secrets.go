@@ -1,6 +1,6 @@
-// Deprecated: This file is deprecated. Use services/neostore/supabase package instead.
-// This file is kept for backward compatibility with existing code that uses
-// database.RepositoryInterface. New code should use:
+// Backward compatibility: secrets operations moved to `services/neostore/supabase`.
+// This file is kept for compatibility with existing code that uses
+// `database.RepositoryInterface`. New code should use:
 //
 //	import secretssupabase "github.com/R3E-Network/service_layer/services/neostore/supabase"
 //	secretsRepo := secretssupabase.NewRepository(baseRepo)

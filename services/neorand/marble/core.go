@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/crypto"
 	"github.com/google/uuid"
+
+	"github.com/R3E-Network/service_layer/internal/crypto"
 )
 
 // =============================================================================
@@ -18,6 +19,13 @@ import (
 
 // GenerateRandomness generates verifiable random numbers.
 func (s *Service) GenerateRandomness(ctx context.Context, seed string, numWords int) (*DirectRandomResponse, error) {
+	if numWords <= 0 {
+		numWords = 1
+	}
+	if numWords > MaxNumWords {
+		numWords = MaxNumWords
+	}
+
 	seedBytes, err := hex.DecodeString(seed)
 	if err != nil {
 		seedBytes = []byte(seed)
@@ -32,7 +40,9 @@ func (s *Service) GenerateRandomness(ctx context.Context, seed string, numWords 
 	// Generate multiple random words from the VRF output
 	randomWords := make([]string, numWords)
 	for i := 0; i < numWords; i++ {
-		wordInput := append(vrfProof.Output, byte(i))
+		wordInput := make([]byte, 0, len(vrfProof.Output)+1)
+		wordInput = append(wordInput, vrfProof.Output...)
+		wordInput = append(wordInput, byte(i))
 		wordHash := crypto.Hash256(wordInput)
 		randomWords[i] = hex.EncodeToString(wordHash)
 	}

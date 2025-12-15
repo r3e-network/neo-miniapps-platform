@@ -33,11 +33,12 @@ The NeoCompute Marble service implements secure JavaScript execution:
 | File | Purpose |
 |------|---------|
 | `service.go` | Service initialization, job management |
-| `lifecycle.go` | Service lifecycle (Start/Stop) |
 | `core.go` | Script execution, goja runtime |
 | `handlers.go` | HTTP request handlers |
 | `api.go` | Route registration |
 | `types.go` | Request/response types |
+
+Lifecycle is handled by the shared `commonservice.BaseService` (start/stop hooks, workers, standard routes).
 
 ## Key Components
 
@@ -210,7 +211,8 @@ POST /execute
 |---------|---------|
 | `internal/crypto` | AES-GCM, HMAC, hashing |
 | `internal/marble` | MarbleRun TEE utilities |
-| `internal/database` | Secrets access |
+| `internal/secretstore` | NeoStore secret fetch over mTLS |
+| `internal/database` | Framework DB access (optional) |
 | `services/common/service` | Base service framework |
 
 ### External Packages

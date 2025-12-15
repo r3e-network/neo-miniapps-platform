@@ -44,8 +44,8 @@ type FeedConfig struct {
 	Enabled        bool          `json:"enabled" yaml:"enabled"`                                     // Whether feed is active
 }
 
-// NeoFeedsConfig is the root configuration for the neofeeds service.
-type NeoFeedsConfig struct {
+// FeedsConfig is the root configuration for the neofeeds service.
+type FeedsConfig struct {
 	Version        string         `json:"version" yaml:"version"`
 	Sources        []SourceConfig `json:"sources" yaml:"sources"`
 	Feeds          []FeedConfig   `json:"feeds" yaml:"feeds"`
@@ -53,14 +53,19 @@ type NeoFeedsConfig struct {
 	UpdateInterval time.Duration  `json:"update_interval,omitempty" yaml:"update_interval,omitempty"` // Global update interval
 }
 
+// NeoFeedsConfig is kept for backward compatibility.
+//
+//revive:disable-next-line:exported
+type NeoFeedsConfig = FeedsConfig
+
 // LoadConfigFromFile loads configuration from a JSON or YAML file.
-func LoadConfigFromFile(path string) (*NeoFeedsConfig, error) {
+func LoadConfigFromFile(path string) (*FeedsConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read config file: %w", err)
 	}
 
-	var cfg NeoFeedsConfig
+	var cfg FeedsConfig
 
 	// Try YAML first (also handles JSON)
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
@@ -79,7 +84,7 @@ func LoadConfigFromFile(path string) (*NeoFeedsConfig, error) {
 }
 
 // Validate validates the configuration and sets defaults.
-func (c *NeoFeedsConfig) Validate() error {
+func (c *FeedsConfig) Validate() error {
 	if len(c.Sources) == 0 {
 		return fmt.Errorf("at least one source required")
 	}
@@ -135,7 +140,7 @@ func (c *NeoFeedsConfig) Validate() error {
 }
 
 // GetSource returns a source by ID.
-func (c *NeoFeedsConfig) GetSource(id string) *SourceConfig {
+func (c *FeedsConfig) GetSource(id string) *SourceConfig {
 	for i := range c.Sources {
 		if c.Sources[i].ID == id {
 			return &c.Sources[i]
@@ -145,7 +150,7 @@ func (c *NeoFeedsConfig) GetSource(id string) *SourceConfig {
 }
 
 // GetFeed returns a feed by ID.
-func (c *NeoFeedsConfig) GetFeed(id string) *FeedConfig {
+func (c *FeedsConfig) GetFeed(id string) *FeedConfig {
 	for i := range c.Feeds {
 		if c.Feeds[i].ID == id {
 			return &c.Feeds[i]
@@ -155,11 +160,12 @@ func (c *NeoFeedsConfig) GetFeed(id string) *FeedConfig {
 }
 
 // GetEnabledFeeds returns all enabled feeds.
-func (c *NeoFeedsConfig) GetEnabledFeeds() []FeedConfig {
+func (c *FeedsConfig) GetEnabledFeeds() []FeedConfig {
 	var feeds []FeedConfig
-	for _, f := range c.Feeds {
-		if f.Enabled {
-			feeds = append(feeds, f)
+	for i := range c.Feeds {
+		feed := &c.Feeds[i]
+		if feed.Enabled {
+			feeds = append(feeds, *feed)
 		}
 	}
 	return feeds
@@ -168,8 +174,8 @@ func (c *NeoFeedsConfig) GetEnabledFeeds() []FeedConfig {
 // DefaultConfig returns the default configuration.
 // Chainlink feeds on Arbitrum: BTC, ETH, LINK, SOL, BNB, DOGE, ADA, AVAX, LTC, UNI, XRP
 // Binance-only feeds: NEO, GAS, TRX, HYPE, XMR, ZEC, SUI, BCH, ASTR
-func DefaultConfig() *NeoFeedsConfig {
-	return &NeoFeedsConfig{
+func DefaultConfig() *FeedsConfig {
+	return &FeedsConfig{
 		Version: "1.0",
 		Sources: []SourceConfig{
 			{
@@ -212,11 +218,11 @@ func DefaultConfig() *NeoFeedsConfig {
 }
 
 // ToJSON serializes config to JSON.
-func (c *NeoFeedsConfig) ToJSON() ([]byte, error) {
+func (c *FeedsConfig) ToJSON() ([]byte, error) {
 	return json.MarshalIndent(c, "", "  ")
 }
 
 // ToYAML serializes config to YAML.
-func (c *NeoFeedsConfig) ToYAML() ([]byte, error) {
+func (c *FeedsConfig) ToYAML() ([]byte, error) {
 	return yaml.Marshal(c)
 }

@@ -12,6 +12,7 @@ func (s *Service) registerRoutes() {
 	s.BaseService.RegisterStandardRoutes()
 
 	router := s.Router()
+	router.HandleFunc("/master-key", s.handleMasterKey).Methods("GET")
 	router.HandleFunc("/pool-info", s.handleInfo).Methods("GET")
 	router.HandleFunc("/accounts", s.handleListAccounts).Methods("GET")
 	router.HandleFunc("/request", s.handleRequestAccounts).Methods("POST")

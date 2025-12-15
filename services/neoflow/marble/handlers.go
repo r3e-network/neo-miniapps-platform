@@ -4,10 +4,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/httputil"
-	neoflowsupabase "github.com/R3E-Network/service_layer/services/neoflow/supabase"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+
+	"github.com/R3E-Network/service_layer/internal/httputil"
+	neoflowsupabase "github.com/R3E-Network/service_layer/services/neoflow/supabase"
 )
 
 func (s *Service) handleListTriggers(w http.ResponseWriter, r *http.Request) {
@@ -23,7 +24,8 @@ func (s *Service) handleListTriggers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	responses := make([]TriggerResponse, len(triggers))
-	for i, t := range triggers {
+	for i := range triggers {
+		t := &triggers[i]
 		responses[i] = TriggerResponse{
 			ID:          t.ID,
 			Name:        t.Name,

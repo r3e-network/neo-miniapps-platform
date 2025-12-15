@@ -30,12 +30,19 @@
 package neovaultmarble
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	"math/big"
 	"sync"
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/chain"
+	slcrypto "github.com/R3E-Network/service_layer/internal/crypto"
 	"github.com/R3E-Network/service_layer/internal/database"
 	"github.com/R3E-Network/service_layer/internal/marble"
+	"github.com/R3E-Network/service_layer/internal/runtime"
 	commonservice "github.com/R3E-Network/service_layer/services/common/service"
 	neovaultsupabase "github.com/R3E-Network/service_layer/services/neovault/supabase"
 )
@@ -117,6 +124,9 @@ type Service struct {
 	chainClient  *chain.Client
 	teeFulfiller *chain.TEEFulfiller
 	gateway      *chain.GatewayContract
+
+	// TxSubmitter + GlobalSigner integration
+	serviceAdapter *ServiceAdapter
 }
 
 // GetTokenConfig returns the configuration for a specific token.
@@ -144,7 +154,7 @@ func (s *Service) GetSupportedTokens() []string {
 type Config struct {
 	Marble               *marble.Marble
 	DB                   database.RepositoryInterface
-	NeoVaultRepo            neovaultsupabase.RepositoryInterface
+	NeoVaultRepo         neovaultsupabase.RepositoryInterface
 	ChainClient          *chain.Client
 	TEEFulfiller         *chain.TEEFulfiller
 	Gateway              *chain.GatewayContract
@@ -154,13 +164,28 @@ type Config struct {
 }
 
 // New creates a new NeoVault service.
-func New(cfg Config) (*Service, error) {
-	base := commonservice.NewBase(commonservice.BaseConfig{
-		ID:      ServiceID,
-		Name:    ServiceName,
-		Version: Version,
-		Marble:  cfg.Marble,
-		DB:      cfg.DB,
+func New(cfg *Config) (*Service, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config cannot be nil")
+	}
+	if cfg.Marble == nil {
+		return nil, fmt.Errorf("marble is required")
+	}
+
+	strict := runtime.StrictIdentityMode() || cfg.Marble.IsEnclave()
+
+	requiredSecrets := []string(nil)
+	if strict {
+		requiredSecrets = []string{"NEOVAULT_MASTER_KEY"}
+	}
+
+	base := commonservice.NewBase(&commonservice.BaseConfig{
+		ID:              ServiceID,
+		Name:            ServiceName,
+		Version:         Version,
+		Marble:          cfg.Marble,
+		DB:              cfg.DB,
+		RequiredSecrets: requiredSecrets,
 	})
 
 	// Use provided token configs or defaults
@@ -184,7 +209,16 @@ func New(cfg Config) (*Service, error) {
 	// UPGRADE SAFETY: NEOVAULT_MASTER_KEY is injected by MarbleRun Coordinator from
 	// manifest-defined secrets. It is used only for TEE HMAC signatures on
 	// request/completion proofs (account keys are managed by the neoaccounts service).
-	if key, ok := cfg.Marble.Secret("NEOVAULT_MASTER_KEY"); ok {
+	if key, ok := cfg.Marble.Secret("NEOVAULT_MASTER_KEY"); ok && len(key) >= 32 {
+		s.masterKey = key
+	} else if strict {
+		return nil, fmt.Errorf("neovault: NEOVAULT_MASTER_KEY is required and must be at least 32 bytes")
+	} else {
+		base.Logger().WithFields(nil).Warn("NEOVAULT_MASTER_KEY not configured; generating ephemeral key (development/testing only)")
+		key, err := slcrypto.GenerateRandomBytes(32)
+		if err != nil {
+			return nil, fmt.Errorf("neovault: generate fallback master key: %w", err)
+		}
 		s.masterKey = key
 	}
 
@@ -195,10 +229,67 @@ func New(cfg Config) (*Service, error) {
 		}
 	}
 
-	// Register standard /health route (we keep custom /info handler for async pool info)
-	base.RegisterStandardRoutes()
+	base.WithHydrate(func(ctx context.Context) error {
+		s.resumeRequests(ctx)
+		return nil
+	})
+	base.AddWorker(s.runMixingLoop)
+	base.AddTickerWorker(30*time.Second, func(ctx context.Context) error {
+		s.checkDeliveries(ctx)
+		return nil
+	}, commonservice.WithTickerWorkerName("delivery-checker"))
+
+	// Register service-specific routes, then standard routes so custom /info wins.
 	s.registerRoutes()
+	base.RegisterStandardRoutes()
 
 	return s, nil
 }
 
+// resumeRequests loads requests in deposited/mixing state and resumes processing.
+func (s *Service) resumeRequests(ctx context.Context) {
+	if s.repo == nil {
+		return
+	}
+
+	// Kick off mixing for deposited requests
+	if deposited, err := s.repo.ListByStatus(ctx, string(StatusDeposited)); err == nil {
+		for i := range deposited {
+			req := RequestFromRecord(&deposited[i])
+			go s.startMixing(ctx, req)
+		}
+	}
+}
+
+// submitCompletionProofOnChain submits the completion proof to the on-chain contract.
+// This is called ONLY during dispute resolution.
+func (s *Service) submitCompletionProofOnChain(ctx context.Context, request *MixRequest) (string, error) {
+	if s.teeFulfiller == nil {
+		return "", fmt.Errorf("TEE fulfiller not configured")
+	}
+
+	proof := request.CompletionProof
+	if proof == nil {
+		return "", fmt.Errorf("no completion proof")
+	}
+
+	// Serialize proof for on-chain submission
+	proofBytes, err := json.Marshal(proof)
+	if err != nil {
+		return "", fmt.Errorf("marshal proof: %w", err)
+	}
+
+	// Parse request ID as big.Int for contract call
+	requestIDBigInt := new(big.Int)
+	// Use hash of request ID as numeric identifier
+	idHash := sha256.Sum256([]byte(request.ID))
+	requestIDBigInt.SetBytes(idHash[:8])
+
+	// Submit via TEE fulfiller (this is the ONLY on-chain submission in normal neovault flow)
+	txHash, err := s.teeFulfiller.FulfillRequest(ctx, requestIDBigInt, proofBytes)
+	if err != nil {
+		return "", fmt.Errorf("fulfill request: %w", err)
+	}
+
+	return txHash, nil
+}

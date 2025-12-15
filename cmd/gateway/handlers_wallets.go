@@ -1,12 +1,13 @@
 package main
 
 import (
-	"encoding/json"
 	"net/http"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/database"
 	"github.com/gorilla/mux"
+
+	"github.com/R3E-Network/service_layer/internal/database"
+	"github.com/R3E-Network/service_layer/internal/httputil"
 )
 
 // =============================================================================
@@ -16,20 +17,28 @@ import (
 func listWalletsHandler(db *database.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Header.Get("X-User-ID")
+		if userID == "" {
+			jsonError(w, "missing user id", http.StatusUnauthorized)
+			return
+		}
+
 		wallets, err := db.GetUserWallets(r.Context(), userID)
 		if err != nil {
 			jsonError(w, "failed to get wallets", http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(wallets)
+		httputil.WriteJSON(w, http.StatusOK, wallets)
 	}
 }
 
 func addWalletHandler(db *database.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Header.Get("X-User-ID")
+		if userID == "" {
+			jsonError(w, "missing user id", http.StatusUnauthorized)
+			return
+		}
 
 		var req struct {
 			Address   string `json:"address"`
@@ -38,8 +47,7 @@ func addWalletHandler(db *database.Repository) http.HandlerFunc {
 			Signature string `json:"signature"`
 			Message   string `json:"message"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			jsonError(w, "invalid request", http.StatusBadRequest)
+		if !httputil.DecodeJSON(w, r, &req) {
 			return
 		}
 
@@ -69,15 +77,18 @@ func addWalletHandler(db *database.Repository) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(wallet)
+		httputil.WriteJSON(w, http.StatusCreated, wallet)
 	}
 }
 
 func setPrimaryWalletHandler(db *database.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Header.Get("X-User-ID")
+		if userID == "" {
+			jsonError(w, "missing user id", http.StatusUnauthorized)
+			return
+		}
+
 		walletID := mux.Vars(r)["id"]
 
 		if err := db.SetPrimaryWallet(r.Context(), userID, walletID); err != nil {
@@ -85,14 +96,18 @@ func setPrimaryWalletHandler(db *database.Repository) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
 }
 
 func verifyWalletHandler(db *database.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Header.Get("X-User-ID")
+		if userID == "" {
+			jsonError(w, "missing user id", http.StatusUnauthorized)
+			return
+		}
+
 		walletID := mux.Vars(r)["id"]
 
 		var req struct {
@@ -100,8 +115,7 @@ func verifyWalletHandler(db *database.Repository) http.HandlerFunc {
 			Signature string `json:"signature"`
 			Message   string `json:"message"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			jsonError(w, "invalid request", http.StatusBadRequest)
+		if !httputil.DecodeJSON(w, r, &req) {
 			return
 		}
 
@@ -128,14 +142,18 @@ func verifyWalletHandler(db *database.Repository) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "verified"})
+		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "verified"})
 	}
 }
 
 func deleteWalletHandler(db *database.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Header.Get("X-User-ID")
+		if userID == "" {
+			jsonError(w, "missing user id", http.StatusUnauthorized)
+			return
+		}
+
 		walletID := mux.Vars(r)["id"]
 
 		if err := db.DeleteWallet(r.Context(), walletID, userID); err != nil {

@@ -3,3 +3,4 @@ kind: Kustomization
 
 resources:
   - coordinator.yaml
+  - sgx-qcnl-configmap.yaml

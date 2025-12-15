@@ -1,17 +1,18 @@
 package main
 
 import (
-	"encoding/json"
-	"io"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/database"
 	"github.com/gorilla/mux"
+
+	"github.com/R3E-Network/service_layer/internal/database"
+	internalhttputil "github.com/R3E-Network/service_layer/internal/httputil"
+	"github.com/R3E-Network/service_layer/internal/marble"
 )
 
 // =============================================================================
@@ -21,28 +22,35 @@ import (
 func getGasBankAccountHandler(db *database.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Header.Get("X-User-ID")
+		if userID == "" {
+			jsonError(w, "missing user id", http.StatusUnauthorized)
+			return
+		}
+
 		account, err := db.GetOrCreateGasBankAccount(r.Context(), userID)
 		if err != nil {
 			jsonError(w, "failed to get account", http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(account)
+		internalhttputil.WriteJSON(w, http.StatusOK, account)
 	}
 }
 
 func createDepositHandler(db *database.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Header.Get("X-User-ID")
+		if userID == "" {
+			jsonError(w, "missing user id", http.StatusUnauthorized)
+			return
+		}
 
 		var req struct {
 			Amount      int64  `json:"amount"`
 			FromAddress string `json:"from_address"`
 			TxHash      string `json:"tx_hash"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			jsonError(w, "invalid request", http.StatusBadRequest)
+		if !internalhttputil.DecodeJSON(w, r, &req) {
 			return
 		}
 
@@ -68,29 +76,36 @@ func createDepositHandler(db *database.Repository) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(deposit)
+		internalhttputil.WriteJSON(w, http.StatusCreated, deposit)
 	}
 }
 
 func listDepositsHandler(db *database.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Header.Get("X-User-ID")
+		if userID == "" {
+			jsonError(w, "missing user id", http.StatusUnauthorized)
+			return
+		}
+
 		deposits, err := db.GetDepositRequests(r.Context(), userID, 50)
 		if err != nil {
 			jsonError(w, "failed to get deposits", http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(deposits)
+		internalhttputil.WriteJSON(w, http.StatusOK, deposits)
 	}
 }
 
 func listTransactionsHandler(db *database.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Header.Get("X-User-ID")
+		if userID == "" {
+			jsonError(w, "missing user id", http.StatusUnauthorized)
+			return
+		}
+
 		account, err := db.GetGasBankAccount(r.Context(), userID)
 		if err != nil {
 			jsonError(w, "account not found", http.StatusNotFound)
@@ -103,28 +118,51 @@ func listTransactionsHandler(db *database.Repository) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(txs)
+		internalhttputil.WriteJSON(w, http.StatusOK, txs)
 	}
 }
 
 // Service endpoint configuration from environment
 var serviceEndpoints = map[string]string{
-	"vrf":          getEnvOrDefault("VRF_SERVICE_URL", "http://localhost:8081"),
-	"neovault":        getEnvOrDefault("NEOVAULT_SERVICE_URL", "http://localhost:8082"),
-	"neofeeds":    getEnvOrDefault("NEOFEEDS_SERVICE_URL", "http://localhost:8083"),
-	"neoflow":   getEnvOrDefault("NEOFLOW_SERVICE_URL", "http://localhost:8084"),
-	"neocompute": getEnvOrDefault("NEOCOMPUTE_SERVICE_URL", "http://localhost:8085"),
+	// Canonical service IDs.
+	"neorand":     getEnvFirst([]string{"NEORAND_SERVICE_URL", "VRF_SERVICE_URL"}, "http://localhost:8081"),
+	"neovault":    getEnvFirst([]string{"NEOVAULT_SERVICE_URL", "MIXER_SERVICE_URL"}, "http://localhost:8082"),
+	"neofeeds":    getEnvFirst([]string{"NEOFEEDS_SERVICE_URL", "DATAFEEDS_SERVICE_URL"}, "http://localhost:8083"),
+	"neoflow":     getEnvFirst([]string{"NEOFLOW_SERVICE_URL", "AUTOMATION_SERVICE_URL"}, "http://localhost:8084"),
+	"neoaccounts": getEnvFirst([]string{"NEOACCOUNTS_SERVICE_URL", "ACCOUNTPOOL_SERVICE_URL"}, "http://localhost:8085"),
+	"neocompute":  getEnvFirst([]string{"NEOCOMPUTE_SERVICE_URL", "CONFIDENTIAL_SERVICE_URL"}, "http://localhost:8086"),
+	"neostore":    getEnvFirst([]string{"NEOSTORE_SERVICE_URL", "SECRETS_SERVICE_URL"}, "http://localhost:8087"),
+	"neooracle":   getEnvFirst([]string{"NEOORACLE_SERVICE_URL", "ORACLE_SERVICE_URL"}, "http://localhost:8088"),
+
+	// Backward-compatible aliases.
+	"vrf":     getEnvFirst([]string{"VRF_SERVICE_URL", "NEORAND_SERVICE_URL"}, "http://localhost:8081"),
+	"oracle":  getEnvFirst([]string{"ORACLE_SERVICE_URL", "NEOORACLE_SERVICE_URL"}, "http://localhost:8088"),
+	"secrets": getEnvFirst([]string{"SECRETS_SERVICE_URL", "NEOSTORE_SERVICE_URL"}, "http://localhost:8087"),
 }
 
-func getEnvOrDefault(key, defaultVal string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
+func getEnvFirst(keys []string, defaultVal string) string {
+	for _, key := range keys {
+		if key == "" {
+			continue
+		}
+		if val := os.Getenv(key); val != "" {
+			return val
+		}
 	}
 	return defaultVal
 }
 
-func proxyHandler(service string) http.HandlerFunc {
+func proxyHandler(service string, m *marble.Marble) http.HandlerFunc {
+	useMTLS := m != nil && m.TLSConfig() != nil
+	transport := http.DefaultTransport
+	if useMTLS {
+		if base, ok := http.DefaultTransport.(*http.Transport); ok {
+			cloned := base.Clone()
+			cloned.TLSClientConfig = m.TLSConfig().Clone()
+			transport = cloned
+		}
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		targetURL, ok := serviceEndpoints[service]
 		if !ok {
@@ -140,42 +178,95 @@ func proxyHandler(service string) http.HandlerFunc {
 
 		// Create reverse proxy
 		proxy := httputil.NewSingleHostReverseProxy(target)
+		proxy.Transport = transport
 
-		// Customize the director to set the path
-		originalDirector := proxy.Director
-		proxy.Director = func(req *http.Request) {
-			originalDirector(req)
-			path := mux.Vars(r)["path"]
-			if path != "" {
-				req.URL.Path = "/" + path
-			} else {
-				req.URL.Path = "/"
+		// Use Rewrite so we fully control forwarded headers and avoid the
+		// automatic X-Forwarded-For append logic in Director mode.
+		proxy.Director = nil
+		proxy.Rewrite = func(pr *httputil.ProxyRequest) {
+			// Never forward identity/privileged headers provided by public clients.
+			// The gateway is the trust boundary: it authenticates the user, then
+			// forwards only the derived identity and tracing metadata to internal
+			// services.
+			pr.Out.Header.Del("X-Service-ID")
+			pr.Out.Header.Del("X-Service-Token")
+			pr.Out.Header.Del("X-User-ID")
+			pr.Out.Header.Del("X-User-Role")
+			pr.Out.Header.Del("X-API-Key")
+			pr.Out.Header.Del("Authorization")
+			pr.Out.Header.Del("Cookie")
+
+			// Strip spoofable proxy headers before the default reverse proxy
+			// director appends forwarding information.
+			pr.Out.Header.Del("X-Forwarded-For")
+			pr.Out.Header.Del("X-Real-IP")
+			pr.Out.Header.Del("Forwarded")
+			pr.Out.Header.Del("X-Forwarded-Host")
+			pr.Out.Header.Del("X-Forwarded-Proto")
+
+			upstream := *target
+			if useMTLS {
+				upstream.Scheme = "https"
 			}
-			req.URL.RawQuery = r.URL.RawQuery
+			pr.SetURL(&upstream)
+			pr.Out.Host = pr.In.Host
+
+			// When running inside MarbleRun with injected TLS credentials, enforce
+			// HTTPS+mTLS for all upstream service calls regardless of the configured
+			// URL scheme. This keeps service discovery flexible while ensuring the
+			// security properties expected by the mesh.
+			path := mux.Vars(pr.In)["path"]
+			if path != "" {
+				pr.Out.URL.Path = "/" + path
+			} else {
+				pr.Out.URL.Path = "/"
+			}
+			pr.Out.URL.RawPath = ""
 
 			// Forward authentication headers
-			if userID := r.Header.Get("X-User-ID"); userID != "" {
-				req.Header.Set("X-User-ID", userID)
+			if userID := pr.In.Header.Get("X-User-ID"); userID != "" {
+				pr.Out.Header.Set("X-User-ID", userID)
 			}
-			if auth := r.Header.Get("Authorization"); auth != "" {
-				req.Header.Set("Authorization", auth)
+			if role := pr.In.Header.Get("X-User-Role"); role != "" {
+				pr.Out.Header.Set("X-User-Role", role)
+			}
+			if traceID := pr.In.Header.Get("X-Trace-ID"); traceID != "" {
+				pr.Out.Header.Set("X-Trace-ID", traceID)
+			}
+
+			// Forward the derived client IP (sanitized). This preserves accurate
+			// audit logging and rate limiting inside the service mesh while
+			// preventing spoofing from untrusted internet clients.
+			if clientIP := internalhttputil.ClientIP(pr.In); clientIP != "" {
+				pr.Out.Header.Set("X-Forwarded-For", clientIP)
+				pr.Out.Header.Set("X-Real-IP", clientIP)
 			}
 
 			// Set forwarding headers
-			req.Header.Set("X-Forwarded-Host", r.Host)
-			req.Header.Set("X-Forwarded-Proto", "https")
-			req.Header.Set("X-Gateway-Service", service)
+			pr.Out.Header.Set("X-Forwarded-Host", pr.In.Host)
+			proto := pr.In.Header.Get("X-Forwarded-Proto")
+			if proto == "" {
+				if pr.In.TLS != nil {
+					proto = "https"
+				} else {
+					proto = "http"
+				}
+			}
+			pr.Out.Header.Set("X-Forwarded-Proto", proto)
+			pr.Out.Header.Set("X-Gateway-Service", service)
 		}
 
 		// Custom error handler
 		proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadGateway)
-			json.NewEncoder(w).Encode(map[string]string{
-				"error":   "service unavailable",
+			log.Printf("gateway proxy error: service=%s err=%v", service, err)
+
+			details := map[string]string{
 				"service": service,
-				"detail":  err.Error(),
-			})
+			}
+			if !internalhttputil.StrictIdentityMode() {
+				details["detail"] = err.Error()
+			}
+			internalhttputil.WriteErrorResponse(w, r, http.StatusBadGateway, "BAD_GATEWAY", "service unavailable", details)
 		}
 
 		// Custom response modifier to handle streaming
@@ -187,61 +278,5 @@ func proxyHandler(service string) http.HandlerFunc {
 
 		// Forward the request
 		proxy.ServeHTTP(w, r)
-	}
-}
-
-// proxyWithBody handles POST/PUT requests with body forwarding
-func proxyWithBody(service string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		targetURL, ok := serviceEndpoints[service]
-		if !ok {
-			jsonError(w, "unknown service", http.StatusNotFound)
-			return
-		}
-
-		path := mux.Vars(r)["path"]
-		fullURL := targetURL
-		if path != "" {
-			fullURL = strings.TrimRight(targetURL, "/") + "/" + path
-		}
-		if r.URL.RawQuery != "" {
-			fullURL += "?" + r.URL.RawQuery
-		}
-
-		// Create new request
-		proxyReq, err := http.NewRequestWithContext(r.Context(), r.Method, fullURL, r.Body)
-		if err != nil {
-			jsonError(w, "failed to create proxy request", http.StatusInternalServerError)
-			return
-		}
-
-		// Copy headers
-		for key, values := range r.Header {
-			for _, value := range values {
-				proxyReq.Header.Add(key, value)
-			}
-		}
-		proxyReq.Header.Set("X-Gateway-Service", service)
-
-		// Send request
-		client := &http.Client{Timeout: 30 * time.Second}
-		resp, err := client.Do(proxyReq)
-		if err != nil {
-			jsonError(w, "service unavailable: "+err.Error(), http.StatusBadGateway)
-			return
-		}
-		defer resp.Body.Close()
-
-		// Copy response headers
-		for key, values := range resp.Header {
-			for _, value := range values {
-				w.Header().Add(key, value)
-			}
-		}
-		w.Header().Set("X-Proxied-By", "gateway")
-		w.WriteHeader(resp.StatusCode)
-
-		// Copy response body
-		io.Copy(w, resp.Body)
 	}
 }

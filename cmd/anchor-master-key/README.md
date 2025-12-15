@@ -13,12 +13,12 @@ go run ./cmd/anchor-master-key \
   --pubkey-hash <sha256_pubkey_hex> \
   --attest-hash <attestation_bundle_hash_hex_or_cid>
 
-# Auto-mode: fetch pubkey/hash from AccountPool
+# Auto-mode: fetch pubkey/hash from NeoAccounts (AccountPool)
 go run ./cmd/anchor-master-key \
   --rpc https://neo-rpc.example \
   --gateway 0x<gateway_script_hash> \
   --priv <admin_private_key_hex> \
-  --accountpool https://accountpool:8080 \
+  --neoaccounts https://neoaccounts:8085 \
   --attest-hash <attestation_bundle_hash_hex_or_cid>
 
 # Auto-attestation hash from bundle
@@ -26,7 +26,7 @@ go run ./cmd/anchor-master-key \
   --rpc https://neo-rpc.example \
   --gateway 0x<gateway_script_hash> \
   --priv <admin_private_key_hex> \
-  --accountpool https://accountpool:8080 \
+  --neoaccounts https://neoaccounts:8085 \
   --bundle file:///path/to/bundle.json   # SHA-256 used as attest-hash
 ```
 

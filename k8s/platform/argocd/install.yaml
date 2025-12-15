@@ -1,0 +1,26 @@
+# ArgoCD 安装说明
+#
+# 使用官方 manifest 安装 ArgoCD:
+#
+# kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.9.3/manifests/install.yaml
+#
+# 或者使用此文件作为参考 (实际应用时下载最新稳定版)
+#
+# 安装后验证:
+# kubectl get pods -n argocd
+# kubectl get svc -n argocd
+#
+# 获取初始 admin 密码:
+# kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+#
+# 端口转发访问 UI (可选):
+# kubectl port-forward svc/argocd-server -n argocd 8080:443
+#
+# 登录: https://localhost:8080
+# 用户名: admin
+# 密码: (从上面命令获取)
+
+---
+# 注意: 此文件仅作为占位符和文档
+# 实际部署应使用官方 manifest:
+# kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.9.3/manifests/install.yaml

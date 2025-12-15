@@ -66,15 +66,22 @@ type TokenStats struct {
 }
 
 // NewAccountWithBalances creates an AccountWithBalances from an Account.
-func NewAccountWithBalances(acc Account) *AccountWithBalances {
+func NewAccountWithBalances(acc *Account) *AccountWithBalances {
+	account := Account{}
+	if acc != nil {
+		account = *acc
+	}
 	return &AccountWithBalances{
-		Account:  acc,
+		Account:  account,
 		Balances: make(map[string]TokenBalance),
 	}
 }
 
 // AddBalance adds a token balance to the account.
-func (a *AccountWithBalances) AddBalance(bal AccountBalance) {
+func (a *AccountWithBalances) AddBalance(bal *AccountBalance) {
+	if bal == nil {
+		return
+	}
 	a.Balances[bal.TokenType] = TokenBalance{
 		TokenType:  bal.TokenType,
 		ScriptHash: bal.ScriptHash,

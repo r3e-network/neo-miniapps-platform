@@ -1,0 +1,142 @@
+# SGX Hardware overlay for real SGX environment
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: service-layer
+
+resources:
+  # Build on top of the production overlay, then add SGX resource limits.
+  - ../production
+
+# Patch all deployments for SGX hardware mode - only add SGX resources
+patches:
+  # Mount the AESM socket required by Open Enclave / DCAP on many SGX platforms.
+  # This is a hostPath to `/var/run/aesmd` provided by the Intel SGX runtime on the node.
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: aesmd-socket
+          hostPath:
+            path: /var/run/aesmd
+            type: Directory
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: aesmd-socket
+          mountPath: /var/run/aesmd
+
+  # Gateway SGX patch
+  - target:
+      kind: Deployment
+      name: gateway
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1enclave
+        value: "1"
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1provision
+        value: "1"
+
+  # NeoRand SGX patch
+  - target:
+      kind: Deployment
+      name: neorand
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1enclave
+        value: "1"
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1provision
+        value: "1"
+
+  # NeoVault SGX patch
+  - target:
+      kind: Deployment
+      name: neovault
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1enclave
+        value: "1"
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1provision
+        value: "1"
+
+  # NeoFeeds SGX patch
+  - target:
+      kind: Deployment
+      name: neofeeds
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1enclave
+        value: "1"
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1provision
+        value: "1"
+
+  # NeoFlow SGX patch - increased memory for enclave
+  - target:
+      kind: Deployment
+      name: neoflow
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1enclave
+        value: "1"
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1provision
+        value: "1"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "2Gi"
+
+  # NeoAccounts SGX patch
+  - target:
+      kind: Deployment
+      name: neoaccounts
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1enclave
+        value: "1"
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1provision
+        value: "1"
+
+  # NeoCompute SGX patch
+  - target:
+      kind: Deployment
+      name: neocompute
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1enclave
+        value: "1"
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1provision
+        value: "1"
+
+  # NeoStore SGX patch
+  - target:
+      kind: Deployment
+      name: neostore
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1enclave
+        value: "1"
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1provision
+        value: "1"
+
+  # NeoOracle SGX patch
+  - target:
+      kind: Deployment
+      name: neooracle
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1enclave
+        value: "1"
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1provision
+        value: "1"
+
+  # Production overlay already sets COORDINATOR_MESH_ADDR; no extra patch needed here.

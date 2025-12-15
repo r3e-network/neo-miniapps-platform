@@ -29,18 +29,22 @@ SKIP_TESTS=false
 ROLLING_UPDATE=false
 WAIT_TIMEOUT=300
 DRY_RUN=false
+SIGNING_KEY=""
+SIGNING_KEY_DIR=""
+SKIP_SIGNER_CHECK=false
+OVERLAY_PATH=""
 
 # Services to build and deploy
 SERVICES=(
     "gateway"
-    "vrf"
-    "mixer"
-    "datafeeds"
-    "automation"
-    "accountpool"
-    "confidential"
-    "secrets"
-    "oracle"
+    "neorand"
+    "neovault"
+    "neofeeds"
+    "neoflow"
+    "neoaccounts"
+    "neocompute"
+    "neostore"
+    "neooracle"
 )
 
 # =============================================================================
@@ -61,12 +65,17 @@ Commands:
 
 Options:
   --env <env>           Environment: dev, test, prod (default: dev)
-  --registry <url>      Docker registry URL (e.g., docker.io/myorg)
+  --overlay <path>      Override the kustomize overlay path (e.g. k8s/overlays/production-hardened)
+  --registry <url>      Docker registry URL (e.g., docker.io/myorg). Images will be pushed as: <registry>/service-layer/<service>:<tag>
   --push                Push images to registry after build
   --skip-build          Skip Docker image build
   --skip-tests          Skip running tests before deployment
   --rolling-update      Perform rolling update instead of recreate
   --timeout <seconds>   Wait timeout for deployments (default: 300)
+  --signing-key <path>  Enclave signing key (PEM). Required for prod builds unless images are already available.
+  --signing-key-dir <dir>
+                        Per-service signing keys named <service>.pem or <service>-private.pem (recommended for prod).
+  --skip-signer-check   Skip comparing key-derived SignerIDs against manifests/manifest.json (not recommended).
   --dry-run             Show what would be done without executing
   -h, --help            Show this help message
 
@@ -83,6 +92,9 @@ Examples:
   # Deploy to test environment
   $0 --env test deploy
 
+  # Deploy hardened production overlay
+  $0 --env prod --overlay k8s/overlays/production-hardened deploy
+
 EOF
 }
 
@@ -91,6 +103,10 @@ parse_args() {
         case $1 in
             --env)
                 ENVIRONMENT="$2"
+                shift 2
+                ;;
+            --overlay)
+                OVERLAY_PATH="$2"
                 shift 2
                 ;;
             --registry)
@@ -117,6 +133,18 @@ parse_args() {
             --timeout)
                 WAIT_TIMEOUT="$2"
                 shift 2
+                ;;
+            --signing-key)
+                SIGNING_KEY="$2"
+                shift 2
+                ;;
+            --signing-key-dir)
+                SIGNING_KEY_DIR="$2"
+                shift 2
+                ;;
+            --skip-signer-check)
+                SKIP_SIGNER_CHECK=true
+                shift
                 ;;
             --dry-run)
                 DRY_RUN=true
@@ -149,10 +177,144 @@ parse_args() {
 
     # Set registry prefix if provided
     if [ -n "$REGISTRY" ]; then
-        IMAGE_PREFIX="$REGISTRY/"
+        IMAGE_PREFIX="$REGISTRY/service-layer/"
     else
         IMAGE_PREFIX="service-layer/"
     fi
+}
+
+# =============================================================================
+# Helpers
+# =============================================================================
+default_service_binary() {
+    # Some packages keep legacy binary names for compatibility.
+    case "$1" in
+        neorand) echo "vrf" ;;
+        neoaccounts) echo "accountpool" ;;
+        *) echo "$1" ;;
+    esac
+}
+
+resolve_overlay_path() {
+    if [[ -n "$OVERLAY_PATH" ]]; then
+        echo "$OVERLAY_PATH"
+        return 0
+    fi
+    case "$ENVIRONMENT" in
+        dev) echo "k8s/overlays/simulation" ;;
+        test) echo "k8s/overlays/test" ;;
+        prod) echo "k8s/overlays/production" ;;
+        *) echo "k8s/overlays/simulation" ;;
+    esac
+}
+
+resolve_signing_key() {
+    local pkg="$1"
+    if [[ -n "$SIGNING_KEY" ]]; then
+        echo "$SIGNING_KEY"
+        return 0
+    fi
+    if [[ -n "$SIGNING_KEY_DIR" ]]; then
+        local candidates=(
+            "${SIGNING_KEY_DIR}/${pkg}.pem"
+            "${SIGNING_KEY_DIR}/${pkg}-private.pem"
+            "${SIGNING_KEY_DIR}/${pkg}.key"
+            "${SIGNING_KEY_DIR}/${pkg}-private.key"
+        )
+        local candidate
+        for candidate in "${candidates[@]}"; do
+            if [[ -f "$candidate" ]]; then
+                echo "$candidate"
+                return 0
+            fi
+        done
+    fi
+    return 1
+}
+
+ego_image() {
+    echo "ghcr.io/edgelesssys/ego-dev:v${EGO_VERSION:-1.8.0}"
+}
+
+ego_signerid() {
+    local key_path="$1"
+    if command -v ego &> /dev/null; then
+        ego signerid "$key_path"
+        return $?
+    fi
+    docker run --rm -v "${key_path}:/signing-key:ro" "$(ego_image)" ego signerid /signing-key
+}
+
+ego_signerid_from_private_key() {
+    local key_path="$1"
+
+    local signer
+    signer="$(ego_signerid "$key_path" 2>/dev/null | tr -d '\r\n' || true)"
+    if [[ -n "$signer" ]]; then
+        echo "$signer"
+        return 0
+    fi
+
+    if command -v openssl &> /dev/null; then
+        local tmp_pub
+        tmp_pub="$(mktemp -t service-layer-signingkey.pub.XXXXXX.pem)"
+        if openssl rsa -in "$key_path" -pubout -out "$tmp_pub" &>/dev/null; then
+            signer="$(ego_signerid "$tmp_pub" 2>/dev/null | tr -d '\r\n' || true)"
+        fi
+        rm -f "$tmp_pub"
+        if [[ -n "$signer" ]]; then
+            echo "$signer"
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+verify_signerids() {
+    if [[ "$SKIP_SIGNER_CHECK" == "true" ]]; then
+        log_warn "Skipping signer ID checks (--skip-signer-check)"
+        return 0
+    fi
+
+    local manifest="$PROJECT_ROOT/manifests/manifest.json"
+    if [[ ! -f "$manifest" ]]; then
+        log_error "Manifest not found: $manifest"
+        exit 1
+    fi
+
+    for pkg in "${SERVICES[@]}"; do
+        local key_path
+        if ! key_path="$(resolve_signing_key "$pkg")"; then
+            log_error "Missing signing key for ${pkg}. Provide --signing-key or --signing-key-dir."
+            exit 1
+        fi
+        if [[ ! -r "$key_path" ]]; then
+            log_error "Signing key not readable: $key_path"
+            exit 1
+        fi
+
+        local expected actual
+        expected="$(jq -r --arg pkg "$pkg" '.Packages[$pkg].SignerID' "$manifest" 2>/dev/null || true)"
+        if [[ -z "$expected" || "$expected" == "null" ]]; then
+            log_error "Manifest does not define Packages.${pkg}.SignerID"
+            exit 1
+        fi
+
+        actual="$(ego_signerid_from_private_key "$key_path" || true)"
+        if [[ -z "$actual" ]]; then
+            log_error "Unable to compute SignerID from signing key: $key_path"
+            log_error "Install the ego CLI or ensure Docker can pull $(ego_image), or use --skip-signer-check."
+            exit 1
+        fi
+
+        if [[ "$expected" != "$actual" ]]; then
+            log_error "SignerID mismatch for '${pkg}': manifest expects ${expected}, signing key yields ${actual}"
+            exit 1
+        fi
+    done
+
+    log_info "SignerID checks passed"
 }
 
 # =============================================================================
@@ -184,6 +346,30 @@ preflight_checks() {
     # Check if MarbleRun is installed
     if ! command -v marblerun &> /dev/null; then
         log_warn "marblerun CLI not found. Some features may not work."
+    fi
+
+    # Production builds require stable enclave signing keys that match the manifest.
+    if [[ "$ENVIRONMENT" == "prod" ]] && [[ "$SKIP_BUILD" != "true" ]]; then
+        if [[ -z "$SIGNING_KEY" && -z "$SIGNING_KEY_DIR" ]]; then
+            log_error "Production builds require enclave signing keys."
+            log_error "Provide --signing-key-dir <dir> (recommended) or --signing-key <path>, or use --skip-build and ensure images exist."
+            exit 1
+        fi
+        if [[ "$SKIP_SIGNER_CHECK" != "true" ]] && ! command -v jq &> /dev/null; then
+            log_error "jq is required for signer ID checks in prod. Install jq or use --skip-signer-check."
+            exit 1
+        fi
+    fi
+
+    # Check cert-manager ClusterIssuer email configuration
+    local cert_issuer_file="$PROJECT_ROOT/k8s/platform/cert-manager/cluster-issuer.yaml"
+    if [[ -f "$cert_issuer_file" ]]; then
+        if grep -q "email:.*@example\.com" "$cert_issuer_file"; then
+            log_error "cert-manager ClusterIssuer still contains placeholder email (@example.com)"
+            log_error "Please update the email addresses in: $cert_issuer_file"
+            log_error "The email is required for Let's Encrypt ACME registration"
+            exit 1
+        fi
     fi
 
     log_info "Pre-flight checks passed"
@@ -228,6 +414,11 @@ build_images() {
 
     cd "$PROJECT_ROOT"
 
+    if [[ "$ENVIRONMENT" == "prod" ]]; then
+        export DOCKER_BUILDKIT=1
+        verify_signerids
+    fi
+
     for service in "${SERVICES[@]}"; do
         log_info "Building $service..."
 
@@ -246,17 +437,50 @@ build_images() {
         fi
 
         if [ "$service" == "gateway" ]; then
-            docker build -t "$image_name" -f "$dockerfile" . || {
-                log_error "Failed to build $service"
-                exit 1
-            }
+            if [[ "$ENVIRONMENT" == "prod" ]]; then
+                local key_path
+                if ! key_path="$(resolve_signing_key "$service")"; then
+                    log_error "Missing signing key for ${service}. Provide --signing-key or --signing-key-dir."
+                    exit 1
+                fi
+                docker build -t "$image_name" \
+                    --secret id=ego_private_key,src="$key_path" \
+                    --build-arg EGO_STRICT_SIGNING=1 \
+                    -f "$dockerfile" . || {
+                    log_error "Failed to build $service"
+                    exit 1
+                }
+            else
+                docker build -t "$image_name" -f "$dockerfile" . || {
+                    log_error "Failed to build $service"
+                    exit 1
+                }
+            fi
         else
-            docker build -t "$image_name" \
-                --build-arg SERVICE="$service" \
-                -f "$dockerfile" . || {
-                log_error "Failed to build $service"
-                exit 1
-            }
+            local service_binary
+            service_binary="$(default_service_binary "$service")"
+            if [[ "$ENVIRONMENT" == "prod" ]]; then
+                local key_path
+                if ! key_path="$(resolve_signing_key "$service")"; then
+                    log_error "Missing signing key for ${service}. Provide --signing-key or --signing-key-dir."
+                    exit 1
+                fi
+                docker build -t "$image_name" \
+                    --secret id=ego_private_key,src="$key_path" \
+                    --build-arg EGO_STRICT_SIGNING=1 \
+                    --build-arg SERVICE="$service_binary" \
+                    -f "$dockerfile" . || {
+                    log_error "Failed to build $service"
+                    exit 1
+                }
+            else
+                docker build -t "$image_name" \
+                    --build-arg SERVICE="$service_binary" \
+                    -f "$dockerfile" . || {
+                    log_error "Failed to build $service"
+                    exit 1
+                }
+            fi
         fi
 
         # Also tag as latest for the environment
@@ -362,22 +586,28 @@ setup_marblerun_manifest() {
         return 0
     fi
 
-    marblerun check --timeout 60s || {
-        log_warn "MarbleRun is not ready. Skipping manifest setup."
-        return 0
-    }
-
     # Port forward to coordinator
     log_info "Setting up port forwarding to MarbleRun Coordinator..."
-    kubectl -n marblerun port-forward svc/marblerun-coordinator 4433:4433 &
+    local coordinator_svc="coordinator-client-api"
+    if ! kubectl -n marblerun get svc "$coordinator_svc" &>/dev/null; then
+        coordinator_svc="marblerun-coordinator-client-api"
+    fi
+    if ! kubectl -n marblerun get svc "$coordinator_svc" &>/dev/null; then
+        log_warn "Coordinator client service not found in namespace 'marblerun'. Skipping manifest setup."
+        return 0
+    fi
+
+    kubectl -n marblerun port-forward "svc/${coordinator_svc}" 4433:4433 &
     PF_PID=$!
     sleep 3
 
     # Set the manifest
     log_info "Setting MarbleRun manifest..."
-    marblerun manifest set "$PROJECT_ROOT/manifests/manifest.json" \
-        --coordinator localhost:4433 \
-        --insecure || {
+    local flags=()
+    if [[ "$ENVIRONMENT" != "prod" ]]; then
+        flags+=(--insecure)
+    fi
+    marblerun manifest set "$PROJECT_ROOT/manifests/manifest.json" "localhost:4433" "${flags[@]}" || {
         log_warn "Manifest may already be set or coordinator not ready"
     }
 
@@ -395,25 +625,29 @@ deploy_k8s() {
 
     cd "$PROJECT_ROOT"
 
-    local overlay_path="k8s/overlays/$ENVIRONMENT"
-
-    # Check if overlay exists
+    local overlay_path
+    overlay_path="$(resolve_overlay_path)"
     if [ ! -d "$overlay_path" ]; then
-        log_warn "Overlay not found: $overlay_path, using simulation"
-        overlay_path="k8s/overlays/simulation"
+        log_error "Overlay not found: $overlay_path"
+        exit 1
     fi
 
     if [ "$DRY_RUN" == "true" ]; then
-        log_info "[DRY RUN] Would apply: kubectl apply -k $overlay_path"
+        log_info "[DRY RUN] Would apply: $overlay_path"
+        log_info "[DRY RUN] Would set images to: ${IMAGE_PREFIX}<service>:${ENVIRONMENT}"
         return 0
     fi
 
-    # Apply Kubernetes manifests
+    # Apply Kubernetes manifests with image overrides to match the environment tag.
     log_info "Applying Kubernetes manifests from $overlay_path..."
-    kubectl apply -k "$overlay_path" || {
-        log_error "Failed to apply Kubernetes manifests"
-        exit 1
-    }
+    kubectl kustomize "$overlay_path" | \
+        sed -E \
+            -e "s#(^[[:space:]]*image:[[:space:]]*)service-layer/#\\1${IMAGE_PREFIX}#" \
+            -e "s#(^[[:space:]]*image:[[:space:]].*):latest#\\1:${ENVIRONMENT}#" | \
+        kubectl apply -f - || {
+            log_error "Failed to apply Kubernetes manifests"
+            exit 1
+        }
 
     # Wait for deployments
     log_info "Waiting for deployments to be ready (timeout: ${WAIT_TIMEOUT}s)..."
@@ -488,8 +722,14 @@ show_status() {
     kubectl -n service-layer get deployments
 
     echo ""
-    log_info "Gateway accessible at: http://localhost:30080"
-    log_info "Or via: kubectl -n service-layer port-forward svc/gateway 8080:8080"
+    if [[ "$ENVIRONMENT" == "prod" ]]; then
+        log_info "Gateway is ClusterIP in the production overlay; access it via port-forward or apply the ingress template:"
+        log_info "  kubectl -n service-layer port-forward svc/gateway 8080:8080"
+        log_info "  envsubst < k8s/overlays/production/ingress.yaml | kubectl apply -f -"
+    else
+        log_info "Gateway accessible at: http://localhost:30080"
+        log_info "Or via: kubectl -n service-layer port-forward svc/gateway 8080:8080"
+    fi
 }
 
 # =============================================================================

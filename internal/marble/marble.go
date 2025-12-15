@@ -6,14 +6,19 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/edgelesssys/ego/attestation"
 	"github.com/edgelesssys/ego/enclave"
+
+	"github.com/R3E-Network/service_layer/internal/logging"
 )
 
 // Marble represents a MarbleRun Marble instance.
@@ -26,9 +31,12 @@ type Marble struct {
 	uuid       string
 
 	// TLS credentials from Coordinator
-	cert      tls.Certificate
-	rootCA    *x509.CertPool
-	tlsConfig *tls.Config
+	cert               tls.Certificate
+	rootCA             *x509.CertPool
+	tlsConfig          *tls.Config
+	httpClientUsesMTLS bool
+	httpClient         *http.Client
+	externalHTTPClient *http.Client
 
 	// Secrets injected by Coordinator
 	secrets map[string][]byte
@@ -81,11 +89,21 @@ func (m *Marble) Initialize(ctx context.Context) error {
 	// 3. Secrets defined in the manifest
 
 	// Load TLS certificate from environment (injected by Coordinator)
-	certPEM := os.Getenv("MARBLE_CERT")
-	keyPEM := os.Getenv("MARBLE_KEY")
-	rootPEM := os.Getenv("MARBLE_ROOT_CA")
+	certPEM := strings.TrimSpace(os.Getenv("MARBLE_CERT"))
+	keyPEM := strings.TrimSpace(os.Getenv("MARBLE_KEY"))
+	rootPEM := strings.TrimSpace(os.Getenv("MARBLE_ROOT_CA"))
 
-	if certPEM != "" && keyPEM != "" {
+	hasCertKey := certPEM != "" && keyPEM != ""
+	hasRootCA := rootPEM != ""
+
+	// MarbleRun mTLS requires a private root CA for the mesh. If the Coordinator
+	// injected a leaf certificate/key but no root CA, fail fast instead of falling
+	// back to system roots (which would silently weaken trust boundaries).
+	if hasCertKey && !hasRootCA {
+		return fmt.Errorf("MARBLE_ROOT_CA is required when MARBLE_CERT and MARBLE_KEY are set")
+	}
+
+	if hasCertKey {
 		cert, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
 		if err != nil {
 			return fmt.Errorf("parse TLS certificate: %w", err)
@@ -93,7 +111,7 @@ func (m *Marble) Initialize(ctx context.Context) error {
 		m.cert = cert
 	}
 
-	if rootPEM != "" {
+	if hasRootCA {
 		m.rootCA = x509.NewCertPool()
 		if !m.rootCA.AppendCertsFromPEM([]byte(rootPEM)) {
 			return fmt.Errorf("parse root CA certificate")
@@ -102,7 +120,10 @@ func (m *Marble) Initialize(ctx context.Context) error {
 
 	// Configure TLS for mTLS communication only if we have valid certificates
 	// Without certificates from Coordinator, run in HTTP mode (development/simulation)
-	if certPEM != "" && keyPEM != "" {
+	if hasCertKey {
+		if m.rootCA == nil {
+			return fmt.Errorf("failed to initialize MarbleRun mTLS: missing root CA pool")
+		}
 		m.tlsConfig = &tls.Config{
 			Certificates: []tls.Certificate{m.cert},
 			RootCAs:      m.rootCA,
@@ -136,27 +157,175 @@ func (m *Marble) TLSConfig() *tls.Config {
 
 // HTTPClient returns an HTTP client configured for mTLS.
 func (m *Marble) HTTPClient() *http.Client {
-	return &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: m.TLSConfig(),
-		},
+	if m == nil {
+		return &http.Client{
+			Transport: &traceHeaderRoundTripper{base: http.DefaultTransport},
+			Timeout:   30 * time.Second,
+		}
 	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	useMTLS := m.tlsConfig != nil
+	if m.httpClient != nil && m.httpClientUsesMTLS == useMTLS {
+		return m.httpClient
+	}
+
+	if !useMTLS {
+		m.httpClientUsesMTLS = false
+		m.httpClient = &http.Client{
+			Transport: &traceHeaderRoundTripper{base: http.DefaultTransport},
+			Timeout:   30 * time.Second,
+		}
+		return m.httpClient
+	}
+
+	tlsCfg := m.tlsConfig.Clone()
+
+	// Clone the default transport to preserve sane defaults (proxy env support,
+	// dial timeouts, HTTP/2, connection pooling) while injecting the MarbleRun
+	// mTLS credentials.
+	var transport http.RoundTripper
+	if base, ok := http.DefaultTransport.(*http.Transport); ok {
+		cloned := base.Clone()
+		cloned.TLSClientConfig = tlsCfg
+		transport = cloned
+	} else {
+		transport = &http.Transport{
+			TLSClientConfig: tlsCfg,
+		}
+	}
+
+	m.httpClientUsesMTLS = true
+	m.httpClient = &http.Client{
+		Transport: &traceHeaderRoundTripper{base: transport},
+		Timeout:   30 * time.Second,
+	}
+	return m.httpClient
+}
+
+// ExternalHTTPClient returns an HTTP client suitable for outbound calls to
+// non-Marblerun endpoints (Supabase, Neo RPC, third-party APIs).
+//
+// It never installs the MarbleRun root CA or client certificate, ensuring the
+// connection uses the system trust store and does not attempt mTLS.
+func (m *Marble) ExternalHTTPClient() *http.Client {
+	if m == nil {
+		return &http.Client{
+			Transport: &traceHeaderRoundTripper{base: http.DefaultTransport},
+			Timeout:   30 * time.Second,
+		}
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.externalHTTPClient != nil {
+		return m.externalHTTPClient
+	}
+
+	var transport http.RoundTripper
+	if base, ok := http.DefaultTransport.(*http.Transport); ok {
+		cloned := base.Clone()
+		if cloned.TLSClientConfig != nil {
+			cloned.TLSClientConfig = cloned.TLSClientConfig.Clone()
+			// Enforce a modern TLS baseline for external calls.
+			if cloned.TLSClientConfig.MinVersion == 0 || cloned.TLSClientConfig.MinVersion < tls.VersionTLS12 {
+				cloned.TLSClientConfig.MinVersion = tls.VersionTLS12
+			}
+		} else {
+			cloned.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		}
+		transport = cloned
+	} else {
+		transport = http.DefaultTransport
+	}
+
+	m.externalHTTPClient = &http.Client{
+		Transport: &traceHeaderRoundTripper{base: transport},
+		Timeout:   30 * time.Second,
+	}
+	return m.externalHTTPClient
+}
+
+type traceHeaderRoundTripper struct {
+	base http.RoundTripper
+}
+
+func (t *traceHeaderRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if t.base == nil {
+		t.base = http.DefaultTransport
+	}
+
+	traceID := logging.GetTraceID(req.Context())
+	if traceID == "" || req.Header.Get("X-Trace-ID") != "" {
+		return t.base.RoundTrip(req)
+	}
+
+	clone := req.Clone(req.Context())
+	clone.Header.Set("X-Trace-ID", traceID)
+	return t.base.RoundTrip(clone)
+}
+
+func decodeHexEnvSecret(value string) ([]byte, bool) {
+	value = strings.TrimSpace(value)
+	value = strings.TrimPrefix(value, "0x")
+	value = strings.TrimPrefix(value, "0X")
+	if value == "" || len(value)%2 != 0 {
+		return nil, false
+	}
+
+	for _, ch := range value {
+		switch {
+		case '0' <= ch && ch <= '9':
+		case 'a' <= ch && ch <= 'f':
+		case 'A' <= ch && ch <= 'F':
+		default:
+			return nil, false
+		}
+	}
+
+	decoded, err := hex.DecodeString(value)
+	if err != nil {
+		return nil, false
+	}
+	return decoded, true
 }
 
 // Secret returns a secret by name.
 func (m *Marble) Secret(name string) ([]byte, bool) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
 	secret, ok := m.secrets[name]
-	return secret, ok
+	m.mu.RUnlock()
+	if ok {
+		return secret, true
+	}
+
+	// Fallback: allow secrets injected as direct env vars (common in MarbleRun manifests).
+	envValue, ok := os.LookupEnv(name)
+	if !ok || strings.TrimSpace(envValue) == "" {
+		return nil, false
+	}
+
+	decoded := []byte(envValue)
+	if hexDecoded, ok := decodeHexEnvSecret(envValue); ok {
+		decoded = hexDecoded
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if secret, ok := m.secrets[name]; ok {
+		return secret, true
+	}
+	m.secrets[name] = decoded
+	return decoded, true
 }
 
 // UseSecret provides secure access to a secret via callback.
 // The secret is zeroed after the callback returns.
 func (m *Marble) UseSecret(name string, fn func([]byte) error) error {
-	m.mu.RLock()
-	secret, ok := m.secrets[name]
-	m.mu.RUnlock()
+	secret, ok := m.Secret(name)
 
 	if !ok {
 		return fmt.Errorf("secret not found: %s", name)
@@ -207,4 +376,12 @@ func (m *Marble) SetTestSecret(name string, value []byte) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.secrets[name] = value
+}
+
+// SetTestReport sets an enclave report for testing purposes only.
+// This method should only be used in tests.
+func (m *Marble) SetTestReport(report *attestation.Report) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.report = report
 }

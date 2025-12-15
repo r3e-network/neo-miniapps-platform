@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package signer;
+
+option go_package = "github.com/R3E-Network/service_layer/api/gen/signer;signerpb";
+
+// TEESigner provides deterministic key derivation inside a TEE and
+// produces ECDSA P-256 signatures over transaction hashes.
+service TEESigner {
+  // Sign signs a hex-encoded 32-byte transaction hash.
+  // tx_hash may include an optional 0x prefix.
+  rpc Sign(SignRequest) returns (SignResponse);
+}
+
+message SignRequest {
+  string tx_hash = 1;
+  // key_version optionally requests signing with a specific active/deprecated key.
+  // When omitted, the signer uses the current active key version.
+  string key_version = 2;
+}
+
+message SignResponse {
+  // signature is a 64-byte Neo N3 signature: r(32) || s(32).
+  bytes signature = 1;
+  string key_version = 2;
+}

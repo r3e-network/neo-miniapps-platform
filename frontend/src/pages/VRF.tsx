@@ -16,11 +16,10 @@ import { api } from '../api/client';
 interface VRFResult {
   request_id: string;
   seed: string;
-  random_value: string;
+  random_words: string[];
   proof: string;
   public_key: string;
   timestamp: string;
-  verified: boolean;
 }
 
 export function VRF() {
@@ -34,8 +33,8 @@ export function VRF() {
   const requestMutation = useMutation({
     mutationFn: (data: { seed: string; numWords: number }) =>
       api.neorandRandom(data.seed, data.numWords),
-    onSuccess: (data: any) => {
-      setResult(data);
+    onSuccess: (data: unknown) => {
+      setResult(data as VRFResult);
       setVerificationResult(null);
     },
   });
@@ -53,10 +52,8 @@ export function VRF() {
 
     setVerifying(true);
     try {
-      // In production, this would call a verification endpoint
-      // For now, simulate verification
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setVerificationResult(true);
+      const res = await api.neorandVerify(result.seed, result.random_words, result.proof, result.public_key);
+      setVerificationResult(Boolean(res?.valid));
     } catch (error) {
       setVerificationResult(false);
     } finally {
@@ -214,16 +211,20 @@ export function VRF() {
                   </div>
                 </div>
 
-                {/* Random Value */}
+                {/* Random Words */}
                 <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Random Value</label>
+                  <label className="text-xs text-gray-500 mb-1 block">
+                    Random Words ({result.random_words?.length ?? 0})
+                  </label>
                   <div className="flex items-center gap-2 bg-gray-700/50 rounded-lg px-4 py-3">
                     <Hash className="w-5 h-5 text-blue-400" />
-                    <span className="text-white font-mono text-sm flex-1 break-all">
-                      {result.random_value}
-                    </span>
+                    <div className="text-white font-mono text-sm flex-1 break-all space-y-1">
+                      {(result.random_words ?? []).map((word, idx) => (
+                        <div key={idx}>{word}</div>
+                      ))}
+                    </div>
                     <button
-                      onClick={() => copyToClipboard(result.random_value)}
+                      onClick={() => copyToClipboard(JSON.stringify(result.random_words ?? []))}
                       className="text-gray-400 hover:text-white transition-colors"
                     >
                       <Copy className="w-4 h-4" />

@@ -2,65 +2,27 @@
 package neooracle
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/marble"
+	"github.com/R3E-Network/service_layer/internal/runtime"
+	"github.com/R3E-Network/service_layer/internal/secretstore"
 	commonservice "github.com/R3E-Network/service_layer/services/common/service"
 )
 
 const (
 	ServiceID   = "neooracle"
-	ServiceName = "NeoNeoOracle Service"
+	ServiceName = "NeoOracle Service"
 	Version     = "1.0.0"
 )
-
-// SecretsClient fetches secrets from the Secrets service over mTLS.
-type SecretsClient struct {
-	baseURL    string
-	httpClient *http.Client
-}
-
-func NewSecretsClient(baseURL string, httpClient *http.Client) *SecretsClient {
-	return &SecretsClient{baseURL: baseURL, httpClient: httpClient}
-}
-
-func (c *SecretsClient) GetSecret(ctx context.Context, userID, name string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/secrets/%s", c.baseURL, name), nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("X-User-ID", userID)
-	req.Header.Set("X-Service-ID", ServiceID) // identify oracle as caller to Secrets service
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("secret service error: %s", resp.Status)
-	}
-
-	var out struct {
-		Name    string `json:"name"`
-		Value   string `json:"value"`
-		Version int    `json:"version"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", err
-	}
-	return out.Value, nil
-}
 
 // Service implements the oracle.
 type Service struct {
 	*commonservice.BaseService
-	secretClient *SecretsClient
+	secretClient *secretstore.Client
 	httpClient   *http.Client
 	maxBodyBytes int64
 	allowlist    URLAllowlist
@@ -77,12 +39,25 @@ type Config struct {
 
 // New creates a new NeoOracle service.
 func New(cfg Config) (*Service, error) {
-	base := commonservice.NewBase(commonservice.BaseConfig{
+	base := commonservice.NewBase(&commonservice.BaseConfig{
 		ID:      ServiceID,
 		Name:    ServiceName,
 		Version: Version,
 		Marble:  cfg.Marble,
 	})
+
+	strict := runtime.StrictIdentityMode() || (cfg.Marble != nil && cfg.Marble.IsEnclave())
+	if strict {
+		validAllowlistEntries := 0
+		for _, raw := range cfg.URLAllowlist.Prefixes {
+			if _, ok := parseURLAllowlistEntry(raw); ok {
+				validAllowlistEntries++
+			}
+		}
+		if validAllowlistEntries == 0 {
+			return nil, fmt.Errorf("neooracle: URL allowlist is required in strict identity mode (set ORACLE_HTTP_ALLOWLIST)")
+		}
+	}
 
 	httpClient := cfg.SecretsHTTPClient
 	if httpClient == nil && cfg.Marble != nil {
@@ -92,7 +67,18 @@ func New(cfg Config) (*Service, error) {
 		httpClient = &http.Client{Timeout: 15 * time.Second}
 	}
 
-	secretClient := NewSecretsClient(cfg.SecretsBaseURL, httpClient)
+	var secretClient *secretstore.Client
+	if secretsBaseURL := strings.TrimSpace(cfg.SecretsBaseURL); secretsBaseURL != "" {
+		client, err := secretstore.New(secretstore.Config{
+			BaseURL:         secretsBaseURL,
+			HTTPClient:      httpClient,
+			CallerServiceID: ServiceID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("neooracle: configure secret store client: %w", err)
+		}
+		secretClient = client
+	}
 
 	maxBytes := cfg.MaxBodyBytes
 	if maxBytes <= 0 {
@@ -102,7 +88,14 @@ func New(cfg Config) (*Service, error) {
 	s := &Service{
 		BaseService:  base,
 		secretClient: secretClient,
-		httpClient:   &http.Client{Timeout: 20 * time.Second},
+		httpClient: func() *http.Client {
+			client := &http.Client{Timeout: 20 * time.Second}
+			if cfg.Marble != nil {
+				client = cfg.Marble.ExternalHTTPClient()
+				client.Timeout = 20 * time.Second
+			}
+			return client
+		}(),
 		maxBodyBytes: maxBytes,
 		allowlist:    cfg.URLAllowlist,
 	}

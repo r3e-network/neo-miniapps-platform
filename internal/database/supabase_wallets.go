@@ -115,7 +115,7 @@ func (r *Repository) SetPrimaryWallet(ctx context.Context, userID, walletID stri
 }
 
 // VerifyWallet marks a wallet as verified.
-func (r *Repository) VerifyWallet(ctx context.Context, walletID string, signature string) error {
+func (r *Repository) VerifyWallet(ctx context.Context, walletID, signature string) error {
 	update := map[string]interface{}{
 		"verified":               true,
 		"verification_signature": signature,

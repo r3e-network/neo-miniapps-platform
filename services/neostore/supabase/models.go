@@ -28,7 +28,7 @@ type AuditLog struct {
 	ID           string    `json:"id"`
 	UserID       string    `json:"user_id"`
 	SecretName   string    `json:"secret_name"`
-	Action       string    `json:"action"` // create, read, update, delete, grant, revoke
+	Action       string    `json:"action"`               // create, read, update, delete, grant, revoke
 	ServiceID    string    `json:"service_id,omitempty"` // Service that accessed the secret
 	IPAddress    string    `json:"ip_address,omitempty"`
 	UserAgent    string    `json:"user_agent,omitempty"`

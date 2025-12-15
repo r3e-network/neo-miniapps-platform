@@ -56,6 +56,9 @@ if !ok {
 
 // Get optional user ID
 userID := httputil.GetUserID(r)
+
+// Get calling service identity (derived from verified mTLS in strict environments)
+serviceID := httputil.GetServiceID(r)
 ```
 
 ### Path Parameters
@@ -72,7 +75,10 @@ All error responses follow a consistent format:
 
 ```json
 {
-    "error": "error message here"
+    "code": "HTTP_400",
+    "message": "error message here",
+    "details": {},
+    "trace_id": "trace-id-here"
 }
 ```
 
@@ -125,8 +131,15 @@ func (s *Service) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 | Header | Purpose |
 |--------|---------|
 | `X-User-ID` | User identifier (set by gateway after auth) |
+| `X-Service-ID` | Optional service identity hint (dev fallback; production uses verified mTLS identity) |
 | `Content-Type` | Must be `application/json` for POST/PUT |
-| `Authorization` | Bearer token for API authentication |
+| `Authorization` | Bearer token for gateway authentication (not forwarded to internal services) |
+
+## Trust Model
+
+- In strict environments (production, SGX hardware, or when MarbleRun injects TLS credentials), `GetUserID`, `GetUserRole`, and `GetServiceID` only trust identity that is protected by verified mTLS.
+- User identity (`X-User-ID`) is set by the gateway after authentication and forwarded to internal services over the MarbleRun mesh.
+- Service identity is derived from the MarbleRun-issued mTLS certificate to prevent header spoofing.
 
 ## Testing
 

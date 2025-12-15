@@ -5,10 +5,8 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math/big"
 	"net/http"
 	"os"
@@ -17,10 +15,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/crypto"
-	"github.com/R3E-Network/service_layer/internal/database"
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
+
+	"github.com/R3E-Network/service_layer/internal/crypto"
+	"github.com/R3E-Network/service_layer/internal/database"
+	"github.com/R3E-Network/service_layer/internal/httputil"
 )
 
 // =============================================================================
@@ -100,13 +100,16 @@ func (s *Service) GetPrice(ctx context.Context, pair string) (*PriceResponse, er
 	}
 
 	if len(s.signingKey) > 0 {
-		sig, pub, _ := s.signPrice(response)
+		sig, pub, err := s.signPrice(response)
+		if err != nil {
+			return nil, fmt.Errorf("sign price: %w", err)
+		}
 		response.Signature = append([]byte{}, sig...)
 		response.PublicKey = append([]byte{}, pub...)
 	}
 
 	if s.DB() != nil {
-		_ = s.DB().CreatePriceFeed(ctx, &database.PriceFeed{
+		if err := s.DB().CreatePriceFeed(ctx, &database.PriceFeed{
 			ID:        uuid.New().String(),
 			FeedID:    feedID,
 			Pair:      pair,
@@ -115,7 +118,12 @@ func (s *Service) GetPrice(ctx context.Context, pair string) (*PriceResponse, er
 			Timestamp: response.Timestamp,
 			Sources:   response.Sources,
 			Signature: response.Signature,
-		})
+		}); err != nil {
+			s.Logger().WithContext(ctx).WithError(err).WithFields(map[string]interface{}{
+				"feed_id": feedID,
+				"pair":    pair,
+			}).Warn("failed to persist price feed")
+		}
 	}
 
 	return response, nil
@@ -160,7 +168,15 @@ func (s *Service) fetchPriceFromSource(ctx context.Context, pair string, feed *F
 	}
 	url := formatSourceURLNew(src.URL, pairForURL, feed)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	timeout := src.Timeout
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+
+	requestCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return 0, err
 	}
@@ -169,23 +185,25 @@ func (s *Service) fetchPriceFromSource(ctx context.Context, pair string, feed *F
 		req.Header.Set(k, resolveEnvVar(v))
 	}
 
-	client := s.httpClient
-	if src.Timeout > 0 {
-		client = &http.Client{
-			Timeout: src.Timeout,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
-			},
-		}
-	}
-
-	resp, err := client.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return 0, err
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, truncated, readErr := httputil.ReadAllWithLimit(resp.Body, 32<<10)
+		if readErr != nil {
+			return 0, readErr
+		}
+		msg := strings.TrimSpace(string(respBody))
+		if truncated {
+			msg += "...(truncated)"
+		}
+		return 0, fmt.Errorf("price source returned HTTP %d: %s", resp.StatusCode, msg)
+	}
+
+	body, err := httputil.ReadAllStrict(resp.Body, 1<<20)
 	if err != nil {
 		return 0, err
 	}
@@ -202,7 +220,10 @@ func (s *Service) fetchPriceFromSource(ctx context.Context, pair string, feed *F
 func (s *Service) fetchPrice(ctx context.Context, pair string, source PriceSource) (float64, error) {
 	url := formatSourceURL(source.URL, pair)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	requestCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return 0, err
 	}
@@ -213,7 +234,19 @@ func (s *Service) fetchPrice(ctx context.Context, pair string, source PriceSourc
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, truncated, readErr := httputil.ReadAllWithLimit(resp.Body, 32<<10)
+		if readErr != nil {
+			return 0, readErr
+		}
+		msg := strings.TrimSpace(string(respBody))
+		if truncated {
+			msg += "...(truncated)"
+		}
+		return 0, fmt.Errorf("price source returned HTTP %d: %s", resp.StatusCode, msg)
+	}
+
+	body, err := httputil.ReadAllStrict(resp.Body, 1<<20)
 	if err != nil {
 		return 0, err
 	}
@@ -235,13 +268,16 @@ func (s *Service) calculateMedian(prices []float64) float64 {
 	return prices[n/2]
 }
 
-func (s *Service) signPrice(price *PriceResponse) ([]byte, []byte, error) {
-	data, _ := json.Marshal(map[string]interface{}{
+func (s *Service) signPrice(price *PriceResponse) (signature, publicKey []byte, err error) {
+	data, err := json.Marshal(map[string]interface{}{
 		"pair":      price.Pair,
 		"price":     price.Price,
 		"decimals":  price.Decimals,
 		"timestamp": price.Timestamp.Unix(),
 	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal signature payload: %w", err)
+	}
 
 	seed, err := crypto.DeriveKey(s.signingKey, nil, "price-signing", 32)
 	if err != nil {
@@ -257,12 +293,12 @@ func (s *Service) signPrice(price *PriceResponse) ([]byte, []byte, error) {
 	priv := &ecdsa.PrivateKey{PublicKey: ecdsa.PublicKey{Curve: curve}, D: d}
 	priv.PublicKey.X, priv.PublicKey.Y = curve.ScalarBaseMult(d.Bytes())
 
-	sig, err := crypto.Sign(priv, data)
+	signature, err = crypto.Sign(priv, data)
 	if err != nil {
 		return nil, nil, err
 	}
-	pubBytes := crypto.PublicKeyToBytes(&priv.PublicKey)
-	return sig, pubBytes, nil
+	publicKey = crypto.PublicKeyToBytes(&priv.PublicKey)
+	return signature, publicKey, nil
 }
 
 func formatSourceURL(tmpl, pair string) string {
@@ -280,14 +316,12 @@ func formatSourceURLNew(tmpl, pair string, feed *FeedConfig) string {
 	if feed != nil {
 		url = strings.ReplaceAll(url, "{base}", feed.Base)
 		url = strings.ReplaceAll(url, "{quote}", feed.Quote)
-	} else {
+	} else if len(pair) >= 6 {
 		// Parse base/quote from pair (e.g., BTCUSDT -> BTC, USDT)
-		if len(pair) >= 6 {
-			base := strings.ToLower(pair[:3])
-			quote := strings.ToLower(pair[3:])
-			url = strings.ReplaceAll(url, "{base}", base)
-			url = strings.ReplaceAll(url, "{quote}", quote)
-		}
+		base := strings.ToLower(pair[:3])
+		quote := strings.ToLower(pair[3:])
+		url = strings.ReplaceAll(url, "{base}", base)
+		url = strings.ReplaceAll(url, "{quote}", quote)
 	}
 
 	// Legacy format support

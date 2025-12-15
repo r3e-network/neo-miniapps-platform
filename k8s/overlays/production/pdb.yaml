@@ -1,0 +1,39 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: gateway-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: gateway
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: neorand-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: neorand
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: neovault-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: neovault
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: neooracle-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: neooracle

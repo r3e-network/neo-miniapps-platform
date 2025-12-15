@@ -133,7 +133,7 @@ func TestNeoFeedsServiceWithFairy(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neofeeds"})
 	m.SetTestSecret("NEOFEEDS_SIGNING_KEY", []byte("test-signing-key-32-bytes-long!!"))
 
-	svc, err := neofeeds.New(neofeeds.Config{
+	svc, err := neofeeds.New(&neofeeds.Config{
 		Marble:      m,
 		ArbitrumRPC: "https://arb1.arbitrum.io/rpc",
 	})
@@ -193,8 +193,8 @@ func TestNeoFeedsPriceFlow(t *testing.T) {
 
 	// Set virtual time (to avoid timestamp issues)
 	now := uint64(time.Now().UnixMilli())
-	if err := client.SetTime(sessionID, now); err != nil {
-		t.Logf("SetTime: %v (might not be supported)", err)
+	if setTimeErr := client.SetTime(sessionID, now); setTimeErr != nil {
+		t.Logf("SetTime: %v (might not be supported)", setTimeErr)
 	}
 
 	// Get admin address (should be the deployer)

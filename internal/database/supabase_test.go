@@ -10,6 +10,26 @@ import (
 	"time"
 )
 
+func newClientWithHandler(t *testing.T, handler http.Handler) *Client {
+	t.Helper()
+
+	client, err := NewClient(Config{
+		URL:        "http://supabase.test",
+		ServiceKey: "test-key",
+	})
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+
+	client.httpClient.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, r)
+		return rr.Result(), nil
+	})
+
+	return client
+}
+
 // =============================================================================
 // Client Tests
 // =============================================================================
@@ -18,7 +38,9 @@ func TestNewClient(t *testing.T) {
 	tests := []struct {
 		name    string
 		cfg     Config
+		env     string
 		wantErr bool
+		wantURL string
 	}{
 		{
 			name: "valid config",
@@ -26,6 +48,7 @@ func TestNewClient(t *testing.T) {
 				URL:        "https://test.supabase.co",
 				ServiceKey: "test-key",
 			},
+			env:     "production",
 			wantErr: false,
 		},
 		{
@@ -34,12 +57,32 @@ func TestNewClient(t *testing.T) {
 				URL:        "",
 				ServiceKey: "test-key",
 			},
+			env:     "production",
+			wantErr: true,
+		},
+		{
+			name:    "dev missing URL uses mock",
+			cfg:     Config{},
+			env:     "development",
+			wantErr: false,
+			wantURL: "http://localhost:54321",
+		},
+		{
+			name: "prod missing service key",
+			cfg: Config{
+				URL:        "https://test.supabase.co",
+				ServiceKey: "",
+			},
+			env:     "production",
 			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.env != "" {
+				t.Setenv("MARBLE_ENV", tt.env)
+			}
 			client, err := NewClient(tt.cfg)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("NewClient() error = %v, wantErr %v", err, tt.wantErr)
@@ -48,13 +91,15 @@ func TestNewClient(t *testing.T) {
 			if !tt.wantErr && client == nil {
 				t.Error("NewClient() returned nil client")
 			}
+			if !tt.wantErr && tt.wantURL != "" && client.url != tt.wantURL {
+				t.Errorf("client.url = %q, want %q", client.url, tt.wantURL)
+			}
 		})
 	}
 }
 
 func TestClientRequest(t *testing.T) {
-	// Create a test server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newClientWithHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify headers
 		if r.Header.Get("apikey") != "test-key" {
 			t.Errorf("apikey header = %s, want test-key", r.Header.Get("apikey"))
@@ -67,12 +112,6 @@ func TestClientRequest(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode([]map[string]string{{"id": "123"}})
 	}))
-	defer server.Close()
-
-	client, _ := NewClient(Config{
-		URL:        server.URL,
-		ServiceKey: "test-key",
-	})
 
 	ctx := context.Background()
 	data, err := client.request(ctx, "GET", "test_table", nil, "")
@@ -86,7 +125,7 @@ func TestClientRequest(t *testing.T) {
 }
 
 func TestClientRequestWithBody(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newClientWithHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			t.Errorf("Method = %s, want POST", r.Method)
 		}
@@ -103,12 +142,6 @@ func TestClientRequestWithBody(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(body)
 	}))
-	defer server.Close()
-
-	client, _ := NewClient(Config{
-		URL:        server.URL,
-		ServiceKey: "test-key",
-	})
 
 	ctx := context.Background()
 	_, err := client.request(ctx, "POST", "test_table", map[string]string{"name": "test"}, "")
@@ -118,16 +151,10 @@ func TestClientRequestWithBody(t *testing.T) {
 }
 
 func TestClientRequestError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newClientWithHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(`{"error": "bad request"}`))
 	}))
-	defer server.Close()
-
-	client, _ := NewClient(Config{
-		URL:        server.URL,
-		ServiceKey: "test-key",
-	})
 
 	ctx := context.Background()
 	_, err := client.request(ctx, "GET", "test_table", nil, "")
@@ -307,7 +334,7 @@ func TestGasBankAccountJSON(t *testing.T) {
 // =============================================================================
 
 func TestRepositoryGetUser(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newClientWithHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/rest/v1/users" {
 			t.Errorf("Path = %s, want /rest/v1/users", r.URL.Path)
 		}
@@ -318,9 +345,6 @@ func TestRepositoryGetUser(t *testing.T) {
 			Address: "NXV7ZhHiyM1aHXwpVsRZC6BN3y4gABn6gR",
 		}})
 	}))
-	defer server.Close()
-
-	client, _ := NewClient(Config{URL: server.URL, ServiceKey: "test-key"})
 	repo := NewRepository(client)
 
 	ctx := context.Background()
@@ -335,13 +359,10 @@ func TestRepositoryGetUser(t *testing.T) {
 }
 
 func TestRepositoryGetUserNotFound(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newClientWithHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode([]User{})
 	}))
-	defer server.Close()
-
-	client, _ := NewClient(Config{URL: server.URL, ServiceKey: "test-key"})
 	repo := NewRepository(client)
 
 	ctx := context.Background()
@@ -352,16 +373,13 @@ func TestRepositoryGetUserNotFound(t *testing.T) {
 }
 
 func TestRepositoryGetUserByAddress(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newClientWithHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode([]User{{
 			ID:      "user-123",
 			Address: "NXV7ZhHiyM1aHXwpVsRZC6BN3y4gABn6gR",
 		}})
 	}))
-	defer server.Close()
-
-	client, _ := NewClient(Config{URL: server.URL, ServiceKey: "test-key"})
 	repo := NewRepository(client)
 
 	ctx := context.Background()
@@ -376,16 +394,13 @@ func TestRepositoryGetUserByAddress(t *testing.T) {
 }
 
 func TestRepositoryCreateUser(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newClientWithHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			t.Errorf("Method = %s, want POST", r.Method)
 		}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode([]User{})
 	}))
-	defer server.Close()
-
-	client, _ := NewClient(Config{URL: server.URL, ServiceKey: "test-key"})
 	repo := NewRepository(client)
 
 	ctx := context.Background()
@@ -399,16 +414,13 @@ func TestRepositoryCreateUser(t *testing.T) {
 }
 
 func TestRepositoryGetSecrets(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newClientWithHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode([]Secret{
 			{ID: "secret-1", Name: "API_KEY"},
 			{ID: "secret-2", Name: "DB_PASSWORD"},
 		})
 	}))
-	defer server.Close()
-
-	client, _ := NewClient(Config{URL: server.URL, ServiceKey: "test-key"})
 	repo := NewRepository(client)
 
 	ctx := context.Background()
@@ -423,16 +435,13 @@ func TestRepositoryGetSecrets(t *testing.T) {
 }
 
 func TestRepositoryGetServiceRequests(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newClientWithHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode([]ServiceRequest{
 			{ID: "req-1", ServiceType: "vrf"},
 			{ID: "req-2", ServiceType: "neovault"},
 		})
 	}))
-	defer server.Close()
-
-	client, _ := NewClient(Config{URL: server.URL, ServiceKey: "test-key"})
 	repo := NewRepository(client)
 
 	ctx := context.Background()
@@ -447,7 +456,7 @@ func TestRepositoryGetServiceRequests(t *testing.T) {
 }
 
 func TestRepositoryGetLatestPrice(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newClientWithHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode([]PriceFeed{{
 			ID:     "feed-123",
@@ -455,9 +464,6 @@ func TestRepositoryGetLatestPrice(t *testing.T) {
 			Price:  5000000000000,
 		}})
 	}))
-	defer server.Close()
-
-	client, _ := NewClient(Config{URL: server.URL, ServiceKey: "test-key"})
 	repo := NewRepository(client)
 
 	ctx := context.Background()
@@ -472,7 +478,7 @@ func TestRepositoryGetLatestPrice(t *testing.T) {
 }
 
 func TestRepositoryGetGasBankAccount(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newClientWithHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode([]GasBankAccount{{
 			ID:       "account-123",
@@ -481,9 +487,6 @@ func TestRepositoryGetGasBankAccount(t *testing.T) {
 			Reserved: 100000,
 		}})
 	}))
-	defer server.Close()
-
-	client, _ := NewClient(Config{URL: server.URL, ServiceKey: "test-key"})
 	repo := NewRepository(client)
 
 	ctx := context.Background()

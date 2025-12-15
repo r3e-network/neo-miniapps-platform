@@ -18,7 +18,7 @@ Core Marble type for TEE service configuration.
 
 ```go
 m, err := marble.New(marble.Config{
-    MarbleType: "vrf",
+    MarbleType: "neorand",
 })
 ```
 
@@ -69,11 +69,11 @@ defer crypto.ZeroBytes(secret) // Always zero secrets after use
 
 | Secret | Service | Description |
 |--------|---------|-------------|
-| `VRF_PRIVATE_KEY` | VRF | ECDSA P-256 private key |
-| `MIXER_MASTER_KEY` | NeoVault | HMAC signing key |
-| `POOL_MASTER_KEY` | AccountPool | HD wallet master key |
-| `DATAFEEDS_SIGNING_KEY` | NeoFeeds | Price signing key |
-| `SECRETS_MASTER_KEY` | Secrets | AES-256 encryption key |
+| `VRF_PRIVATE_KEY` | NeoRand | ECDSA P-256 private key |
+| `NEOVAULT_MASTER_KEY` | NeoVault | HMAC signing key |
+| `POOL_MASTER_KEY` | NeoAccounts | HD wallet master key |
+| `NEOFEEDS_SIGNING_KEY` | NeoFeeds | Price signing key |
+| `SECRETS_MASTER_KEY` | NeoStore | AES-256 encryption key |
 
 ## mTLS Communication
 
@@ -84,7 +84,16 @@ For secure inter-service communication within the MarbleRun mesh:
 httpClient := m.HTTPClient()
 
 // Make request to another marble
-resp, err := httpClient.Get("https://accountpool:8080/info")
+resp, err := httpClient.Get("https://neoaccounts:8085/info")
+```
+
+## External HTTP Calls
+
+For outbound calls to non-mesh endpoints (Supabase, Neo RPC, third-party APIs), use:
+
+```go
+httpClient := m.ExternalHTTPClient()
+resp, err := httpClient.Get("https://api.coingecko.com/api/v3/ping")
 ```
 
 ## Service Lifecycle

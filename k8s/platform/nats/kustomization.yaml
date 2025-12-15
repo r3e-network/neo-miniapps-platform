@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: platform
+
+resources:
+  - namespace.yaml
+  - helm-values.yaml
+  - pvc.yaml
+  - stream-config.yaml
+  - consumer-config.yaml

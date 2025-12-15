@@ -1,0 +1,35 @@
+{
+  "exe": "marble",
+  "key": "private.pem",
+  "debug": true,
+  "heapSize": 512,
+  "productID": 1,
+  "securityVersion": 1,
+  "mounts": [
+    {
+      "source": "/etc/ssl/certs",
+      "target": "/etc/ssl/certs",
+      "type": "hostfs",
+      "readOnly": true
+    }
+  ],
+  "env": [
+    { "name": "SERVICE_TYPE", "fromHost": true },
+    { "name": "EDG_MARBLE_TYPE", "fromHost": true },
+    { "name": "MARBLE_CERT", "fromHost": true },
+    { "name": "MARBLE_KEY", "fromHost": true },
+    { "name": "MARBLE_ROOT_CA", "fromHost": true },
+    { "name": "MARBLE_UUID", "fromHost": true },
+    { "name": "MARBLE_SECRETS", "fromHost": true },
+    { "name": "SUPABASE_URL", "fromHost": true },
+    { "name": "SUPABASE_SERVICE_KEY", "fromHost": true },
+    { "name": "NEO_RPC_URL", "fromHost": true },
+    { "name": "PORT", "fromHost": true }
+  ],
+  "files": [
+    {
+      "source": "/etc/ssl/certs/ca-certificates.crt",
+      "target": "/etc/ssl/certs/ca-certificates.crt"
+    }
+  ]
+}

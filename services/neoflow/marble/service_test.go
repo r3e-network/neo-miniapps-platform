@@ -13,10 +13,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gorilla/mux"
+
 	"github.com/R3E-Network/service_layer/internal/chain"
 	"github.com/R3E-Network/service_layer/internal/marble"
 	neoflowsupabase "github.com/R3E-Network/service_layer/services/neoflow/supabase"
-	"github.com/gorilla/mux"
 )
 
 // =============================================================================
@@ -48,7 +49,7 @@ type trackingNeoFlowRepo struct {
 func newTrackingNeoFlowRepo(t *testing.T) *trackingNeoFlowRepo {
 	return &trackingNeoFlowRepo{
 		mockNeoFlowRepo: newMockNeoFlowRepo(),
-		t:                  t,
+		t:               t,
 	}
 }
 
@@ -59,12 +60,6 @@ func (m *trackingNeoFlowRepo) GetTriggers(ctx context.Context, userID string) ([
 	m.callCount++
 	m.lastUserID = userID
 	return []neoflowsupabase.Trigger{}, nil
-}
-
-func readSchedulerStopCh(svc *Service) chan struct{} {
-	svc.scheduler.mu.RLock()
-	defer svc.scheduler.mu.RUnlock()
-	return svc.scheduler.stopCh
 }
 
 func newHTTPTestServer(t *testing.T, handler http.Handler) *httptest.Server {
@@ -191,31 +186,25 @@ func TestSchedulerInitialization(t *testing.T) {
 	if svc.scheduler.triggers == nil {
 		t.Error("scheduler.triggers should not be nil")
 	}
-	if svc.scheduler.stopCh == nil {
-		t.Error("scheduler.stopCh should not be nil")
+	if svc.scheduler.chainTriggers == nil {
+		t.Error("scheduler.chainTriggers should not be nil")
 	}
 }
 
-func TestSchedulerRestartReinitializesStopChannel(t *testing.T) {
+func TestServiceStopIsIdempotent(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neoflow"})
 	svc, _ := New(Config{Marble: m})
 
-	first := readSchedulerStopCh(svc)
-	if first == nil {
-		t.Fatal("stopCh should not be nil on initialization")
+	ctx := context.Background()
+	if err := svc.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
 	}
 
-	svc.stopSchedulerWorkers()
-	if ch := readSchedulerStopCh(svc); ch != nil {
-		t.Error("stopCh should be nil after stopSchedulerWorkers")
+	if err := svc.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
 	}
-
-	second := svc.ensureSchedulerStopCh()
-	if second == nil {
-		t.Fatal("stopCh should be re-created by ensureSchedulerStopCh")
-	}
-	if first == second {
-		t.Error("stopCh should be a new channel after ensuring scheduler stop channel")
+	if err := svc.Stop(); err != nil {
+		t.Fatalf("Stop() should be idempotent, got error = %v", err)
 	}
 }
 
@@ -948,7 +937,7 @@ func TestServiceConfigFields(t *testing.T) {
 		DB:              nil,
 		ChainClient:     nil,
 		TEEFulfiller:    nil,
-		NeoFlowHash:  "0x1234567890abcdef",
+		NeoFlowHash:     "0x1234567890abcdef",
 		EnableChainExec: true,
 	}
 
@@ -1082,6 +1071,38 @@ func TestDispatchActionWebhookMissingURL(t *testing.T) {
 	}
 }
 
+func TestDispatchActionWebhookStrictModeRequiresHTTPS(t *testing.T) {
+	t.Setenv("MARBLE_ENV", "production")
+
+	m, _ := marble.New(marble.Config{MarbleType: "neoflow"})
+	svc, _ := New(Config{Marble: m})
+
+	action := json.RawMessage(`{"type":"webhook","url":"http://example.com","method":"POST"}`)
+	err := svc.dispatchAction(context.Background(), action)
+	if err == nil {
+		t.Fatal("dispatchAction() should return error in strict mode for http webhook url")
+	}
+	if err.Error() != "external webhook url must use https in strict identity mode" {
+		t.Fatalf("error = %q, want %q", err.Error(), "external webhook url must use https in strict identity mode")
+	}
+}
+
+func TestDispatchActionWebhookStrictModeBlocksLoopbackIP(t *testing.T) {
+	t.Setenv("MARBLE_ENV", "production")
+
+	m, _ := marble.New(marble.Config{MarbleType: "neoflow"})
+	svc, _ := New(Config{Marble: m})
+
+	action := json.RawMessage(`{"type":"webhook","url":"https://127.0.0.1","method":"POST"}`)
+	err := svc.dispatchAction(context.Background(), action)
+	if err == nil {
+		t.Fatal("dispatchAction() should return error in strict mode for loopback webhook target")
+	}
+	if err.Error() != "external webhook target IP not allowed in strict identity mode" {
+		t.Fatalf("error = %q, want %q", err.Error(), "external webhook target IP not allowed in strict identity mode")
+	}
+}
+
 func TestDispatchActionUnknownType(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neoflow"})
 	svc, _ := New(Config{Marble: m})
@@ -1146,6 +1167,18 @@ func TestDispatchActionWebhookError(t *testing.T) {
 	err := svc.dispatchAction(context.Background(), action)
 	if err == nil {
 		t.Error("dispatchAction() should return error for 500 status")
+	}
+}
+
+func TestAllowPrivateWebhookTargets(t *testing.T) {
+	t.Setenv("NEOFLOW_WEBHOOK_ALLOW_PRIVATE_NETWORKS", "")
+	if allowPrivateWebhookTargets() {
+		t.Fatal("allowPrivateWebhookTargets() = true, want false when env is unset")
+	}
+
+	t.Setenv("NEOFLOW_WEBHOOK_ALLOW_PRIVATE_NETWORKS", "true")
+	if !allowPrivateWebhookTargets() {
+		t.Fatal("allowPrivateWebhookTargets() = false, want true when env is true")
 	}
 }
 

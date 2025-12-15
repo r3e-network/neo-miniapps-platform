@@ -48,13 +48,14 @@ This service implements an **Off-Chain First** architecture where:
 | File | Purpose |
 |------|---------|
 | `service.go` | Service initialization and configuration |
-| `lifecycle.go` | Service lifecycle (Start/Stop/Shutdown) |
 | `handlers.go` | HTTP request handlers |
 | `api.go` | Route registration |
 | `mixing.go` | Mixing execution logic |
 | `pool.go` | Pool account management |
 | `proofs.go` | Request/completion proof generation |
 | `types.go` | Data structures |
+
+Lifecycle is handled by the shared `commonservice.BaseService` (start/stop hooks, workers, standard routes).
 
 ## Key Components
 

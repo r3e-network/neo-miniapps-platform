@@ -7,19 +7,23 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
-	"log"
+	"crypto/sha256"
+	"fmt"
 	"math/big"
 	"os"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/R3E-Network/service_layer/internal/chain"
 	"github.com/R3E-Network/service_layer/internal/crypto"
 	"github.com/R3E-Network/service_layer/internal/database"
 	"github.com/R3E-Network/service_layer/internal/marble"
+	"github.com/R3E-Network/service_layer/internal/runtime"
 	commonservice "github.com/R3E-Network/service_layer/services/common/service"
 	neoaccountssupabase "github.com/R3E-Network/service_layer/services/neoaccounts/supabase"
-	"github.com/google/uuid"
 )
 
 const (
@@ -65,7 +69,13 @@ type Config struct {
 
 // New creates a new NeoAccounts service.
 func New(cfg Config) (*Service, error) {
-	base := commonservice.NewBase(commonservice.BaseConfig{
+	if cfg.Marble == nil {
+		return nil, fmt.Errorf("neoaccounts: marble is required")
+	}
+
+	strict := runtime.StrictIdentityMode() || cfg.Marble.IsEnclave()
+
+	base := commonservice.NewBase(&commonservice.BaseConfig{
 		ID:      ServiceID,
 		Name:    ServiceName,
 		Version: Version,
@@ -79,17 +89,39 @@ func New(cfg Config) (*Service, error) {
 		chainClient: cfg.ChainClient,
 	}
 
-	// Load master key from Marble secrets
-	// UPGRADE SAFETY: POOL_MASTER_KEY is injected by MarbleRun Coordinator from
-	// manifest-defined secrets. All account keys are derived from this master key
-	// using HKDF without enclave identity, ensuring keys remain stable across upgrades.
-	if key, ok := cfg.Marble.Secret("POOL_MASTER_KEY"); ok {
+	// Load and validate master key material.
+	if err := s.loadMasterKey(cfg.Marble); err != nil {
+		if strict {
+			return nil, err
+		}
+
+		s.Logger().WithError(err).Warn("master key not configured; generating ephemeral key (development/testing only)")
+
+		key, keyErr := crypto.GenerateRandomBytes(32)
+		if keyErr != nil {
+			return nil, fmt.Errorf("neoaccounts: generate fallback master key: %w", keyErr)
+		}
+
+		pubKeyCompressed, pubErr := deriveMasterPubKey(key)
+		if pubErr != nil {
+			return nil, fmt.Errorf("neoaccounts: derive fallback master pubkey: %w", pubErr)
+		}
+
+		computedHash := sha256.Sum256(pubKeyCompressed)
 		s.masterKey = key
+		s.masterPubKey = pubKeyCompressed
+		s.masterKeyHash = computedHash[:]
 	}
 
 	base.WithHydrate(s.initializePool)
-	base.AddWorker(s.runAccountRotation)
-	base.AddWorker(s.runLockCleanup)
+	base.AddTickerWorker(time.Hour, func(ctx context.Context) error {
+		s.rotateAccounts(ctx)
+		return nil
+	}, commonservice.WithTickerWorkerName("account-rotation"))
+	base.AddTickerWorker(time.Hour, func(ctx context.Context) error {
+		s.cleanupStaleLocks(ctx)
+		return nil
+	}, commonservice.WithTickerWorkerName("lock-cleanup"))
 
 	s.registerRoutes()
 	return s, nil
@@ -99,10 +131,14 @@ func New(cfg Config) (*Service, error) {
 func (s *Service) initializePool(ctx context.Context) error {
 	accounts, err := s.repo.List(ctx)
 	if err != nil {
-		// In development mode, skip pool initialization if database is unavailable
-		env := os.Getenv("MARBLE_ENV")
-		if env == "development" || env == "testing" || env == "production" {
-			log.Printf("WARNING: Database unavailable, skipping pool initialization: %v", err)
+		// In development/testing mode, skip pool initialization if database is unavailable.
+		// In strict identity/SGX mode, fail closed (database is required).
+		if runtime.StrictIdentityMode() {
+			return err
+		}
+		env := strings.ToLower(strings.TrimSpace(os.Getenv("MARBLE_ENV")))
+		if env == "development" || env == "testing" {
+			s.Logger().WithContext(ctx).WithError(err).Warn("database unavailable; skipping pool initialization")
 			return nil
 		}
 		return err
@@ -166,7 +202,11 @@ func (s *Service) createAccount(ctx context.Context) (*neoaccountssupabase.Accou
 	for _, tokenType := range []string{TokenTypeGAS, TokenTypeNEO} {
 		scriptHash, decimals := neoaccountssupabase.GetDefaultTokenConfig(tokenType)
 		if err := s.repo.UpsertBalance(ctx, accountID, tokenType, scriptHash, 0, decimals); err != nil {
-			// Log but don't fail - balance can be created on first update
+			// Log but don't fail - balance can be created on first update.
+			s.Logger().WithContext(ctx).WithError(err).WithFields(map[string]interface{}{
+				"token_type": tokenType,
+				"account_id": accountID,
+			}).Warn("failed to initialize account balance")
 		}
 	}
 

@@ -2,35 +2,99 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: service-layer-config
-  namespace: service-layer
 data:
-  # MarbleRun Coordinator address (full K8s DNS)
-  COORDINATOR_ADDR: "coordinator-mesh-api.marblerun.svc.cluster.local:2001"
+  # MarbleRun Coordinator addresses (full K8s DNS)
+  # - Mesh API (2001): used by Marbles (EDG_MARBLE_COORDINATOR_ADDR)
+  # - Client API (4433): used by MarbleRun CLI (marblerun *)
+  COORDINATOR_MESH_ADDR: "coordinator-mesh-api.marblerun.svc.cluster.local:2001"
+  COORDINATOR_CLIENT_ADDR: "coordinator-client-api.marblerun.svc.cluster.local:4433"
+  # Default to SGX hardware mode; overlays can override (e.g. simulation).
+  OE_SIMULATION: "0"
+  # Application environment; overlays should set this to "production" for real deployments.
+  MARBLE_ENV: "development"
+  # Gateway configuration.
+  GATEWAY_TLS_MODE: "off"
+  # Keep JWT/token/session lifetimes aligned (Go duration, e.g. 15m, 24h).
+  JWT_EXPIRY: "24h"
+  # Optional admin allowlists (comma-separated Supabase user IDs).
+  # When set, the gateway will attach `X-User-Role: admin|super_admin` to proxied
+  # service requests (over MarbleRun mTLS) to unlock admin endpoints.
+  ADMIN_USER_IDS: ""
+  SUPER_ADMIN_USER_IDS: ""
+  # Gateway rate limiting (recommended in production).
+  RATE_LIMIT_ENABLED: "false"
+  RATE_LIMIT_REQUESTS: "100"
+  RATE_LIMIT_WINDOW: "1m"
+  RATE_LIMIT_BURST: "100"
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  # Comma-separated list of allowed browser origins (must be set correctly in production).
+  CORS_ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:5173"
+  # OAuth (optional) - used by the gateway redirect/callback flow.
+  FRONTEND_URL: "http://localhost:3000"
+  OAUTH_REDIRECT_BASE: "http://localhost:8080"
+  OAUTH_COOKIE_MODE: "true"
+  OAUTH_COOKIE_SAMESITE: "lax"
   # Service ports
   GATEWAY_PORT: "8080"
   VRF_PORT: "8081"
   NEOVAULT_PORT: "8082"
   NEOFEEDS_PORT: "8083"
   NEOFLOW_PORT: "8084"
-  ACCOUNTPOOL_PORT: "8085"
+  NEOACCOUNTS_PORT: "8085"
   NEOCOMPUTE_PORT: "8086"
   SECRETS_PORT: "8087"
   ORACLE_PORT: "8088"
   # Supabase Configuration
-  SUPABASE_URL: "https://dmonstzalbldzzdbbcdj.supabase.co"
-  SUPABASE_SERVICE_KEY: "sb_secret_B6OeQfZiVCcPtxR0KyGroA_lUtz42PN"
+  # Public Supabase project URL (not a secret). Override per environment.
+  SUPABASE_URL: "https://your-project.supabase.co"
   # Neo RPC (Testnet)
   NEO_RPC_URL: "https://testnet1.neo.coz.io:443"
-  # JWT Secret for development (32+ bytes required)
-  JWT_SECRET: "dev-only-secret-32bytes-minimum-k8s-development"
-  # Service Secrets (DEV ONLY - generate real keys for production)
-  SECRETS_MASTER_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-  POOL_MASTER_KEY: "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
-  COORD_MASTER_SEED: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+  # Neo N3 network magic (Testnet). Mainnet: 860833102
+  NEO_NETWORK_MAGIC: "894710606"
   # Oracle config
   ORACLE_HTTP_ALLOWLIST: "https://api.binance.com,https://api.coinbase.com,https://api.coingecko.com"
-  SECRETS_BASE_URL: "http://secrets:8087"
-  # MARBLE_SECRETS for accountpool (JSON format with base64-encoded raw bytes)
-  MARBLE_SECRETS_ACCOUNTPOOL: '{"POOL_MASTER_KEY":"/ty6mHZUMhD+3LqYdlQyEP7cuph2VDIQ/ty6mHZUMhA=","COORD_MASTER_SEED":"q83vASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4k="}'
-  # MARBLE_SECRETS for secrets service
-  MARBLE_SECRETS_SECRETS: '{"SECRETS_MASTER_KEY":"ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8="}'
+  # Optional Arbitrum RPC override for Chainlink (NeoFeeds). Defaults to https://arb1.arbitrum.io/rpc.
+  ARBITRUM_RPC: "https://arb1.arbitrum.io/rpc"
+  # NeoFlow webhook security (production/SGX): block private networks by default.
+  NEOFLOW_WEBHOOK_ALLOW_PRIVATE_NETWORKS: "false"
+
+  # Internal service endpoints (used by gateway/service-to-service clients)
+  NEORAND_SERVICE_URL: "https://neorand:8081"
+  NEOVAULT_SERVICE_URL: "https://neovault:8082"
+  NEOFEEDS_SERVICE_URL: "https://neofeeds:8083"
+  NEOFLOW_SERVICE_URL: "https://neoflow:8084"
+  NEOACCOUNTS_SERVICE_URL: "https://neoaccounts:8085"
+  NEOCOMPUTE_SERVICE_URL: "https://neocompute:8086"
+  NEOSTORE_SERVICE_URL: "https://neostore:8087"
+  NEOORACLE_SERVICE_URL: "https://neooracle:8088"
+  SECRETS_BASE_URL: "https://neostore:8087"
+
+  # New infrastructure services
+  INDEXER_PORT: "8089"
+  TX_SUBMITTER_PORT: "8090"
+  MIXER_SCHEDULER_PORT: "8091"
+  MIXER_EXECUTOR_PORT: "8092"
+  TEE_SIGNER_PORT: "9443"
+
+  # NATS JetStream configuration
+  NATS_URL: "nats://nats.platform.svc.cluster.local:4222"
+  NATS_STREAM_NAME: "neo-events"
+  NATS_JETSTREAM_DOMAIN: "neo-jetstream"
+
+  # Indexer configuration
+  INDEXER_CONFIRMATION_DEPTH: "6"
+  INDEXER_POLL_INTERVAL: "15s"
+
+  # Tx-Submitter configuration
+  TX_SUBMITTER_MAX_RETRIES: "5"
+  TX_SUBMITTER_CONFIRMATION_TIMEOUT: "5m"
+
+  # Mixer configuration (disabled by default for safety)
+  MIXER_ENABLED: "false"
+  MIXER_MIN_TRANSFERS_PER_HOUR: "10"
+  MIXER_MAX_TRANSFERS_PER_HOUR: "100"
+
+  # TEE Signer configuration
+  TEE_SIGNER_SERVICE_URL: "https://tee-signer:9443"
+  TEE_SIGNER_KEY_ROTATION_DAYS: "30"

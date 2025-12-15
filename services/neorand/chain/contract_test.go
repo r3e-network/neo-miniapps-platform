@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/R3E-Network/service_layer/internal/chain"
+	"github.com/R3E-Network/service_layer/internal/testutil"
 )
 
 // =============================================================================
@@ -18,7 +19,7 @@ import (
 
 func newTestClient(t *testing.T, handler http.HandlerFunc) *chain.Client {
 	t.Helper()
-	server := httptest.NewServer(handler)
+	server := testutil.NewHTTPTestServer(t, handler)
 	t.Cleanup(server.Close)
 
 	client, err := chain.NewClient(chain.Config{

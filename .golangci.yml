@@ -20,7 +20,7 @@ linters:
     - unconvert
     - unparam
     - gosec
-    - exportloopref
+    - copyloopvar
     - nolintlint
 
 linters-settings:
@@ -29,8 +29,10 @@ linters-settings:
     check-blank: true
 
   govet:
-    check-shadowing: true
     enable-all: true
+    disable:
+      - fieldalignment
+      - unusedwrite
 
   gofmt:
     simplify: true
@@ -96,10 +98,11 @@ issues:
   max-issues-per-linter: 0
   max-same-issues: 0
   new: false
+  uniq-by-line: true
 
 output:
-  format: colored-line-number
+  formats:
+    - format: colored-line-number
   print-issued-lines: true
   print-linter-name: true
-  uniq-by-line: true
   sort-results: true

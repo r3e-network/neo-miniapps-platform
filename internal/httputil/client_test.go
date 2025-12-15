@@ -1,17 +1,33 @@
 package httputil
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/middleware"
+	"github.com/R3E-Network/service_layer/internal/serviceauth"
 )
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func newResponse(statusCode int, payload []byte) *http.Response {
+	return &http.Response{
+		StatusCode: statusCode,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(bytes.NewReader(payload)),
+	}
+}
 
 // =============================================================================
 // ServiceClient Tests
@@ -48,7 +64,7 @@ func TestNewServiceClient_Defaults(t *testing.T) {
 func TestNewServiceClient_WithTokenGenerator(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		t.Fatalf("Failed to generate RSA key: %v", err)
+		t.Fatalf("rsa.GenerateKey: %v", err)
 	}
 
 	client := NewServiceClient(ServiceClientConfig{
@@ -63,24 +79,22 @@ func TestNewServiceClient_WithTokenGenerator(t *testing.T) {
 }
 
 func TestServiceClient_Get(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := NewServiceClient(ServiceClientConfig{
+		BaseURL: "http://example",
+	})
+	client.httpClient.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		if r.Method != http.MethodGet {
 			t.Errorf("Method = %s, want GET", r.Method)
 		}
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	}))
-	defer server.Close()
-
-	client := NewServiceClient(ServiceClientConfig{
-		BaseURL: server.URL,
+		payload, _ := json.Marshal(map[string]string{"status": "ok"})
+		return newResponse(http.StatusOK, payload), nil
 	})
 
 	resp, err := client.Get(context.Background(), "/test")
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
-	defer resp.Body.Close()
+	resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("StatusCode = %d, want 200", resp.StatusCode)
@@ -88,7 +102,10 @@ func TestServiceClient_Get(t *testing.T) {
 }
 
 func TestServiceClient_Post(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := NewServiceClient(ServiceClientConfig{
+		BaseURL: "http://example",
+	})
+	client.httpClient.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		if r.Method != http.MethodPost {
 			t.Errorf("Method = %s, want POST", r.Method)
 		}
@@ -97,24 +114,19 @@ func TestServiceClient_Post(t *testing.T) {
 		}
 
 		var body map[string]string
-		json.NewDecoder(r.Body).Decode(&body)
+		_ = json.NewDecoder(r.Body).Decode(&body)
 		if body["key"] != "value" {
 			t.Errorf("body[key] = %s, want value", body["key"])
 		}
 
-		w.WriteHeader(http.StatusCreated)
-	}))
-	defer server.Close()
-
-	client := NewServiceClient(ServiceClientConfig{
-		BaseURL: server.URL,
+		return newResponse(http.StatusCreated, nil), nil
 	})
 
 	resp, err := client.Post(context.Background(), "/test", map[string]string{"key": "value"})
 	if err != nil {
 		t.Fatalf("Post() error = %v", err)
 	}
-	defer resp.Body.Close()
+	resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
 		t.Errorf("StatusCode = %d, want 201", resp.StatusCode)
@@ -124,22 +136,20 @@ func TestServiceClient_Post(t *testing.T) {
 func TestServiceClient_WithServiceToken(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		t.Fatalf("Failed to generate RSA key: %v", err)
+		t.Fatalf("rsa.GenerateKey: %v", err)
 	}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := r.Header.Get(middleware.ServiceTokenHeader)
-		if token == "" {
-			t.Error("X-Service-Token header should be set")
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
 
 	client := NewServiceClient(ServiceClientConfig{
 		PrivateKey: privateKey,
 		ServiceID:  "gateway",
-		BaseURL:    server.URL,
+		BaseURL:    "http://example",
+	})
+	client.httpClient.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		token := r.Header.Get(serviceauth.ServiceTokenHeader)
+		if token == "" {
+			t.Error("X-Service-Token header should be set")
+		}
+		return newResponse(http.StatusOK, nil), nil
 	})
 
 	resp, err := client.Get(context.Background(), "/test")
@@ -150,21 +160,18 @@ func TestServiceClient_WithServiceToken(t *testing.T) {
 }
 
 func TestServiceClient_WithUserID(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID := r.Header.Get(middleware.UserIDHeader)
+	client := NewServiceClient(ServiceClientConfig{
+		BaseURL: "http://example",
+	})
+	client.httpClient.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		userID := r.Header.Get(serviceauth.UserIDHeader)
 		if userID != "user-123" {
 			t.Errorf("X-User-ID = %s, want user-123", userID)
 		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	client := NewServiceClient(ServiceClientConfig{
-		BaseURL: server.URL,
+		return newResponse(http.StatusOK, nil), nil
 	})
 
-	// Create context with user ID using middleware's WithUserID function
-	ctx := middleware.WithUserID(context.Background(), "user-123")
+	ctx := serviceauth.WithUserID(context.Background(), "user-123")
 
 	resp, err := client.Get(ctx, "/test")
 	if err != nil {
@@ -175,19 +182,16 @@ func TestServiceClient_WithUserID(t *testing.T) {
 
 func TestServiceClient_RetryOnAuthFailure(t *testing.T) {
 	attempts := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := NewServiceClient(ServiceClientConfig{
+		BaseURL:    "http://example",
+		MaxRetries: 3,
+	})
+	client.httpClient.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		attempts++
 		if attempts < 3 {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
+			return newResponse(http.StatusUnauthorized, nil), nil
 		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	client := NewServiceClient(ServiceClientConfig{
-		BaseURL:    server.URL,
-		MaxRetries: 3,
+		return newResponse(http.StatusOK, nil), nil
 	})
 
 	resp, err := client.Get(context.Background(), "/test")
@@ -205,16 +209,14 @@ func TestServiceClient_RetryOnAuthFailure(t *testing.T) {
 }
 
 func TestServiceClient_Put(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := NewServiceClient(ServiceClientConfig{
+		BaseURL: "http://example",
+	})
+	client.httpClient.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		if r.Method != http.MethodPut {
 			t.Errorf("Method = %s, want PUT", r.Method)
 		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	client := NewServiceClient(ServiceClientConfig{
-		BaseURL: server.URL,
+		return newResponse(http.StatusOK, nil), nil
 	})
 
 	resp, err := client.Put(context.Background(), "/test", map[string]string{"key": "value"})
@@ -225,16 +227,14 @@ func TestServiceClient_Put(t *testing.T) {
 }
 
 func TestServiceClient_Delete(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := NewServiceClient(ServiceClientConfig{
+		BaseURL: "http://example",
+	})
+	client.httpClient.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		if r.Method != http.MethodDelete {
 			t.Errorf("Method = %s, want DELETE", r.Method)
 		}
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer server.Close()
-
-	client := NewServiceClient(ServiceClientConfig{
-		BaseURL: server.URL,
+		return newResponse(http.StatusNoContent, nil), nil
 	})
 
 	resp, err := client.Delete(context.Background(), "/test")
@@ -249,20 +249,11 @@ func TestServiceClient_Delete(t *testing.T) {
 }
 
 func TestDecodeResponse_Success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "hello"})
-	}))
-	defer server.Close()
-
-	resp, err := http.Get(server.URL)
-	if err != nil {
-		t.Fatalf("http.Get() error = %v", err)
-	}
+	payload, _ := json.Marshal(map[string]string{"message": "hello"})
+	resp := newResponse(http.StatusOK, payload)
 
 	var result map[string]string
-	err = DecodeResponse(resp, &result)
-	if err != nil {
+	if err := DecodeResponse(resp, &result); err != nil {
 		t.Fatalf("DecodeResponse() error = %v", err)
 	}
 
@@ -272,19 +263,30 @@ func TestDecodeResponse_Success(t *testing.T) {
 }
 
 func TestDecodeResponse_Error(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("bad request"))
-	}))
-	defer server.Close()
+	resp := newResponse(http.StatusBadRequest, []byte("bad request"))
 
-	resp, err := http.Get(server.URL)
-	if err != nil {
-		t.Fatalf("http.Get() error = %v", err)
-	}
-
-	err = DecodeResponse(resp, nil)
+	err := DecodeResponse(resp, nil)
 	if err == nil {
 		t.Error("DecodeResponse() should return error for 4xx status")
+	}
+}
+
+func TestDecodeResponse_InvalidJSON(t *testing.T) {
+	resp := newResponse(http.StatusOK, []byte("{invalid json"))
+	var out map[string]string
+	if err := DecodeResponse(resp, &out); err == nil {
+		t.Fatalf("expected DecodeResponse() to fail for invalid JSON")
+	}
+}
+
+func TestServiceClient_Do_TransportError(t *testing.T) {
+	client := NewServiceClient(ServiceClientConfig{BaseURL: "http://example"})
+	client.httpClient.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return nil, errors.New("boom")
+	})
+
+	_, err := client.Get(context.Background(), "/test")
+	if err == nil {
+		t.Fatalf("expected transport error")
 	}
 }

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { User, Key, Bell, Plus, Trash2, Copy, Check, AlertCircle, Wallet, Link2 } from 'lucide-react';
 import { useAuthStore } from '../stores/auth';
-import { api, APIKey, Wallet as WalletType, OAuthProvider } from '../api/client';
+import { api, API_BASE, APIKey, Wallet as WalletType, OAuthProvider } from '../api/client';
 
 export function Settings() {
   const { user } = useAuthStore();
@@ -75,8 +75,7 @@ export function Settings() {
   });
 
   const handleOAuthLink = (provider: 'google' | 'github') => {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-    window.location.href = `${apiUrl}/api/v1/auth/${provider}`;
+    window.location.href = `${API_BASE}/auth/${provider}`;
   };
 
   const handleCopyKey = async () => {
@@ -94,9 +93,9 @@ export function Settings() {
   };
 
   const availableScopes = [
-    { id: 'oracle', label: 'Oracle Service' },
+    { id: 'neooracle', label: 'NeoOracle Service' },
     { id: 'neorand', label: 'NeoRand Service' },
-    { id: 'secrets', label: 'Secrets Management' },
+    { id: 'neostore', label: 'NeoStore (Secrets)' },
     { id: 'neoflow', label: 'NeoFlow' },
     { id: 'neofeeds', label: 'Data Feeds' },
     { id: 'gasbank', label: 'Gas Bank' },

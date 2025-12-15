@@ -19,7 +19,7 @@ The Neo Service Layer is a **TEE-Centric (Trusted Execution Environment)** platf
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                           FRONTEND (Netlify)                                │
+│                           FRONTEND (Vercel)                                 │
 │                    React + TypeScript + Tailwind CSS                        │
 │                         User Dashboard & API Console                        │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -63,30 +63,30 @@ The Neo Service Layer is a **TEE-Centric (Trusted Execution Environment)** platf
 
 ### Backend (Go)
 
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| TEE Runtime | EGo (Edgeless Systems) | MarbleRun TEE execution |
-| Orchestration | MarbleRun | Multi-TEE coordination, secrets management |
-| Database | Supabase (PostgreSQL) | Persistent storage, real-time subscriptions |
-| HTTP Router | Gorilla Mux | REST API routing |
-| Blockchain | Neo N3 | Smart contract interaction |
+| Component     | Technology             | Purpose                                     |
+| ------------- | ---------------------- | ------------------------------------------- |
+| TEE Runtime   | EGo (Edgeless Systems) | MarbleRun TEE execution                     |
+| Orchestration | MarbleRun              | Multi-TEE coordination, secrets management  |
+| Database      | Supabase (PostgreSQL)  | Persistent storage, real-time subscriptions |
+| HTTP Router   | Gorilla Mux            | REST API routing                            |
+| Blockchain    | Neo N3                 | Smart contract interaction                  |
 
 ### Frontend (TypeScript)
 
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| Framework | React 18 | UI components |
-| Styling | Tailwind CSS | Responsive design |
-| State | Zustand | State management |
-| Hosting | Netlify | CDN, serverless functions |
+| Component | Technology   | Purpose                   |
+| --------- | ------------ | ------------------------- |
+| Framework | React 18     | UI components             |
+| Styling   | Tailwind CSS | Responsive design         |
+| State     | Zustand      | State management          |
+| Hosting   | Vercel       | CDN, serverless functions |
 
 ### Infrastructure
 
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| Secrets | MarbleRun Coordinator | TEE secret injection |
-| TLS | mTLS (MarbleRun) | Inter-service communication |
-| Attestation | MarbleRun/EGo | Remote attestation |
+| Component   | Technology            | Purpose                     |
+| ----------- | --------------------- | --------------------------- |
+| Secrets     | MarbleRun Coordinator | TEE secret injection        |
+| TLS         | mTLS (MarbleRun)      | Inter-service communication |
+| Attestation | MarbleRun/EGo         | Remote attestation          |
 
 ---
 
@@ -123,16 +123,16 @@ The Neo Service Layer is a **TEE-Centric (Trusted Execution Environment)** platf
 
 #### API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Service health check |
-| `/info` | GET | Service status and statistics |
-| `/pubkey` | GET | Get VRF public key |
-| `/random` | POST | Direct randomness generation (off-chain) |
-| `/verify` | POST | Verify VRF proof |
-| `/request` | POST | Create on-chain request |
-| `/request/{id}` | GET | Get request status |
-| `/requests` | GET | List user's requests |
+| Endpoint        | Method | Description                              |
+| --------------- | ------ | ---------------------------------------- |
+| `/health`       | GET    | Service health check                     |
+| `/info`         | GET    | Service status and statistics            |
+| `/pubkey`       | GET    | Get VRF public key                       |
+| `/random`       | POST   | Direct randomness generation (off-chain) |
+| `/verify`       | POST   | Verify VRF proof                         |
+| `/request`      | POST   | Create on-chain request                  |
+| `/request/{id}` | GET    | Get request status                       |
+| `/requests`     | GET    | List user's requests                     |
 
 #### Request/Response Types
 
@@ -210,22 +210,22 @@ Fee is deducted from delivery (user receives NetAmount = TotalAmount - ServiceFe
 
 #### Supported Tokens
 
-| Token | Script Hash | Min Amount | Max Amount | Fee Rate |
-|-------|-------------|------------|------------|----------|
-| GAS | `0xd2a4cff31913016155e38e474a2c06d08be276cf` | 0.001 | 1.0 | 0.5% |
-| NEO | `0xef4073a0f2b305a38ec4050e4d3d28bc40ea63f5` | 1 | 1000 | 0.5% |
+| Token | Script Hash                                  | Min Amount | Max Amount | Fee Rate |
+| ----- | -------------------------------------------- | ---------- | ---------- | -------- |
+| GAS   | `0xd2a4cff31913016155e38e474a2c06d08be276cf` | 0.001      | 1.0        | 0.5%     |
+| NEO   | `0xef4073a0f2b305a38ec4050e4d3d28bc40ea63f5` | 1          | 1000       | 0.5%     |
 
 #### API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Service health check |
-| `/info` | GET | Service status and pool statistics |
-| `/mix` | POST | Create mix request |
-| `/mix/{id}` | GET | Get mix request status |
-| `/mix/{id}/deposit` | POST | Confirm deposit |
-| `/tokens` | GET | List supported tokens |
-| `/dispute/{id}` | POST | Submit dispute (triggers on-chain proof) |
+| Endpoint            | Method | Description                              |
+| ------------------- | ------ | ---------------------------------------- |
+| `/health`           | GET    | Service health check                     |
+| `/info`             | GET    | Service status and pool statistics       |
+| `/mix`              | POST   | Create mix request                       |
+| `/mix/{id}`         | GET    | Get mix request status                   |
+| `/mix/{id}/deposit` | POST   | Confirm deposit                          |
+| `/tokens`           | GET    | List supported tokens                    |
+| `/dispute/{id}`     | POST   | Submit dispute (triggers on-chain proof) |
 
 #### Security Features
 
@@ -272,10 +272,10 @@ Fee is deducted from delivery (user receives NetAmount = TotalAmount - ServiceFe
 
 #### Data Sources
 
-| Source | Type | Priority | Weight |
-|--------|------|----------|--------|
-| Chainlink (Arbitrum) | On-chain | 1 (Primary) | 3 |
-| Binance | HTTP API | 2 (Fallback) | 1 |
+| Source               | Type     | Priority     | Weight |
+| -------------------- | -------- | ------------ | ------ |
+| Chainlink (Arbitrum) | On-chain | 1 (Primary)  | 3      |
+| Binance              | HTTP API | 2 (Fallback) | 1      |
 
 #### Supported Feeds
 
@@ -283,34 +283,34 @@ Fee is deducted from delivery (user receives NetAmount = TotalAmount - ServiceFe
 
 #### API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Service health check |
-| `/info` | GET | Service configuration |
-| `/price/{pair}` | GET | Get single price |
-| `/prices` | GET | Get all prices |
-| `/feeds` | GET | List available feeds |
-| `/sources` | GET | List data sources |
-| `/config` | GET | Get full configuration |
+| Endpoint        | Method | Description            |
+| --------------- | ------ | ---------------------- |
+| `/health`       | GET    | Service health check   |
+| `/info`         | GET    | Service configuration  |
+| `/price/{pair}` | GET    | Get single price       |
+| `/prices`       | GET    | Get all prices         |
+| `/feeds`        | GET    | List available feeds   |
+| `/sources`      | GET    | List data sources      |
+| `/config`       | GET    | Get full configuration |
 
 #### Configuration (YAML)
 
 ```yaml
 update_interval: 60s
 feeds:
-  - id: "BTC/USD"
-    pair: "BTCUSDT"
-    base: "btc"
-    quote: "usd"
-    decimals: 8
-    enabled: true
-    sources: ["binance", "chainlink"]
+    - id: "BTC/USD"
+      pair: "BTCUSDT"
+      base: "btc"
+      quote: "usd"
+      decimals: 8
+      enabled: true
+      sources: ["binance", "chainlink"]
 sources:
-  - id: "binance"
-    name: "Binance"
-    url: "https://api.binance.com/api/v3/ticker/price?symbol={pair}"
-    json_path: "price"
-    weight: 1
+    - id: "binance"
+      name: "Binance"
+      url: "https://api.binance.com/api/v3/ticker/price?symbol={pair}"
+      json_path: "price"
+      weight: 1
 ```
 
 ---
@@ -323,12 +323,12 @@ sources:
 
 #### Trigger Types
 
-| Type | ID | Description | Example |
-|------|-----|-------------|---------|
-| Time | 1 | Cron expressions | "Every Friday 00:00 UTC" |
-| Price | 2 | Price thresholds | "When BTC > $100,000" |
-| Event | 3 | On-chain events | "When contract X emits event Y" |
-| Threshold | 4 | Balance thresholds | "When balance < 10 GAS" |
+| Type      | ID  | Description        | Example                         |
+| --------- | --- | ------------------ | ------------------------------- |
+| Time      | 1   | Cron expressions   | "Every Friday 00:00 UTC"        |
+| Price     | 2   | Price thresholds   | "When BTC > $100,000"           |
+| Event     | 3   | On-chain events    | "When contract X emits event Y" |
+| Threshold | 4   | Balance thresholds | "When balance < 10 GAS"         |
 
 #### Workflow
 
@@ -356,18 +356,18 @@ sources:
 
 #### API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Service health check |
-| `/info` | GET | Service status |
-| `/triggers` | GET | List user's triggers |
-| `/triggers` | POST | Create trigger |
-| `/triggers/{id}` | GET | Get trigger details |
-| `/triggers/{id}` | PUT | Update trigger |
-| `/triggers/{id}` | DELETE | Delete trigger |
-| `/triggers/{id}/enable` | POST | Enable trigger |
-| `/triggers/{id}/disable` | POST | Disable trigger |
-| `/triggers/{id}/executions` | GET | List executions |
+| Endpoint                    | Method | Description          |
+| --------------------------- | ------ | -------------------- |
+| `/health`                   | GET    | Service health check |
+| `/info`                     | GET    | Service status       |
+| `/triggers`                 | GET    | List user's triggers |
+| `/triggers`                 | POST   | Create trigger       |
+| `/triggers/{id}`            | GET    | Get trigger details  |
+| `/triggers/{id}`            | PUT    | Update trigger       |
+| `/triggers/{id}`            | DELETE | Delete trigger       |
+| `/triggers/{id}/enable`     | POST   | Enable trigger       |
+| `/triggers/{id}/disable`    | POST   | Disable trigger      |
+| `/triggers/{id}/executions` | GET    | List executions      |
 
 ---
 
@@ -386,14 +386,14 @@ sources:
 
 #### API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Service health check |
-| `/info` | GET | Pool statistics |
-| `/accounts` | GET | List available accounts |
-| `/accounts/lock` | POST | Lock account for use |
-| `/accounts/{id}/unlock` | POST | Release account |
-| `/accounts/{id}/balance` | GET | Get account balance |
+| Endpoint                 | Method | Description             |
+| ------------------------ | ------ | ----------------------- |
+| `/health`                | GET    | Service health check    |
+| `/info`                  | GET    | Pool statistics         |
+| `/accounts`              | GET    | List available accounts |
+| `/accounts/lock`         | POST   | Lock account for use    |
+| `/accounts/{id}/unlock`  | POST   | Release account         |
+| `/accounts/{id}/balance` | GET    | Get account balance     |
 
 ---
 
@@ -435,34 +435,50 @@ sources:
 │ MARBLE_KEY            │ │ MARBLE_KEY            │ │ MARBLE_KEY            │
 │ MARBLE_ROOT_CA        │ │ MARBLE_ROOT_CA        │ │ MARBLE_ROOT_CA        │
 │ MARBLE_SECRETS        │ │ MARBLE_SECRETS        │ │ MARBLE_SECRETS        │
-│ VRF_PRIVATE_KEY       │ │ MIXER_MASTER_KEY      │ │ JWT_SECRET            │
+│ VRF_PRIVATE_KEY       │ │ NEOVAULT_MASTER_KEY   │ │ JWT_SECRET            │
 └───────────────────────┘ └───────────────────────┘ └───────────────────────┘
 ```
 
-### TEE Configuration (enclave.json)
+### TEE Configuration (`enclave.json`)
+
+The Docker images generate and sign an `enclave.json` during build (see `docker/Dockerfile.gateway` and `docker/Dockerfile.service`).
 
 ```json
 {
-  "exe": "marble",
-  "key": "private.pem",
-  "debug": true,
-  "heapSize": 512,
-  "productID": 1,
-  "securityVersion": 1,
-  "mounts": [
-    {"source": "/etc/ssl/certs", "target": "/etc/ssl/certs", "type": "hostfs", "readOnly": true}
-  ],
-  "env": [
-    {"name": "SERVICE_TYPE", "fromHost": true},
-    {"name": "MARBLE_CERT", "fromHost": true},
-    {"name": "MARBLE_KEY", "fromHost": true},
-    {"name": "MARBLE_ROOT_CA", "fromHost": true},
-    {"name": "MARBLE_SECRETS", "fromHost": true},
-    {"name": "SUPABASE_URL", "fromHost": true},
-    {"name": "SUPABASE_SERVICE_KEY", "fromHost": true}
-  ]
+    "exe": "<binary>",
+    "key": "private.pem",
+    "debug": false,
+    "heapSize": 256,
+    "executableHeap": false,
+    "productID": 1,
+    "securityVersion": 1,
+    "mounts": [{ "target": "/tmp", "type": "memfs" }],
+    "env": [
+        { "name": "EDG_MARBLE_TYPE", "fromHost": true },
+        { "name": "MARBLE_CERT", "fromHost": true },
+        { "name": "MARBLE_KEY", "fromHost": true },
+        { "name": "MARBLE_ROOT_CA", "fromHost": true },
+        { "name": "MARBLE_SECRETS", "fromHost": true },
+        { "name": "SUPABASE_URL", "fromHost": true },
+        { "name": "SUPABASE_SERVICE_KEY", "fromHost": true }
+    ]
 }
 ```
+
+**Key management note:** `private.pem` is the enclave signing key and must be treated like a build-time secret. It should be provided by your CI/build pipeline (or generated once and stored securely) and must not be shipped in runtime images or committed to the repository.
+
+To keep signing keys out of Docker layers, the Dockerfiles support BuildKit secrets (`id=ego_private_key`) and an opt-in strict mode:
+
+```bash
+DOCKER_BUILDKIT=1 docker build \
+  --secret id=ego_private_key,src=/path/to/private.pem \
+  --build-arg EGO_STRICT_SIGNING=1 \
+  -f docker/Dockerfile.gateway \
+  -t service-layer/gateway:latest \
+  .
+```
+
+For SGX hardware runs, prefer `./scripts/up.sh --signing-key` or `./scripts/up.sh --signing-key-dir` which verifies `SignerID` values against `manifests/manifest.json` and starts Docker Compose with `--no-build` (Compose cannot pass BuildKit secrets).
 
 ### Supabase Integration
 
@@ -495,11 +511,22 @@ sources:
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Netlify Frontend Deployment
+### Vercel Frontend Deployment
+
+Vercel configuration lives at the repo root in `vercel.json` and is set up as a
+single-page application (SPA):
+
+- Build base: `frontend`
+- Build output: `frontend/dist`
+- SPA rewrite: `/* -> /index.html`
+- Security headers: CSP, HSTS, etc.
+
+Set `VITE_API_URL` in Vercel (build environment) to point at your Gateway API
+base (for example `https://api.yourdomain.tld/api/v1`).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              Netlify                                        │
+│                              Vercel                                         │
 │                                                                             │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐             │
 │  │   CDN           │  │   Build         │  │   Functions     │             │
@@ -517,19 +544,19 @@ sources:
 
 ### TEE Security Guarantees
 
-1. **NeoComputeity**: Code and data inside TEE are encrypted
+1. **Confidentiality**: Code and data inside the TEE are encrypted
 2. **Integrity**: Tampering is detected via hardware attestation
 3. **Attestation**: Remote parties can verify TEE identity
 
 ### Secret Management
 
-| Secret | Service | Injection Method |
-|--------|---------|------------------|
-| VRF_PRIVATE_KEY | VRF | MarbleRun Coordinator |
-| MIXER_MASTER_KEY | NeoVault | MarbleRun Coordinator |
-| POOL_MASTER_KEY | AccountPool | MarbleRun Coordinator |
-| DATAFEEDS_SIGNING_KEY | NeoFeeds | MarbleRun Coordinator |
-| JWT_SECRET | Gateway | MarbleRun Coordinator |
+| Secret               | Service     | Injection Method      |
+| -------------------- | ----------- | --------------------- |
+| VRF_PRIVATE_KEY      | NeoRand     | MarbleRun Coordinator |
+| NEOVAULT_MASTER_KEY  | NeoVault    | MarbleRun Coordinator |
+| POOL_MASTER_KEY      | NeoAccounts | MarbleRun Coordinator |
+| NEOFEEDS_SIGNING_KEY | NeoFeeds    | MarbleRun Coordinator |
+| JWT_SECRET           | Gateway     | MarbleRun Coordinator |
 
 ### Authentication Flow
 
@@ -582,20 +609,20 @@ sources:
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐             │
-│  │ Supabase Cloud  │  │ Neo N3 Mainnet  │  │ Netlify CDN     │             │
+│  │ Supabase Cloud  │  │ Neo N3 Mainnet  │  │ Vercel CDN      │             │
 │  └─────────────────┘  └─────────────────┘  └─────────────────┘             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| SUPABASE_URL | Supabase project URL | Yes |
-| SUPABASE_SERVICE_KEY | Supabase service role key | Yes |
-| NEO_RPC_URL | Neo N3 RPC endpoint | Yes |
-| PORT | Service port | No (default: 8080) |
-| SERVICE_TYPE | Service identifier | Yes |
+| Variable             | Description               | Required           |
+| -------------------- | ------------------------- | ------------------ |
+| SUPABASE_URL         | Supabase project URL      | Yes                |
+| SUPABASE_SERVICE_KEY | Supabase service role key | Yes                |
+| NEO_RPC_URL          | Neo N3 RPC endpoint       | Yes                |
+| PORT                 | Service port              | No (default: 8080) |
+| SERVICE_TYPE         | Service identifier        | Yes                |
 
 ---
 
@@ -603,42 +630,50 @@ sources:
 
 ### Public Routes
 
-| Route | Method | Description |
-|-------|--------|-------------|
-| `/health` | GET | Health check |
-| `/attestation` | GET | MarbleRun attestation report |
-| `/api/v1/auth/nonce` | POST | Get auth nonce |
-| `/api/v1/auth/register` | POST | Register user |
-| `/api/v1/auth/login` | POST | Login with Neo wallet |
-| `/api/v1/auth/google` | GET | Google OAuth |
-| `/api/v1/auth/github` | GET | GitHub OAuth |
+| Route                   | Method | Description                  |
+| ----------------------- | ------ | ---------------------------- |
+| `/health`               | GET    | Health check                 |
+| `/attestation`          | GET    | MarbleRun attestation report |
+| `/api/v1/auth/nonce`    | POST   | Get auth nonce               |
+| `/api/v1/auth/register` | POST   | Register user                |
+| `/api/v1/auth/login`    | POST   | Login with Neo wallet        |
+| `/api/v1/auth/google`   | GET    | Google OAuth                 |
+| `/api/v1/auth/github`   | GET    | GitHub OAuth                 |
+
+**Wallet auth flow (Neo N3)**
+
+1. `POST /api/v1/auth/nonce` with `{ "address": "<neo_address>" }` to receive a one-time `nonce` and a `message` to sign.
+2. Sign the returned `message` using your wallet, then `POST /api/v1/auth/login` (or `/api/v1/auth/register`) with:
+   `{ address, publicKey, signature, message, nonce }`.
+
+When `OAUTH_COOKIE_MODE=true`, the gateway also sets an HTTP-only cookie (`sl_auth_token`) so browser clients can authenticate via `credentials: "include"` without exposing the JWT to JavaScript.
 
 ### Protected Routes (Require JWT)
 
-| Route | Method | Description |
-|-------|--------|-------------|
-| `/api/v1/me` | GET | Get user profile |
-| `/api/v1/apikeys` | GET/POST | Manage API keys |
-| `/api/v1/wallets` | GET/POST | Manage wallets |
-| `/api/v1/gasbank/*` | * | Gas bank operations |
-| `/api/v1/neorand/*` | * | VRF service proxy |
-| `/api/v1/neovault/*` | * | NeoVault service proxy |
-| `/api/v1/neofeeds/*` | * | NeoFeeds service proxy |
-| `/api/v1/neoflow/*` | * | NeoFlow service proxy |
-| `/api/v1/neocompute/*` | * | NeoCompute service proxy |
+| Route                  | Method   | Description              |
+| ---------------------- | -------- | ------------------------ |
+| `/api/v1/me`           | GET      | Get user profile         |
+| `/api/v1/apikeys`      | GET/POST | Manage API keys          |
+| `/api/v1/wallets`      | GET/POST | Manage wallets           |
+| `/api/v1/gasbank/*`    | \*       | Gas bank operations      |
+| `/api/v1/neorand/*`    | \*       | VRF service proxy        |
+| `/api/v1/neovault/*`   | \*       | NeoVault service proxy   |
+| `/api/v1/neofeeds/*`   | \*       | NeoFeeds service proxy   |
+| `/api/v1/neoflow/*`    | \*       | NeoFlow service proxy    |
+| `/api/v1/neocompute/*` | \*       | NeoCompute service proxy |
 
 ---
 
 ## Version Information
 
-| Service | Version | Status |
-|---------|---------|--------|
-| NeoRand Service | 2.0.0 | Production |
-| NeoVault Service | 3.2.0 | Production |
-| NeoFeeds Service | 3.0.0 | Production |
-| NeoFlow Service | 2.0.0 | Production |
-| AccountPool Service | 1.0.0 | Production |
-| NeoCompute Service | 1.0.0 | Beta |
+| Service             | Version | Status     |
+| ------------------- | ------- | ---------- |
+| NeoRand Service     | 2.0.0   | Production |
+| NeoVault Service    | 3.2.0   | Production |
+| NeoFeeds Service    | 3.0.0   | Production |
+| NeoFlow Service     | 2.0.0   | Production |
+| AccountPool Service | 1.0.0   | Production |
+| NeoCompute Service  | 1.0.0   | Beta       |
 
 ---
 

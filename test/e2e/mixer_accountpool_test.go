@@ -35,7 +35,7 @@ func TestNeoVaultNeoAccountsIntegration(t *testing.T) {
 	neovaultMarble, _ := marble.New(marble.Config{MarbleType: "neovault"})
 	neovaultMarble.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("e2e-test-neovault-master-key-32b!!"))
 
-	neovaultSvc, err := neovault.New(neovault.Config{
+	neovaultSvc, err := neovault.New(&neovault.Config{
 		Marble:         neovaultMarble,
 		NeoAccountsURL: apServer.URL,
 	})
@@ -289,7 +289,7 @@ func TestNeoVaultTokenConfigs(t *testing.T) {
 	neovaultMarble, _ := marble.New(marble.Config{MarbleType: "neovault"})
 	neovaultMarble.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("e2e-test-neovault-master-key-32b!!"))
 
-	neovaultSvc, _ := neovault.New(neovault.Config{
+	neovaultSvc, _ := neovault.New(&neovault.Config{
 		Marble:         neovaultMarble,
 		NeoAccountsURL: "http://localhost:8081",
 	})

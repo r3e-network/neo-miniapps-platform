@@ -1,12 +1,15 @@
 package neooracle
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	internalhttputil "github.com/R3E-Network/service_layer/internal/httputil"
 	"github.com/R3E-Network/service_layer/internal/marble"
+	"github.com/R3E-Network/service_layer/internal/testutil"
 )
 
 func TestAllowlistBlocksURL(t *testing.T) {
@@ -23,7 +26,7 @@ func TestAllowlistBlocksURL(t *testing.T) {
 
 func TestBodyLimitApplied(t *testing.T) {
 	// Mock upstream returning large body.
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	up := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(strings.Repeat("A", 1024)))
 	}))
 	defer up.Close()
@@ -36,12 +39,16 @@ func TestBodyLimitApplied(t *testing.T) {
 	req.Header.Set("X-User-ID", "user1")
 	rr := httptest.NewRecorder()
 	svc.handleQuery(rr, req)
-	if rr.Result().StatusCode != http.StatusOK {
-		t.Fatalf("status=%d want 200", rr.Result().StatusCode)
+	if rr.Result().StatusCode != http.StatusBadGateway {
+		t.Fatalf("status=%d want 502", rr.Result().StatusCode)
 	}
-	// Expect truncated body to length 10
-	if got := rr.Body.Len(); got < 10 {
-		t.Fatalf("expected truncated body len >=10, got %d", got)
+
+	var resp internalhttputil.ErrorResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if resp.Message != "upstream response too large" {
+		t.Fatalf("message=%q want %q", resp.Message, "upstream response too large")
 	}
 }
 

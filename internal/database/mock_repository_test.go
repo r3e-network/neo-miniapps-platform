@@ -52,7 +52,8 @@ func TestMockRepository_UserOperations(t *testing.T) {
 
 	// Test UpdateUserEmail
 	newEmail := "updated@example.com"
-	if err := repo.UpdateUserEmail(ctx, user.ID, newEmail); err != nil {
+	err = repo.UpdateUserEmail(ctx, user.ID, newEmail)
+	if err != nil {
 		t.Fatalf("UpdateUserEmail() error = %v", err)
 	}
 	got, _ = repo.GetUser(ctx, user.ID)
@@ -90,7 +91,8 @@ func TestMockRepository_GasBankOperations(t *testing.T) {
 	}
 
 	// Test UpdateGasBankBalance
-	if err := repo.UpdateGasBankBalance(ctx, "user-123", 1000000, 100000); err != nil {
+	err = repo.UpdateGasBankBalance(ctx, "user-123", 1000000, 100000)
+	if err != nil {
 		t.Fatalf("UpdateGasBankBalance() error = %v", err)
 	}
 	got, _ := repo.GetGasBankAccount(ctx, "user-123")
@@ -105,7 +107,8 @@ func TestMockRepository_GasBankOperations(t *testing.T) {
 		Amount:       1000000,
 		BalanceAfter: 1000000,
 	}
-	if err := repo.CreateGasBankTransaction(ctx, tx); err != nil {
+	err = repo.CreateGasBankTransaction(ctx, tx)
+	if err != nil {
 		t.Fatalf("CreateGasBankTransaction() error = %v", err)
 	}
 

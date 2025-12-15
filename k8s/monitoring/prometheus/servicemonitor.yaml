@@ -1,0 +1,91 @@
+# ServiceMonitor CRD 配置
+# 自动发现和抓取服务指标
+
+---
+# Gateway ServiceMonitor
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: gateway
+  namespace: monitoring
+  labels:
+    app: gateway
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: gateway
+  namespaceSelector:
+    matchNames:
+      - apps
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+
+---
+# Neo* Services ServiceMonitor
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: neo-services
+  namespace: monitoring
+  labels:
+    app: neo-services
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: service-layer
+  namespaceSelector:
+    matchNames:
+      - apps
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+
+---
+# NATS ServiceMonitor
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: nats
+  namespace: monitoring
+  labels:
+    app: nats
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nats
+  namespaceSelector:
+    matchNames:
+      - platform
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+
+---
+# MarbleRun Coordinator ServiceMonitor
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: marblerun-coordinator
+  namespace: monitoring
+  labels:
+    app: marblerun
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: coordinator
+  namespaceSelector:
+    matchNames:
+      - marblerun
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s

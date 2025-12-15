@@ -3,7 +3,6 @@ package vrfchain
 
 import (
 	"context"
-	"fmt"
 	"math/big"
 
 	"github.com/R3E-Network/service_layer/internal/chain"
@@ -60,67 +59,20 @@ func NewVRFContract(client *chain.Client, contractHash string, wallet *chain.Wal
 
 // GetRandomness returns the randomness for a VRF request.
 func (v *VRFContract) GetRandomness(ctx context.Context, requestID *big.Int) ([]byte, error) {
-	params := []chain.ContractParam{chain.NewIntegerParam(requestID)}
-	result, err := v.client.InvokeFunction(ctx, v.contractHash, "getRandomness", params)
-	if err != nil {
-		return nil, err
-	}
-	if result.State != "HALT" {
-		return nil, fmt.Errorf("execution failed: %s", result.Exception)
-	}
-	if len(result.Stack) == 0 {
-		return nil, fmt.Errorf("no result")
-	}
-	return chain.ParseByteArray(result.Stack[0])
+	return chain.InvokeStruct(ctx, v.client, v.contractHash, "getRandomness", chain.ParseByteArray, chain.NewIntegerParam(requestID))
 }
 
 // GetProof returns the proof for a VRF request.
 func (v *VRFContract) GetProof(ctx context.Context, requestID *big.Int) ([]byte, error) {
-	params := []chain.ContractParam{chain.NewIntegerParam(requestID)}
-	result, err := v.client.InvokeFunction(ctx, v.contractHash, "getProof", params)
-	if err != nil {
-		return nil, err
-	}
-	if result.State != "HALT" {
-		return nil, fmt.Errorf("execution failed: %s", result.Exception)
-	}
-	if len(result.Stack) == 0 {
-		return nil, fmt.Errorf("no result")
-	}
-	return chain.ParseByteArray(result.Stack[0])
+	return chain.InvokeStruct(ctx, v.client, v.contractHash, "getProof", chain.ParseByteArray, chain.NewIntegerParam(requestID))
 }
 
 // GetVRFPublicKey returns the VRF public key.
 func (v *VRFContract) GetVRFPublicKey(ctx context.Context) ([]byte, error) {
-	result, err := v.client.InvokeFunction(ctx, v.contractHash, "getVRFPublicKey", nil)
-	if err != nil {
-		return nil, err
-	}
-	if result.State != "HALT" {
-		return nil, fmt.Errorf("execution failed: %s", result.Exception)
-	}
-	if len(result.Stack) == 0 {
-		return nil, fmt.Errorf("no result")
-	}
-	return chain.ParseByteArray(result.Stack[0])
+	return chain.InvokeStruct(ctx, v.client, v.contractHash, "getVRFPublicKey", chain.ParseByteArray)
 }
 
 // VerifyProof verifies a VRF proof on-chain.
 func (v *VRFContract) VerifyProof(ctx context.Context, seed, randomWords, proof []byte) (bool, error) {
-	params := []chain.ContractParam{
-		chain.NewByteArrayParam(seed),
-		chain.NewByteArrayParam(randomWords),
-		chain.NewByteArrayParam(proof),
-	}
-	result, err := v.client.InvokeFunction(ctx, v.contractHash, "verifyProof", params)
-	if err != nil {
-		return false, err
-	}
-	if result.State != "HALT" {
-		return false, fmt.Errorf("execution failed: %s", result.Exception)
-	}
-	if len(result.Stack) == 0 {
-		return false, fmt.Errorf("no result")
-	}
-	return chain.ParseBoolean(result.Stack[0])
+	return chain.InvokeBool(ctx, v.client, v.contractHash, "verifyProof", chain.NewByteArrayParam(seed), chain.NewByteArrayParam(randomWords), chain.NewByteArrayParam(proof))
 }

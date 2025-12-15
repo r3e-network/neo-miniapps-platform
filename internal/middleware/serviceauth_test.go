@@ -10,8 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/logging"
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/R3E-Network/service_layer/internal/logging"
 )
 
 // =============================================================================
@@ -87,7 +88,7 @@ func TestServiceAuthMiddleware_ValidToken(t *testing.T) {
 	privateKey, publicKey := generateTestKeyPair(t)
 	middleware := newTestServiceAuthMiddleware(t, publicKey, []string{"gateway"}, false)
 
-	token := generateValidServiceToken(t, privateKey, "gateway", time.Hour)
+	token := generateValidServiceToken(t, privateKey, "gateway", 2*time.Hour)
 
 	req := httptest.NewRequest("GET", "/api/test", nil)
 	req.Header.Set(ServiceTokenHeader, token)
@@ -335,11 +336,30 @@ func TestServiceTokenGenerator_GenerateToken(t *testing.T) {
 }
 
 func TestServiceTokenGenerator_DefaultExpiry(t *testing.T) {
-	privateKey, _ := generateTestKeyPair(t)
+	privateKey, publicKey := generateTestKeyPair(t)
 	generator := NewServiceTokenGenerator(privateKey, "gateway", 0)
 
-	if generator.expiry != DefaultServiceTokenExpiry {
-		t.Errorf("Expected default expiry %v, got %v", DefaultServiceTokenExpiry, generator.expiry)
+	tokenString, err := generator.GenerateToken()
+	if err != nil {
+		t.Fatalf("GenerateToken() error = %v", err)
+	}
+
+	token, err := jwt.ParseWithClaims(tokenString, &ServiceClaims{}, func(token *jwt.Token) (interface{}, error) {
+		return publicKey, nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to parse token: %v", err)
+	}
+
+	claims, ok := token.Claims.(*ServiceClaims)
+	if !ok {
+		t.Fatal("Invalid claims type")
+	}
+	if claims.IssuedAt == nil || claims.ExpiresAt == nil {
+		t.Fatalf("expected issued_at and expires_at to be set")
+	}
+	if got := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time); got != DefaultServiceTokenExpiry {
+		t.Errorf("Expected default expiry %v, got %v", DefaultServiceTokenExpiry, got)
 	}
 }
 
@@ -384,7 +404,7 @@ func TestGetServiceID(t *testing.T) {
 	}
 
 	// With service ID
-	ctx = context.WithValue(ctx, serviceIDKey, "gateway")
+	ctx = WithServiceID(ctx, "gateway")
 	if id := GetServiceID(ctx); id != "gateway" {
 		t.Errorf("Expected 'gateway', got '%s'", id)
 	}
@@ -399,7 +419,7 @@ func TestGetUserIDFromContext(t *testing.T) {
 	}
 
 	// With user ID
-	ctx = context.WithValue(ctx, userIDKey, "user-123")
+	ctx = WithUserID(ctx, "user-123")
 	if id := GetUserIDFromContext(ctx); id != "user-123" {
 		t.Errorf("Expected 'user-123', got '%s'", id)
 	}
@@ -411,7 +431,7 @@ func TestGetUserIDFromContext(t *testing.T) {
 
 func TestRequireServiceAuth_WithServiceID(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/test", nil)
-	ctx := context.WithValue(req.Context(), serviceIDKey, "gateway")
+	ctx := WithServiceID(req.Context(), "gateway")
 	req = req.WithContext(ctx)
 
 	rr := httptest.NewRecorder()

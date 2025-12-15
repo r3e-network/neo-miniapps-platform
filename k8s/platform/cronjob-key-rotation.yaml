@@ -1,0 +1,36 @@
+# =============================================================================
+# TEE Signer Key Rotation (Monthly)
+# =============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: tee-signer-key-rotation
+  namespace: service-layer
+  labels:
+    app: tee-signer-key-rotation
+spec:
+  # Run at 00:00 UTC on the 1st of each month.
+  schedule: "0 0 1 * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: tee-signer-key-rotation
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: OnFailure
+          containers:
+            - name: rotate
+              image: curlimages/curl:8.5.0
+              imagePullPolicy: IfNotPresent
+              args:
+                - -fsS
+                - -X
+                - POST
+                - http://tee-signer.service-layer.svc.cluster.local:8080/internal/rotate-key
+

@@ -1,0 +1,179 @@
+# =============================================================================
+# MarbleRun Coordinator Deployment for Simulation / Development
+# - Runs with OE_SIMULATION=1 (no SGX required)
+# - Does not mount AESM/DCAP host resources
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: marblerun
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coordinator
+  namespace: marblerun
+  labels:
+    app: coordinator
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: coordinator
+  template:
+    metadata:
+      labels:
+        app: coordinator
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: coordinator
+          image: ghcr.io/edgelesssys/marblerun/coordinator:v1.8.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - containerPort: 4433
+              name: client
+            - containerPort: 2001
+              name: mesh
+            - containerPort: 9944
+              name: prometheus
+          env:
+            - name: EDG_COORDINATOR_MESH_ADDR
+              value: "0.0.0.0:2001"
+            - name: EDG_COORDINATOR_CLIENT_ADDR
+              value: "0.0.0.0:4433"
+            - name: EDG_COORDINATOR_PROMETHEUS_ADDR
+              value: "0.0.0.0:9944"
+            - name: EDG_COORDINATOR_DNS_NAMES
+              value: "coordinator,coordinator.marblerun,coordinator.marblerun.svc.cluster.local,localhost"
+            - name: EDG_COORDINATOR_SEAL_DIR
+              value: "/coordinator/data"
+            - name: OE_SIMULATION
+              value: "1"
+          volumeMounts:
+            - name: coordinator-data
+              mountPath: /coordinator/data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 9944
+              scheme: HTTP
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 9944
+              scheme: HTTP
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 5
+      volumes:
+        - name: coordinator-data
+          persistentVolumeClaim:
+            claimName: coordinator-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: coordinator-pvc
+  namespace: marblerun
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coordinator-client-api
+  namespace: marblerun
+spec:
+  selector:
+    app: coordinator
+  ports:
+    - port: 4433
+      targetPort: 4433
+      name: client
+  type: ClusterIP
+---
+# Alias matching the default `marblerun install` service name.
+# Kept for compatibility with the Service Layer Kustomize overlays.
+apiVersion: v1
+kind: Service
+metadata:
+  name: marblerun-coordinator-client-api
+  namespace: marblerun
+spec:
+  selector:
+    app: coordinator
+  ports:
+    - port: 4433
+      targetPort: 4433
+      name: client
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coordinator-mesh-api
+  namespace: marblerun
+spec:
+  selector:
+    app: coordinator
+  ports:
+    - port: 2001
+      targetPort: 2001
+      name: mesh
+  type: ClusterIP
+---
+# Alias matching the default `marblerun install` mesh service name.
+apiVersion: v1
+kind: Service
+metadata:
+  name: marblerun-coordinator
+  namespace: marblerun
+spec:
+  selector:
+    app: coordinator
+  ports:
+    - port: 2001
+      targetPort: 2001
+      name: mesh
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coordinator-prometheus
+  namespace: marblerun
+spec:
+  selector:
+    app: coordinator
+  ports:
+    - port: 9944
+      targetPort: 9944
+      name: prometheus
+  type: ClusterIP

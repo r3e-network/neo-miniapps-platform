@@ -1,0 +1,100 @@
+# NATS JetStream Stream 配置
+# 根据架构文档 Section 3.2 和 internal/nats/subjects.go 定义
+
+---
+# Stream CRD (需要安装 NATS JetStream Controller)
+# kubectl apply -f https://raw.githubusercontent.com/nats-io/nack/main/deploy/crds.yml
+# kubectl apply -f https://raw.githubusercontent.com/nats-io/nack/main/deploy/deployment.yml
+
+apiVersion: jetstream.nats.io/v1beta2
+kind: Stream
+metadata:
+  name: neo-events
+  namespace: platform
+spec:
+  name: neo-events
+  subjects:
+    # =============================================================================
+    # Chain Events (from Indexer service)
+    # =============================================================================
+    # Pattern: sl.chain.{chainId}.event.{contractHash}
+    - sl.chain.*.event.*
+    - sl.chain.*.block
+
+    # =============================================================================
+    # Service Jobs (internal work queue)
+    # =============================================================================
+    # Pattern: sl.job.{serviceType}
+    - sl.job.vrf
+    - sl.job.oracle
+    - sl.job.automation
+    - sl.job.mixer
+    - sl.job.accountpool
+
+    # =============================================================================
+    # Transaction Submission
+    # =============================================================================
+    - sl.tx.submit
+    - sl.tx.confirm
+    - sl.tx.failed
+
+    # =============================================================================
+    # Dead Letter Queues (failed messages for investigation)
+    # =============================================================================
+    - sl.dlq.vrf
+    - sl.dlq.oracle
+    - sl.dlq.automation
+    - sl.dlq.mixer
+    - sl.dlq.tx
+
+    # =============================================================================
+    # Wildcard (capture all sl.* events for debugging/audit)
+    # =============================================================================
+    - sl.>
+
+  # 保留策略
+  retention: limits # 基于大小和时间限制
+  maxAge: 168h # 7 天
+  maxBytes: 10737418240 # 10GB
+
+  # 存储配置
+  storage: file
+
+  # 副本数 (单节点模式为 1)
+  replicas: 1
+
+  # 去重窗口
+  duplicateWindow: 5m
+
+  # 最大消息大小
+  maxMsgSize: 1048576 # 1MB
+
+  # 丢弃策略 (超出限制时丢弃旧消息)
+  discard: old
+
+---
+# ConfigMap: NATS 客户端配置
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nats-client-config
+  namespace: platform
+data:
+  nats.conf: |
+    # NATS Server URL
+    server: nats://nats.platform.svc.cluster.local:4222
+
+    # JetStream 配置
+    jetstream:
+      enabled: true
+      domain: neo-jetstream
+
+    # Stream 名称
+    stream: neo-events
+
+    # 重试配置
+    max_reconnects: 10
+    reconnect_wait: 2s
+
+    # 超时配置
+    timeout: 5s

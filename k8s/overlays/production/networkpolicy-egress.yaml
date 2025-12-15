@@ -1,0 +1,98 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-egress
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # Allow DNS resolution (CoreDNS/kube-dns).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+    # Allow NodeLocal DNSCache when deployed (commonly bound to a link-local IP).
+    # This keeps DNS working in clusters that use 169.254.20.10 (or similar).
+    - to:
+        - ipBlock:
+            cidr: 169.254.0.0/16
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+    # Allow mesh/coordinator connectivity (MarbleRun Mesh API).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: marblerun
+          podSelector:
+            matchLabels:
+              app: coordinator
+      ports:
+        - protocol: TCP
+          port: 2001
+
+    # Allow internal service-to-service traffic within the service-layer namespace.
+    - to:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8081
+        - protocol: TCP
+          port: 8082
+        - protocol: TCP
+          port: 8083
+        - protocol: TCP
+          port: 8084
+        - protocol: TCP
+          port: 8085
+        - protocol: TCP
+          port: 8086
+        - protocol: TCP
+          port: 8087
+        - protocol: TCP
+          port: 8088
+
+    # Allow external HTTPS (Supabase, Neo RPC, third-party APIs).
+    # NOTE: NetworkPolicy cannot restrict by domain; tighten via egress gateway or CNI features if needed.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            # Block common private and reserved ranges to reduce SSRF blast radius.
+            # If you use PrivateLink/VPC endpoints, you may need to adjust this.
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 224.0.0.0/4
+              - 240.0.0.0/4
+      ports:
+        - protocol: TCP
+          port: 443
+
+    # IPv6 external HTTPS (optional / dual-stack clusters).
+    - to:
+        - ipBlock:
+            cidr: ::/0
+            except:
+              - ::1/128
+              - fc00::/7
+              - fe80::/10
+      ports:
+        - protocol: TCP
+          port: 443

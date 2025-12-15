@@ -180,28 +180,26 @@ The NeoAccounts service uses a service-specific Supabase repository for database
 ### Package Structure
 
 ```
-services/accountpool/
-├── supabase/
-│   ├── repository.go    # AccountPool-specific repository interface
-│   └── models.go        # AccountPool data models (Account, Lock)
-├── accountpool.go       # Service implementation
+services/neoaccounts/
+├── marble/              # Service implementation (HTTP handlers, key derivation, signing)
+├── supabase/            # NeoAccounts-specific repository (pool accounts + balances)
+│   ├── repository.go
+│   └── models.go
 └── README.md
 ```
 
 ### Repository Interface
 
 ```go
-import accountpoolsupabase "github.com/R3E-Network/service_layer/services/accountpool/supabase"
+import neoaccountssupabase "github.com/R3E-Network/service_layer/services/neoaccounts/supabase"
 
 // Create repository
-poolRepo := accountpoolsupabase.NewRepository(baseRepo)
+poolRepo := neoaccountssupabase.NewRepository(baseRepo)
 
 // Operations
-err := poolRepo.Create(ctx, &accountpoolsupabase.Account{...})
+err := poolRepo.Create(ctx, &neoaccountssupabase.Account{...})
 accounts, err := poolRepo.ListAvailable(ctx, 10)
 err := poolRepo.Update(ctx, account)
-err := poolRepo.Lock(ctx, accountID, serviceID)
-err := poolRepo.Unlock(ctx, accountID)
 ```
 
 ### Data Models
@@ -214,12 +212,12 @@ err := poolRepo.Unlock(ctx, accountID)
 ## Testing
 
 ```bash
-go test ./services/accountpool/... -v -cover
+go test ./services/neoaccounts/... -v -cover
 ```
 
 Current test coverage: **11.4%**
 
 ## Version
 
-- Service ID: `accountpool`
+- Service ID: `neoaccounts` (alias: `accountpool`)
 - Version: `1.0.0`

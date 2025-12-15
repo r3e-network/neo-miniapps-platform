@@ -9,9 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/errors"
-	"github.com/R3E-Network/service_layer/internal/logging"
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/R3E-Network/service_layer/internal/errors"
+	internalhttputil "github.com/R3E-Network/service_layer/internal/httputil"
+	"github.com/R3E-Network/service_layer/internal/logging"
+	"github.com/R3E-Network/service_layer/internal/serviceauth"
 )
 
 // =============================================================================
@@ -20,24 +23,16 @@ import (
 
 const (
 	// ServiceTokenHeader is the header name for service-to-service tokens.
-	ServiceTokenHeader = "X-Service-Token"
+	ServiceTokenHeader = serviceauth.ServiceTokenHeader
 
 	// ServiceIDHeader is the header name for service identification.
-	ServiceIDHeader = "X-Service-ID"
+	ServiceIDHeader = serviceauth.ServiceIDHeader
 
 	// UserIDHeader is the header name for user identification.
-	UserIDHeader = "X-User-ID"
+	UserIDHeader = serviceauth.UserIDHeader
 
 	// DefaultServiceTokenExpiry is the default expiration time for service tokens.
-	DefaultServiceTokenExpiry = 1 * time.Hour
-)
-
-// Context keys for service authentication.
-type contextKey string
-
-const (
-	serviceIDKey contextKey = "service_id"
-	userIDKey    contextKey = "user_id"
+	DefaultServiceTokenExpiry = serviceauth.DefaultServiceTokenExpiry
 )
 
 // =============================================================================
@@ -45,9 +40,23 @@ const (
 // =============================================================================
 
 // ServiceClaims represents JWT claims for service-to-service authentication.
-type ServiceClaims struct {
-	ServiceID string `json:"service_id"`
-	jwt.RegisteredClaims
+type ServiceClaims = serviceauth.ServiceClaims
+
+// ServiceTokenGenerator generates service-to-service JWT tokens.
+type ServiceTokenGenerator = serviceauth.ServiceTokenGenerator
+
+// ServiceTokenRoundTripper injects X-Service-Token (and optionally X-User-ID)
+// into outgoing HTTP requests.
+type ServiceTokenRoundTripper = serviceauth.ServiceTokenRoundTripper
+
+// NewServiceTokenGenerator creates a new service token generator.
+func NewServiceTokenGenerator(privateKey *rsa.PrivateKey, serviceID string, expiry time.Duration) *ServiceTokenGenerator {
+	return serviceauth.NewServiceTokenGenerator(privateKey, serviceID, expiry)
+}
+
+// NewServiceTokenRoundTripper wraps a base transport with service-token injection.
+func NewServiceTokenRoundTripper(base http.RoundTripper, generator *ServiceTokenGenerator) http.RoundTripper {
+	return serviceauth.NewServiceTokenRoundTripper(base, generator)
 }
 
 // =============================================================================
@@ -56,13 +65,13 @@ type ServiceClaims struct {
 
 // ServiceAuthMiddleware provides service-to-service JWT authentication.
 type ServiceAuthMiddleware struct {
-	publicKey        *rsa.PublicKey
-	logger           *logging.Logger
-	allowedServices  map[string]bool
-	requireUserID    bool
-	skipPaths        map[string]bool
-	mu               sync.RWMutex
-	validatedTokens  map[string]*cachedToken // In-memory cache for validated tokens
+	publicKey       *rsa.PublicKey
+	logger          *logging.Logger
+	allowedServices map[string]bool
+	requireUserID   bool
+	skipPaths       map[string]bool
+	mu              sync.RWMutex
+	validatedTokens map[string]*cachedToken // In-memory cache for validated tokens
 }
 
 // cachedToken stores validated token info with expiry.
@@ -92,9 +101,14 @@ func NewServiceAuthMiddleware(cfg ServiceAuthConfig) *ServiceAuthMiddleware {
 		skip[path] = true
 	}
 
+	logger := cfg.Logger
+	if logger == nil {
+		logger = logging.New("serviceauth", "info", "json")
+	}
+
 	return &ServiceAuthMiddleware{
 		publicKey:       cfg.PublicKey,
-		logger:          cfg.Logger,
+		logger:          logger,
 		allowedServices: allowed,
 		requireUserID:   cfg.RequireUserID,
 		skipPaths:       skip,
@@ -149,9 +163,9 @@ func (m *ServiceAuthMiddleware) Handler(next http.Handler) http.Handler {
 		}
 
 		// Add service ID and user ID to context
-		ctx := context.WithValue(r.Context(), serviceIDKey, claims.ServiceID)
+		ctx := serviceauth.WithServiceID(r.Context(), claims.ServiceID)
 		if userID != "" {
-			ctx = context.WithValue(ctx, userIDKey, userID)
+			ctx = serviceauth.WithUserID(ctx, userID)
 		}
 
 		// Log successful authentication
@@ -166,6 +180,10 @@ func (m *ServiceAuthMiddleware) Handler(next http.Handler) http.Handler {
 
 // validateServiceToken validates a service JWT token.
 func (m *ServiceAuthMiddleware) validateServiceToken(tokenString string) (*ServiceClaims, error) {
+	if m.publicKey == nil {
+		return nil, errors.Internal("service authentication is not configured", nil)
+	}
+
 	// Check cache first
 	if cached := m.getCachedToken(tokenString); cached != nil {
 		return cached, nil
@@ -197,6 +215,15 @@ func (m *ServiceAuthMiddleware) validateServiceToken(tokenString string) (*Servi
 		return nil, errors.InvalidToken(nil).WithDetails("reason", "missing service_id claim")
 	}
 
+	// Defense in depth: ensure token was minted by our service-layer issuer.
+	if claims.Issuer != "service-layer" {
+		return nil, errors.InvalidToken(nil).WithDetails("reason", "invalid issuer")
+	}
+	// Keep Subject consistent with the service identity.
+	if claims.Subject != "" && claims.Subject != claims.ServiceID {
+		return nil, errors.InvalidToken(nil).WithDetails("reason", "subject/service mismatch")
+	}
+
 	// Cache the validated token
 	m.cacheToken(tokenString, claims)
 
@@ -206,18 +233,25 @@ func (m *ServiceAuthMiddleware) validateServiceToken(tokenString string) (*Servi
 // getCachedToken retrieves a cached token if valid.
 func (m *ServiceAuthMiddleware) getCachedToken(tokenString string) *ServiceClaims {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	cached, ok := m.validatedTokens[tokenString]
 	if !ok {
+		m.mu.RUnlock()
 		return nil
 	}
 
 	// Check if cache entry has expired
 	if time.Now().After(cached.expiresAt) {
+		m.mu.RUnlock()
+		m.mu.Lock()
+		// Re-check under write lock before deleting.
+		if current, ok := m.validatedTokens[tokenString]; ok && time.Now().After(current.expiresAt) {
+			delete(m.validatedTokens, tokenString)
+		}
+		m.mu.Unlock()
 		return nil
 	}
 
+	m.mu.RUnlock()
 	return cached.claims
 }
 
@@ -269,8 +303,7 @@ func (m *ServiceAuthMiddleware) respondError(w http.ResponseWriter, r *http.Requ
 		serviceErr = errors.Internal("Service authentication failed", err)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(serviceErr.HTTPStatus)
+	internalhttputil.WriteErrorResponse(w, r, serviceErr.HTTPStatus, string(serviceErr.Code), serviceErr.Message, serviceErr.Details)
 
 	m.logger.WithContext(r.Context()).WithError(err).WithFields(map[string]interface{}{
 		"path":   r.URL.Path,
@@ -280,69 +313,41 @@ func (m *ServiceAuthMiddleware) respondError(w http.ResponseWriter, r *http.Requ
 }
 
 // =============================================================================
-// Service Token Generator
-// =============================================================================
-
-// ServiceTokenGenerator generates service-to-service JWT tokens.
-type ServiceTokenGenerator struct {
-	privateKey *rsa.PrivateKey
-	serviceID  string
-	expiry     time.Duration
-}
-
-// NewServiceTokenGenerator creates a new service token generator.
-func NewServiceTokenGenerator(privateKey *rsa.PrivateKey, serviceID string, expiry time.Duration) *ServiceTokenGenerator {
-	if expiry == 0 {
-		expiry = DefaultServiceTokenExpiry
-	}
-	return &ServiceTokenGenerator{
-		privateKey: privateKey,
-		serviceID:  serviceID,
-		expiry:     expiry,
-	}
-}
-
-// GenerateToken generates a new service token.
-func (g *ServiceTokenGenerator) GenerateToken() (string, error) {
-	now := time.Now()
-	claims := &ServiceClaims{
-		ServiceID: g.serviceID,
-		RegisteredClaims: jwt.RegisteredClaims{
-			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(g.expiry)),
-			Issuer:    "service-layer",
-			Subject:   g.serviceID,
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-	return token.SignedString(g.privateKey)
-}
-
-// =============================================================================
 // Helper Functions
 // =============================================================================
 
 // GetServiceID extracts service ID from context.
 func GetServiceID(ctx context.Context) string {
-	if v := ctx.Value(serviceIDKey); v != nil {
-		return v.(string)
-	}
-	return ""
+	return serviceauth.GetServiceID(ctx)
 }
 
 // GetUserIDFromContext extracts user ID from context.
 func GetUserIDFromContext(ctx context.Context) string {
-	if v := ctx.Value(userIDKey); v != nil {
-		return v.(string)
-	}
-	return ""
+	return serviceauth.GetUserID(ctx)
+}
+
+// WithServiceID returns a new context with the service ID set.
+// This is useful for propagating service identity through internal calls.
+func WithServiceID(ctx context.Context, serviceID string) context.Context {
+	return serviceauth.WithServiceID(ctx, serviceID)
 }
 
 // WithUserID returns a new context with the user ID set.
 // This is useful for propagating user ID through service-to-service calls.
 func WithUserID(ctx context.Context, userID string) context.Context {
-	return context.WithValue(ctx, userIDKey, userID)
+	return serviceauth.WithUserID(ctx, userID)
+}
+
+// ParseRSAPublicKeyFromPEM parses an RSA public key from PEM bytes.
+// Supported PEM types: PUBLIC KEY (PKIX), RSA PUBLIC KEY (PKCS#1), CERTIFICATE.
+func ParseRSAPublicKeyFromPEM(pemBytes []byte) (*rsa.PublicKey, error) {
+	return serviceauth.ParseRSAPublicKeyFromPEM(pemBytes)
+}
+
+// ParseRSAPrivateKeyFromPEM parses an RSA private key from PEM bytes.
+// Supported PEM types: RSA PRIVATE KEY (PKCS#1), PRIVATE KEY (PKCS#8).
+func ParseRSAPrivateKeyFromPEM(pemBytes []byte) (*rsa.PrivateKey, error) {
+	return serviceauth.ParseRSAPrivateKeyFromPEM(pemBytes)
 }
 
 // isValidUserID validates user ID format (UUID).
@@ -384,7 +389,7 @@ func RequireServiceAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		serviceID := GetServiceID(r.Context())
 		if serviceID == "" {
-			http.Error(w, `{"error":"service authentication required"}`, http.StatusUnauthorized)
+			internalhttputil.WriteErrorResponse(w, r, http.StatusUnauthorized, "AUTH_REQUIRED", "service authentication required", nil)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -396,11 +401,11 @@ func RequireUserIDHeader(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Header.Get(UserIDHeader)
 		if userID == "" {
-			http.Error(w, `{"error":"X-User-ID header required"}`, http.StatusUnauthorized)
+			internalhttputil.WriteErrorResponse(w, r, http.StatusUnauthorized, "USER_ID_REQUIRED", "X-User-ID header required", nil)
 			return
 		}
 		if !isValidUserID(userID) {
-			http.Error(w, `{"error":"invalid X-User-ID format"}`, http.StatusBadRequest)
+			internalhttputil.WriteErrorResponse(w, r, http.StatusBadRequest, "INVALID_USER_ID", "invalid X-User-ID format", nil)
 			return
 		}
 		next.ServeHTTP(w, r)

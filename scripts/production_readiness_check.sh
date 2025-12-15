@@ -36,7 +36,7 @@ CRITICAL_PATTERNS=(
 WARNING_PATTERNS=(
     "placeholder"
     "for now"
-    "in production"
+    "dev-only"
     "simplified"
     "temporary"
     "workaround"
@@ -53,9 +53,16 @@ check_pattern() {
     local severity=$2
     local color=$RED
     local count=0
+    local word_flag=""
 
     if [[ "$severity" == "warning" ]]; then
         color=$YELLOW
+    fi
+
+    # Avoid false positives for patterns like "1xxx" or UUID format examples.
+    # Apply whole-word matching for simple token patterns (TODO/FIXME/XXX/HACK).
+    if [[ "$pattern" =~ ^[A-Za-z]+$ ]]; then
+        word_flag="-w"
     fi
 
     # Search with exclusions using find + grep (more reliable for exclusions)
@@ -76,8 +83,8 @@ check_pattern() {
         ! -name "*.spec.ts" \
         ! -name "*.spec.tsx" \
         ! -name "production_readiness_check.sh" \
-        -exec grep -lni "$pattern" {} \; 2>/dev/null | while read -r file; do
-            grep -ni "$pattern" "$file" 2>/dev/null | while read -r line; do
+        -exec grep -lni $word_flag "$pattern" {} \; 2>/dev/null | while read -r file; do
+            grep -ni $word_flag "$pattern" "$file" 2>/dev/null | while read -r line; do
                 echo "$file:$line"
             done
         done || true)

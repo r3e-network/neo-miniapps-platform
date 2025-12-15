@@ -28,8 +28,8 @@ func main() {
 		walletPath = os.Args[1]
 	}
 
-	if err := os.MkdirAll(filepath.Dir(walletPath), 0755); err != nil {
-		log.Fatalf("Failed to create wallet directory: %v", err)
+	if mkdirErr := os.MkdirAll(filepath.Dir(walletPath), 0o755); mkdirErr != nil {
+		log.Fatalf("Failed to create wallet directory: %v", mkdirErr)
 	}
 
 	w, err := wallet.NewWallet(walletPath)
@@ -44,13 +44,13 @@ func main() {
 	}
 	acc.Label = "deployer"
 
-	if err := acc.Encrypt(password, w.Scrypt); err != nil {
-		log.Fatalf("Failed to encrypt account: %v", err)
+	if encryptErr := acc.Encrypt(password, w.Scrypt); encryptErr != nil {
+		log.Fatalf("Failed to encrypt account: %v", encryptErr)
 	}
 
 	w.AddAccount(acc)
-	if err := w.Save(); err != nil {
-		log.Fatalf("Failed to save wallet: %v", err)
+	if saveErr := w.Save(); saveErr != nil {
+		log.Fatalf("Failed to save wallet: %v", saveErr)
 	}
 
 	fmt.Println("Wallet created successfully!")
@@ -59,6 +59,9 @@ func main() {
 	fmt.Printf("Script Hash: %s\n", acc.ScriptHash())
 	fmt.Printf("Public Key: %s\n", privateKey.PublicKey().String())
 	fmt.Println("\nWallet JSON:")
-	data, _ := json.MarshalIndent(w, "", "  ")
+	data, err := json.MarshalIndent(w, "", "  ")
+	if err != nil {
+		log.Fatalf("Failed to marshal wallet: %v", err)
+	}
 	fmt.Println(string(data))
 }

@@ -44,13 +44,13 @@ The Neo Service Layer has been reviewed for production readiness. All core servi
 | internal/crypto | 71.9% | ✅ Good |
 | services/neocompute | 65.3% | ✅ Good |
 | services/neofeeds | 61.5% | ✅ Good |
-| services/oracle | 58.6% | ✅ Good |
+| services/neooracle | 58.6% | ✅ Good |
 | internal/marble | 43.8% | ⚠️ Acceptable |
 | internal/gasbank | 40.9% | ⚠️ Acceptable |
-| services/secrets | 31.4% | ⚠️ Acceptable |
-| services/vrf | 28.6% | ⚠️ Acceptable |
+| services/neostore | 31.4% | ⚠️ Acceptable |
+| services/neorand | 28.6% | ⚠️ Acceptable |
 | internal/database | 17.1% | ⚠️ Needs improvement |
-| services/accountpool | 11.4% | ⚠️ Needs improvement |
+| services/neoaccounts | 11.4% | ⚠️ Needs improvement |
 | services/neoflow | 10.8% | ⚠️ Needs improvement |
 | services/neovault | 9.6% | ⚠️ Needs improvement |
 | internal/chain | 5.7% | ⚠️ Needs improvement |
@@ -74,14 +74,14 @@ The Neo Service Layer has been reviewed for production readiness. All core servi
 
 | Service | Version | Status | Pattern |
 |---------|---------|--------|---------|
-| VRF | 2.0.0 | ✅ Production | Request-Callback |
+| NeoRand (VRF) | 2.0.0 | ✅ Production | Request-Callback |
 | NeoVault | 3.2.0 | ✅ Production | Off-Chain + Dispute |
 | NeoFeeds | 3.0.0 | ✅ Production | Push/Auto-Update |
 | NeoFlow | 2.0.0 | ✅ Production | Trigger-Based |
-| AccountPool | 1.0.0 | ✅ Production | Account Lending |
+| NeoAccounts (AccountPool) | 1.0.0 | ✅ Production | Account Lending |
 | NeoCompute | 1.0.0 | ⚠️ Beta | Sealed Computation |
-| Secrets | 1.0.0 | ✅ Production | Encrypted Storage |
-| Oracle | 1.0.0 | ✅ Production | HTTP Proxy |
+| NeoStore (Secrets) | 1.0.0 | ✅ Production | Encrypted Storage |
+| NeoOracle | 1.0.0 | ✅ Production | HTTP Proxy |
 
 ### 3.3 Data Layer ✅
 
@@ -107,11 +107,13 @@ The Neo Service Layer has been reviewed for production readiness. All core servi
 
 | Secret | Service | Description |
 |--------|---------|-------------|
-| VRF_PRIVATE_KEY | VRF | ECDSA P-256 private key |
-| MIXER_MASTER_KEY | NeoVault | HMAC signing key |
-| POOL_MASTER_KEY | AccountPool | HD wallet master key |
-| DATAFEEDS_SIGNING_KEY | NeoFeeds | Price signing key |
-| SECRETS_MASTER_KEY | Secrets | AES-256 encryption key |
+| VRF_PRIVATE_KEY | NeoRand | ECDSA P-256 private key |
+| NEOVAULT_MASTER_KEY | NeoVault | HMAC signing key |
+| POOL_MASTER_KEY | NeoAccounts | HD wallet master key |
+| NEOFEEDS_SIGNING_KEY | NeoFeeds | Price signing key |
+| SECRETS_MASTER_KEY | NeoStore | AES-256 encryption key |
+
+Operational note: secrets that must remain stable across restarts/replicas (JWT signing, encryption master keys, VRF keys, etc.) should be declared with `"Shared": true` in `manifests/manifest.json`.
 
 ---
 
@@ -185,7 +187,7 @@ All services expose `/health` endpoint returning:
 
 ### 8.1 High Priority
 
-1. **Increase Test Coverage**: Target 60%+ for critical services (neovault, neoflow, accountpool)
+1. **Increase Test Coverage**: Target 60%+ for critical services (neovault, neoflow, neoaccounts)
 2. **Add Integration Tests**: More tests with mock database
 3. **Error Handling**: Add more comprehensive error handling in chain interactions
 
@@ -224,7 +226,7 @@ go test ./... -v
 go test ./... -cover
 
 # Run specific service tests
-go test ./services/vrf/... -v
+go test ./services/neorand/... -v
 
 # Run smoke tests only
 go test ./test/smoke/... -v

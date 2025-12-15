@@ -40,7 +40,6 @@ This service implements the **Push/Auto-Update Pattern** - the TEE proactively p
 | File | Purpose |
 |------|---------|
 | `service.go` | Service initialization and configuration |
-| `lifecycle.go` | Service lifecycle (Start/Stop/Shutdown) |
 | `core.go` | Price fetching and aggregation logic |
 | `chainlink.go` | Chainlink Arbitrum price feed client |
 | `fulfiller.go` | On-chain price push implementation |
@@ -48,6 +47,8 @@ This service implements the **Push/Auto-Update Pattern** - the TEE proactively p
 | `api.go` | Route registration |
 | `config.go` | YAML/JSON configuration loading |
 | `types.go` | Data structures and request/response types |
+
+Lifecycle is handled by the shared `commonservice.BaseService` (start/stop hooks, workers, standard routes).
 
 ## Key Components
 

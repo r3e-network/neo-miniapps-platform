@@ -26,7 +26,7 @@ func TestNew(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			logger := New(tt.service, tt.level, tt.format)
 			if logger == nil {
-				t.Error("New() returned nil")
+				t.Fatal("New() returned nil")
 			}
 			if logger.service != tt.service {
 				t.Errorf("service = %v, want %v", logger.service, tt.service)
@@ -43,7 +43,7 @@ func TestLogger_WithContext(t *testing.T) {
 
 	entry := logger.WithContext(ctx)
 	if entry == nil {
-		t.Error("WithContext() returned nil")
+		t.Fatal("WithContext() returned nil")
 	}
 
 	// Check if fields are set
@@ -403,7 +403,7 @@ func TestInitDefault(t *testing.T) {
 
 	logger := Default()
 	if logger == nil {
-		t.Error("Default() returned nil after InitDefault()")
+		t.Fatal("Default() returned nil after InitDefault()")
 	}
 	if logger.service != "test-service" {
 		t.Errorf("service = %v, want test-service", logger.service)
@@ -416,7 +416,7 @@ func TestDefault(t *testing.T) {
 
 	logger := Default()
 	if logger == nil {
-		t.Error("Default() returned nil")
+		t.Fatal("Default() returned nil")
 	}
 	if logger.service != "unknown" {
 		t.Errorf("service = %v, want unknown", logger.service)

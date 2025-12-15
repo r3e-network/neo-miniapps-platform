@@ -1,0 +1,20 @@
+# 测试证书 - 验证 cert-manager 工作正常
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: test-certificate
+  namespace: cert-manager
+spec:
+  secretName: test-tls-secret
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
+  dnsNames:
+    - test.local
+    - "*.test.local"
+
+---
+# 验证命令:
+# kubectl get certificate -n cert-manager
+# kubectl describe certificate test-certificate -n cert-manager
+# kubectl get secret test-tls-secret -n cert-manager

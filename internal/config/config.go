@@ -2,6 +2,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,13 +28,13 @@ type Config struct {
 	Env Environment
 
 	// MarbleRun
-	CoordinatorAddr  string
-	MarbleType       string
-	MarbleDNSNames   []string
+	CoordinatorAddr   string
+	MarbleType        string
+	MarbleDNSNames    []string
 	MarbleRunInsecure bool
 
 	// Neo N3
-	NeoRPCURL      string
+	NeoRPCURL       string
 	NeoNetworkMagic uint32
 
 	// Supabase
@@ -41,39 +42,39 @@ type Config struct {
 	SupabaseServiceKey string
 
 	// Service Ports
-	GatewayPort      int
-	VRFPort          int
-	NeoVaultPort        int
+	GatewayPort     int
+	VRFPort         int
+	NeoVaultPort    int
 	NeoFeedsPort    int
-	NeoFlowPort   int
-	NeoAccountsPort  int
-	NeoComputePort int
-	SecretsPort      int
-	OraclePort       int
+	NeoFlowPort     int
+	NeoAccountsPort int
+	NeoComputePort  int
+	SecretsPort     int
+	OraclePort      int
 
 	// Logging
 	LogLevel  string
 	LogFormat string
 
 	// Security
-	JWTExpiry           time.Duration
-	RateLimitEnabled    bool
-	RateLimitRequests   int
-	RateLimitWindow     time.Duration
-	CORSOrigins         []string
+	JWTExpiry         time.Duration
+	RateLimitEnabled  bool
+	RateLimitRequests int
+	RateLimitWindow   time.Duration
+	CORSOrigins       []string
 
 	// Database
 	DBMaxConnections int
 	DBIdleTimeout    time.Duration
 
 	// Features
-	EnableProfiling       bool
-	EnableDebugEndpoints  bool
-	TestMode              bool
-	MetricsEnabled        bool
-	MetricsPort           int
-	TracingEnabled        bool
-	TracingEndpoint       string
+	EnableProfiling      bool
+	EnableDebugEndpoints bool
+	TestMode             bool
+	MetricsEnabled       bool
+	MetricsPort          int
+	TracingEnabled       bool
+	TracingEndpoint      string
 }
 
 // Load loads configuration based on MARBLE_ENV environment variable
@@ -92,8 +93,11 @@ func Load() (*Config, error) {
 	// Load environment-specific .env file
 	configFile := filepath.Join("config", fmt.Sprintf("%s.env", env))
 	if err := godotenv.Load(configFile); err != nil {
-		// Config file is optional, continue with environment variables
-		fmt.Printf("Warning: Could not load %s: %v\n", configFile, err)
+		// Config file is optional; only warn on non-"file not found" errors
+		// (e.g. parse errors) to avoid noisy logs during tests and CI runs.
+		if !errors.Is(err, os.ErrNotExist) {
+			fmt.Printf("Warning: Could not load %s: %v\n", configFile, err)
+		}
 	}
 
 	cfg := &Config{
@@ -111,7 +115,10 @@ func Load() (*Config, error) {
 // loadFromEnv loads configuration from environment variables
 func (c *Config) loadFromEnv() error {
 	// MarbleRun
-	c.CoordinatorAddr = getEnv("COORDINATOR_ADDR", "localhost:4433")
+	c.CoordinatorAddr = getEnv("COORDINATOR_CLIENT_ADDR", "")
+	if c.CoordinatorAddr == "" {
+		c.CoordinatorAddr = getEnv("COORDINATOR_ADDR", "localhost:4433")
+	}
 	c.MarbleType = getEnv("MARBLE_TYPE", "gateway")
 	c.MarbleDNSNames = strings.Split(getEnv("MARBLE_DNS_NAMES", "localhost"), ",")
 	c.MarbleRunInsecure = getBoolEnv("MARBLERUN_INSECURE", true)
@@ -159,7 +166,7 @@ func (c *Config) loadFromEnv() error {
 	if err != nil {
 		return fmt.Errorf("invalid RATE_LIMIT_WINDOW: %w", err)
 	}
-	c.CORSOrigins = strings.Split(getEnv("CORS_ORIGINS", "*"), ",")
+	c.CORSOrigins = strings.Split(getEnv("CORS_ALLOWED_ORIGINS", getEnv("CORS_ORIGINS", "*")), ",")
 
 	// Database
 	c.DBMaxConnections = getIntEnv("DB_MAX_CONNECTIONS", 20)

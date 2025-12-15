@@ -4,7 +4,6 @@ package neoaccountsmarble
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,7 +38,7 @@ func (s *Service) RequestAccounts(ctx context.Context, serviceID string, count i
 				break
 			}
 			// Convert to AccountWithBalances
-			accWithBal := neoaccountssupabase.NewAccountWithBalances(*acc)
+			accWithBal := neoaccountssupabase.NewAccountWithBalances(acc)
 			accounts = append(accounts, *accWithBal)
 		}
 	}
@@ -71,7 +70,10 @@ func (s *Service) RequestAccounts(ctx context.Context, serviceID string, count i
 		}
 
 		if err := s.repo.Update(ctx, dbAcc); err != nil {
-			log.Printf("[neoaccounts] failed to lock account %s: %v", acc.ID, err)
+			s.Logger().WithContext(ctx).WithError(err).WithFields(map[string]interface{}{
+				"account_id": acc.ID,
+				"service_id": serviceID,
+			}).Warn("failed to lock account")
 			continue
 		}
 
@@ -110,7 +112,10 @@ func (s *Service) ReleaseAccounts(ctx context.Context, serviceID string, account
 		acc.LastUsedAt = time.Now()
 
 		if err := s.repo.Update(ctx, acc); err != nil {
-			log.Printf("[neoaccounts] failed to release account %s: %v", accID, err)
+			s.Logger().WithContext(ctx).WithError(err).WithFields(map[string]interface{}{
+				"account_id": accID,
+				"service_id": serviceID,
+			}).Warn("failed to release account")
 			continue
 		}
 		released++
@@ -140,7 +145,10 @@ func (s *Service) ReleaseAllByService(ctx context.Context, serviceID string) (in
 		acc.LastUsedAt = time.Now()
 
 		if err := s.repo.Update(ctx, acc); err != nil {
-			log.Printf("[neoaccounts] failed to release account %s for service %s: %v", acc.ID, serviceID, err)
+			s.Logger().WithContext(ctx).WithError(err).WithFields(map[string]interface{}{
+				"account_id": acc.ID,
+				"service_id": serviceID,
+			}).Warn("failed to release account for service")
 			continue
 		}
 		released++
@@ -150,7 +158,7 @@ func (s *Service) ReleaseAllByService(ctx context.Context, serviceID string) (in
 }
 
 // UpdateBalance updates an account's token balance.
-func (s *Service) UpdateBalance(ctx context.Context, serviceID, accountID, tokenType string, delta int64, absolute *int64) (int64, int64, int64, error) {
+func (s *Service) UpdateBalance(ctx context.Context, serviceID, accountID, tokenType string, delta int64, absolute *int64) (oldBalance, newBalance, txCount int64, err error) {
 	if s.repo == nil {
 		return 0, 0, 0, fmt.Errorf("repository not configured")
 	}
@@ -178,12 +186,10 @@ func (s *Service) UpdateBalance(ctx context.Context, serviceID, accountID, token
 		return 0, 0, 0, fmt.Errorf("get balance: %w", err)
 	}
 
-	var oldBalance int64
 	if currentBal != nil {
 		oldBalance = currentBal.Amount
 	}
 
-	var newBalance int64
 	if absolute != nil {
 		newBalance = *absolute
 	} else {
@@ -192,12 +198,6 @@ func (s *Service) UpdateBalance(ctx context.Context, serviceID, accountID, token
 
 	if newBalance < 0 {
 		return 0, 0, 0, fmt.Errorf("insufficient balance")
-	}
-
-	// Validate NEO is indivisible (no fractional amounts)
-	if tokenType == TokenTypeNEO && newBalance != 0 {
-		// NEO has 0 decimals, so amount should be in whole units
-		// This is already enforced by int64, but we add explicit check
 	}
 
 	// Get script hash and decimals for token
@@ -233,14 +233,16 @@ func (s *Service) GetPoolInfo(ctx context.Context) (*PoolInfoResponse, error) {
 		TokenStats: make(map[string]TokenStats),
 	}
 
-	for _, acc := range accounts {
+	for i := range accounts {
+		acc := &accounts[i]
 		info.TotalAccounts++
 
-		if acc.IsRetiring {
+		switch {
+		case acc.IsRetiring:
 			info.RetiringAccounts++
-		} else if acc.LockedBy != "" {
+		case acc.LockedBy != "":
 			info.LockedAccounts++
-		} else {
+		default:
 			info.ActiveAccounts++
 		}
 	}
@@ -258,7 +260,7 @@ func (s *Service) GetPoolInfo(ctx context.Context) (*PoolInfoResponse, error) {
 }
 
 // ListAccountsByService returns accounts locked by a specific service.
-func (s *Service) ListAccountsByService(ctx context.Context, serviceID string, tokenType string, minBalance *int64) ([]AccountInfo, error) {
+func (s *Service) ListAccountsByService(ctx context.Context, serviceID, tokenType string, minBalance *int64) ([]AccountInfo, error) {
 	if s.repo == nil {
 		return nil, fmt.Errorf("repository not configured")
 	}
@@ -271,37 +273,18 @@ func (s *Service) ListAccountsByService(ctx context.Context, serviceID string, t
 	}
 
 	result := make([]AccountInfo, 0, len(accounts))
-	for _, acc := range accounts {
+	for i := range accounts {
+		acc := &accounts[i]
 		// Filter by token balance if specified
 		if tokenType != "" && minBalance != nil {
 			if !acc.HasSufficientBalance(tokenType, *minBalance) {
 				continue
 			}
 		}
-		result = append(result, AccountInfoFromWithBalances(&acc))
+		result = append(result, AccountInfoFromWithBalances(acc))
 	}
 
 	return result, nil
-}
-
-// runAccountRotation periodically rotates pool accounts (daily rotation).
-func (s *Service) runAccountRotation(ctx context.Context) {
-	if s.repo == nil {
-		return
-	}
-	ticker := time.NewTicker(1 * time.Hour)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-s.StopChan():
-			return
-		case <-ticker.C:
-			s.rotateAccounts(ctx)
-		}
-	}
 }
 
 // rotateAccounts retires old accounts and creates new ones.
@@ -320,7 +303,8 @@ func (s *Service) rotateAccounts(ctx context.Context) {
 
 	// Count active (unlocked, non-retiring) accounts
 	activeCount := 0
-	for _, acc := range accounts {
+	for i := range accounts {
+		acc := &accounts[i]
 		if !acc.IsRetiring && acc.LockedBy == "" {
 			activeCount++
 		}
@@ -362,7 +346,7 @@ func (s *Service) rotateAccounts(ctx context.Context) {
 				dbAcc.IsRetiring = true
 				retired++
 				if err := s.repo.Update(ctx, dbAcc); err != nil {
-					log.Printf("[neoaccounts] failed to mark account %s as retiring: %v", acc.ID, err)
+					s.Logger().WithContext(ctx).WithError(err).WithField("account_id", acc.ID).Warn("failed to mark account as retiring")
 				}
 			}
 		}
@@ -377,31 +361,12 @@ func (s *Service) rotateAccounts(ctx context.Context) {
 	}
 
 	// Delete empty retiring accounts (only if not locked and all balances are zero)
-	for _, acc := range accounts {
+	for i := range accounts {
+		acc := &accounts[i]
 		if acc.IsRetiring && acc.IsEmpty() && acc.LockedBy == "" {
 			if err := s.repo.Delete(ctx, acc.ID); err != nil {
-				log.Printf("[neoaccounts] failed to delete retiring account %s: %v", acc.ID, err)
+				s.Logger().WithContext(ctx).WithError(err).WithField("account_id", acc.ID).Warn("failed to delete retiring account")
 			}
-		}
-	}
-}
-
-// runLockCleanup periodically cleans up stale locks.
-func (s *Service) runLockCleanup(ctx context.Context) {
-	if s.repo == nil {
-		return
-	}
-	ticker := time.NewTicker(1 * time.Hour)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-s.StopChan():
-			return
-		case <-ticker.C:
-			s.cleanupStaleLocks(ctx)
 		}
 	}
 }
@@ -428,7 +393,7 @@ func (s *Service) cleanupStaleLocks(ctx context.Context) {
 				acc.LockedBy = ""
 				acc.LockedAt = time.Time{}
 				if err := s.repo.Update(ctx, acc); err != nil {
-					log.Printf("[neoaccounts] failed to release stale lock on account %s: %v", acc.ID, err)
+					s.Logger().WithContext(ctx).WithError(err).WithField("account_id", acc.ID).Warn("failed to release stale lock")
 				}
 			}
 		}

@@ -2,13 +2,14 @@ package neorand
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/gorilla/mux"
+
 	"github.com/R3E-Network/service_layer/internal/crypto"
 	"github.com/R3E-Network/service_layer/internal/httputil"
-	"github.com/google/uuid"
 )
 
 // =============================================================================
@@ -41,8 +42,7 @@ func (s *Service) handleInfo(w http.ResponseWriter, r *http.Request) {
 
 	pubKey := crypto.PublicKeyToBytes(&s.privateKey.PublicKey)
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":             "active",
 		"public_key":         hex.EncodeToString(pubKey),
 		"pending_requests":   pendingCount,
@@ -53,8 +53,7 @@ func (s *Service) handleInfo(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) handlePublicKey(w http.ResponseWriter, r *http.Request) {
 	pubKey := crypto.PublicKeyToBytes(&s.privateKey.PublicKey)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{
 		"public_key": hex.EncodeToString(pubKey),
 	})
 }
@@ -77,8 +76,8 @@ func (s *Service) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 	if input.NumWords <= 0 {
 		input.NumWords = 1
 	}
-	if input.NumWords > 10 {
-		input.NumWords = 10
+	if input.NumWords > MaxNumWords {
+		input.NumWords = MaxNumWords
 	}
 	if input.CallbackGasLimit <= 0 {
 		input.CallbackGasLimit = 100000
@@ -86,7 +85,7 @@ func (s *Service) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Create request
 	requestID := uuid.New().String()
-	request := &NeoRandRequest{
+	request := &Request{
 		ID:               uuid.New().String(),
 		RequestID:        requestID,
 		UserID:           userID,
@@ -99,7 +98,10 @@ func (s *Service) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.repo != nil {
-		_ = s.repo.Create(r.Context(), neorandRecordFromReq(request))
+		if err := s.repo.Create(r.Context(), neorandRecordFromReq(request)); err != nil {
+			httputil.InternalError(w, "failed to persist request")
+			return
+		}
 	}
 
 	s.mu.Lock()
@@ -114,9 +116,7 @@ func (s *Service) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	httputil.WriteJSON(w, http.StatusCreated, map[string]any{
 		"request_id":  requestID,
 		"status":      StatusPending,
 		"service_fee": ServiceFeePerRequest,
@@ -124,9 +124,9 @@ func (s *Service) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleGetRequest(w http.ResponseWriter, r *http.Request) {
-	requestID := r.URL.Path[len("/request/"):]
+	requestID := mux.Vars(r)["id"]
 
-	var request *NeoRandRequest
+	var request *Request
 	if s.repo != nil {
 		if rec, err := s.repo.GetByRequestID(r.Context(), requestID); err == nil {
 			request = neorandReqFromRecord(rec)
@@ -134,7 +134,7 @@ func (s *Service) handleGetRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	if request == nil {
 		s.mu.RLock()
-		request = s.requests[requestID]
+		request = cloneRequest(s.requests[requestID])
 		s.mu.RUnlock()
 	}
 	if request == nil {
@@ -151,7 +151,7 @@ func (s *Service) handleListRequests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var requests []*NeoRandRequest
+	var requests []*Request
 	if s.repo != nil {
 		if rows, err := s.repo.ListByStatus(r.Context(), StatusPending); err == nil {
 			for i := range rows {
@@ -165,13 +165,12 @@ func (s *Service) handleListRequests(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
 	for _, req := range s.requests {
 		if req.UserID == userID {
-			requests = append(requests, req)
+			requests = append(requests, cloneRequest(req))
 		}
 	}
 	s.mu.RUnlock()
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(requests)
+	httputil.WriteJSON(w, http.StatusOK, requests)
 }
 
 func (s *Service) handleDirectRandom(w http.ResponseWriter, r *http.Request) {
@@ -187,6 +186,9 @@ func (s *Service) handleDirectRandom(w http.ResponseWriter, r *http.Request) {
 
 	if req.NumWords <= 0 {
 		req.NumWords = 1
+	}
+	if req.NumWords > MaxNumWords {
+		req.NumWords = MaxNumWords
 	}
 
 	result, err := s.GenerateRandomness(r.Context(), req.Seed, req.NumWords)
@@ -216,4 +218,15 @@ func (s *Service) handleVerify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, resp)
+}
+
+func cloneRequest(req *Request) *Request {
+	if req == nil {
+		return nil
+	}
+	cpy := *req
+	if req.RandomWords != nil {
+		cpy.RandomWords = append([]string(nil), req.RandomWords...)
+	}
+	return &cpy
 }

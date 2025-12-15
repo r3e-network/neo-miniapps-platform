@@ -24,13 +24,13 @@ const (
 // PoolAccount represents an account in the mixing pool.
 // Pool accounts are managed by neoaccounts service.
 type PoolAccount struct {
-	ID         string                               `json:"id"`
-	Address    string                               `json:"address"`
+	ID         string                                    `json:"id"`
+	Address    string                                    `json:"address"`
 	Balances   map[string]neoaccountsmarble.TokenBalance `json:"balances"` // key: token_type
-	CreatedAt  time.Time                            `json:"created_at"`
-	LastUsedAt time.Time                            `json:"last_used_at"`
-	TxCount    int64                                `json:"tx_count"`
-	IsRetiring bool                                 `json:"is_retiring"`
+	CreatedAt  time.Time                                 `json:"created_at"`
+	LastUsedAt time.Time                                 `json:"last_used_at"`
+	TxCount    int64                                     `json:"tx_count"`
+	IsRetiring bool                                      `json:"is_retiring"`
 }
 
 // GetBalance returns the balance for a specific token type.
@@ -148,7 +148,9 @@ func RequestFromRecord(rec *neovaultsupabase.RequestRecord) *MixRequest {
 	var completionProof *CompletionProof
 	if rec.CompletionProofJSON != "" {
 		completionProof = &CompletionProof{}
-		_ = json.Unmarshal([]byte(rec.CompletionProofJSON), completionProof)
+		if err := json.Unmarshal([]byte(rec.CompletionProofJSON), completionProof); err != nil {
+			completionProof = nil
+		}
 	}
 	return &MixRequest{
 		ID:              rec.ID,

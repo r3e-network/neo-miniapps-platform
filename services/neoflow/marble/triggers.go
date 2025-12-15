@@ -5,17 +5,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"math"
 	"math/big"
+	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/R3E-Network/service_layer/internal/chain"
+	"github.com/R3E-Network/service_layer/internal/runtime"
 	neoflowchain "github.com/R3E-Network/service_layer/services/neoflow/chain"
 	neoflowsupabase "github.com/R3E-Network/service_layer/services/neoflow/supabase"
-	"github.com/google/uuid"
 )
 
 func (s *Service) checkAndExecuteTriggers(ctx context.Context) {
@@ -56,11 +61,16 @@ func (s *Service) executeTrigger(ctx context.Context, trigger *neoflowsupabase.T
 	// Update last execution and calculate next
 	trigger.LastExecution = time.Now()
 	if trigger.TriggerType == "cron" && trigger.Schedule != "" {
-		next, _ := s.parseNextCronExecution(trigger.Schedule)
-		trigger.NextExecution = next
+		next, cronErr := s.parseNextCronExecution(trigger.Schedule)
+		if cronErr != nil {
+			s.Logger().WithContext(ctx).WithError(cronErr).WithField("trigger_id", trigger.ID).Warn("invalid cron schedule")
+			trigger.NextExecution = time.Time{}
+		} else {
+			trigger.NextExecution = next
+		}
 	}
 	if updateErr := s.repo.UpdateTrigger(ctx, trigger); updateErr != nil {
-		log.Printf("[neoflow] failed to update trigger %s: %v", trigger.ID, updateErr)
+		s.Logger().WithContext(ctx).WithError(updateErr).WithField("trigger_id", trigger.ID).Warn("failed to update trigger")
 	}
 
 	// Persist execution log
@@ -77,7 +87,7 @@ func (s *Service) executeTrigger(ctx context.Context, trigger *neoflowsupabase.T
 			exec.Error = err.Error()
 		}
 		if execErr := s.repo.CreateExecution(ctx, exec); execErr != nil {
-			log.Printf("[neoflow] failed to persist execution log for trigger %s: %v", trigger.ID, execErr)
+			s.Logger().WithContext(ctx).WithError(execErr).WithField("trigger_id", trigger.ID).Warn("failed to persist execution log")
 		}
 	}
 }
@@ -100,20 +110,67 @@ func (s *Service) dispatchAction(ctx context.Context, actionRaw json.RawMessage)
 		if action.URL == "" {
 			return fmt.Errorf("webhook url required")
 		}
-		req, err := http.NewRequestWithContext(ctx, method, action.URL, bytes.NewReader(action.Body))
+
+		parsedURL, err := url.Parse(strings.TrimSpace(action.URL))
+		if err != nil {
+			return fmt.Errorf("invalid webhook url: %w", err)
+		}
+		scheme := strings.ToLower(strings.TrimSpace(parsedURL.Scheme))
+		if scheme != "http" && scheme != "https" {
+			return fmt.Errorf("unsupported webhook url scheme: %q", parsedURL.Scheme)
+		}
+		if parsedURL.Hostname() == "" {
+			return fmt.Errorf("webhook url must include hostname")
+		}
+		if parsedURL.User != nil {
+			return fmt.Errorf("webhook url must not include userinfo")
+		}
+
+		useMeshClient := isMeshHostname(parsedURL.Hostname())
+		strict := runtime.StrictIdentityMode()
+
+		// In strict identity mode, never allow plaintext external webhooks.
+		if strict && !useMeshClient && scheme != "https" {
+			return fmt.Errorf("external webhook url must use https in strict identity mode")
+		}
+
+		// In strict identity mode, never allow internal (mesh) webhooks without mTLS.
+		if strict && useMeshClient {
+			if m := s.Marble(); m == nil || m.TLSConfig() == nil {
+				return fmt.Errorf("mesh webhook requires Marble mTLS in strict identity mode")
+			}
+		}
+
+		// Mitigate SSRF: in strict identity mode, prevent external webhooks from
+		// reaching loopback/link-local/private networks unless explicitly allowed.
+		if strict && !useMeshClient && !allowPrivateWebhookTargets() {
+			if validateErr := validateWebhookHostname(ctx, parsedURL.Hostname()); validateErr != nil {
+				return validateErr
+			}
+		}
+
+		// If this is an internal (mesh) URL and Marble mTLS is available, enforce
+		// HTTPS so peer identity can be verified.
+		if m := s.Marble(); m != nil && m.TLSConfig() != nil && useMeshClient {
+			parsedURL.Scheme = "https"
+		}
+
+		targetURL := parsedURL.String()
+		req, err := http.NewRequestWithContext(ctx, method, targetURL, bytes.NewReader(action.Body))
 		if err != nil {
 			return err
 		}
 		req.Header.Set("Content-Type", "application/json")
 
-		// Use Marble mTLS client for secure inter-service communication
-		// Falls back to default client with timeout for external webhooks
-		var httpClient *http.Client
-		if s.Marble() != nil {
-			httpClient = s.Marble().HTTPClient()
-		}
-		if httpClient == nil {
-			httpClient = &http.Client{Timeout: 30 * time.Second}
+		// Use Marble mTLS client only for internal mesh targets. External webhooks
+		// must use the system trust store (Marble root CA is not a public CA).
+		httpClient := &http.Client{Timeout: 30 * time.Second}
+		if m := s.Marble(); m != nil {
+			if useMeshClient {
+				httpClient = m.HTTPClient()
+			} else {
+				httpClient = m.ExternalHTTPClient()
+			}
 		}
 
 		resp, err := httpClient.Do(req)
@@ -128,6 +185,102 @@ func (s *Service) dispatchAction(ctx context.Context, actionRaw json.RawMessage)
 		// Unknown action type; ignore
 	}
 	return nil
+}
+
+func allowPrivateWebhookTargets() bool {
+	raw := strings.ToLower(strings.TrimSpace(os.Getenv("NEOFLOW_WEBHOOK_ALLOW_PRIVATE_NETWORKS")))
+	return raw == "1" || raw == "true" || raw == "yes"
+}
+
+func validateWebhookHostname(ctx context.Context, rawHost string) error {
+	host := strings.TrimSpace(rawHost)
+	host = strings.TrimSuffix(host, ".")
+	hostLower := strings.ToLower(host)
+
+	if hostLower == "" {
+		return fmt.Errorf("webhook url must include hostname")
+	}
+	if hostLower == "localhost" || strings.HasSuffix(hostLower, ".localhost") {
+		return fmt.Errorf("external webhook hostname not allowed in strict identity mode")
+	}
+
+	if ip := net.ParseIP(hostLower); ip != nil {
+		if isDisallowedWebhookIP(ip) {
+			return fmt.Errorf("external webhook target IP not allowed in strict identity mode")
+		}
+		return nil
+	}
+
+	lookupCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	addrs, err := net.DefaultResolver.LookupIPAddr(lookupCtx, hostLower)
+	if err != nil {
+		return fmt.Errorf("failed to resolve webhook hostname: %w", err)
+	}
+	if len(addrs) == 0 {
+		return fmt.Errorf("failed to resolve webhook hostname: no addresses found")
+	}
+
+	for _, addr := range addrs {
+		if isDisallowedWebhookIP(addr.IP) {
+			return fmt.Errorf("external webhook target resolves to a private or local IP which is not allowed in strict identity mode")
+		}
+	}
+	return nil
+}
+
+func isDisallowedWebhookIP(ip net.IP) bool {
+	if ip == nil {
+		return true
+	}
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+		return true
+	}
+	if ip.IsPrivate() {
+		return true
+	}
+
+	// Carrier-grade NAT (RFC 6598): 100.64.0.0/10
+	if ip4 := ip.To4(); ip4 != nil {
+		if ip4[0] == 100 && ip4[1]&0xC0 == 0x40 {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isMeshHostname(rawHost string) bool {
+	host := strings.ToLower(strings.TrimSpace(rawHost))
+	if host == "" {
+		return false
+	}
+
+	if strings.HasSuffix(host, ".svc.cluster.local") ||
+		strings.HasSuffix(host, ".service-layer") ||
+		strings.HasSuffix(host, ".service-layer.svc.cluster.local") {
+		return true
+	}
+
+	switch host {
+	case "gateway",
+		"neorand",
+		"vrf",
+		"neovault",
+		"neofeeds",
+		"neoflow",
+		"neoaccounts",
+		"accountpool",
+		"neocompute",
+		"neostore",
+		"secrets",
+		"neooracle",
+		"oracle":
+		return true
+	default:
+		return false
+	}
 }
 
 // parseNextCronExecution parses a cron expression and returns the next execution time.
@@ -182,12 +335,12 @@ func (s *Service) parseNextCronExecution(cronExpr string) (time.Time, error) {
 }
 
 // parseCronField parses a single cron field and returns a map of allowed values.
-func parseCronField(field string, min, max int) (map[int]bool, error) {
+func parseCronField(field string, minValue, maxValue int) (map[int]bool, error) {
 	allowed := make(map[int]bool)
 
 	// Handle wildcard
 	if field == "*" {
-		for i := min; i <= max; i++ {
+		for i := minValue; i <= maxValue; i++ {
 			allowed[i] = true
 		}
 		return allowed, nil
@@ -199,7 +352,7 @@ func parseCronField(field string, min, max int) (map[int]bool, error) {
 		if err != nil || step <= 0 {
 			return nil, fmt.Errorf("invalid step: %s", field)
 		}
-		for i := min; i <= max; i += step {
+		for i := minValue; i <= maxValue; i += step {
 			allowed[i] = true
 		}
 		return allowed, nil
@@ -228,7 +381,7 @@ func parseCronField(field string, min, max int) (map[int]bool, error) {
 			}
 			start, err1 := strconv.Atoi(bounds[0])
 			end, err2 := strconv.Atoi(bounds[1])
-			if err1 != nil || err2 != nil || start < min || end > max || start > end {
+			if err1 != nil || err2 != nil || start < minValue || end > maxValue || start > end {
 				return nil, fmt.Errorf("invalid range values: %s", part)
 			}
 			for i := start; i <= end; i += step {
@@ -237,7 +390,7 @@ func parseCronField(field string, min, max int) (map[int]bool, error) {
 		} else {
 			// Single value
 			val, err := strconv.Atoi(part)
-			if err != nil || val < min || val > max {
+			if err != nil || val < minValue || val > maxValue {
 				return nil, fmt.Errorf("invalid value: %s", part)
 			}
 			allowed[val] = true
@@ -291,7 +444,7 @@ func (s *Service) checkChainTriggers(ctx context.Context) {
 }
 
 // evaluateTriggerCondition evaluates whether a trigger's condition is met.
-func (s *Service) evaluateTriggerCondition(ctx context.Context, trigger *chain.Trigger) (bool, []byte) {
+func (s *Service) evaluateTriggerCondition(ctx context.Context, trigger *chain.Trigger) (shouldExecute bool, executionData []byte) {
 	switch trigger.TriggerType {
 	case TriggerTypeTime:
 		return s.evaluateTimeTrigger(trigger)
@@ -308,7 +461,7 @@ func (s *Service) evaluateTriggerCondition(ctx context.Context, trigger *chain.T
 }
 
 // evaluateTimeTrigger checks if a time-based trigger should execute.
-func (s *Service) evaluateTimeTrigger(trigger *chain.Trigger) (bool, []byte) {
+func (s *Service) evaluateTimeTrigger(trigger *chain.Trigger) (shouldExecute bool, executionData []byte) {
 	// Parse cron expression from condition
 	cronExpr := trigger.Condition
 	if cronExpr == "" {
@@ -325,7 +478,16 @@ func (s *Service) evaluateTimeTrigger(trigger *chain.Trigger) (bool, []byte) {
 	// Check if we're within the execution window (1 minute tolerance)
 	if now.After(nextExec) && now.Sub(nextExec) < time.Minute {
 		// Check if we haven't executed recently
-		if trigger.LastExecutedAt == 0 || now.Unix()-int64(trigger.LastExecutedAt/1000) > 60 {
+		if trigger.LastExecutedAt == 0 {
+			return true, []byte(fmt.Sprintf(`{"executed_at":%d}`, now.Unix()))
+		}
+
+		lastExecutedSecondsU64 := trigger.LastExecutedAt / 1000
+		if lastExecutedSecondsU64 > uint64(math.MaxInt64) {
+			return false, nil
+		}
+		lastExecutedSeconds := int64(lastExecutedSecondsU64)
+		if now.Unix()-lastExecutedSeconds > 60 {
 			return true, []byte(fmt.Sprintf(`{"executed_at":%d}`, now.Unix()))
 		}
 	}
@@ -334,7 +496,7 @@ func (s *Service) evaluateTimeTrigger(trigger *chain.Trigger) (bool, []byte) {
 }
 
 // evaluatePriceTrigger checks if a price-based trigger should execute.
-func (s *Service) evaluatePriceTrigger(ctx context.Context, trigger *chain.Trigger) (bool, []byte) {
+func (s *Service) evaluatePriceTrigger(ctx context.Context, trigger *chain.Trigger) (shouldExecute bool, executionData []byte) {
 	if s.neoFeedsContract == nil {
 		return false, nil
 	}
@@ -352,7 +514,6 @@ func (s *Service) evaluatePriceTrigger(ctx context.Context, trigger *chain.Trigg
 	}
 
 	currentPrice := price.Int64()
-	shouldExecute := false
 
 	switch condition.Operator {
 	case ">":
@@ -368,21 +529,24 @@ func (s *Service) evaluatePriceTrigger(ctx context.Context, trigger *chain.Trigg
 	}
 
 	if shouldExecute {
-		executionData, _ := json.Marshal(map[string]interface{}{
+		data, err := json.Marshal(map[string]interface{}{
 			"feed_id":       condition.FeedID,
 			"current_price": currentPrice,
 			"threshold":     condition.Threshold,
 			"operator":      condition.Operator,
 			"timestamp":     time.Now().Unix(),
 		})
-		return true, executionData
+		if err != nil {
+			return false, nil
+		}
+		return true, data
 	}
 
 	return false, nil
 }
 
 // evaluateThresholdTrigger checks if a threshold-based trigger should execute.
-func (s *Service) evaluateThresholdTrigger(ctx context.Context, trigger *chain.Trigger) (bool, []byte) {
+func (s *Service) evaluateThresholdTrigger(ctx context.Context, trigger *chain.Trigger) (shouldExecute bool, executionData []byte) {
 	// Parse threshold condition
 	var condition ThresholdCondition
 	if err := json.Unmarshal([]byte(trigger.Condition), &condition); err != nil {
@@ -406,7 +570,6 @@ func (s *Service) evaluateThresholdTrigger(ctx context.Context, trigger *chain.T
 
 	// Compare balance against threshold
 	threshold := condition.Threshold
-	var shouldExecute bool
 	switch condition.Operator {
 	case "<":
 		shouldExecute = balance < threshold
@@ -424,13 +587,16 @@ func (s *Service) evaluateThresholdTrigger(ctx context.Context, trigger *chain.T
 
 	if shouldExecute {
 		// Return execution data with balance info
-		data, _ := json.Marshal(map[string]interface{}{
+		data, err := json.Marshal(map[string]interface{}{
 			"address":   condition.Address,
 			"asset":     condition.Asset,
 			"balance":   balance,
 			"threshold": threshold,
 			"operator":  condition.Operator,
 		})
+		if err != nil {
+			return false, nil
+		}
 		return true, data
 	}
 	return false, nil
@@ -460,7 +626,10 @@ func (s *Service) queryNep17Balance(ctx context.Context, address, assetHash stri
 	// Find balance for the specified asset
 	for _, b := range response.Balance {
 		if strings.EqualFold(b.AssetHash, assetHash) {
-			balance, _ := strconv.ParseInt(b.Amount, 10, 64)
+			balance, err := strconv.ParseInt(b.Amount, 10, 64)
+			if err != nil {
+				return 0, fmt.Errorf("parse balance amount: %w", err)
+			}
 			return balance, nil
 		}
 	}
@@ -480,7 +649,12 @@ func (s *Service) executeChainTrigger(ctx context.Context, trigger *chain.Trigge
 	// Update local trigger state
 	s.scheduler.mu.Lock()
 	if t, ok := s.scheduler.chainTriggers[trigger.TriggerID.Uint64()]; ok {
-		t.LastExecutedAt = uint64(time.Now().UnixMilli())
+		nowMillis := time.Now().UnixMilli()
+		if nowMillis < 0 {
+			t.LastExecutedAt = 0
+		} else {
+			t.LastExecutedAt = uint64(nowMillis)
+		}
 		t.ExecutionCount = new(big.Int).Add(t.ExecutionCount, big.NewInt(1))
 
 		// Check if max executions reached
@@ -506,6 +680,9 @@ func (s *Service) SetupEventTriggerListener() {
 
 		// Fetch full trigger details from contract
 		neoflowContract := neoflowchain.NewNeoFlowContract(s.chainClient, s.neoflowHash, nil)
+		if parsed.TriggerID > uint64(math.MaxInt64) {
+			return fmt.Errorf("triggerID overflows int64: %d", parsed.TriggerID)
+		}
 		trigger, err := neoflowContract.GetTrigger(context.Background(), big.NewInt(int64(parsed.TriggerID)))
 		if err != nil {
 			return err

@@ -6,14 +6,15 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/chain"
+	"github.com/R3E-Network/service_layer/internal/httputil"
 )
 
 type masterKeyResponse struct {
@@ -32,7 +33,7 @@ type masterKeyResponse struct {
 func main() {
 	rpc := flag.String("rpc", "", "Neo RPC URL")
 	gateway := flag.String("gateway", "", "Gateway contract hash (0x-prefixed)")
-	neoAccounts := flag.String("neoaccounts", "", "NeoAccounts base URL (https://host:port)")
+	neoAccounts := flag.String("neoaccounts", "", "NeoAccounts (or gateway) base URL (https://host:port)")
 	flag.Parse()
 
 	if *rpc == "" || *gateway == "" || *neoAccounts == "" {
@@ -41,29 +42,35 @@ func main() {
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	// Avoid defers in CLI entrypoints that may call os.Exit/log.Fatalf.
+	// Context is canceled explicitly before exit.
 
 	mk, err := fetchMasterKey(*neoAccounts)
 	if err != nil {
+		cancel()
 		log.Fatalf("fetch master key: %v", err)
 	}
 
 	client, err := chain.NewClient(chain.Config{RPCURL: *rpc})
 	if err != nil {
+		cancel()
 		log.Fatalf("client: %v", err)
 	}
 	gw := chain.NewGatewayContract(client, trim0x(*gateway), nil)
 
 	onchainPubKey, err := gw.GetTEEMasterPubKey(ctx)
 	if err != nil {
+		cancel()
 		log.Fatalf("get on-chain pubkey: %v", err)
 	}
 	onchainHash, err := gw.GetTEEMasterPubKeyHash(ctx)
 	if err != nil {
+		cancel()
 		log.Fatalf("get on-chain pubkey hash: %v", err)
 	}
 	onchainAttest, err := gw.GetTEEMasterAttestationHash(ctx)
 	if err != nil {
+		cancel()
 		log.Fatalf("get on-chain attestation hash: %v", err)
 	}
 
@@ -83,24 +90,51 @@ func main() {
 	fmt.Printf("  hash match:   %v\n", okHash)
 
 	if !okPub || !okHash {
+		cancel()
 		os.Exit(1)
 	}
+
+	cancel()
 }
 
 func fetchMasterKey(baseURL string) (masterKeyResponse, error) {
-	url := strings.TrimRight(baseURL, "/") + "/master-key"
-	resp, err := http.Get(url)
+	u, err := url.Parse(strings.TrimRight(baseURL, "/") + "/master-key")
+	if err != nil {
+		return masterKeyResponse{}, err
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return masterKeyResponse{}, fmt.Errorf("unsupported URL scheme: %s", u.Scheme)
+	}
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), http.NoBody)
+	if err != nil {
+		return masterKeyResponse{}, err
+	}
+
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return masterKeyResponse{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return masterKeyResponse{}, fmt.Errorf("http %d: %s", resp.StatusCode, string(b))
+		b, truncated, readErr := httputil.ReadAllWithLimit(resp.Body, 32<<10)
+		if readErr != nil {
+			return masterKeyResponse{}, fmt.Errorf("http %d (failed to read body: %v)", resp.StatusCode, readErr)
+		}
+		msg := string(b)
+		if truncated {
+			msg += "...(truncated)"
+		}
+		return masterKeyResponse{}, fmt.Errorf("http %d: %s", resp.StatusCode, msg)
 	}
 	var body masterKeyResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return masterKeyResponse{}, err
+	data, err := httputil.ReadAllStrict(resp.Body, 1<<20)
+	if err != nil {
+		return masterKeyResponse{}, fmt.Errorf("read /master-key response: %w", err)
+	}
+	if err := json.Unmarshal(data, &body); err != nil {
+		return masterKeyResponse{}, fmt.Errorf("decode /master-key response: %w", err)
 	}
 	if body.PubKey == "" || body.Hash == "" {
 		return masterKeyResponse{}, fmt.Errorf("/master-key missing pubkey/hash")

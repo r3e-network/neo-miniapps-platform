@@ -59,9 +59,9 @@ func NewEventState(event *ContractEvent) *EventState {
 }
 
 // RequireMinItems validates the minimum number of state items.
-func (e *EventState) RequireMinItems(min int, eventName string) error {
-	if len(e.State) < min {
-		return fmt.Errorf("%s: expected at least %d items, got %d", eventName, min, len(e.State))
+func (e *EventState) RequireMinItems(minItems int, eventName string) error {
+	if len(e.State) < minItems {
+		return fmt.Errorf("%s: expected at least %d items, got %d", eventName, minItems, len(e.State))
 	}
 	return nil
 }

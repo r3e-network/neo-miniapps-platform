@@ -2,7 +2,6 @@ package chain
 
 import (
 	"context"
-	"fmt"
 	"math/big"
 )
 
@@ -28,136 +27,50 @@ func NewGatewayContract(client *Client, contractHash string, wallet *Wallet) *Ga
 
 // GetAdmin returns the admin address.
 func (g *GatewayContract) GetAdmin(ctx context.Context) (string, error) {
-	result, err := g.client.InvokeFunction(ctx, g.contractHash, "admin", nil)
-	if err != nil {
-		return "", err
-	}
-	if result.State != "HALT" {
-		return "", fmt.Errorf("execution failed: %s", result.Exception)
-	}
-	if len(result.Stack) == 0 {
-		return "", fmt.Errorf("no result")
-	}
-	return ParseHash160(result.Stack[0])
+	return InvokeStruct(ctx, g.client, g.contractHash, "admin", ParseHash160)
 }
 
 // IsTEEAccount checks if an account is a registered TEE account.
 func (g *GatewayContract) IsTEEAccount(ctx context.Context, account string) (bool, error) {
-	params := []ContractParam{NewHash160Param(account)}
-	result, err := g.client.InvokeFunction(ctx, g.contractHash, "isTEEAccount", params)
-	if err != nil {
-		return false, err
-	}
-	if result.State != "HALT" {
-		return false, fmt.Errorf("execution failed: %s", result.Exception)
-	}
-	if len(result.Stack) == 0 {
-		return false, fmt.Errorf("no result")
-	}
-	return ParseBoolean(result.Stack[0])
+	return IsTEEAccount(ctx, g.client, g.contractHash, account)
 }
 
 // GetTEEPublicKey returns the TEE public key for a TEE account.
 func (g *GatewayContract) GetTEEPublicKey(ctx context.Context, teeAccount string) ([]byte, error) {
-	params := []ContractParam{NewHash160Param(teeAccount)}
-	result, err := g.client.InvokeFunction(ctx, g.contractHash, "getTEEPublicKey", params)
-	if err != nil {
-		return nil, err
-	}
-	if result.State != "HALT" {
-		return nil, fmt.Errorf("execution failed: %s", result.Exception)
-	}
-	if len(result.Stack) == 0 {
-		return nil, fmt.Errorf("no result")
-	}
-	return ParseByteArray(result.Stack[0])
+	return InvokeStruct(ctx, g.client, g.contractHash, "getTEEPublicKey", ParseByteArray, NewHash160Param(teeAccount))
 }
 
 // GetServiceContract returns a registered service contract hash.
 func (g *GatewayContract) GetServiceContract(ctx context.Context, serviceType string) (string, error) {
-	params := []ContractParam{NewStringParam(serviceType)}
-	result, err := g.client.InvokeFunction(ctx, g.contractHash, "getServiceContract", params)
-	if err != nil {
-		return "", err
-	}
-	if result.State != "HALT" {
-		return "", fmt.Errorf("execution failed: %s", result.Exception)
-	}
-	if len(result.Stack) == 0 {
-		return "", fmt.Errorf("no result")
-	}
-	return ParseHash160(result.Stack[0])
+	return InvokeStruct(ctx, g.client, g.contractHash, "getServiceContract", ParseHash160, NewStringParam(serviceType))
 }
 
 // GetServiceFee returns the fee for a service type.
 //
-// DEPRECATED: On-chain fee handling is deprecated. Use gasbank.GetServiceFee() instead.
+// Deprecated: On-chain fee handling is deprecated. Use gasbank.GetServiceFee() instead.
 // Fee management has moved to off-chain Supabase-based system for better flexibility.
 // This method is kept for backward compatibility with existing contracts.
 func (g *GatewayContract) GetServiceFee(ctx context.Context, serviceType string) (*big.Int, error) {
-	params := []ContractParam{NewStringParam(serviceType)}
-	result, err := g.client.InvokeFunction(ctx, g.contractHash, "getServiceFee", params)
-	if err != nil {
-		return nil, err
-	}
-	if result.State != "HALT" {
-		return nil, fmt.Errorf("execution failed: %s", result.Exception)
-	}
-	if len(result.Stack) == 0 {
-		return nil, fmt.Errorf("no result")
-	}
-	return ParseInteger(result.Stack[0])
+	return InvokeInt(ctx, g.client, g.contractHash, "getServiceFee", NewStringParam(serviceType))
 }
 
 // BalanceOf returns user balance in the gateway.
 //
-// DEPRECATED: On-chain balance is deprecated. Use gasbank.Manager.GetBalance() instead.
+// Deprecated: On-chain balance is deprecated. Use gasbank.Manager.GetBalance() instead.
 // All balance management has moved to off-chain Supabase-based system.
 // Users deposit directly to Service Layer account, not to gateway contract.
 func (g *GatewayContract) BalanceOf(ctx context.Context, account string) (*big.Int, error) {
-	params := []ContractParam{NewHash160Param(account)}
-	result, err := g.client.InvokeFunction(ctx, g.contractHash, "balanceOf", params)
-	if err != nil {
-		return nil, err
-	}
-	if result.State != "HALT" {
-		return nil, fmt.Errorf("execution failed: %s", result.Exception)
-	}
-	if len(result.Stack) == 0 {
-		return nil, fmt.Errorf("no result")
-	}
-	return ParseInteger(result.Stack[0])
+	return InvokeInt(ctx, g.client, g.contractHash, "balanceOf", NewHash160Param(account))
 }
 
 // GetRequest returns a service request by ID.
 func (g *GatewayContract) GetRequest(ctx context.Context, requestID *big.Int) (*ContractServiceRequest, error) {
-	params := []ContractParam{NewIntegerParam(requestID)}
-	result, err := g.client.InvokeFunction(ctx, g.contractHash, "getRequest", params)
-	if err != nil {
-		return nil, err
-	}
-	if result.State != "HALT" {
-		return nil, fmt.Errorf("execution failed: %s", result.Exception)
-	}
-	if len(result.Stack) == 0 {
-		return nil, fmt.Errorf("no result")
-	}
-	return ParseServiceRequest(result.Stack[0])
+	return InvokeStruct(ctx, g.client, g.contractHash, "getRequest", ParseServiceRequest, NewIntegerParam(requestID))
 }
 
 // IsPaused returns whether the contract is paused.
 func (g *GatewayContract) IsPaused(ctx context.Context) (bool, error) {
-	result, err := g.client.InvokeFunction(ctx, g.contractHash, "paused", nil)
-	if err != nil {
-		return false, err
-	}
-	if result.State != "HALT" {
-		return false, fmt.Errorf("execution failed: %s", result.Exception)
-	}
-	if len(result.Stack) == 0 {
-		return false, fmt.Errorf("no result")
-	}
-	return ParseBoolean(result.Stack[0])
+	return InvokeBool(ctx, g.client, g.contractHash, "paused")
 }
 
 // =============================================================================
@@ -166,45 +79,15 @@ func (g *GatewayContract) IsPaused(ctx context.Context) (bool, error) {
 
 // GetTEEMasterPubKey returns the anchored TEE master public key.
 func (g *GatewayContract) GetTEEMasterPubKey(ctx context.Context) ([]byte, error) {
-	result, err := g.client.InvokeFunction(ctx, g.contractHash, "getTEEMasterPubKey", nil)
-	if err != nil {
-		return nil, err
-	}
-	if result.State != "HALT" {
-		return nil, fmt.Errorf("execution failed: %s", result.Exception)
-	}
-	if len(result.Stack) == 0 {
-		return nil, fmt.Errorf("no result")
-	}
-	return ParseByteArray(result.Stack[0])
+	return InvokeStruct(ctx, g.client, g.contractHash, "getTEEMasterPubKey", ParseByteArray)
 }
 
 // GetTEEMasterPubKeyHash returns the SHA-256 hash of the anchored TEE master public key.
 func (g *GatewayContract) GetTEEMasterPubKeyHash(ctx context.Context) ([]byte, error) {
-	result, err := g.client.InvokeFunction(ctx, g.contractHash, "getTEEMasterPubKeyHash", nil)
-	if err != nil {
-		return nil, err
-	}
-	if result.State != "HALT" {
-		return nil, fmt.Errorf("execution failed: %s", result.Exception)
-	}
-	if len(result.Stack) == 0 {
-		return nil, fmt.Errorf("no result")
-	}
-	return ParseByteArray(result.Stack[0])
+	return InvokeStruct(ctx, g.client, g.contractHash, "getTEEMasterPubKeyHash", ParseByteArray)
 }
 
 // GetTEEMasterAttestationHash returns the attestation hash/CID for the TEE master key.
 func (g *GatewayContract) GetTEEMasterAttestationHash(ctx context.Context) ([]byte, error) {
-	result, err := g.client.InvokeFunction(ctx, g.contractHash, "getTEEMasterAttestationHash", nil)
-	if err != nil {
-		return nil, err
-	}
-	if result.State != "HALT" {
-		return nil, fmt.Errorf("execution failed: %s", result.Exception)
-	}
-	if len(result.Stack) == 0 {
-		return nil, fmt.Errorf("no result")
-	}
-	return ParseByteArray(result.Stack[0])
+	return InvokeStruct(ctx, g.client, g.contractHash, "getTEEMasterAttestationHash", ParseByteArray)
 }

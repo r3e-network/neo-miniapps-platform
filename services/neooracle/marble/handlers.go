@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
-	"github.com/R3E-Network/service_layer/internal/httputil"
 	"github.com/google/uuid"
+
+	"github.com/R3E-Network/service_layer/internal/httputil"
 )
 
 // =============================================================================
@@ -32,6 +34,13 @@ func (s *Service) handleQuery(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "url required")
 		return
 	}
+	if httputil.StrictIdentityMode() {
+		parsed, err := url.Parse(input.URL)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" || !strings.EqualFold(parsed.Scheme, "https") {
+			httputil.BadRequest(w, "only https urls are allowed in strict identity mode")
+			return
+		}
+	}
 	if !s.allowlist.Allows(input.URL) {
 		httputil.BadRequest(w, "url not allowed")
 		return
@@ -48,6 +57,10 @@ func (s *Service) handleQuery(w http.ResponseWriter, r *http.Request) {
 
 	// If a secret is requested, fetch it over mTLS and inject.
 	if input.SecretName != "" {
+		if s.secretClient == nil {
+			httputil.ServiceUnavailable(w, "secret store not configured (set SECRETS_BASE_URL)")
+			return
+		}
 		secret, err := s.secretClient.GetSecret(r.Context(), userID, input.SecretName)
 		if err != nil {
 			httputil.InternalError(w, fmt.Sprintf("failed to fetch secret: %v", err))
@@ -81,8 +94,17 @@ func (s *Service) handleQuery(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	limited := io.LimitReader(resp.Body, s.maxBodyBytes)
-	respBody, _ := io.ReadAll(limited)
+	respBody, truncated, err := httputil.ReadAllWithLimit(resp.Body, s.maxBodyBytes)
+	if err != nil {
+		httputil.InternalError(w, fmt.Sprintf("failed to read response body: %v", err))
+		return
+	}
+	if truncated {
+		httputil.WriteErrorResponse(w, r, http.StatusBadGateway, "", "upstream response too large", map[string]any{
+			"limit_bytes": s.maxBodyBytes,
+		})
+		return
+	}
 
 	outHeaders := map[string]string{}
 	for k, vals := range resp.Header {

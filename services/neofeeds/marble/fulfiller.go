@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"math/big"
-	"time"
 )
 
 // =============================================================================
@@ -21,26 +20,6 @@ var DefaultFeeds = []string{
 	"NEO/GAS",
 }
 
-// runChainPushLoop periodically fetches prices and pushes them on-chain.
-func (s *Service) runChainPushLoop(ctx context.Context) {
-	ticker := time.NewTicker(s.updateInterval)
-	defer ticker.Stop()
-
-	// Initial push
-	s.pushPricesToChain(ctx)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-s.StopChan():
-			return
-		case <-ticker.C:
-			s.pushPricesToChain(ctx)
-		}
-	}
-}
-
 // pushPricesToChain fetches all configured prices and pushes them on-chain.
 func (s *Service) pushPricesToChain(ctx context.Context) {
 	enabledFeeds := s.GetEnabledFeeds()
@@ -52,7 +31,8 @@ func (s *Service) pushPricesToChain(ctx context.Context) {
 	prices := make([]*big.Int, 0, len(enabledFeeds))
 	timestamps := make([]uint64, 0, len(enabledFeeds))
 
-	for _, feed := range enabledFeeds {
+	for i := range enabledFeeds {
+		feed := &enabledFeeds[i]
 		pair := feed.Pair
 		if pair == "" {
 			pair = feedIDToPair(feed.ID)
@@ -63,16 +43,25 @@ func (s *Service) pushPricesToChain(ctx context.Context) {
 			continue
 		}
 
+		timestampMillis := price.Timestamp.UnixMilli()
+		if timestampMillis < 0 {
+			continue
+		}
+
 		feedIDs = append(feedIDs, feed.ID)
 		prices = append(prices, big.NewInt(price.Price))
-		timestamps = append(timestamps, uint64(price.Timestamp.UnixMilli()))
+		timestamps = append(timestamps, uint64(timestampMillis))
 	}
 
 	if len(feedIDs) == 0 {
 		return
 	}
 
-	_, _ = s.teeFulfiller.UpdatePrices(ctx, s.neoFeedsHash, feedIDs, prices, timestamps)
+	if _, err := s.teeFulfiller.UpdatePrices(ctx, s.neoFeedsHash, feedIDs, prices, timestamps); err != nil {
+		s.Logger().WithContext(ctx).WithError(err).WithFields(map[string]interface{}{
+			"feeds": len(feedIDs),
+		}).Warn("failed to push prices on-chain")
+	}
 }
 
 // PushSinglePrice pushes a single price update on-chain.
@@ -87,12 +76,17 @@ func (s *Service) PushSinglePrice(ctx context.Context, feedID string) error {
 		return fmt.Errorf("get price: %w", err)
 	}
 
+	timestampMillis := price.Timestamp.UnixMilli()
+	if timestampMillis < 0 {
+		return fmt.Errorf("invalid timestamp for feed %s", feedID)
+	}
+
 	_, err = s.teeFulfiller.UpdatePrice(
 		ctx,
 		s.neoFeedsHash,
 		feedID,
 		big.NewInt(price.Price),
-		uint64(price.Timestamp.UnixMilli()),
+		uint64(timestampMillis),
 	)
 	return err
 }

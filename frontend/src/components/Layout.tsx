@@ -1,7 +1,8 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import { Home, Server, Key, Wallet, Zap, Settings, LogOut, Shield, Shuffle, Moon, Sun, Dices } from 'lucide-react';
 import { useAuthStore } from '../stores/auth';
 import { useThemeStore } from '../stores/theme';
+import { api } from '../api/client';
 import { useEffect } from 'react';
 
 const navigation = [
@@ -15,7 +16,7 @@ const navigation = [
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
-export function Layout({ children }: { children: React.ReactNode }) {
+export function Layout() {
   const location = useLocation();
   const { user, logout } = useAuthStore();
   const { theme, toggleTheme } = useThemeStore();
@@ -32,6 +33,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }, [theme]);
 
   const isDark = theme === 'dark';
+
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+    } catch (err) {
+      console.error('Logout error:', err);
+    } finally {
+      logout();
+    }
+  };
 
   return (
     <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
@@ -78,7 +89,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
               <button
-                onClick={logout}
+                onClick={handleLogout}
                 className={`p-2 ${isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'} transition-colors`}
                 title="Logout"
               >
@@ -91,7 +102,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <div className="pl-64">
-        <main className="p-8">{children}</main>
+        <main className="p-8">
+          <Outlet />
+        </main>
       </div>
     </div>
   );

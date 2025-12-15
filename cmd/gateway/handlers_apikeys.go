@@ -3,11 +3,12 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"net/http"
 
-	"github.com/R3E-Network/service_layer/internal/database"
 	"github.com/gorilla/mux"
+
+	"github.com/R3E-Network/service_layer/internal/database"
+	"github.com/R3E-Network/service_layer/internal/httputil"
 )
 
 // =============================================================================
@@ -17,27 +18,34 @@ import (
 func listAPIKeysHandler(db *database.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Header.Get("X-User-ID")
+		if userID == "" {
+			jsonError(w, "missing user id", http.StatusUnauthorized)
+			return
+		}
+
 		keys, err := db.GetAPIKeys(r.Context(), userID)
 		if err != nil {
 			jsonError(w, "failed to get API keys", http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(keys)
+		httputil.WriteJSON(w, http.StatusOK, keys)
 	}
 }
 
 func createAPIKeyHandler(db *database.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Header.Get("X-User-ID")
+		if userID == "" {
+			jsonError(w, "missing user id", http.StatusUnauthorized)
+			return
+		}
 
 		var req struct {
 			Name   string   `json:"name"`
 			Scopes []string `json:"scopes"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			jsonError(w, "invalid request", http.StatusBadRequest)
+		if !httputil.DecodeJSON(w, r, &req) {
 			return
 		}
 
@@ -69,9 +77,7 @@ func createAPIKeyHandler(db *database.Repository) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		httputil.WriteJSON(w, http.StatusCreated, map[string]interface{}{
 			"id":         apiKey.ID,
 			"name":       apiKey.Name,
 			"key":        rawKey, // Only returned once!
@@ -85,6 +91,11 @@ func createAPIKeyHandler(db *database.Repository) http.HandlerFunc {
 func revokeAPIKeyHandler(db *database.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Header.Get("X-User-ID")
+		if userID == "" {
+			jsonError(w, "missing user id", http.StatusUnauthorized)
+			return
+		}
+
 		keyID := mux.Vars(r)["id"]
 
 		if err := db.RevokeAPIKey(r.Context(), keyID, userID); err != nil {

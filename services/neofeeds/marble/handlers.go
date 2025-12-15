@@ -2,8 +2,9 @@
 package neofeeds
 
 import (
-	"encoding/json"
 	"net/http"
+
+	"github.com/gorilla/mux"
 
 	"github.com/R3E-Network/service_layer/internal/httputil"
 )
@@ -13,8 +14,7 @@ import (
 // =============================================================================
 
 func (s *Service) handleGetConfig(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(s.config)
+	httputil.WriteJSON(w, http.StatusOK, s.config)
 }
 
 func (s *Service) handleListSources(w http.ResponseWriter, r *http.Request) {
@@ -26,13 +26,11 @@ func (s *Service) handleListSources(w http.ResponseWriter, r *http.Request) {
 			"weight": src.Weight,
 		})
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(sources)
+	httputil.WriteJSON(w, http.StatusOK, sources)
 }
 
 func (s *Service) handleGetPrice(w http.ResponseWriter, r *http.Request) {
-	// Extract pair from URL (e.g., /price/BTCUSDT)
-	pair := r.URL.Path[len("/price/"):]
+	pair := mux.Vars(r)["pair"]
 	if pair == "" {
 		httputil.BadRequest(w, "pair required")
 		return
@@ -44,14 +42,12 @@ func (s *Service) handleGetPrice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(price)
+	httputil.WriteJSON(w, http.StatusOK, price)
 }
 
 func (s *Service) handleGetPrices(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
 	if s.DB() == nil {
-		json.NewEncoder(w).Encode([]PriceResponse{})
+		httputil.WriteJSON(w, http.StatusOK, []PriceResponse{})
 		return
 	}
 
@@ -69,7 +65,7 @@ func (s *Service) handleGetPrices(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	}
-	json.NewEncoder(w).Encode(responses)
+	httputil.WriteJSON(w, http.StatusOK, responses)
 }
 
 func (s *Service) handleListFeeds(w http.ResponseWriter, r *http.Request) {
@@ -80,6 +76,5 @@ func (s *Service) handleListFeeds(w http.ResponseWriter, r *http.Request) {
 			"name": src.Name,
 		})
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(feeds)
+	httputil.WriteJSON(w, http.StatusOK, feeds)
 }

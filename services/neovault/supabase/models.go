@@ -40,12 +40,12 @@ type Registration struct {
 	Status RegistrationStatus `json:"status"`
 
 	// Compliance Information
-	Email            string    `json:"email,omitempty"`
-	Jurisdiction     string    `json:"jurisdiction,omitempty"`
-	TermsVersion     string    `json:"terms_version"`
-	TermsAcceptedAt  time.Time `json:"terms_accepted_at"`
-	Purpose          string    `json:"purpose,omitempty"`
-	ExpectedVolume   string    `json:"expected_volume,omitempty"`
+	Email           string    `json:"email,omitempty"`
+	Jurisdiction    string    `json:"jurisdiction,omitempty"`
+	TermsVersion    string    `json:"terms_version"`
+	TermsAcceptedAt time.Time `json:"terms_accepted_at"`
+	Purpose         string    `json:"purpose,omitempty"`
+	ExpectedVolume  string    `json:"expected_volume,omitempty"`
 
 	// Admin Review
 	ReviewedBy      string    `json:"reviewed_by,omitempty"`

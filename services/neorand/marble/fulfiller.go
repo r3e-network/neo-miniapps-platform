@@ -29,7 +29,7 @@ func (s *Service) runRequestFulfiller(ctx context.Context) {
 }
 
 // fulfillRequest generates randomness and submits callback to user contract.
-func (s *Service) fulfillRequest(ctx context.Context, request *NeoRandRequest) {
+func (s *Service) fulfillRequest(ctx context.Context, request *Request) {
 	// Generate VRF proof
 	seedBytes, err := hex.DecodeString(request.Seed)
 	if err != nil {
@@ -38,7 +38,7 @@ func (s *Service) fulfillRequest(ctx context.Context, request *NeoRandRequest) {
 
 	vrfProof, err := crypto.GenerateVRF(s.privateKey, seedBytes)
 	if err != nil {
-		s.markRequestFailed(request, fmt.Sprintf("generate VRF: %v", err))
+		s.markRequestFailed(ctx, request, fmt.Sprintf("generate VRF: %v", err))
 		return
 	}
 
@@ -46,7 +46,9 @@ func (s *Service) fulfillRequest(ctx context.Context, request *NeoRandRequest) {
 	randomWords := make([]string, request.NumWords)
 	randomWordsBig := make([]*big.Int, request.NumWords)
 	for i := 0; i < request.NumWords; i++ {
-		wordInput := append(vrfProof.Output, byte(i))
+		wordInput := make([]byte, 0, len(vrfProof.Output)+1)
+		wordInput = append(wordInput, vrfProof.Output...)
+		wordInput = append(wordInput, byte(i))
 		wordHash := crypto.Hash256(wordInput)
 		randomWords[i] = hex.EncodeToString(wordHash)
 		randomWordsBig[i] = new(big.Int).SetBytes(wordHash)
@@ -76,12 +78,15 @@ func (s *Service) fulfillRequest(ctx context.Context, request *NeoRandRequest) {
 		// Submit to chain
 		txHash, err := s.teeFulfiller.FulfillRequest(ctx, requestIDBig, resultBytes)
 		if err != nil {
-			s.markRequestFailed(request, fmt.Sprintf("chain callback failed: %v", err))
+			s.markRequestFailed(ctx, request, fmt.Sprintf("chain callback failed: %v", err))
 			return
 		}
 
 		// Log successful submission
-		fmt.Printf("[VRF] Request %s fulfilled, txHash: %s\n", request.RequestID, txHash)
+		s.Logger().WithContext(ctx).WithFields(map[string]any{
+			"request_id": request.RequestID,
+			"tx_hash":    txHash,
+		}).Info("request fulfilled on-chain")
 	}
 
 	// Update request status after successful chain submission
@@ -93,19 +98,35 @@ func (s *Service) fulfillRequest(ctx context.Context, request *NeoRandRequest) {
 	s.mu.Unlock()
 
 	if s.repo != nil {
-		_ = s.repo.Update(ctx, neorandRecordFromReq(request))
+		updateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if err := s.repo.Update(updateCtx, neorandRecordFromReq(request)); err != nil {
+			s.Logger().WithContext(ctx).WithError(err).WithField("request_id", request.RequestID).Warn("failed to persist fulfilled request")
+		}
 	}
 }
 
 // markRequestFailed marks a request as failed.
-func (s *Service) markRequestFailed(request *NeoRandRequest, errMsg string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *Service) markRequestFailed(ctx context.Context, request *Request, errMsg string) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
+	s.mu.Lock()
 	request.Status = StatusFailed
 	request.Error = errMsg
+	s.mu.Unlock()
 
-	if s.repo != nil {
-		_ = s.repo.Update(context.Background(), neorandRecordFromReq(request))
+	if s.repo == nil {
+		return
+	}
+
+	updateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := s.repo.Update(updateCtx, neorandRecordFromReq(request)); err != nil {
+		s.Logger().WithContext(ctx).WithError(err).WithFields(map[string]any{
+			"request_id": request.RequestID,
+			"status":     StatusFailed,
+		}).Warn("failed to persist failed request")
 	}
 }

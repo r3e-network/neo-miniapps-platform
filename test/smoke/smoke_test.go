@@ -12,8 +12,8 @@ import (
 
 	"github.com/R3E-Network/service_layer/internal/marble"
 	neoaccounts "github.com/R3E-Network/service_layer/services/neoaccounts/marble"
-	neovault "github.com/R3E-Network/service_layer/services/neovault/marble"
 	vrf "github.com/R3E-Network/service_layer/services/neorand/marble"
+	neovault "github.com/R3E-Network/service_layer/services/neovault/marble"
 )
 
 // TestNeoAccountsSmoke performs basic smoke tests on the NeoAccounts service.
@@ -75,7 +75,7 @@ func TestNeoVaultSmoke(t *testing.T) {
 		}
 		m.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("smoke-test-neovault-key-32-bytes!!!"))
 
-		svc, err := neovault.New(neovault.Config{
+		svc, err := neovault.New(&neovault.Config{
 			Marble:         m,
 			NeoAccountsURL: "http://localhost:8081",
 		})
@@ -90,7 +90,7 @@ func TestNeoVaultSmoke(t *testing.T) {
 	t.Run("health endpoint responds", func(t *testing.T) {
 		m, _ := marble.New(marble.Config{MarbleType: "neovault"})
 		m.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("smoke-test-neovault-key-32-bytes!!!"))
-		svc, _ := neovault.New(neovault.Config{
+		svc, _ := neovault.New(&neovault.Config{
 			Marble:         m,
 			NeoAccountsURL: "http://localhost:8081",
 		})
@@ -107,7 +107,7 @@ func TestNeoVaultSmoke(t *testing.T) {
 	t.Run("service metadata correct", func(t *testing.T) {
 		m, _ := marble.New(marble.Config{MarbleType: "neovault"})
 		m.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("smoke-test-neovault-key-32-bytes!!!"))
-		svc, _ := neovault.New(neovault.Config{
+		svc, _ := neovault.New(&neovault.Config{
 			Marble:         m,
 			NeoAccountsURL: "http://localhost:8081",
 		})
@@ -123,7 +123,7 @@ func TestNeoVaultSmoke(t *testing.T) {
 	t.Run("supported tokens available", func(t *testing.T) {
 		m, _ := marble.New(marble.Config{MarbleType: "neovault"})
 		m.SetTestSecret("NEOVAULT_MASTER_KEY", []byte("smoke-test-neovault-key-32-bytes!!!"))
-		svc, _ := neovault.New(neovault.Config{
+		svc, _ := neovault.New(&neovault.Config{
 			Marble:         m,
 			NeoAccountsURL: "http://localhost:8081",
 		})

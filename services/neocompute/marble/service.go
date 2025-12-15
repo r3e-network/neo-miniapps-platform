@@ -15,16 +15,23 @@ package neocomputemarble
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
+	"golang.org/x/crypto/hkdf"
+
 	"github.com/R3E-Network/service_layer/internal/database"
 	"github.com/R3E-Network/service_layer/internal/marble"
+	"github.com/R3E-Network/service_layer/internal/runtime"
+	"github.com/R3E-Network/service_layer/internal/secretstore"
 	commonservice "github.com/R3E-Network/service_layer/services/common/service"
-	"golang.org/x/crypto/hkdf"
 )
 
 const (
@@ -38,8 +45,9 @@ const (
 	// Max script size (100KB)
 	MaxScriptSize = 100 * 1024
 
-	// Gas cost per operation (simplified)
-	GasPerInstruction = 1
+	// Gas accounting is approximate and based on the submitted script size.
+	// This value is intended for billing/rate limiting and is not tied to VM opcodes.
+	GasPerScriptByte = 10
 
 	// Resource limits for security
 	MaxInputSize      = 1 * 1024 * 1024 // 1MB max input size
@@ -67,7 +75,8 @@ type jobEntry struct {
 type Service struct {
 	*commonservice.BaseService
 	masterKey       []byte
-	signingKey      []byte   // Derived key for HMAC signing
+	signingKey      []byte // Derived key for HMAC signing
+	secretClient    *secretstore.Client
 	jobs            sync.Map // map[jobID]jobEntry
 	resultTTL       time.Duration
 	cleanupInterval time.Duration
@@ -80,16 +89,31 @@ type Config struct {
 	// Optional overrides, primarily used for testing.
 	ResultTTL       time.Duration
 	CleanupInterval time.Duration
+	// NeoStore configuration for secret injection.
+	SecretsBaseURL    string
+	SecretsHTTPClient *http.Client
 }
 
 // New creates a new NeoCompute service.
 func New(cfg Config) (*Service, error) {
-	base := commonservice.NewBase(commonservice.BaseConfig{
-		ID:      ServiceID,
-		Name:    ServiceName,
-		Version: Version,
-		Marble:  cfg.Marble,
-		DB:      cfg.DB,
+	if cfg.Marble == nil {
+		return nil, fmt.Errorf("neocompute: marble is required")
+	}
+
+	strict := runtime.StrictIdentityMode() || cfg.Marble.IsEnclave()
+
+	requiredSecrets := []string(nil)
+	if strict {
+		requiredSecrets = []string{"COMPUTE_MASTER_KEY"}
+	}
+
+	base := commonservice.NewBase(&commonservice.BaseConfig{
+		ID:              ServiceID,
+		Name:            ServiceName,
+		Version:         Version,
+		Marble:          cfg.Marble,
+		DB:              cfg.DB,
+		RequiredSecrets: requiredSecrets,
 	})
 
 	resultTTL := DefaultResultTTL
@@ -110,13 +134,46 @@ func New(cfg Config) (*Service, error) {
 		cleanupInterval: cleanupInterval,
 	}
 
-	if key, ok := cfg.Marble.Secret("COMPUTE_MASTER_KEY"); ok {
+	key, ok := cfg.Marble.Secret("COMPUTE_MASTER_KEY")
+	switch {
+	case ok && len(key) >= 32:
 		s.masterKey = key
-		// Derive signing key from master key using HKDF
 		signingKey, err := deriveSigningKey(key)
 		if err == nil {
 			s.signingKey = signingKey
 		}
+	case strict:
+		return nil, fmt.Errorf("neocompute: COMPUTE_MASTER_KEY is required and must be at least 32 bytes")
+	default:
+		// Development/testing fallback: generate an ephemeral master key.
+		buf := make([]byte, 32)
+		if _, err := rand.Read(buf); err != nil {
+			return nil, fmt.Errorf("neocompute: generate fallback key: %w", err)
+		}
+		s.masterKey = buf
+		if signingKey, err := deriveSigningKey(buf); err == nil {
+			s.signingKey = signingKey
+		}
+	}
+
+	secretsBaseURL := strings.TrimSpace(cfg.SecretsBaseURL)
+	if secretsBaseURL == "" {
+		secretsBaseURL = strings.TrimSpace(os.Getenv("SECRETS_BASE_URL"))
+	}
+	if secretsBaseURL != "" {
+		httpClient := cfg.SecretsHTTPClient
+		if httpClient == nil && cfg.Marble != nil {
+			httpClient = cfg.Marble.HTTPClient()
+		}
+		client, err := secretstore.New(secretstore.Config{
+			BaseURL:         secretsBaseURL,
+			HTTPClient:      httpClient,
+			CallerServiceID: ServiceID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("neocompute: configure secret store client: %w", err)
+		}
+		s.secretClient = client
 	}
 
 	// Register cleanup worker using BaseService's ticker worker
@@ -142,7 +199,10 @@ func (s *Service) statistics() map[string]any {
 	now := time.Now()
 
 	s.jobs.Range(func(key, value interface{}) bool {
-		entry := value.(jobEntry)
+		entry, ok := value.(jobEntry)
+		if !ok {
+			return true
+		}
 		if !s.isJobExpired(entry, now) {
 			jobCount++
 			if entry.Response.Status == "running" {
@@ -205,7 +265,11 @@ func (s *Service) getJob(userID, jobID string) *ExecuteResponse {
 	if !ok {
 		return nil
 	}
-	entry := val.(jobEntry)
+	entry, ok := val.(jobEntry)
+	if !ok {
+		s.jobs.Delete(jobID)
+		return nil
+	}
 	if s.isJobExpired(entry, time.Now()) {
 		s.jobs.Delete(jobID)
 		return nil
@@ -221,7 +285,10 @@ func (s *Service) listJobs(userID string) []*ExecuteResponse {
 	var jobs []*ExecuteResponse
 	now := time.Now()
 	s.jobs.Range(func(key, value interface{}) bool {
-		entry := value.(jobEntry)
+		entry, ok := value.(jobEntry)
+		if !ok {
+			return true
+		}
 		if s.isJobExpired(entry, now) {
 			s.jobs.Delete(key)
 			return true
@@ -239,7 +306,10 @@ func (s *Service) countRunningJobs(userID string) int {
 	count := 0
 	now := time.Now()
 	s.jobs.Range(func(key, value interface{}) bool {
-		entry := value.(jobEntry)
+		entry, ok := value.(jobEntry)
+		if !ok {
+			return true
+		}
 		if s.isJobExpired(entry, now) {
 			s.jobs.Delete(key)
 			return true
@@ -258,7 +328,11 @@ func (s *Service) purgeExpiredJobs() {
 	}
 	now := time.Now()
 	s.jobs.Range(func(key, value interface{}) bool {
-		entry := value.(jobEntry)
+		entry, ok := value.(jobEntry)
+		if !ok {
+			s.jobs.Delete(key)
+			return true
+		}
 		if s.isJobExpired(entry, now) {
 			s.jobs.Delete(key)
 		}

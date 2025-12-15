@@ -6,55 +6,85 @@ namespace: service-layer
 
 resources:
   - ../../base
+  - pdb.yaml
+  - networkpolicy.yaml
+  - networkpolicy-egress.yaml
 
-# Production-specific patches
 patches:
-  # Enable SGX hardware mode (disable simulation)
-  - patch: |-
+  # Production should not expose the gateway directly via NodePort. Prefer Ingress.
+  - target:
+      kind: Service
+      name: gateway
+    patch: |-
       - op: replace
-        path: /spec/template/spec/containers/0/env
-        value:
-          - name: EDG_MARBLE_COORDINATOR_ADDR
-            valueFrom:
-              configMapKeyRef:
-                name: service-layer-config
-                key: COORDINATOR_ADDR
-          - name: EDG_MARBLE_TYPE
-            value: "gateway"
-          - name: EDG_MARBLE_DNS_NAMES
-            value: "gateway,gateway.service-layer,gateway.service-layer.svc.cluster.local"
-          - name: OE_SIMULATION
-            value: "0"
-          - name: PORT
-            value: "8080"
-          - name: SUPABASE_URL
-            valueFrom:
-              configMapKeyRef:
-                name: service-layer-config
-                key: SUPABASE_URL
-          - name: SUPABASE_SERVICE_KEY
-            valueFrom:
-              secretKeyRef:
-                name: service-layer-secrets
-                key: SUPABASE_SERVICE_KEY
-          - name: NEO_RPC_URL
-            valueFrom:
-              configMapKeyRef:
-                name: service-layer-config
-                key: NEO_RPC_URL
-    target:
+        path: /spec/type
+        value: ClusterIP
+      - op: remove
+        path: /spec/ports/0/nodePort
+
+  # Spread replicas across nodes for higher availability.
+  - target:
       kind: Deployment
       name: gateway
+    patch: |-
+      - op: add
+        path: /spec/template/spec/topologySpreadConstraints
+        value:
+          - maxSkew: 1
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: ScheduleAnyway
+            labelSelector:
+              matchLabels:
+                app: gateway
+  - target:
+      kind: Deployment
+      name: neorand
+    patch: |-
+      - op: add
+        path: /spec/template/spec/topologySpreadConstraints
+        value:
+          - maxSkew: 1
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: ScheduleAnyway
+            labelSelector:
+              matchLabels:
+                app: neorand
+  - target:
+      kind: Deployment
+      name: neovault
+    patch: |-
+      - op: add
+        path: /spec/template/spec/topologySpreadConstraints
+        value:
+          - maxSkew: 1
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: ScheduleAnyway
+            labelSelector:
+              matchLabels:
+                app: neovault
+  - target:
+      kind: Deployment
+      name: neooracle
+    patch: |-
+      - op: add
+        path: /spec/template/spec/topologySpreadConstraints
+        value:
+          - maxSkew: 1
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: ScheduleAnyway
+            labelSelector:
+              matchLabels:
+                app: neooracle
 
 # Production replicas
 replicas:
   - name: gateway
     count: 2
-  - name: vrf
+  - name: neorand
     count: 2
   - name: neovault
     count: 2
-  - name: oracle
+  - name: neooracle
     count: 2
 
 # Production resource limits
@@ -62,4 +92,22 @@ configMapGenerator:
   - name: service-layer-config
     behavior: merge
     literals:
-      - COORDINATOR_ADDR=marblerun-coordinator.marblerun:4433
+      - COORDINATOR_MESH_ADDR=coordinator-mesh-api.marblerun.svc.cluster.local:2001
+      - COORDINATOR_CLIENT_ADDR=coordinator-client-api.marblerun.svc.cluster.local:4433
+      - OE_SIMULATION=0
+      - MARBLE_ENV=production
+      - JWT_EXPIRY=15m
+      - RATE_LIMIT_ENABLED=true
+      - RATE_LIMIT_REQUESTS=100
+      - RATE_LIMIT_WINDOW=1m
+      - RATE_LIMIT_BURST=100
+      - METRICS_ENABLED=true
+      # Neo N3 network (MainNet)
+      - NEO_RPC_URL=https://mainnet1.neo.coz.io:443
+      - NEO_NETWORK_MAGIC=860833102
+      # Frontend / CORS / OAuth redirect (set to your Vercel + Gateway domains)
+      - CORS_ALLOWED_ORIGINS=https://app.service-layer.r3e.network
+      - FRONTEND_URL=https://app.service-layer.r3e.network
+      - OAUTH_REDIRECT_BASE=https://api.service-layer.r3e.network
+      # External allowlist (required in production/SGX mode)
+      - ORACLE_HTTP_ALLOWLIST=https://api.binance.com,https://api.coinbase.com

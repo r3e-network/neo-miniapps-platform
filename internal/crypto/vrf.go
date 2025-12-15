@@ -43,9 +43,6 @@ var (
 	// Suite string for P256-SHA256-TAI
 	vrfSuiteString = []byte{0x01} // ECVRF-P256-SHA256-TAI
 
-	// Cofactor for P256 is 1
-	cofactor = big.NewInt(1)
-
 	// Field prime for P256
 	p256 = elliptic.P256()
 )
@@ -157,7 +154,7 @@ func VerifyVRFProof(publicKey *ecdsa.PublicKey, alpha []byte, proof *VRFProofDat
 
 // hashToCurveP256 implements the try-and-increment method for P-256.
 // This is the TAI (Try-And-Increment) method from RFC 9381.
-func hashToCurveP256(alpha []byte, publicKey *ecdsa.PublicKey) (*big.Int, *big.Int, error) {
+func hashToCurveP256(alpha []byte, publicKey *ecdsa.PublicKey) (x, y *big.Int, err error) {
 	curve := p256
 	params := curve.Params()
 
@@ -166,7 +163,7 @@ func hashToCurveP256(alpha []byte, publicKey *ecdsa.PublicKey) (*big.Int, *big.I
 
 	// Try-and-increment: try different counter values until we find a valid point
 	for ctr := byte(0); ctr < 255; ctr++ {
-		// hash_string = suite_string || 0x01 || pk || alpha || ctr
+		// hash_string is the concatenation of suite_string, 0x01, pk, alpha, and ctr.
 		h := sha256.New()
 		h.Write(vrfSuiteString)
 		h.Write([]byte{0x01}) // hash_to_curve domain separator
@@ -176,22 +173,21 @@ func hashToCurveP256(alpha []byte, publicKey *ecdsa.PublicKey) (*big.Int, *big.I
 		hashValue := h.Sum(nil)
 
 		// Interpret hash as x-coordinate candidate
-		x := new(big.Int).SetBytes(hashValue)
-		x.Mod(x, params.P)
+		xCandidate := new(big.Int).SetBytes(hashValue)
+		xCandidate.Mod(xCandidate, params.P)
 
 		// Try to find y such that (x, y) is on the curve
 		// y^2 = x^3 - 3x + b (mod p) for P-256
-		y := computeYFromX(curve, x)
-		if y != nil {
+		yCandidate := computeYFromX(curve, xCandidate)
+		if yCandidate != nil {
 			// Ensure we always use the even y (for determinism)
-			if y.Bit(0) == 1 {
-				y.Sub(params.P, y)
+			if yCandidate.Bit(0) == 1 {
+				yCandidate.Sub(params.P, yCandidate)
 			}
 
 			// Verify point is on curve
-			if curve.IsOnCurve(x, y) {
-				// Multiply by cofactor (1 for P-256, so this is a no-op)
-				return x, y, nil
+			if curve.IsOnCurve(xCandidate, yCandidate) {
+				return xCandidate, yCandidate, nil
 			}
 		}
 	}

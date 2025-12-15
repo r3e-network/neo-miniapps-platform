@@ -1,12 +1,12 @@
 # Neo Service Layer
 
-A production-ready, TEE-protected service layer for Neo N3 blockchain, built with **MarbleRun**, **EGo**, **Supabase**, and **Netlify**.
+A production-ready, TEE-protected service layer for Neo N3 blockchain, built with **MarbleRun**, **EGo**, **Supabase**, and **Vercel**.
 
 ## 🏗️ Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         NETLIFY (Frontend)                                   │
+│                         VERCEL (Frontend)                                    │
 │                    React + TypeScript + Vite + TailwindCSS                  │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │ HTTPS
@@ -23,22 +23,16 @@ A production-ready, TEE-protected service layer for Neo N3 blockchain, built wit
                     ▼               ▼               ▼
 ┌─────────────────────┐ ┌─────────────────────┐ ┌─────────────────────┐
 │   GATEWAY MARBLE    │ │  SERVICE MARBLES    │ │   WORKER MARBLES    │
-│   (EGo TEE)     │ │  (EGo TEEs)     │ │   (EGo TEEs)    │
+│     (EGo TEE)       │ │    (EGo TEEs)       │ │     (EGo TEEs)      │
 │                     │ │                     │ │                     │
-│ • API Gateway       │ │ • Oracle            │ │ • NeoFlow Jobs   │
-│ • Auth/JWT          │ │ • VRF               │ │ • NeoFeeds Push    │
-│ • Rate Limiting     │ │ • NeoVault             │ │ • Event Processing  │
-│ • Request Routing   │ │ • Secrets           │ │                     │
-│                     │ │ • NeoFeeds         │ │                     │
-│                     │ │ • GasBank           │ │                     │
-│                     │ │ • NeoFlow        │ │                     │
-│                     │ │ • NeoCompute      │ │                     │
-│                     │ │ • Accounts          │ │                     │
-│                     │ │ • CCIP              │ │                     │
-│                     │ │ • DataLink          │ │                     │
-│                     │ │ • DataStreams       │ │                     │
-│                     │ │ • DTA               │ │                     │
-│                     │ │ • CRE               │ │                     │
+│ • API Gateway       │ │ • NeoOracle         │ │ • NeoFlow Jobs      │
+│ • Auth/JWT          │ │ • NeoRand (VRF)     │ │ • NeoFeeds Push     │
+│ • Rate Limiting     │ │ • NeoVault          │ │ • Event Processing  │
+│ • Request Routing   │ │ • NeoStore          │ │                     │
+│ • GasBank (via DB)  │ │ • NeoFeeds          │ │                     │
+│                     │ │ • NeoFlow           │ │                     │
+│                     │ │ • NeoCompute        │ │                     │
+│                     │ │ • NeoAccounts       │ │                     │
 └─────────────────────┘ └─────────────────────┘ └─────────────────────┘
                                     │
                                     ▼
@@ -55,7 +49,7 @@ A production-ready, TEE-protected service layer for Neo N3 blockchain, built wit
 
 ### Prerequisites
 
-- Go 1.22+
+- Go 1.24+
 - Docker & Docker Compose
 - Node.js 20+
 - EGo SDK (for MarbleRun development)
@@ -71,7 +65,7 @@ cd service_layer
 # Start services in simulation mode
 make docker-up
 
-# Set the MarbleRun manifest
+# (Optional) Re-apply the MarbleRun manifest
 make marblerun-manifest
 
 # Start frontend development server
@@ -84,8 +78,8 @@ make frontend-dev
 # Build with EGo
 make build-ego
 
-# Sign marbles
-make sign-marbles
+# Sign enclave binaries
+make sign-enclaves
 
 # Start with MarbleRun hardware
 make docker-up-tee
@@ -93,29 +87,23 @@ make docker-up-tee
 
 ## 📦 Services
 
-| Service | Description | Port |
-|---------|-------------|------|
-| **Gateway** | API Gateway with JWT auth | 8080 |
-| **Oracle** | External data fetching | - |
-| **VRF** | Verifiable random function | - |
-| **NeoVault** | Deterministic Shared Seed Privacy NeoVault (v4.1) | - |
-| **Secrets** | Secure secret management | - |
-| **NeoFeeds** | Price feed aggregation | - |
-| **GasBank** | Gas fee management | - |
-| **NeoFlow** | Task neoflow | - |
-| **NeoCompute** | NeoCompute compute | - |
-| **Accounts** | User account management | - |
-| **CCIP** | Cross-chain interoperability | - |
-| **DataLink** | Data linking service | - |
-| **DataStreams** | Real-time data streams | - |
-| **DTA** | Data trust authority | - |
-| **CRE** | Chainlink runtime environment | - |
+| Service         | Description                          | Port |
+| --------------- | ------------------------------------ | ---- |
+| **Gateway**     | API Gateway with JWT auth            | 8080 |
+| **NeoOracle**   | External data fetching (allowlisted) | 8088 |
+| **NeoRand**     | Verifiable randomness (VRF)          | 8081 |
+| **NeoVault**    | Privacy-preserving transactions      | 8082 |
+| **NeoStore**    | Secrets + encrypted data management  | 8087 |
+| **NeoFeeds**    | Price feed aggregation               | 8083 |
+| **NeoFlow**     | Task automation                      | 8084 |
+| **NeoCompute**  | Confidential computation             | 8086 |
+| **NeoAccounts** | Account pool / key management        | 8085 |
 
 ### Internal Services
 
-| Service | Description |
-|---------|-------------|
-| **AccountPool** | Shared account pool service (owns HD keys; other services request/lock/sign via API) |
+| Service         | Description                                                                          |
+| --------------- | ------------------------------------------------------------------------------------ |
+| **NeoAccounts** | Shared account pool service (owns HD keys; other services request/lock/sign via API) |
 
 ## 📜 Smart Contracts
 
@@ -123,23 +111,28 @@ Neo N3 smart contracts for on-chain service integration:
 
 ```
 contracts/
-├── ServiceLayerGateway/    # Main entry point - fee management, routing
-├── OracleService/          # Oracle request/fulfillment
-├── VRFService/             # VRF request/fulfillment with proof storage
-├── NeoVaultService/           # Deterministic Shared Seed Privacy NeoVault (v4.1)
-├── NeoFeedsService/       # Price feed aggregation
-└── examples/               # Example consumer contracts
+├── gateway/                # ServiceLayerGateway contract
+├── common/                 # Shared contract utilities
+├── examples/               # Example consumer contracts
+└── build.sh                # Build script (nccs)
+services/
+├── neooracle/contract/     # NeoOracleService contract
+├── neorand/contract/       # NeoRandService contract
+├── neovault/contract/      # NeoVaultService contract
+├── neofeeds/contract/      # NeoFeedsService contract
+├── neoflow/contract/       # NeoFlowService contract
+└── neocompute/contract/    # NeoComputeService contract
 ```
 
 ### Contract Workflow
 
 The Service Layer supports three different service patterns:
 
-| Pattern | Services | Description |
-|---------|----------|-------------|
-| **Request-Response** | Oracle, VRF, NeoVault, NeoCompute | User initiates request → TEE processes → Callback |
-| **Push (Auto-Update)** | NeoFeeds | TEE periodically updates on-chain data, no user request needed |
-| **Trigger-Based** | NeoFlow | User registers trigger → TEE monitors conditions → Periodic callbacks |
+| Pattern                | Services                          | Description                                                           |
+| ---------------------- | --------------------------------- | --------------------------------------------------------------------- |
+| **Request-Response**   | Oracle, VRF, NeoVault, NeoCompute | User initiates request → TEE processes → Callback                     |
+| **Push (Auto-Update)** | NeoFeeds                          | TEE periodically updates on-chain data, no user request needed        |
+| **Trigger-Based**      | NeoFlow                           | User registers trigger → TEE monitors conditions → Periodic callbacks |
 
 #### Pattern 1: Request-Response (Oracle, VRF, NeoVault)
 
@@ -191,19 +184,19 @@ Complete request flow from User to Callback:
 
 **Step-by-Step Flow:**
 
-| Step | Component | Action | Description |
-|------|-----------|--------|-------------|
-| 1 | User | Initiate | User calls their contract method |
-| 2 | User Contract | `RequestPrice()` | Builds payload, calls Gateway |
-| 3 | ServiceLayerGateway | `RequestService()` | Validates, charges fee, routes to service |
-| 4 | Service Contract | `OnRequest()` | Stores request, emits event |
-| 5 | Service Layer (TEE) | Monitor | Listens for on-chain events |
-| 6 | Service Layer (TEE) | Process | Executes off-chain logic |
-| 7 | Service Layer (TEE) | Sign | Signs result with TEE key |
-| 8 | Service Contract | `OnFulfill()` | Receives fulfillment from Gateway |
-| 9 | ServiceLayerGateway | `FulfillRequest()` | Verifies TEE signature, routes callback |
-| 10 | User Contract | `Callback()` | Receives result, updates state |
-| 11 | User | Complete | Transaction confirmed |
+| Step | Component           | Action             | Description                               |
+| ---- | ------------------- | ------------------ | ----------------------------------------- |
+| 1    | User                | Initiate           | User calls their contract method          |
+| 2    | User Contract       | `RequestPrice()`   | Builds payload, calls Gateway             |
+| 3    | ServiceLayerGateway | `RequestService()` | Validates, charges fee, routes to service |
+| 4    | Service Contract    | `OnRequest()`      | Stores request, emits event               |
+| 5    | Service Layer (TEE) | Monitor            | Listens for on-chain events               |
+| 6    | Service Layer (TEE) | Process            | Executes off-chain logic                  |
+| 7    | Service Layer (TEE) | Sign               | Signs result with TEE key                 |
+| 8    | Service Contract    | `OnFulfill()`      | Receives fulfillment from Gateway         |
+| 9    | ServiceLayerGateway | `FulfillRequest()` | Verifies TEE signature, routes callback   |
+| 10   | User Contract       | `Callback()`       | Receives result, updates state            |
+| 11   | User                | Complete           | Transaction confirmed                     |
 
 #### Pattern 2: Push / Auto-Update (NeoFeeds)
 
@@ -284,12 +277,12 @@ Users register triggers, TEE monitors conditions and invokes callbacks:
 
 **NeoFlow Trigger Examples:**
 
-| Trigger Type | Example | Use Case |
-|--------------|---------|----------|
-| Time-based | `cron: "0 0 * * FRI"` | Weekly token distribution |
-| Price-based | `price: BTC > 100000` | Auto-sell when price target hit |
-| Threshold | `balance < 10 GAS` | Auto-refill gas bank |
-| Event-based | `event: LiquidityAdded` | React to on-chain events |
+| Trigger Type | Example                 | Use Case                        |
+| ------------ | ----------------------- | ------------------------------- |
+| Time-based   | `cron: "0 0 * * FRI"`   | Weekly token distribution       |
+| Price-based  | `price: BTC > 100000`   | Auto-sell when price target hit |
+| Threshold    | `balance < 10 GAS`      | Auto-refill gas bank            |
+| Event-based  | `event: LiquidityAdded` | React to on-chain events        |
 
 ### NeoVault Service (v4.1) - Deterministic Shared Seed
 
@@ -342,23 +335,16 @@ service_layer/
 │   ├── marble/           # Marble SDK & service framework
 │   ├── database/         # Supabase client & repository
 │   ├── crypto/           # Cryptographic operations
-│   └── attestation/      # Remote attestation
+│   └── secretstore/      # NeoStore (secrets) client
 ├── services/
-│   ├── oracle/           # Oracle service
-│   ├── vrf/              # VRF service
-│   ├── neovault/            # NeoVault service
-│   ├── accountpool/      # Shared account pool service (locks/signs on behalf of others)
-│   ├── secrets/          # Secrets service
-│   ├── neofeeds/        # NeoFeeds service
-│   ├── gasbank/          # GasBank service
-│   ├── neoflow/       # NeoFlow service
-│   ├── neocompute/     # NeoCompute compute
-│   ├── accounts/         # Accounts service
-│   ├── ccip/             # CCIP service
-│   ├── datalink/         # DataLink service
-│   ├── datastreams/      # DataStreams service
-│   ├── dta/              # DTA service
-│   └── cre/              # CRE service
+│   ├── neooracle/        # NeoOracle service
+│   ├── neorand/          # NeoRand (VRF) service
+│   ├── neovault/         # NeoVault service
+│   ├── neoaccounts/      # NeoAccounts (AccountPool) service
+│   ├── neostore/         # NeoStore (Secrets) service
+│   ├── neofeeds/         # NeoFeeds service
+│   ├── neoflow/          # NeoFlow service
+│   └── neocompute/       # NeoCompute service
 ├── manifests/
 │   └── manifest.json     # MarbleRun manifest
 ├── migrations/
@@ -367,6 +353,7 @@ service_layer/
 │   ├── Dockerfile.gateway
 │   ├── Dockerfile.service
 │   └── docker-compose.yaml
+├── k8s/                   # Kubernetes manifests/overlays
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
@@ -374,6 +361,7 @@ service_layer/
 │   │   ├── api/
 │   │   └── stores/
 │   └── package.json
+├── scripts/              # Dev/deploy scripts
 └── Makefile
 ```
 
@@ -412,12 +400,24 @@ make marblerun-recover   # Recover coordinator
 ### Authentication
 
 ```bash
-# Register/Login
-POST /api/v1/auth/register
+# 1) Request a nonce + message to sign
+POST /api/v1/auth/nonce
+{
+  "address": "NXV7ZhHiyM1aHXwpVsRZC6BwNFP2jghXAq"
+}
+
+# 2) Sign the returned "message" with your Neo N3 wallet, then login (or register)
+POST /api/v1/auth/login
 {
   "address": "NXV7ZhHiyM1aHXwpVsRZC6BwNFP2jghXAq",
-  "signature": "..."
+  "publicKey": "hex_or_base64_public_key",
+  "signature": "hex_or_base64_signature",
+  "message": "original_message_from_nonce_endpoint",
+  "nonce": "nonce_from_nonce_endpoint"
 }
+
+# Note: when OAUTH_COOKIE_MODE=true, the gateway also sets an HttpOnly cookie
+# (sl_auth_token) so browser clients can authenticate via `credentials: include`.
 ```
 
 ### Oracle
@@ -456,6 +456,14 @@ POST /api/v1/secrets/secrets
 ## 📊 Environment Variables
 
 ```bash
+# Runtime
+MARBLE_ENV=development   # development|testing|production
+
+# Gateway (required in production; >= 32 bytes)
+JWT_SECRET=...
+GATEWAY_TLS_MODE=off     # off|tls|mtls
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+
 # Supabase
 SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_SERVICE_KEY=xxx
@@ -465,9 +473,22 @@ NEO_RPC_URL=https://testnet1.neo.coz.io:443
 NEO_NETWORK_MAGIC=894710606
 
 # MarbleRun
-COORDINATOR_ADDR=:4433
+# Marbles reach the coordinator via the mesh API address.
+# - Docker Compose: coordinator:2001
+# - Kubernetes: coordinator-mesh-api.marblerun.svc.cluster.local:2001 (or your domain)
+COORDINATOR_MESH_ADDR=coordinator:2001
+# marblerun CLI connects to the coordinator client API (usually exposed on localhost for dev)
+COORDINATOR_CLIENT_ADDR=localhost:4433
 OE_SIMULATION=1  # Set to 0 for MarbleRun hardware
+
+# OAuth (optional)
+FRONTEND_URL=http://localhost:3000
+OAUTH_REDIRECT_BASE=http://localhost:8080
+OAUTH_COOKIE_MODE=true
+OAUTH_COOKIE_SAMESITE=lax  # strict|lax|none (none requires HTTPS)
 ```
+
+See `.env.example` for a complete, annotated list (service URLs, allowlists, testnet settings).
 
 ## 🔄 Upgrade Notes
 

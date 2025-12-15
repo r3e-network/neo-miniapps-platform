@@ -6,12 +6,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/chain"
+	"github.com/R3E-Network/service_layer/internal/httputil"
 )
 
 const (
@@ -68,7 +68,19 @@ func (c *Client) call(method string, params ...interface{}) (*chain.RPCResponse,
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, truncated, readErr := httputil.ReadAllWithLimit(resp.Body, 32<<10)
+		if readErr != nil {
+			return nil, fmt.Errorf("read response: %w", readErr)
+		}
+		msg := string(respBody)
+		if truncated {
+			msg += "...(truncated)"
+		}
+		return nil, fmt.Errorf("rpc http error %d: %s", resp.StatusCode, msg)
+	}
+
+	respBody, err := httputil.ReadAllStrict(resp.Body, 8<<20)
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
@@ -114,11 +126,11 @@ func (c *Client) NewSession() (string, error) {
 
 // SetupSessionWithGas creates a session and funds the wallet with GAS.
 // Reads NEO_TESTNET_WIF from environment.
-func (c *Client) SetupSessionWithGas(gasAmount int64) (string, string, error) {
-	sessionID := fmt.Sprintf("test-%d", time.Now().UnixNano())
+func (c *Client) SetupSessionWithGas(gasAmount int64) (sessionID, accountHash string, err error) {
+	sessionID = fmt.Sprintf("test-%d", time.Now().UnixNano())
 
 	// Create session
-	_, err := c.call("newsnapshotsfromcurrentsystem", sessionID)
+	_, err = c.call("newsnapshotsfromcurrentsystem", sessionID)
 	if err != nil {
 		return "", "", fmt.Errorf("create session: %w", err)
 	}
@@ -137,12 +149,11 @@ func (c *Client) SetupSessionWithGas(gasAmount int64) (string, string, error) {
 
 	// Parse response to get account address
 	var walletInfo map[string]interface{}
-	if err := json.Unmarshal(resp.Result, &walletInfo); err != nil {
-		return "", "", fmt.Errorf("parse wallet info: %w", err)
+	if unmarshalErr := json.Unmarshal(resp.Result, &walletInfo); unmarshalErr != nil {
+		return "", "", fmt.Errorf("parse wallet info: %w", unmarshalErr)
 	}
 
 	// Get the account script hash from response
-	var accountHash string
 	for _, v := range walletInfo {
 		if addr, ok := v.(string); ok {
 			accountHash = addr
@@ -184,7 +195,7 @@ type VirtualDeployResult struct {
 }
 
 // VirtualDeploy deploys a contract virtually in a session.
-func (c *Client) VirtualDeploy(sessionID string, nefPath, manifestPath string) (*VirtualDeployResult, error) {
+func (c *Client) VirtualDeploy(sessionID, nefPath, manifestPath string) (*VirtualDeployResult, error) {
 	nefData, err := os.ReadFile(nefPath)
 	if err != nil {
 		return nil, fmt.Errorf("read nef: %w", err)

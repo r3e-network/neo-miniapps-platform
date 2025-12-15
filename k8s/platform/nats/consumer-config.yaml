@@ -1,0 +1,110 @@
+# NATS JetStream Consumer 配置
+# 为每个 Neo* 服务创建 Consumer
+
+---
+# NeoRand Consumer
+apiVersion: jetstream.nats.io/v1beta2
+kind: Consumer
+metadata:
+  name: neorand-consumer
+  namespace: platform
+spec:
+  streamName: neo-events
+  durableName: neorand-consumer
+  deliverPolicy: all
+  ackPolicy: explicit
+  ackWait: 30s
+  maxDeliver: 3
+  filterSubject: neo.vrf.*
+  replayPolicy: instant
+  deliverGroup: neorand-workers
+
+---
+# NeoVault Consumer
+apiVersion: jetstream.nats.io/v1beta2
+kind: Consumer
+metadata:
+  name: neovault-consumer
+  namespace: platform
+spec:
+  streamName: neo-events
+  durableName: neovault-consumer
+  deliverPolicy: all
+  ackPolicy: explicit
+  ackWait: 30s
+  maxDeliver: 3
+  filterSubject: neo.vault.*
+  replayPolicy: instant
+  deliverGroup: neovault-workers
+
+---
+# NeoFeeds Consumer
+apiVersion: jetstream.nats.io/v1beta2
+kind: Consumer
+metadata:
+  name: neofeeds-consumer
+  namespace: platform
+spec:
+  streamName: neo-events
+  durableName: neofeeds-consumer
+  deliverPolicy: all
+  ackPolicy: explicit
+  ackWait: 30s
+  maxDeliver: 3
+  filterSubject: neo.datafeed.*
+  replayPolicy: instant
+  deliverGroup: neofeeds-workers
+
+---
+# NeoFlow Consumer
+apiVersion: jetstream.nats.io/v1beta2
+kind: Consumer
+metadata:
+  name: neoflow-consumer
+  namespace: platform
+spec:
+  streamName: neo-events
+  durableName: neoflow-consumer
+  deliverPolicy: all
+  ackPolicy: explicit
+  ackWait: 30s
+  maxDeliver: 3
+  filterSubject: neo.flow.*
+  replayPolicy: instant
+  deliverGroup: neoflow-workers
+
+---
+# NeoAccounts Consumer (for GasBank funding)
+apiVersion: jetstream.nats.io/v1beta2
+kind: Consumer
+metadata:
+  name: neoaccounts-consumer
+  namespace: platform
+spec:
+  streamName: neo-events
+  durableName: neoaccounts-consumer
+  deliverPolicy: all
+  ackPolicy: explicit
+  ackWait: 30s
+  maxDeliver: 3
+  filterSubject: neo.accounts.*
+  replayPolicy: instant
+  deliverGroup: neoaccounts-workers
+
+---
+# Dead Letter Queue (DLQ) Stream
+# 用于存储失败的消息
+apiVersion: jetstream.nats.io/v1beta2
+kind: Stream
+metadata:
+  name: neo-events-dlq
+  namespace: platform
+spec:
+  name: neo-events-dlq
+  subjects:
+    - neo.dlq.>
+  retention: limits
+  maxAge: 720h # 30 天
+  maxBytes: 1073741824 # 1GB
+  storage: file
+  replicas: 1

@@ -1,0 +1,352 @@
+services:
+  # =============================================================================
+  # MarbleRun Coordinator (Simulation Mode)
+  # - Runs without SGX devices or AESM/DCAP mounts.
+  # =============================================================================
+  coordinator:
+    image: ${MARBLERUN_COORDINATOR_IMAGE:-ghcr.io/edgelesssys/marblerun/coordinator:v1.8.0}
+    container_name: marblerun-coordinator
+    ports:
+      - 127.0.0.1:2001:2001
+      - 127.0.0.1:4433:4433
+    environment:
+      - EDG_COORDINATOR_MESH_ADDR=0.0.0.0:2001
+      - EDG_COORDINATOR_CLIENT_ADDR=0.0.0.0:4433
+      - EDG_COORDINATOR_DNS_NAMES=localhost,coordinator
+      - EDG_COORDINATOR_SEAL_DIR=/coordinator/data
+      - OE_SIMULATION=${OE_SIMULATION:-1}
+    volumes:
+      - coordinator-data:/coordinator/data
+      - ../manifests:/manifests:ro
+    restart: unless-stopped
+
+  # =============================================================================
+  # Gateway Marble (API Gateway) - Simulation Mode
+  # =============================================================================
+  gateway:
+    image: service-layer/gateway:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.gateway
+      args:
+        EGO_VERSION: ${EGO_VERSION:-1.8.0}
+        EGO_STRICT_SIGNING: 0
+    container_name: service-gateway
+    ports:
+      - 127.0.0.1:${GATEWAY_PORT:-8080}:${GATEWAY_PORT:-8080}
+    environment:
+      - EDG_MARBLE_COORDINATOR_ADDR=${COORDINATOR_MESH_ADDR:-coordinator:2001}
+      - EDG_MARBLE_TYPE=gateway
+      - EDG_MARBLE_DNS_NAMES=localhost,gateway
+      - EDG_MARBLE_UUID_FILE=/marble/uuid
+      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - PORT=${GATEWAY_PORT:-8080}
+      - MARBLE_ENV=${MARBLE_ENV:-development}
+      - LOG_LEVEL
+      - LOG_FORMAT
+      - METRICS_ENABLED
+      - ADMIN_USER_IDS
+      - SUPER_ADMIN_USER_IDS
+      - JWT_EXPIRY
+      - RATE_LIMIT_ENABLED
+      - RATE_LIMIT_REQUESTS
+      - RATE_LIMIT_WINDOW
+      - RATE_LIMIT_BURST
+      - SUPABASE_URL
+      - SUPABASE_SERVICE_KEY
+      - NEO_RPC_URL
+      - CORS_ALLOWED_ORIGINS
+      - FRONTEND_URL
+      - OAUTH_REDIRECT_BASE
+      - OAUTH_COOKIE_MODE
+      - GOOGLE_CLIENT_ID
+      - GOOGLE_CLIENT_SECRET
+      - GITHUB_CLIENT_ID
+      - GITHUB_CLIENT_SECRET
+      - VRF_SERVICE_URL=${VRF_SERVICE_URL:-http://neorand:8081}
+      - NEOVAULT_SERVICE_URL=${NEOVAULT_SERVICE_URL:-http://neovault:8082}
+      - NEOFEEDS_SERVICE_URL=${NEOFEEDS_SERVICE_URL:-http://neofeeds:8083}
+      - NEOFLOW_SERVICE_URL=${NEOFLOW_SERVICE_URL:-http://neoflow:8084}
+      - NEOACCOUNTS_SERVICE_URL=${NEOACCOUNTS_SERVICE_URL:-http://neoaccounts:8085}
+      - NEOCOMPUTE_SERVICE_URL=${NEOCOMPUTE_SERVICE_URL:-http://neocompute:8086}
+      - NEOSTORE_SERVICE_URL=${NEOSTORE_SERVICE_URL:-http://neostore:8087}
+      - NEOORACLE_SERVICE_URL=${NEOORACLE_SERVICE_URL:-http://neooracle:8088}
+    volumes:
+      - gateway-data:/marble
+    depends_on:
+      - coordinator
+    restart: unless-stopped
+
+  # =============================================================================
+  # NeoRand Service Marble (legacy VRF) - Simulation Mode
+  # =============================================================================
+  neorand:
+    image: service-layer/neorand:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: vrf
+        EGO_VERSION: ${EGO_VERSION:-1.8.0}
+        EGO_STRICT_SIGNING: 0
+    container_name: service-neorand
+    environment:
+      - EDG_MARBLE_COORDINATOR_ADDR=${COORDINATOR_MESH_ADDR:-coordinator:2001}
+      - EDG_MARBLE_TYPE=neorand
+      - EDG_MARBLE_DNS_NAMES=localhost,neorand,vrf
+      - SERVICE_TYPE=neorand
+      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - PORT=${NEORAND_PORT:-8081}
+      - MARBLE_ENV=${MARBLE_ENV:-development}
+      - METRICS_ENABLED
+      - SUPABASE_URL
+      - SUPABASE_SERVICE_KEY
+      - NEO_RPC_URL
+      - NEO_NETWORK_MAGIC
+      - CONTRACT_GATEWAY_HASH
+      - CONTRACT_VRF_HASH
+      - TEE_PRIVATE_KEY
+    depends_on:
+      - coordinator
+    restart: unless-stopped
+
+  # =============================================================================
+  # NeoVault Service Marble - Simulation Mode
+  # =============================================================================
+  neovault:
+    image: service-layer/neovault:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: neovault
+        EGO_VERSION: ${EGO_VERSION:-1.8.0}
+        EGO_STRICT_SIGNING: 0
+    container_name: service-neovault
+    environment:
+      - EDG_MARBLE_COORDINATOR_ADDR=${COORDINATOR_MESH_ADDR:-coordinator:2001}
+      - EDG_MARBLE_TYPE=neovault
+      - EDG_MARBLE_DNS_NAMES=localhost,neovault
+      - SERVICE_TYPE=neovault
+      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - PORT=${NEOVAULT_PORT:-8082}
+      - MARBLE_ENV=${MARBLE_ENV:-development}
+      - METRICS_ENABLED
+      - SUPABASE_URL
+      - SUPABASE_SERVICE_KEY
+      - NEO_RPC_URL
+      - NEO_NETWORK_MAGIC
+      - ACCOUNTPOOL_URL=${ACCOUNTPOOL_URL:-http://neoaccounts:8085}
+      - NEOVAULT_FEE_ADDRESS
+      - MIXER_FEE_ADDRESS
+      - CONTRACT_GATEWAY_HASH
+      - CONTRACT_NEOVAULT_HASH
+      - TEE_PRIVATE_KEY
+    depends_on:
+      - coordinator
+      - neoaccounts
+    restart: unless-stopped
+
+  # =============================================================================
+  # NeoFeeds Service Marble - Simulation Mode
+  # =============================================================================
+  neofeeds:
+    image: service-layer/neofeeds:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: neofeeds
+        EGO_VERSION: ${EGO_VERSION:-1.8.0}
+        EGO_STRICT_SIGNING: 0
+    container_name: service-neofeeds
+    environment:
+      - EDG_MARBLE_COORDINATOR_ADDR=${COORDINATOR_MESH_ADDR:-coordinator:2001}
+      - EDG_MARBLE_TYPE=neofeeds
+      - EDG_MARBLE_DNS_NAMES=localhost,neofeeds
+      - SERVICE_TYPE=neofeeds
+      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - PORT=${NEOFEEDS_PORT:-8083}
+      - MARBLE_ENV=${MARBLE_ENV:-development}
+      - METRICS_ENABLED
+      - SUPABASE_URL
+      - SUPABASE_SERVICE_KEY
+      - NEO_RPC_URL
+      - NEO_NETWORK_MAGIC
+      - ARBITRUM_RPC
+      - BINANCE_API_KEY
+      - CONTRACT_GATEWAY_HASH
+      - CONTRACT_NEOFEEDS_HASH
+      - TEE_PRIVATE_KEY
+    depends_on:
+      - coordinator
+    restart: unless-stopped
+
+  # =============================================================================
+  # NeoFlow Service Marble - Simulation Mode
+  # =============================================================================
+  neoflow:
+    image: service-layer/neoflow:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: neoflow
+        EGO_VERSION: ${EGO_VERSION:-1.8.0}
+        EGO_STRICT_SIGNING: 0
+    container_name: service-neoflow
+    environment:
+      - EDG_MARBLE_COORDINATOR_ADDR=${COORDINATOR_MESH_ADDR:-coordinator:2001}
+      - EDG_MARBLE_TYPE=neoflow
+      - EDG_MARBLE_DNS_NAMES=localhost,neoflow
+      - SERVICE_TYPE=neoflow
+      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - PORT=${NEOFLOW_PORT:-8084}
+      - MARBLE_ENV=${MARBLE_ENV:-development}
+      - METRICS_ENABLED
+      - NEOFLOW_WEBHOOK_ALLOW_PRIVATE_NETWORKS
+      - SUPABASE_URL
+      - SUPABASE_SERVICE_KEY
+      - NEO_RPC_URL
+      - NEO_NETWORK_MAGIC
+      - CONTRACT_GATEWAY_HASH
+      - CONTRACT_NEOFLOW_HASH
+      - NEOFLOW_SCHEDULER_USER_ID
+      - TEE_PRIVATE_KEY
+    depends_on:
+      - coordinator
+    restart: unless-stopped
+
+  # =============================================================================
+  # NeoAccounts Service Marble - Simulation Mode
+  # =============================================================================
+  neoaccounts:
+    image: service-layer/neoaccounts:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: accountpool
+        EGO_VERSION: ${EGO_VERSION:-1.8.0}
+        EGO_STRICT_SIGNING: 0
+    container_name: service-neoaccounts
+    environment:
+      - EDG_MARBLE_COORDINATOR_ADDR=${COORDINATOR_MESH_ADDR:-coordinator:2001}
+      - EDG_MARBLE_TYPE=neoaccounts
+      - EDG_MARBLE_DNS_NAMES=localhost,neoaccounts,accountpool
+      - SERVICE_TYPE=neoaccounts
+      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - PORT=${NEOACCOUNTS_PORT:-8085}
+      - MARBLE_ENV=${MARBLE_ENV:-development}
+      - METRICS_ENABLED
+      - SUPABASE_URL
+      - SUPABASE_SERVICE_KEY
+      - NEO_RPC_URL
+      - NEO_NETWORK_MAGIC
+    depends_on:
+      - coordinator
+    restart: unless-stopped
+
+  # =============================================================================
+  # NeoCompute Service Marble - Simulation Mode
+  # =============================================================================
+  neocompute:
+    image: service-layer/neocompute:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: neocompute
+        EGO_VERSION: ${EGO_VERSION:-1.8.0}
+        EGO_STRICT_SIGNING: 0
+    container_name: service-neocompute
+    environment:
+      - EDG_MARBLE_COORDINATOR_ADDR=${COORDINATOR_MESH_ADDR:-coordinator:2001}
+      - EDG_MARBLE_TYPE=neocompute
+      - EDG_MARBLE_DNS_NAMES=localhost,neocompute
+      - SERVICE_TYPE=neocompute
+      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - PORT=${NEOCOMPUTE_PORT:-8086}
+      - MARBLE_ENV=${MARBLE_ENV:-development}
+      - METRICS_ENABLED
+      - SUPABASE_URL
+      - SUPABASE_SERVICE_KEY
+      - NEO_RPC_URL
+      - NEO_NETWORK_MAGIC
+      - SECRETS_BASE_URL=${SECRETS_BASE_URL:-http://neostore:8087}
+      - CONTRACT_GATEWAY_HASH
+      - NEOCOMPUTE_RESULT_TTL
+      - TEE_PRIVATE_KEY
+    depends_on:
+      - coordinator
+    restart: unless-stopped
+
+  # =============================================================================
+  # NeoStore Service Marble - Simulation Mode
+  # =============================================================================
+  neostore:
+    image: service-layer/neostore:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: neostore
+        EGO_VERSION: ${EGO_VERSION:-1.8.0}
+        EGO_STRICT_SIGNING: 0
+    container_name: service-neostore
+    environment:
+      - EDG_MARBLE_COORDINATOR_ADDR=${COORDINATOR_MESH_ADDR:-coordinator:2001}
+      - EDG_MARBLE_TYPE=neostore
+      - EDG_MARBLE_DNS_NAMES=localhost,neostore,secrets
+      - SERVICE_TYPE=neostore
+      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - PORT=${NEOSTORE_PORT:-8087}
+      - MARBLE_ENV=${MARBLE_ENV:-development}
+      - METRICS_ENABLED
+      - SUPABASE_URL
+      - SUPABASE_SERVICE_KEY
+      - NEO_RPC_URL
+      - NEO_NETWORK_MAGIC
+    depends_on:
+      - coordinator
+    restart: unless-stopped
+
+  # =============================================================================
+  # NeoOracle Service Marble - Simulation Mode
+  # =============================================================================
+  neooracle:
+    image: service-layer/neooracle:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: neooracle
+        EGO_VERSION: ${EGO_VERSION:-1.8.0}
+        EGO_STRICT_SIGNING: 0
+    container_name: service-neooracle
+    environment:
+      - EDG_MARBLE_COORDINATOR_ADDR=${COORDINATOR_MESH_ADDR:-coordinator:2001}
+      - EDG_MARBLE_TYPE=neooracle
+      - EDG_MARBLE_DNS_NAMES=localhost,neooracle,oracle
+      - SERVICE_TYPE=neooracle
+      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - PORT=${NEOORACLE_PORT:-8088}
+      - MARBLE_ENV=${MARBLE_ENV:-development}
+      - METRICS_ENABLED
+      - SUPABASE_URL
+      - SUPABASE_SERVICE_KEY
+      - NEO_RPC_URL
+      - NEO_NETWORK_MAGIC
+      - SECRETS_BASE_URL=${SECRETS_BASE_URL:-http://neostore:8087}
+      - ORACLE_HTTP_ALLOWLIST
+      - ORACLE_TIMEOUT
+      - ORACLE_MAX_SIZE
+      - CONTRACT_GATEWAY_HASH
+      - TEE_PRIVATE_KEY
+    depends_on:
+      - coordinator
+    restart: unless-stopped
+
+volumes:
+  coordinator-data:
+  gateway-data:

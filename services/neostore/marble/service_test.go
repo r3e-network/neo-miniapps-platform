@@ -25,7 +25,7 @@ func (m *mockRepo) GetSecretByName(_ context.Context, _ string, _ string) (*neos
 	return nil, nil
 }
 func (m *mockRepo) UpdateSecret(_ context.Context, _ *neostoresupabase.Secret) error { return nil }
-func (m *mockRepo) DeleteSecret(_ context.Context, _ string, _ string) error        { return nil }
+func (m *mockRepo) DeleteSecret(_ context.Context, _ string, _ string) error         { return nil }
 func (m *mockRepo) GetSecretPolicies(_ context.Context, _ string, name string) ([]string, error) {
 	if m.policies == nil {
 		return nil, nil
@@ -195,7 +195,7 @@ func TestHandleCreateSecret_Success(t *testing.T) {
 	}
 }
 
-func TestHandleCreateSecret_WithAllowedService(t *testing.T) {
+func TestHandleCreateSecret_ServiceCallerDenied(t *testing.T) {
 	svc := newTestService(t)
 	body := strings.NewReader(`{"name":"api_key","value":"secret123"}`)
 	req := httptest.NewRequest("POST", "/secrets", body)
@@ -203,8 +203,8 @@ func TestHandleCreateSecret_WithAllowedService(t *testing.T) {
 	req.Header.Set(ServiceIDHeader, "neooracle") // oracle is in AllowedServices
 	rr := httptest.NewRecorder()
 	svc.handleCreateSecret(rr, req)
-	if rr.Result().StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want 201", rr.Result().StatusCode)
+	if rr.Result().StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rr.Result().StatusCode)
 	}
 }
 

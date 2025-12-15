@@ -19,6 +19,7 @@ import (
 	"github.com/R3E-Network/service_layer/internal/crypto"
 	"github.com/R3E-Network/service_layer/internal/database"
 	"github.com/R3E-Network/service_layer/internal/marble"
+	"github.com/R3E-Network/service_layer/internal/runtime"
 	commonservice "github.com/R3E-Network/service_layer/services/common/service"
 	neorandsupabase "github.com/R3E-Network/service_layer/services/neorand/supabase"
 )
@@ -52,10 +53,12 @@ type Service struct {
 	teeFulfiller  *chain.TEEFulfiller
 	eventListener *chain.EventListener
 
+	// TxSubmitter integration (replaces direct teeFulfiller usage)
+	txSubmitterAdapter *TxSubmitterAdapter
+
 	// Request tracking
-	requests         map[string]*NeoRandRequest // requestID -> request (in-memory cache)
-	pendingRequests  chan *NeoRandRequest       // ephemeral channel; source of truth is DB
-	lastProcessedBlk uint64
+	requests        map[string]*Request // requestID -> request (in-memory cache)
+	pendingRequests chan *Request       // ephemeral channel; source of truth is DB
 }
 
 // Config holds NeoRand service configuration.
@@ -74,12 +77,25 @@ type Config struct {
 
 // New creates a new NeoRand service.
 func New(cfg Config) (*Service, error) {
-	base := commonservice.NewBase(commonservice.BaseConfig{
+	if cfg.Marble == nil {
+		return nil, fmt.Errorf("neorand: marble is required")
+	}
+
+	strict := runtime.StrictIdentityMode() || cfg.Marble.IsEnclave()
+
+	requiredSecrets := []string(nil)
+	if strict {
+		requiredSecrets = []string{"VRF_PRIVATE_KEY"}
+	}
+
+	base := commonservice.NewBase(&commonservice.BaseConfig{
 		ID:      ServiceID,
 		Name:    ServiceName,
 		Version: Version,
 		Marble:  cfg.Marble,
 		DB:      cfg.DB,
+		// VRF_PRIVATE_KEY must be stable in production/enclave mode for verification.
+		RequiredSecrets: requiredSecrets,
 	})
 
 	s := &Service{
@@ -88,8 +104,8 @@ func New(cfg Config) (*Service, error) {
 		chainClient:     cfg.ChainClient,
 		teeFulfiller:    cfg.TEEFulfiller,
 		eventListener:   cfg.EventListener,
-		requests:        make(map[string]*NeoRandRequest),
-		pendingRequests: make(chan *NeoRandRequest, 100),
+		requests:        make(map[string]*Request),
+		pendingRequests: make(chan *Request, 100),
 	}
 
 	// Load VRF private key from Marble secrets
@@ -97,14 +113,24 @@ func New(cfg Config) (*Service, error) {
 	// manifest-defined secrets. This key remains constant across enclave upgrades
 	// (MRENCLAVE changes) as long as the manifest secret is unchanged.
 	// The key is NOT derived from SGX sealing keys or enclave identity.
-	if keyBytes, ok := cfg.Marble.Secret("VRF_PRIVATE_KEY"); ok {
+	keyBytes, ok := cfg.Marble.Secret("VRF_PRIVATE_KEY")
+	switch {
+	case ok && len(keyBytes) == 32:
+		curve := elliptic.P256()
+		d := new(big.Int).SetBytes(keyBytes)
+		nMinus1 := new(big.Int).Sub(curve.Params().N, big.NewInt(1))
+		d.Mod(d, nMinus1)
+		d.Add(d, big.NewInt(1))
+
 		privateKey := new(ecdsa.PrivateKey)
-		privateKey.Curve = elliptic.P256()
-		privateKey.D = new(big.Int).SetBytes(keyBytes)
-		privateKey.PublicKey.X, privateKey.PublicKey.Y = privateKey.Curve.ScalarBaseMult(keyBytes)
+		privateKey.Curve = curve
+		privateKey.D = d
+		privateKey.PublicKey.X, privateKey.PublicKey.Y = curve.ScalarBaseMult(d.Bytes())
 		s.privateKey = privateKey
-	} else {
-		// Generate new key pair if not provided
+	case strict:
+		return nil, fmt.Errorf("neorand: VRF_PRIVATE_KEY is required and must be 32 bytes")
+	default:
+		s.Logger().WithFields(nil).Warn("VRF_PRIVATE_KEY not configured; generating ephemeral key (development/testing only)")
 		keyPair, err := crypto.GenerateKeyPair()
 		if err != nil {
 			return nil, fmt.Errorf("generate key pair: %w", err)

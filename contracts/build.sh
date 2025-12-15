@@ -18,12 +18,12 @@ mkdir -p build
 # Service contracts (split into multiple partial class files)
 # Format: "directory:ContractName"
 service_contracts=(
-    "../services/oracle/contract:OracleService"
-    "../services/vrf/contract:VRFService"
-    "../services/mixer/contract:NeoVaultService"
-    "../services/datafeeds/contract:DataFeedsService"
-    "../services/automation/contract:NeoFlowService"
-    "../services/confidential/contract:ConfidentialService"
+    "../services/neooracle/contract:NeoOracleService"
+    "../services/neorand/contract:NeoRandService"
+    "../services/neovault/contract:NeoVaultService"
+    "../services/neofeeds/contract:NeoFeedsService"
+    "../services/neoflow/contract:NeoFlowService"
+    "../services/neocompute/contract:NeoComputeService"
 )
 
 # Single-file contracts
@@ -45,13 +45,18 @@ for contract in "${single_contracts[@]}"; do
     echo "Building $name..."
 
     if [ -f "$contract.cs" ]; then
-        nccs "$contract.cs" -o "build/${name}" 2>/dev/null || echo "  Warning: Build may have warnings"
-        if [ -f "build/${name}/${name}.nef" ]; then
-            mv "build/${name}/${name}.nef" "build/${name}.nef"
-            mv "build/${name}/${name}.manifest.json" "build/${name}.manifest.json"
-            rm -rf "build/${name}"
-            echo "  ✓ $name.nef"
-            echo "  ✓ $name.manifest.json"
+        outdir="build/${name}"
+        mkdir -p "$outdir"
+        nccs "$contract.cs" -o "$outdir" 2>/dev/null || echo "  Warning: Build may have warnings"
+
+        nef_file=$(find "$outdir" -maxdepth 1 -name "*.nef" -type f | head -n 1)
+        manifest_file=$(find "$outdir" -maxdepth 1 -name "*.manifest.json" -type f | head -n 1)
+        if [ -n "$nef_file" ] && [ -n "$manifest_file" ] && [ -f "$nef_file" ] && [ -f "$manifest_file" ]; then
+            mv "$nef_file" "build/${name}.nef"
+            mv "$manifest_file" "build/${name}.manifest.json"
+            rm -rf "$outdir"
+            echo "  ✓ ${name}.nef"
+            echo "  ✓ ${name}.manifest.json"
         else
             echo "  ✗ Compilation failed for $name"
         fi
@@ -66,7 +71,16 @@ for entry in "${service_contracts[@]}"; do
     dir="${entry%%:*}"
     name="${entry##*:}"
 
-    echo "Building $name..."
+    out_name="$name"
+    main_file="${dir}/${name}.cs"
+    if [ -f "$main_file" ]; then
+        display_name=$(sed -n 's/.*\\[DisplayName(\"\\([^\"]*\\)\"\\)\\].*/\\1/p' "$main_file" | head -n 1)
+        if [ -n "$display_name" ]; then
+            out_name="$display_name"
+        fi
+    fi
+
+    echo "Building $out_name..."
 
     if [ -d "$dir" ]; then
         # Collect all .cs files in the contract directory
@@ -74,15 +88,20 @@ for entry in "${service_contracts[@]}"; do
 
         if [ -n "$cs_files" ]; then
             # Pass all .cs files to nccs
-            nccs $cs_files -o "build/${name}" 2>/dev/null || echo "  Warning: Build may have warnings"
-            if [ -f "build/${name}/${name}.nef" ]; then
-                mv "build/${name}/${name}.nef" "build/${name}.nef"
-                mv "build/${name}/${name}.manifest.json" "build/${name}.manifest.json"
-                rm -rf "build/${name}"
-                echo "  ✓ $name.nef"
-                echo "  ✓ $name.manifest.json"
+            outdir="build/${out_name}"
+            mkdir -p "$outdir"
+            nccs $cs_files -o "$outdir" 2>/dev/null || echo "  Warning: Build may have warnings"
+
+            nef_file=$(find "$outdir" -maxdepth 1 -name "*.nef" -type f | head -n 1)
+            manifest_file=$(find "$outdir" -maxdepth 1 -name "*.manifest.json" -type f | head -n 1)
+            if [ -n "$nef_file" ] && [ -n "$manifest_file" ] && [ -f "$nef_file" ] && [ -f "$manifest_file" ]; then
+                mv "$nef_file" "build/${out_name}.nef"
+                mv "$manifest_file" "build/${out_name}.manifest.json"
+                rm -rf "$outdir"
+                echo "  ✓ ${out_name}.nef"
+                echo "  ✓ ${out_name}.manifest.json"
             else
-                echo "  ✗ Compilation failed for $name"
+                echo "  ✗ Compilation failed for $out_name"
             fi
         else
             echo "  ⚠ No .cs files found in $dir for $name"
@@ -100,13 +119,18 @@ for contract in "${examples[@]}"; do
     echo "Building $name..."
 
     if [ -f "$contract.cs" ]; then
-        nccs "$contract.cs" -o "build/${name}" 2>/dev/null || echo "  Warning: Build may have warnings"
-        if [ -f "build/${name}/${name}.nef" ]; then
-            mv "build/${name}/${name}.nef" "build/${name}.nef"
-            mv "build/${name}/${name}.manifest.json" "build/${name}.manifest.json"
-            rm -rf "build/${name}"
-            echo "  ✓ $name.nef"
-            echo "  ✓ $name.manifest.json"
+        outdir="build/${name}"
+        mkdir -p "$outdir"
+        nccs "$contract.cs" -o "$outdir" 2>/dev/null || echo "  Warning: Build may have warnings"
+
+        nef_file=$(find "$outdir" -maxdepth 1 -name "*.nef" -type f | head -n 1)
+        manifest_file=$(find "$outdir" -maxdepth 1 -name "*.manifest.json" -type f | head -n 1)
+        if [ -n "$nef_file" ] && [ -n "$manifest_file" ] && [ -f "$nef_file" ] && [ -f "$manifest_file" ]; then
+            mv "$nef_file" "build/${name}.nef"
+            mv "$manifest_file" "build/${name}.manifest.json"
+            rm -rf "$outdir"
+            echo "  ✓ ${name}.nef"
+            echo "  ✓ ${name}.manifest.json"
         else
             echo "  ✗ Compilation failed for $name"
         fi

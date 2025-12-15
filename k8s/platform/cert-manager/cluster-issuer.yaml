@@ -1,0 +1,59 @@
+---
+# Self-signed ClusterIssuer for development
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}
+
+---
+# Let's Encrypt Staging ClusterIssuer for testing
+# 
+# IMPORTANT: Update the email address before deploying to production!
+# The email is required for ACME registration and Let's Encrypt notifications.
+# 
+# You can set the email via environment variable:
+#   export CERT_MANAGER_EMAIL="devops@yourdomain.com"
+#   envsubst < cluster-issuer.yaml | kubectl apply -f -
+#
+# Or manually replace the placeholder:
+#   sed -i 's/devops@example.com/devops@yourdomain.com/g' cluster-issuer.yaml
+#
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: ${CERT_MANAGER_EMAIL:-devops@example.com}  # MUST be replaced with real email
+    privateKeySecretRef:
+      name: letsencrypt-staging-key
+    solvers:
+      - http01:
+          ingress:
+            class: traefik
+
+---
+# Let's Encrypt Production ClusterIssuer
+# Test with staging issuer first, then switch to production
+#
+# IMPORTANT: Production Let's Encrypt has strict rate limits!
+# - 50 certificates per registered domain per week
+# - 5 duplicate certificates per week
+# Always test with staging first!
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: ${CERT_MANAGER_EMAIL:-devops@example.com}  # MUST be replaced with real email
+    privateKeySecretRef:
+      name: letsencrypt-prod-key
+    solvers:
+      - http01:
+          ingress:
+            class: traefik

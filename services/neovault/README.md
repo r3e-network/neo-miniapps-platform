@@ -38,7 +38,7 @@ This ensures:
 
 ```
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│    User      │     │ NeoVault     │     │ AccountPool  │     │ Master Fee   │
+│    User      │     │ NeoVault     │     │ NeoAccounts  │     │ Master Fee   │
 │              │     │ Service      │     │              │     │              │
 └──────┬───────┘     └──────┬───────┘     └──────┬───────┘     └──────┬───────┘
        │                    │                    │                    │
@@ -72,6 +72,10 @@ This ensures:
 |----------|--------|-------------|
 | `/health` | GET | Service health check |
 | `/info` | GET | Service status and pool statistics |
+| `/registration/apply` | POST | Apply for service access (required before mixing) |
+| `/registration/status` | GET | Get registration status |
+| `/admin/registrations` | GET | List registrations (admin only) |
+| `/admin/registrations/review` | POST | Approve/reject/suspend/revoke (admin only) |
 | `/request` | POST | Create mix request |
 | `/status/{id}` | GET | Get mix request status |
 | `/request/{id}` | GET | Get full request details |
@@ -80,6 +84,8 @@ This ensures:
 | `/request/{id}/dispute` | POST | Submit dispute |
 | `/request/{id}/proof` | GET | Get completion proof |
 | `/requests` | GET | List user's requests |
+
+Admin note: NeoVault admin endpoints require `X-User-Role: admin|super_admin`, which is set by the gateway for allowlisted users (`ADMIN_USER_IDS`, `SUPER_ADMIN_USER_IDS`).
 
 ## Supported Tokens
 
@@ -168,8 +174,7 @@ If mixing is not completed by the deadline:
 
 | Secret | Description |
 |--------|-------------|
-| `MIXER_MASTER_KEY` | HMAC signing key for proofs |
-| `MIXER_FEE_ADDRESS` | Master account address for fee collection |
+| `NEOVAULT_MASTER_KEY` | HMAC signing key for proofs |
 
 ### Config Options
 

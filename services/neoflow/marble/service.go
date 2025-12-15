@@ -12,6 +12,9 @@
 package neoflowmarble
 
 import (
+	"context"
+	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -47,19 +50,18 @@ const (
 // Service implements the NeoFlow service.
 type Service struct {
 	*commonservice.BaseService
-	mu        sync.RWMutex
 	scheduler *Scheduler
 
 	// Service-specific repository
 	repo neoflowsupabase.RepositoryInterface
 
 	// Chain interaction for trigger execution
-	chainClient       *chain.Client
-	teeFulfiller      *chain.TEEFulfiller
-	neoflowHash    string
+	chainClient      *chain.Client
+	teeFulfiller     *chain.TEEFulfiller
+	neoflowHash      string
 	neoFeedsContract *neofeedschain.NeoFeedsContract
-	eventListener     *chain.EventListener
-	enableChainExec   bool
+	eventListener    *chain.EventListener
+	enableChainExec  bool
 }
 
 // Scheduler manages trigger execution.
@@ -67,27 +69,30 @@ type Scheduler struct {
 	mu            sync.RWMutex
 	triggers      map[string]*neoflowsupabase.Trigger
 	chainTriggers map[uint64]*chain.Trigger // On-chain triggers by ID
-	stopCh        chan struct{}
 }
 
 // Config holds NeoFlow service configuration.
 type Config struct {
-	Marble         *marble.Marble
-	DB             database.RepositoryInterface
+	Marble      *marble.Marble
+	DB          database.RepositoryInterface
 	NeoFlowRepo neoflowsupabase.RepositoryInterface
 
 	// Chain configuration for trigger execution
-	ChainClient       *chain.Client
-	TEEFulfiller      *chain.TEEFulfiller
-	NeoFlowHash    string                            // Contract hash for NeoFlowService
+	ChainClient      *chain.Client
+	TEEFulfiller     *chain.TEEFulfiller
+	NeoFlowHash      string                          // Contract hash for NeoFlowService
 	NeoFeedsContract *neofeedschain.NeoFeedsContract // For price-based triggers
-	EventListener     *chain.EventListener              // For event-based triggers
-	EnableChainExec   bool                              // Enable on-chain trigger execution
+	EventListener    *chain.EventListener            // For event-based triggers
+	EnableChainExec  bool                            // Enable on-chain trigger execution
 }
 
 // New creates a new NeoFlow service.
-func New(cfg Config) (*Service, error) {
-	base := commonservice.NewBase(commonservice.BaseConfig{
+func New(cfg Config) (*Service, error) { //nolint:gocritic // cfg is read once at startup.
+	if cfg.Marble == nil {
+		return nil, fmt.Errorf("marble is required")
+	}
+
+	base := commonservice.NewBase(&commonservice.BaseConfig{
 		ID:      ServiceID,
 		Name:    ServiceName,
 		Version: Version,
@@ -97,19 +102,32 @@ func New(cfg Config) (*Service, error) {
 
 	s := &Service{
 		BaseService: base,
-		repo:    cfg.NeoFlowRepo,
+		repo:        cfg.NeoFlowRepo,
 		scheduler: &Scheduler{
 			triggers:      make(map[string]*neoflowsupabase.Trigger),
 			chainTriggers: make(map[uint64]*chain.Trigger),
-			stopCh:        make(chan struct{}),
 		},
-		chainClient:       cfg.ChainClient,
-		teeFulfiller:      cfg.TEEFulfiller,
-		neoflowHash:    cfg.NeoFlowHash,
+		chainClient:      cfg.ChainClient,
+		teeFulfiller:     cfg.TEEFulfiller,
+		neoflowHash:      cfg.NeoFlowHash,
 		neoFeedsContract: cfg.NeoFeedsContract,
-		eventListener:     cfg.EventListener,
-		enableChainExec:   cfg.EnableChainExec,
+		eventListener:    cfg.EventListener,
+		enableChainExec:  cfg.EnableChainExec,
 	}
+
+	// Hydrate scheduler cache and register periodic workers.
+	base.WithHydrate(s.hydrateSchedulerCache)
+	base.AddTickerWorker(SchedulerInterval, func(ctx context.Context) error {
+		s.checkAndExecuteTriggers(ctx)
+		return nil
+	}, commonservice.WithTickerWorkerName("scheduler"))
+	base.AddTickerWorker(ChainTriggerInterval, func(ctx context.Context) error {
+		s.checkChainTriggers(ctx)
+		return nil
+	}, commonservice.WithTickerWorkerName("chain-trigger-checker"))
+
+	// Setup event listeners for on-chain triggers.
+	s.SetupEventTriggerListener()
 
 	// Register statistics provider for /info endpoint
 	base.WithStats(s.statistics)
@@ -119,6 +137,49 @@ func New(cfg Config) (*Service, error) {
 	s.registerRoutes()
 
 	return s, nil
+}
+
+func (s *Service) hydrateSchedulerCache(ctx context.Context) error {
+	if s.repo == nil {
+		return nil
+	}
+
+	userID := s.schedulerHydrationUserID()
+	if userID == "" {
+		return nil
+	}
+
+	triggers, err := s.repo.GetTriggers(ctx, userID)
+	if err != nil {
+		return nil
+	}
+
+	s.scheduler.mu.Lock()
+	for i := range triggers {
+		trigger := &triggers[i]
+		if trigger.Enabled {
+			s.scheduler.triggers[trigger.ID] = trigger
+		} else {
+			delete(s.scheduler.triggers, trigger.ID)
+		}
+	}
+	s.scheduler.mu.Unlock()
+
+	return nil
+}
+
+func (s *Service) schedulerHydrationUserID() string {
+	if s == nil {
+		return ""
+	}
+
+	if marbleInstance := s.Marble(); marbleInstance != nil {
+		if value, ok := marbleInstance.Secret("NEOFLOW_SCHEDULER_USER_ID"); ok && len(value) > 0 {
+			return string(value)
+		}
+	}
+
+	return os.Getenv("NEOFLOW_SCHEDULER_USER_ID")
 }
 
 // statistics returns runtime statistics for the /info endpoint.

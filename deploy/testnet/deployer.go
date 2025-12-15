@@ -7,18 +7,20 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/chain"
+	"github.com/nspcc-dev/neo-go/pkg/core/state"
 	"github.com/nspcc-dev/neo-go/pkg/crypto/keys"
 	"github.com/nspcc-dev/neo-go/pkg/encoding/address"
 	"github.com/nspcc-dev/neo-go/pkg/smartcontract/manifest"
 	"github.com/nspcc-dev/neo-go/pkg/smartcontract/nef"
 	"github.com/nspcc-dev/neo-go/pkg/util"
+
+	"github.com/R3E-Network/service_layer/internal/chain"
+	"github.com/R3E-Network/service_layer/internal/httputil"
 )
 
 const (
@@ -101,7 +103,19 @@ func (d *Deployer) call(method string, params ...interface{}) (*chain.RPCRespons
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, truncated, readErr := httputil.ReadAllWithLimit(resp.Body, 32<<10)
+		if readErr != nil {
+			return nil, fmt.Errorf("read response: %w", readErr)
+		}
+		msg := string(respBody)
+		if truncated {
+			msg += "...(truncated)"
+		}
+		return nil, fmt.Errorf("rpc http error %d: %s", resp.StatusCode, msg)
+	}
+
+	respBody, err := httputil.ReadAllStrict(resp.Body, 8<<20)
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
@@ -210,8 +224,8 @@ func (d *Deployer) DeployContract(nefPath, manifestPath string) (*chain.Deployed
 	}
 
 	var invokeResult chain.InvokeResult
-	if err := json.Unmarshal(resp.Result, &invokeResult); err != nil {
-		return nil, fmt.Errorf("parse result: %w", err)
+	if unmarshalErr := json.Unmarshal(resp.Result, &invokeResult); unmarshalErr != nil {
+		return nil, fmt.Errorf("parse result: %w", unmarshalErr)
 	}
 
 	if invokeResult.State != "HALT" {
@@ -219,59 +233,20 @@ func (d *Deployer) DeployContract(nefPath, manifestPath string) (*chain.Deployed
 	}
 
 	// Calculate expected contract hash
-	nefFile, _ := nef.FileFromBytes(nefData)
+	nefFile, err := nef.FileFromBytes(nefData)
+	if err != nil {
+		return nil, fmt.Errorf("parse nef: %w", err)
+	}
 	var m manifest.Manifest
-	json.Unmarshal(manifestData, &m)
-	contractHash := CalculateContractHash(d.GetAccountHash(), nefFile.Checksum, m.Name)
+	if err := json.Unmarshal(manifestData, &m); err != nil {
+		return nil, fmt.Errorf("parse manifest: %w", err)
+	}
+	contractHash := state.CreateContractHash(d.GetAccountHash(), nefFile.Checksum, m.Name)
 
 	return &chain.DeployedContract{
 		Hash:        "0x" + contractHash.StringLE(),
 		GasConsumed: invokeResult.GasConsumed,
 	}, nil
-}
-
-// CalculateContractHash calculates the contract hash from sender, checksum, and name.
-func CalculateContractHash(sender util.Uint160, checksum uint32, name string) util.Uint160 {
-	// Build script: push sender bytes, push checksum, push name
-	var buf bytes.Buffer
-
-	// Opcode PUSHDATA + sender bytes (20 bytes)
-	senderBytes := sender.BytesBE()
-	if len(senderBytes) <= 75 {
-		buf.WriteByte(byte(len(senderBytes)))
-	} else {
-		buf.WriteByte(0x4c) // PUSHDATA1
-		buf.WriteByte(byte(len(senderBytes)))
-	}
-	buf.Write(senderBytes)
-
-	// Push checksum as integer
-	if checksum == 0 {
-		buf.WriteByte(0x00) // PUSH0
-	} else if checksum <= 16 {
-		buf.WriteByte(byte(0x10 + checksum)) // PUSH1-PUSH16
-	} else {
-		// PUSHINT32
-		buf.WriteByte(0x01) // PUSHINT8 marker for small ints
-		buf.WriteByte(byte(checksum))
-		buf.WriteByte(byte(checksum >> 8))
-		buf.WriteByte(byte(checksum >> 16))
-		buf.WriteByte(byte(checksum >> 24))
-	}
-
-	// Push name as string
-	nameBytes := []byte(name)
-	if len(nameBytes) <= 75 {
-		buf.WriteByte(byte(len(nameBytes)))
-	} else {
-		buf.WriteByte(0x4c) // PUSHDATA1
-		buf.WriteByte(byte(len(nameBytes)))
-	}
-	buf.Write(nameBytes)
-
-	// The actual hash computation uses a different method in neo-go
-	// For now, return placeholder - actual hash comes from chain response
-	return util.Uint160{}
 }
 
 // InvokeFunction invokes a contract function (read-only).

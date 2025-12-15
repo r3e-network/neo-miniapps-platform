@@ -9,6 +9,9 @@ import (
 )
 
 // Worker represents a background worker with lifecycle management.
+//
+// Deprecated: prefer `services/common/service.BaseService` worker management
+// (`AddWorker`/`AddTickerWorker`) for all marble services.
 type Worker struct {
 	name     string
 	interval time.Duration
@@ -20,6 +23,8 @@ type Worker struct {
 }
 
 // WorkerConfig holds worker configuration.
+//
+// Deprecated: prefer `services/common/service.BaseService` worker management.
 type WorkerConfig struct {
 	Name     string
 	Interval time.Duration
@@ -27,6 +32,8 @@ type WorkerConfig struct {
 }
 
 // NewWorker creates a new background worker.
+//
+// Deprecated: prefer `services/common/service.BaseService.AddTickerWorker`.
 func NewWorker(cfg WorkerConfig) *Worker {
 	return &Worker{
 		name:     cfg.Name,
@@ -98,12 +105,16 @@ func (w *Worker) run(ctx context.Context) {
 }
 
 // WorkerGroup manages multiple workers.
+//
+// Deprecated: prefer `services/common/service.BaseService` worker management.
 type WorkerGroup struct {
 	workers []*Worker
 	mu      sync.Mutex
 }
 
 // NewWorkerGroup creates a new worker group.
+//
+// Deprecated: prefer `services/common/service.BaseService` worker management.
 func NewWorkerGroup() *WorkerGroup {
 	return &WorkerGroup{
 		workers: make([]*Worker, 0),
@@ -111,6 +122,8 @@ func NewWorkerGroup() *WorkerGroup {
 }
 
 // Add adds a worker to the group.
+//
+// Deprecated: prefer `services/common/service.BaseService.AddWorker`/`AddTickerWorker`.
 func (g *WorkerGroup) Add(w *Worker) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -118,6 +131,8 @@ func (g *WorkerGroup) Add(w *Worker) {
 }
 
 // AddFunc adds a worker function to the group.
+//
+// Deprecated: prefer `services/common/service.BaseService.AddTickerWorker`.
 func (g *WorkerGroup) AddFunc(name string, interval time.Duration, fn func(ctx context.Context) error) *Worker {
 	w := NewWorker(WorkerConfig{
 		Name:     name,
@@ -129,6 +144,8 @@ func (g *WorkerGroup) AddFunc(name string, interval time.Duration, fn func(ctx c
 }
 
 // Start starts all workers in the group.
+//
+// Deprecated: prefer `services/common/service.BaseService.Start`.
 func (g *WorkerGroup) Start(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -148,6 +165,8 @@ func (g *WorkerGroup) Start(ctx context.Context) error {
 }
 
 // Stop stops all workers in the group.
+//
+// Deprecated: prefer `services/common/service.BaseService.Stop`.
 func (g *WorkerGroup) Stop() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -163,8 +182,10 @@ func (g *WorkerGroup) Stop() {
 	wg.Wait()
 }
 
-// TickerLoop runs a function on a ticker until context is cancelled or stop channel is closed.
+// TickerLoop runs a function on a ticker until context is canceled or stop channel is closed.
 // This is a simpler alternative to Worker for inline use.
+//
+// Deprecated: prefer `services/common/service.BaseService.AddTickerWorker`.
 func TickerLoop(ctx context.Context, stopCh <-chan struct{}, interval time.Duration, fn func(ctx context.Context)) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -181,7 +202,9 @@ func TickerLoop(ctx context.Context, stopCh <-chan struct{}, interval time.Durat
 	}
 }
 
-// ChannelLoop processes items from a channel until context is cancelled or stop channel is closed.
+// ChannelLoop processes items from a channel until context is canceled or stop channel is closed.
+//
+// Deprecated: prefer `services/common/service.BaseService.AddWorker`.
 func ChannelLoop[T any](ctx context.Context, stopCh <-chan struct{}, ch <-chan T, fn func(ctx context.Context, item T)) {
 	for {
 		select {
@@ -199,6 +222,9 @@ func ChannelLoop[T any](ctx context.Context, stopCh <-chan struct{}, ch <-chan T
 }
 
 // RetryWithBackoff retries a function with exponential backoff.
+//
+// Deprecated: prefer service-specific retry mechanisms, or wrap retries in a
+// `services/common/service.BaseService` worker.
 func RetryWithBackoff(ctx context.Context, maxRetries int, initialDelay time.Duration, fn func() error) error {
 	delay := initialDelay
 	var lastErr error

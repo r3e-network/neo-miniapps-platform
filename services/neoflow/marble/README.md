@@ -39,11 +39,12 @@ The NeoFlow Marble service implements trigger-based task automation:
 | File | Purpose |
 |------|---------|
 | `service.go` | Service initialization and configuration |
-| `lifecycle.go` | Service lifecycle (Start/Stop) |
 | `triggers.go` | Trigger evaluation logic |
 | `handlers.go` | HTTP request handlers |
 | `api.go` | Route registration |
 | `types.go` | Data structures |
+
+Lifecycle is handled by the shared `commonservice.BaseService` (start/stop hooks, workers, standard routes).
 
 ## Key Components
 

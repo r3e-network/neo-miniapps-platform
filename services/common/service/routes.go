@@ -85,7 +85,7 @@ func ReadinessHandler(s *BaseService) http.HandlerFunc {
 		}
 
 		code := http.StatusOK
-		if status == "unhealthy" {
+		if status != "healthy" {
 			code = http.StatusServiceUnavailable
 		}
 

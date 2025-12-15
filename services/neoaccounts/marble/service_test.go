@@ -29,7 +29,7 @@ import (
 type mockNeoAccountsRepo struct {
 	accounts      map[string]*neoaccountssupabase.Account
 	balances      map[string]map[string]*neoaccountssupabase.AccountBalance // accountID -> tokenType -> balance
-	simulateError bool                                                       // When true, methods return errors
+	simulateError bool                                                      // When true, methods return errors
 }
 
 func newMockNeoAccountsRepo() *mockNeoAccountsRepo {
@@ -102,10 +102,10 @@ func (m *mockNeoAccountsRepo) GetWithBalances(_ context.Context, id string) (*ne
 	if !ok {
 		return nil, fmt.Errorf("account not found: %s", id)
 	}
-	result := neoaccountssupabase.NewAccountWithBalances(*acc)
+	result := neoaccountssupabase.NewAccountWithBalances(acc)
 	if bals, ok := m.balances[id]; ok {
 		for _, bal := range bals {
-			result.AddBalance(*bal)
+			result.AddBalance(bal)
 		}
 	}
 	return result, nil
@@ -114,10 +114,10 @@ func (m *mockNeoAccountsRepo) GetWithBalances(_ context.Context, id string) (*ne
 func (m *mockNeoAccountsRepo) ListWithBalances(_ context.Context) ([]neoaccountssupabase.AccountWithBalances, error) {
 	var result []neoaccountssupabase.AccountWithBalances
 	for _, acc := range m.accounts {
-		accWithBal := neoaccountssupabase.NewAccountWithBalances(*acc)
+		accWithBal := neoaccountssupabase.NewAccountWithBalances(acc)
 		if bals, ok := m.balances[acc.ID]; ok {
 			for _, bal := range bals {
-				accWithBal.AddBalance(*bal)
+				accWithBal.AddBalance(bal)
 			}
 		}
 		result = append(result, *accWithBal)
@@ -129,10 +129,10 @@ func (m *mockNeoAccountsRepo) ListAvailableWithBalances(_ context.Context, token
 	var result []neoaccountssupabase.AccountWithBalances
 	for _, acc := range m.accounts {
 		if !acc.IsRetiring && acc.LockedBy == "" {
-			accWithBal := neoaccountssupabase.NewAccountWithBalances(*acc)
+			accWithBal := neoaccountssupabase.NewAccountWithBalances(acc)
 			if bals, ok := m.balances[acc.ID]; ok {
 				for _, bal := range bals {
-					accWithBal.AddBalance(*bal)
+					accWithBal.AddBalance(bal)
 				}
 			}
 			// Filter by token balance if specified
@@ -157,10 +157,10 @@ func (m *mockNeoAccountsRepo) ListByLockerWithBalances(_ context.Context, locker
 	var result []neoaccountssupabase.AccountWithBalances
 	for _, acc := range m.accounts {
 		if acc.LockedBy == lockerID {
-			accWithBal := neoaccountssupabase.NewAccountWithBalances(*acc)
+			accWithBal := neoaccountssupabase.NewAccountWithBalances(acc)
 			if bals, ok := m.balances[acc.ID]; ok {
 				for _, bal := range bals {
-					accWithBal.AddBalance(*bal)
+					accWithBal.AddBalance(bal)
 				}
 			}
 			result = append(result, *accWithBal)
@@ -1878,18 +1878,17 @@ func TestRotateAccounts(t *testing.T) {
 	mockRepo.Create(context.Background(), acc3)
 
 	// Add balances - acc1 has low balance (rotation candidate)
-	mockRepo.UpsertBalance(context.Background(), "acc-old-1", TokenTypeGAS, "", 1000, 8) // Very low
+	mockRepo.UpsertBalance(context.Background(), "acc-old-1", TokenTypeGAS, "", 1000, 8)       // Very low
 	mockRepo.UpsertBalance(context.Background(), "acc-old-2", TokenTypeGAS, "", 1000000000, 8) // 10 GAS
-	mockRepo.UpsertBalance(context.Background(), "acc-new-1", TokenTypeGAS, "", 500000000, 8) // 5 GAS
+	mockRepo.UpsertBalance(context.Background(), "acc-new-1", TokenTypeGAS, "", 500000000, 8)  // 5 GAS
 
 	// Call rotateAccounts directly
 	svc.rotateAccounts(context.Background())
 
 	// Check that acc1 is now retiring (old, unlocked, low balance)
 	updatedAcc1, _ := mockRepo.GetByID(context.Background(), "acc-old-1")
-	if updatedAcc1 != nil && !updatedAcc1.IsRetiring {
-		// It may or may not be retiring depending on rotation rate calculation
-		// The important thing is that locked accounts are never rotated
+	if updatedAcc1 == nil {
+		t.Fatal("expected acc-old-1 to exist")
 	}
 
 	// Check that acc2 (locked) is NOT retiring
@@ -1979,97 +1978,14 @@ func TestRotateAccountsDeletesEmptyRetiringAccounts(t *testing.T) {
 	}
 }
 
-func TestRunAccountRotationContextCancel(t *testing.T) {
+func TestServiceRegistersTickerWorkers(t *testing.T) {
 	svc, _ := newTestServiceWithMock(t)
 
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Start the rotation goroutine
-	done := make(chan struct{})
-	go func() {
-		svc.runAccountRotation(ctx)
-		close(done)
-	}()
-
-	// Cancel immediately
-	cancel()
-
-	// Should exit quickly
-	select {
-	case <-done:
-		// Good, it exited
-	case <-time.After(time.Second):
-		t.Error("runAccountRotation should exit when context is canceled")
-	}
-}
-
-func TestRunLockCleanupContextCancel(t *testing.T) {
-	svc, _ := newTestServiceWithMock(t)
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	done := make(chan struct{})
-	go func() {
-		svc.runLockCleanup(ctx)
-		close(done)
-	}()
-
-	cancel()
-
-	select {
-	case <-done:
-		// Good
-	case <-time.After(time.Second):
-		t.Error("runLockCleanup should exit when context is canceled")
-	}
-}
-
-func TestRunAccountRotationStopChannel(t *testing.T) {
-	svc, _ := newTestServiceWithMock(t)
-
-	ctx := context.Background()
-
-	done := make(chan struct{})
-	go func() {
-		svc.runAccountRotation(ctx)
-		close(done)
-	}()
-
-	// Trigger stop via base service
-	go func() {
-		time.Sleep(10 * time.Millisecond)
-		svc.BaseService.Stop()
-	}()
-
-	select {
-	case <-done:
-		// Good
-	case <-time.After(time.Second):
-		t.Error("runAccountRotation should exit when stop channel is closed")
-	}
-}
-
-func TestRunLockCleanupStopChannel(t *testing.T) {
-	svc, _ := newTestServiceWithMock(t)
-
-	ctx := context.Background()
-
-	done := make(chan struct{})
-	go func() {
-		svc.runLockCleanup(ctx)
-		close(done)
-	}()
-
-	go func() {
-		time.Sleep(10 * time.Millisecond)
-		svc.BaseService.Stop()
-	}()
-
-	select {
-	case <-done:
-		// Good
-	case <-time.After(time.Second):
-		t.Error("runLockCleanup should exit when stop channel is closed")
+	// NeoAccounts registers two periodic maintenance workers via BaseService.AddTickerWorker:
+	// - account rotation
+	// - stale lock cleanup
+	if svc.WorkerCount() != 2 {
+		t.Fatalf("WorkerCount() = %d, want 2", svc.WorkerCount())
 	}
 }
 

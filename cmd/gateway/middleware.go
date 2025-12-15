@@ -3,53 +3,26 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
-	"github.com/R3E-Network/service_layer/internal/database"
-	"github.com/R3E-Network/service_layer/internal/marble"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
+
+	"github.com/R3E-Network/service_layer/internal/database"
+	"github.com/R3E-Network/service_layer/internal/headergate"
+	"github.com/R3E-Network/service_layer/internal/httputil"
+	sllogging "github.com/R3E-Network/service_layer/internal/logging"
 )
 
-// =============================================================================
-// Middleware
-// =============================================================================
-
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Get origin from request for credentials support
-		origin := r.Header.Get("Origin")
-		if origin != "" && isOriginAllowed(origin) {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")
-			w.Header().Set("Access-Control-Allow-Credentials", "true") // Required for cookie auth
-		} else if origin != "" {
-			// Reject unknown origins when credentials are used
-			if r.Method == http.MethodOptions {
-				w.WriteHeader(http.StatusForbidden)
-				return
-			}
-			http.Error(w, "CORS origin not allowed", http.StatusForbidden)
-			return
-		}
-
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
+func HeaderGateMiddleware(sharedSecret string) func(http.Handler) http.Handler {
+	return headergate.Middleware(sharedSecret)
 }
 
-func authMiddleware(db *database.Repository, m *marble.Marble) mux.MiddlewareFunc {
+func authMiddleware(db *database.Repository) mux.MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Try API Key first
@@ -57,9 +30,30 @@ func authMiddleware(db *database.Repository, m *marble.Marble) mux.MiddlewareFun
 			if apiKey != "" {
 				keyHash := hashToken(apiKey)
 				key, err := db.GetAPIKeyByHash(r.Context(), keyHash)
-				if err == nil {
+				if err != nil {
+					// NotFound means the API key is invalid/revoked. Other errors mean the
+					// auth backend is unhealthy; fail closed with 500.
+					if !database.IsNotFound(err) {
+						log.Printf("get api key by hash: %v", err)
+						jsonError(w, "failed to validate api key", http.StatusInternalServerError)
+						return
+					}
+				} else {
+					role := resolveUserRole(key.UserID)
+					ctx := sllogging.WithUserID(r.Context(), key.UserID)
+					if role != "" {
+						ctx = sllogging.WithRole(ctx, role)
+					}
+					r = r.WithContext(ctx)
 					r.Header.Set("X-User-ID", key.UserID)
-					_ = db.UpdateAPIKeyLastUsed(r.Context(), key.ID)
+					if role != "" {
+						r.Header.Set("X-User-Role", role)
+					} else {
+						r.Header.Del("X-User-Role")
+					}
+					if updateErr := db.UpdateAPIKeyLastUsed(r.Context(), key.ID); updateErr != nil {
+						log.Printf("update api key last used: %v", updateErr)
+					}
 					next.ServeHTTP(w, r)
 					return
 				}
@@ -92,14 +86,32 @@ func authMiddleware(db *database.Repository, m *marble.Marble) mux.MiddlewareFun
 			tokenHash := hashToken(token)
 			session, err := db.GetSessionByTokenHash(r.Context(), tokenHash)
 			if err != nil {
-				jsonError(w, "session expired", http.StatusUnauthorized)
+				if database.IsNotFound(err) {
+					jsonError(w, "session expired", http.StatusUnauthorized)
+					return
+				}
+				log.Printf("get session by token hash: %v", err)
+				jsonError(w, "failed to validate session", http.StatusInternalServerError)
 				return
 			}
 
 			// Update session activity
-			_ = db.UpdateSessionActivity(r.Context(), session.ID)
+			if updateErr := db.UpdateSessionActivity(r.Context(), session.ID); updateErr != nil {
+				log.Printf("update session activity: %v", updateErr)
+			}
 
+			role := resolveUserRole(userID)
+			ctx := sllogging.WithUserID(r.Context(), userID)
+			if role != "" {
+				ctx = sllogging.WithRole(ctx, role)
+			}
+			r = r.WithContext(ctx)
 			r.Header.Set("X-User-ID", userID)
+			if role != "" {
+				r.Header.Set("X-User-Role", role)
+			} else {
+				r.Header.Del("X-User-Role")
+			}
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -113,7 +125,7 @@ func generateJWT(userID string) (string, error) {
 	claims := &Claims{
 		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(jwtExpiry)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Issuer:    "neo-service-layer",
 		},
@@ -152,21 +164,5 @@ func hashToken(token string) string {
 }
 
 func jsonError(w http.ResponseWriter, message string, status int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": message})
-}
-
-func isOriginAllowed(origin string) bool {
-	allowed := os.Getenv("CORS_ALLOWED_ORIGINS")
-	if strings.TrimSpace(allowed) == "" {
-		allowed = "http://localhost:3000,http://localhost:5173"
-	}
-	for _, candidate := range strings.Split(allowed, ",") {
-		c := strings.TrimSpace(candidate)
-		if c != "" && c == origin {
-			return true
-		}
-	}
-	return false
+	httputil.WriteError(w, status, message)
 }

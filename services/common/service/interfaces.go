@@ -4,8 +4,9 @@ package service
 import (
 	"context"
 
-	"github.com/R3E-Network/service_layer/internal/chain"
 	"github.com/gorilla/mux"
+
+	"github.com/R3E-Network/service_layer/internal/chain"
 )
 
 // =============================================================================

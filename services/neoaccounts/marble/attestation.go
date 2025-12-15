@@ -2,6 +2,7 @@ package neoaccountsmarble
 
 import (
 	"encoding/base64"
+	"math"
 	"time"
 
 	"github.com/edgelesssys/ego/attestation"
@@ -51,7 +52,9 @@ func (s *Service) buildMasterKeyAttestation() MasterKeyAttestation {
 	if len(report.ProductID) >= 2 {
 		att.ProdID = uint16(report.ProductID[1])<<8 | uint16(report.ProductID[0])
 	}
-	att.ISVSVN = uint16(report.SecurityVersion)
+	if report.SecurityVersion <= math.MaxUint16 {
+		att.ISVSVN = uint16(report.SecurityVersion)
+	}
 	return att
 }
 

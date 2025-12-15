@@ -4,14 +4,18 @@ package neofeeds
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math/big"
 	"net/http"
+	neturl "net/url"
 	"strings"
 	"time"
+
+	"github.com/R3E-Network/service_layer/internal/httputil"
+	"github.com/R3E-Network/service_layer/internal/runtime"
 )
 
 // ChainlinkFeedConfig defines a Chainlink price feed configuration.
@@ -55,10 +59,39 @@ func NewChainlinkClient(rpcURL string) (*ChainlinkClient, error) {
 		rpcURL = DefaultArbitrumRPC
 	}
 
+	rpcURL = strings.TrimSpace(rpcURL)
+	parsed, err := neturl.Parse(rpcURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return nil, fmt.Errorf("invalid arbitrum rpc url")
+	}
+	if parsed.User != nil {
+		return nil, fmt.Errorf("arbitrum rpc url must not contain credentials")
+	}
+	if runtime.StrictIdentityMode() && !strings.EqualFold(parsed.Scheme, "https") {
+		return nil, fmt.Errorf("arbitrum rpc url must use https in strict identity mode")
+	}
+
+	transport := http.DefaultTransport
+	if base, ok := http.DefaultTransport.(*http.Transport); ok {
+		cloned := base.Clone()
+		if cloned.TLSClientConfig != nil {
+			cloned.TLSClientConfig = cloned.TLSClientConfig.Clone()
+			if cloned.TLSClientConfig.MinVersion == 0 || cloned.TLSClientConfig.MinVersion < tls.VersionTLS12 {
+				cloned.TLSClientConfig.MinVersion = tls.VersionTLS12
+			}
+		} else {
+			cloned.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		}
+		transport = cloned
+	}
+
 	return &ChainlinkClient{
 		rpcURL: rpcURL,
-		client: &http.Client{Timeout: 15 * time.Second},
-		feeds:  ChainlinkFeeds,
+		client: &http.Client{
+			Timeout:   15 * time.Second,
+			Transport: transport,
+		},
+		feeds: ChainlinkFeeds,
 	}, nil
 }
 
@@ -95,7 +128,7 @@ type rpcError struct {
 }
 
 // GetPrice fetches the latest price from a Chainlink feed.
-func (c *ChainlinkClient) GetPrice(ctx context.Context, feedID string) (float64, int, error) {
+func (c *ChainlinkClient) GetPrice(ctx context.Context, feedID string) (priceFloat float64, decimals int, err error) {
 	feed, ok := c.feeds[feedID]
 	if !ok {
 		return 0, 0, fmt.Errorf("chainlink feed not found: %s", feedID)
@@ -133,13 +166,26 @@ func (c *ChainlinkClient) GetPrice(ctx context.Context, feedID string) (float64,
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, truncated, readErr := httputil.ReadAllWithLimit(resp.Body, 32<<10)
+		if readErr != nil {
+			return 0, 0, fmt.Errorf("read response: %w", readErr)
+		}
+		msg := strings.TrimSpace(string(respBody))
+		if truncated {
+			msg += "...(truncated)"
+		}
+		return 0, 0, fmt.Errorf("rpc http error %d: %s", resp.StatusCode, msg)
+	}
+
+	body, err := httputil.ReadAllStrict(resp.Body, 1<<20)
 	if err != nil {
 		return 0, 0, fmt.Errorf("read response: %w", err)
 	}
 
 	var rpcResp rpcResponse
-	if err := json.Unmarshal(body, &rpcResp); err != nil {
+	err = json.Unmarshal(body, &rpcResp)
+	if err != nil {
 		return 0, 0, fmt.Errorf("unmarshal response: %w", err)
 	}
 
@@ -164,11 +210,11 @@ func (c *ChainlinkClient) GetPrice(ctx context.Context, feedID string) (float64,
 	answer := new(big.Int).SetBytes(answerBytes)
 
 	// Convert to float with decimals
-	decimals := feed.Decimals
+	decimals = feed.Decimals
 	divisor := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil))
-	price := new(big.Float).SetInt(answer)
-	price.Quo(price, divisor)
+	priceValue := new(big.Float).SetInt(answer)
+	priceValue.Quo(priceValue, divisor)
 
-	priceFloat, _ := price.Float64()
+	priceFloat, _ = priceValue.Float64()
 	return priceFloat, decimals, nil
 }

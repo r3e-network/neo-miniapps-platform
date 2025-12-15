@@ -2,8 +2,11 @@
 package chain
 
 import (
+	"context"
+	"fmt"
 	"math/big"
 	"os"
+	"strings"
 )
 
 // =============================================================================
@@ -12,12 +15,12 @@ import (
 
 // ContractAddresses holds the deployed contract addresses.
 type ContractAddresses struct {
-	Gateway    string `json:"gateway"`
-	VRF        string `json:"neorand"`
-	NeoVault      string `json:"neovault"`
-	NeoFeeds  string `json:"neofeeds"`
-	GasBank    string `json:"gasbank"`
-	NeoFlow string `json:"neoflow"`
+	Gateway  string `json:"gateway"`
+	VRF      string `json:"neorand"`
+	NeoVault string `json:"neovault"`
+	NeoFeeds string `json:"neofeeds"`
+	GasBank  string `json:"gasbank"`
+	NeoFlow  string `json:"neoflow"`
 }
 
 // LoadFromEnv loads contract addresses from environment variables.
@@ -140,4 +143,52 @@ type ExecutionRecord struct {
 	Timestamp       uint64
 	Success         bool
 	ExecutedBy      string
+}
+
+// =============================================================================
+// Common Invocation Result Checks
+// =============================================================================
+
+func isHaltState(state string) bool {
+	return strings.HasPrefix(strings.TrimSpace(state), "HALT")
+}
+
+func requireHalt(method string, result *InvokeResult) error {
+	if result == nil {
+		return fmt.Errorf("%s: nil invoke result", method)
+	}
+	if isHaltState(result.State) {
+		return nil
+	}
+
+	if msg := strings.TrimSpace(result.Exception); msg != "" {
+		return fmt.Errorf("%s: execution failed (%s): %s", method, result.State, msg)
+	}
+	return fmt.Errorf("%s: execution failed (%s)", method, result.State)
+}
+
+func requireStack(method string, result *InvokeResult) error {
+	if result == nil {
+		return fmt.Errorf("%s: nil invoke result", method)
+	}
+	if len(result.Stack) == 0 {
+		return fmt.Errorf("%s: no result", method)
+	}
+	return nil
+}
+
+func firstStackItem(method string, result *InvokeResult) (StackItem, error) {
+	if err := requireStack(method, result); err != nil {
+		return StackItem{}, err
+	}
+	return result.Stack[0], nil
+}
+
+// =============================================================================
+// Common Contract Helpers
+// =============================================================================
+
+// IsTEEAccount checks if an account is a registered TEE account on a given contract.
+func IsTEEAccount(ctx context.Context, client *Client, contractHash, account string) (bool, error) {
+	return InvokeBool(ctx, client, contractHash, "isTEEAccount", NewHash160Param(account))
 }
