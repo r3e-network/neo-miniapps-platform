@@ -92,4 +92,3 @@ func (l *ClientRateLimiter) Allow(clientCN string) bool {
 
 	return b.allow(l.now())
 }
-

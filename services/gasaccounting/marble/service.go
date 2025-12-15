@@ -30,10 +30,10 @@ type Service struct {
 	reservations map[string]*Reservation
 
 	// Metrics
-	totalDeposits   int64
+	totalDeposits    int64
 	totalWithdrawals int64
-	totalConsumed   int64
-	startTime       time.Time
+	totalConsumed    int64
+	startTime        time.Time
 }
 
 // Reservation represents a GAS reservation.
@@ -130,11 +130,11 @@ func (s *Service) statistics() map[string]any {
 	defer s.mu.RUnlock()
 
 	return map[string]any{
-		"total_deposits":    s.totalDeposits,
-		"total_withdrawals": s.totalWithdrawals,
-		"total_consumed":    s.totalConsumed,
+		"total_deposits":      s.totalDeposits,
+		"total_withdrawals":   s.totalWithdrawals,
+		"total_consumed":      s.totalConsumed,
 		"active_reservations": len(s.reservations),
-		"uptime":            time.Since(s.startTime).String(),
+		"uptime":              time.Since(s.startTime).String(),
 	}
 }
 

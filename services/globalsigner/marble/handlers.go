@@ -1,7 +1,6 @@
 package globalsigner
 
 import (
-	
 	"net/http"
 	"time"
 

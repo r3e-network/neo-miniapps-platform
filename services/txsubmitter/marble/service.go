@@ -155,14 +155,14 @@ func (s *Service) statistics() map[string]any {
 	defer s.mu.RUnlock()
 
 	return map[string]any{
-		"txs_submitted":    s.txsSubmitted,
-		"txs_confirmed":    s.txsConfirmed,
-		"txs_failed":       s.txsFailed,
-		"pending_txs":      len(s.pendingTxs),
-		"uptime":           time.Since(s.startTime).String(),
-		"rate_limit":       s.rateLimiter.Status(),
-		"rpc_healthy":      s.rpcPool != nil && s.rpcPool.HealthyCount() > 0,
-		"rpc_endpoints":    s.rpcPool.HealthyCount(),
+		"txs_submitted": s.txsSubmitted,
+		"txs_confirmed": s.txsConfirmed,
+		"txs_failed":    s.txsFailed,
+		"pending_txs":   len(s.pendingTxs),
+		"uptime":        time.Since(s.startTime).String(),
+		"rate_limit":    s.rateLimiter.Status(),
+		"rpc_healthy":   s.rpcPool != nil && s.rpcPool.HealthyCount() > 0,
+		"rpc_endpoints": s.rpcPool.HealthyCount(),
 	}
 }
 
@@ -359,9 +359,9 @@ func (s *Service) submitFulfillRequest(ctx context.Context, req *TxRequest) (str
 // submitSetTEEMasterKey submits a set_tee_master_key transaction.
 func (s *Service) submitSetTEEMasterKey(ctx context.Context, req *TxRequest) (string, error) {
 	var params struct {
-		PubKey      string `json:"pubkey"`
-		PubKeyHash  string `json:"pubkey_hash"`
-		AttestHash  string `json:"attest_hash"`
+		PubKey     string `json:"pubkey"`
+		PubKeyHash string `json:"pubkey_hash"`
+		AttestHash string `json:"attest_hash"`
 	}
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return "", fmt.Errorf("invalid params: %w", err)

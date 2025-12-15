@@ -169,13 +169,13 @@ type ServiceStatus struct {
 
 // ServiceAllowlist defines which services can submit which transaction types.
 var ServiceAllowlist = map[string][]string{
-	"neooracle":   {"fulfill_request", "fail_request"},
-	"neofeeds":    {"update_price", "update_prices"},
-	"neorand":     {"fulfill_request", "fail_request"},
-	"neocompute":  {"fulfill_request", "fail_request"},
-	"neovault":    {"fulfill_request", "fail_request", "resolve_dispute"},
-	"neoflow":     {"execute_trigger"},
-	"neoaccounts": {"fulfill_request", "fail_request"},
+	"neooracle":    {"fulfill_request", "fail_request"},
+	"neofeeds":     {"update_price", "update_prices"},
+	"neorand":      {"fulfill_request", "fail_request"},
+	"neocompute":   {"fulfill_request", "fail_request"},
+	"neovault":     {"fulfill_request", "fail_request", "resolve_dispute"},
+	"neoflow":      {"execute_trigger"},
+	"neoaccounts":  {"fulfill_request", "fail_request"},
 	"globalsigner": {"set_tee_master_key"},
 }
 

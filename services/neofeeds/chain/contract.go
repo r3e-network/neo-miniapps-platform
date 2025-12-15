@@ -3,8 +3,8 @@ package neofeedschain
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"github.com/R3E-Network/service_layer/internal/chain"
+	"math/big"
 )
 
 // =============================================================================

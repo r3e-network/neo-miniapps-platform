@@ -11,8 +11,7 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/httputil"
-
-	neoaccounts "github.com/R3E-Network/service_layer/services/neoaccounts/marble"
+	neoaccounts "github.com/R3E-Network/service_layer/services/neoaccounts/client"
 )
 
 const maxNeoAccountsResponseBytes int64 = 8 << 20 // 8MiB
@@ -169,7 +168,7 @@ func (c *NeoAccountsClient) UpdateBalance(ctx context.Context, accountID string,
 
 // GetPoolInfo returns pool statistics.
 func (c *NeoAccountsClient) GetPoolInfo(ctx context.Context) (*neoaccounts.PoolInfoResponse, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/info", http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/pool-info", http.NoBody)
 	if err != nil {
 		return nil, err
 	}

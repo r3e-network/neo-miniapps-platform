@@ -39,18 +39,18 @@ const (
 
 // LedgerEntry represents an immutable ledger entry.
 type LedgerEntry struct {
-	ID              int64     `json:"id"`
-	UserID          int64     `json:"user_id"`
-	EntryType       EntryType `json:"entry_type"`
-	Amount          int64     `json:"amount"`          // Positive for credit, negative for debit
-	BalanceAfter    int64     `json:"balance_after"`   // Balance after this entry
-	ReferenceID     string    `json:"reference_id"`    // External reference (tx hash, request ID)
-	ReferenceType   string    `json:"reference_type"`  // Type of reference (tx, request, etc.)
-	ServiceID       string    `json:"service_id"`      // Which service triggered this
-	Description     string    `json:"description"`     // Human-readable description
-	Metadata        string    `json:"metadata"`        // JSON metadata
-	CreatedAt       time.Time `json:"created_at"`
-	IdempotencyKey  string    `json:"idempotency_key"` // For deduplication
+	ID             int64     `json:"id"`
+	UserID         int64     `json:"user_id"`
+	EntryType      EntryType `json:"entry_type"`
+	Amount         int64     `json:"amount"`         // Positive for credit, negative for debit
+	BalanceAfter   int64     `json:"balance_after"`  // Balance after this entry
+	ReferenceID    string    `json:"reference_id"`   // External reference (tx hash, request ID)
+	ReferenceType  string    `json:"reference_type"` // Type of reference (tx, request, etc.)
+	ServiceID      string    `json:"service_id"`     // Which service triggered this
+	Description    string    `json:"description"`    // Human-readable description
+	Metadata       string    `json:"metadata"`       // JSON metadata
+	CreatedAt      time.Time `json:"created_at"`
+	IdempotencyKey string    `json:"idempotency_key"` // For deduplication
 }
 
 // =============================================================================
@@ -59,10 +59,10 @@ type LedgerEntry struct {
 
 // AccountBalance represents a user's GAS balance.
 type AccountBalance struct {
-	UserID          int64     `json:"user_id"`
-	AvailableBalance int64    `json:"available_balance"` // Can be used
-	ReservedBalance  int64    `json:"reserved_balance"`  // Reserved for pending txs
-	TotalBalance     int64    `json:"total_balance"`     // Available + Reserved
+	UserID           int64     `json:"user_id"`
+	AvailableBalance int64     `json:"available_balance"` // Can be used
+	ReservedBalance  int64     `json:"reserved_balance"`  // Reserved for pending txs
+	TotalBalance     int64     `json:"total_balance"`     // Available + Reserved
 	LastUpdated      time.Time `json:"last_updated"`
 }
 
@@ -74,15 +74,15 @@ type AccountBalance struct {
 type DepositRequest struct {
 	UserID    int64  `json:"user_id"`
 	Amount    int64  `json:"amount"`
-	TxHash    string `json:"tx_hash"`    // On-chain deposit tx
-	Reference string `json:"reference"`  // Optional reference
+	TxHash    string `json:"tx_hash"`   // On-chain deposit tx
+	Reference string `json:"reference"` // Optional reference
 }
 
 // DepositResponse is the response from a deposit.
 type DepositResponse struct {
-	EntryID      int64 `json:"entry_id"`
-	NewBalance   int64 `json:"new_balance"`
-	DepositedAt  time.Time `json:"deposited_at"`
+	EntryID     int64     `json:"entry_id"`
+	NewBalance  int64     `json:"new_balance"`
+	DepositedAt time.Time `json:"deposited_at"`
 }
 
 // WithdrawRequest is a request to withdraw GAS.
@@ -111,18 +111,18 @@ type ConsumeRequest struct {
 
 // ConsumeResponse is the response from consuming GAS.
 type ConsumeResponse struct {
-	EntryID    int64 `json:"entry_id"`
-	NewBalance int64 `json:"new_balance"`
+	EntryID    int64     `json:"entry_id"`
+	NewBalance int64     `json:"new_balance"`
 	ConsumedAt time.Time `json:"consumed_at"`
 }
 
 // ReserveRequest is a request to reserve GAS for a pending operation.
 type ReserveRequest struct {
-	UserID      int64  `json:"user_id"`
-	Amount      int64  `json:"amount"`
-	ServiceID   string `json:"service_id"`
-	RequestID   string `json:"request_id"`
-	TTL         time.Duration `json:"ttl"` // How long to hold reservation
+	UserID    int64         `json:"user_id"`
+	Amount    int64         `json:"amount"`
+	ServiceID string        `json:"service_id"`
+	RequestID string        `json:"request_id"`
+	TTL       time.Duration `json:"ttl"` // How long to hold reservation
 }
 
 // ReserveResponse is the response from reserving GAS.
@@ -136,7 +136,7 @@ type ReserveResponse struct {
 // ReleaseRequest is a request to release a reservation.
 type ReleaseRequest struct {
 	ReservationID string `json:"reservation_id"`
-	Consume       bool   `json:"consume"` // If true, consume instead of release
+	Consume       bool   `json:"consume"`       // If true, consume instead of release
 	ActualAmount  int64  `json:"actual_amount"` // Actual amount consumed (if different)
 }
 
@@ -180,12 +180,12 @@ type LedgerHistoryResponse struct {
 
 // ServiceStatus represents the service status.
 type ServiceStatus struct {
-	Service       string    `json:"service"`
-	Version       string    `json:"version"`
-	Healthy       bool      `json:"healthy"`
-	TotalUsers    int64     `json:"total_users"`
-	TotalBalance  int64     `json:"total_balance"`
-	TotalReserved int64     `json:"total_reserved"`
-	EntriesCount  int64     `json:"entries_count"`
-	Uptime        string    `json:"uptime"`
+	Service       string `json:"service"`
+	Version       string `json:"version"`
+	Healthy       bool   `json:"healthy"`
+	TotalUsers    int64  `json:"total_users"`
+	TotalBalance  int64  `json:"total_balance"`
+	TotalReserved int64  `json:"total_reserved"`
+	EntriesCount  int64  `json:"entries_count"`
+	Uptime        string `json:"uptime"`
 }

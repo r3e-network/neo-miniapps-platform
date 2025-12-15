@@ -44,7 +44,7 @@ type Service struct {
 	config *Config
 
 	// Chain interaction
-	chainClient *chain.Client
+	chainClient  *chain.Client
 	rpcEndpoints []RPCEndpoint
 	currentRPC   int
 
@@ -56,9 +56,9 @@ type Service struct {
 	jetstream JetStreamPublisher
 
 	// Metrics
-	blocksProcessed  int64
-	eventsPublished  int64
-	lastBlockTime    time.Time
+	blocksProcessed int64
+	eventsPublished int64
+	lastBlockTime   time.Time
 }
 
 // ServiceConfig holds NeoIndexer service configuration.

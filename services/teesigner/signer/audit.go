@@ -121,4 +121,3 @@ func (l *AuditLogger) run() {
 		cancel()
 	}
 }
-

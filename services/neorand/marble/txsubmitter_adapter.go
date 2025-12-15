@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/crypto"
+	commonservice "github.com/R3E-Network/service_layer/services/common/service"
 	txclient "github.com/R3E-Network/service_layer/services/txsubmitter/client"
 )
 
@@ -18,51 +19,16 @@ import (
 
 // TxSubmitterAdapter wraps TxSubmitter client for NeoRand chain operations.
 // This replaces direct TEEFulfiller usage for centralized chain writes.
+// Embeds BaseTxAdapter for common FulfillRequest/FailRequest operations.
 type TxSubmitterAdapter struct {
-	client *txclient.Client
+	commonservice.BaseTxAdapter
 }
 
 // NewTxSubmitterAdapter creates a new TxSubmitter adapter for NeoRand.
 func NewTxSubmitterAdapter(client *txclient.Client) *TxSubmitterAdapter {
 	return &TxSubmitterAdapter{
-		client: client,
+		BaseTxAdapter: commonservice.BaseTxAdapter{TxClient: client},
 	}
-}
-
-// FulfillRequest submits a VRF fulfillment via TxSubmitter.
-func (a *TxSubmitterAdapter) FulfillRequest(ctx context.Context, requestID *big.Int, resultBytes []byte) (string, error) {
-	if a.client == nil {
-		return "", fmt.Errorf("txsubmitter client not configured")
-	}
-
-	resp, err := a.client.FulfillRequest(ctx, requestID.String(), hex.EncodeToString(resultBytes))
-	if err != nil {
-		return "", fmt.Errorf("fulfill request via txsubmitter: %w", err)
-	}
-
-	if resp.Error != "" {
-		return "", fmt.Errorf("txsubmitter error: %s", resp.Error)
-	}
-
-	return resp.TxHash, nil
-}
-
-// FailRequest submits a VRF failure via TxSubmitter.
-func (a *TxSubmitterAdapter) FailRequest(ctx context.Context, requestID *big.Int, errorMsg string) (string, error) {
-	if a.client == nil {
-		return "", fmt.Errorf("txsubmitter client not configured")
-	}
-
-	resp, err := a.client.FailRequest(ctx, requestID.String(), errorMsg)
-	if err != nil {
-		return "", fmt.Errorf("fail request via txsubmitter: %w", err)
-	}
-
-	if resp.Error != "" {
-		return "", fmt.Errorf("txsubmitter error: %s", resp.Error)
-	}
-
-	return resp.TxHash, nil
 }
 
 // =============================================================================

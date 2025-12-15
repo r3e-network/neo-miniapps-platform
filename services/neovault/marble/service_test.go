@@ -11,7 +11,7 @@ import (
 
 	"github.com/R3E-Network/service_layer/internal/marble"
 	"github.com/R3E-Network/service_layer/internal/testutil"
-	neoaccounts "github.com/R3E-Network/service_layer/services/neoaccounts/marble"
+	neoaccounts "github.com/R3E-Network/service_layer/services/neoaccounts/client"
 	neovaultsupabase "github.com/R3E-Network/service_layer/services/neovault/supabase"
 )
 
@@ -308,7 +308,7 @@ func TestConvertTargetsToDB(t *testing.T) {
 
 func TestNeoAccountsClientGetPoolInfo(t *testing.T) {
 	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/info" {
+		if r.URL.Path != "/pool-info" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")

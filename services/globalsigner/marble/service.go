@@ -50,8 +50,8 @@ type Service struct {
 
 // keyEntry holds a key version's private key and metadata.
 type keyEntry struct {
-	privateKey    *ecdsa.PrivateKey
-	version       *KeyVersion
+	privateKey *ecdsa.PrivateKey
+	version    *KeyVersion
 }
 
 // Config holds GlobalSigner service configuration.
@@ -288,11 +288,11 @@ func (s *Service) rotate(ctx context.Context, force bool) (*RotateResponse, erro
 
 	// Create new key version
 	newKeyVersion := &KeyVersion{
-		Version:    newVersion,
-		Status:     KeyStatusActive,
-		PubKeyHex:  pubKeyHex,
-		PubKeyHash: pubKeyHashHex,
-		CreatedAt:  now,
+		Version:     newVersion,
+		Status:      KeyStatusActive,
+		PubKeyHex:   pubKeyHex,
+		PubKeyHash:  pubKeyHashHex,
+		CreatedAt:   now,
 		ActivatedAt: &now,
 	}
 
@@ -338,8 +338,8 @@ func (s *Service) rotate(ctx context.Context, force bool) (*RotateResponse, erro
 	}
 
 	s.Logger().Info(ctx, "Key rotation completed", map[string]interface{}{
-		"old_version":    oldVersion,
-		"new_version":    newVersion,
+		"old_version":     oldVersion,
+		"new_version":     newVersion,
 		"overlap_ends_at": overlapEndsAt,
 	})
 

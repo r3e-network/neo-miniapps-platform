@@ -14,6 +14,7 @@ import (
 type GasAccountingAdapter struct {
 	client    *gasclient.Client
 	serviceID string
+	logError  func(ctx context.Context, msg string, err error) // Optional error logger
 }
 
 // NewGasAccountingAdapter creates a new GasAccounting adapter.
@@ -22,6 +23,12 @@ func NewGasAccountingAdapter(baseURL, serviceID string) *GasAccountingAdapter {
 		client:    gasclient.New(baseURL, serviceID),
 		serviceID: serviceID,
 	}
+}
+
+// WithErrorLogger sets an error logging callback for non-fatal errors.
+func (a *GasAccountingAdapter) WithErrorLogger(fn func(ctx context.Context, msg string, err error)) *GasAccountingAdapter {
+	a.logError = fn
+	return a
 }
 
 // CheckBalance verifies a user has sufficient balance for an operation.
@@ -135,8 +142,10 @@ func (a *GasAccountingAdapter) WithGasReservation(
 
 	// Operation succeeded, consume actual cost
 	if err := a.Release(ctx, reservationID, true, actualCost); err != nil {
-		// Log but don't fail the operation
-		return nil
+		// Log but don't fail the operation (operation already succeeded)
+		if a.logError != nil {
+			a.logError(ctx, "failed to release gas reservation after successful operation", err)
+		}
 	}
 
 	return nil

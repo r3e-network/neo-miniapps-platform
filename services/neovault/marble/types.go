@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	neoaccountsmarble "github.com/R3E-Network/service_layer/services/neoaccounts/marble"
+	neoaccountsclient "github.com/R3E-Network/service_layer/services/neoaccounts/client"
 	neovaultsupabase "github.com/R3E-Network/service_layer/services/neovault/supabase"
 )
 
@@ -26,7 +26,7 @@ const (
 type PoolAccount struct {
 	ID         string                                    `json:"id"`
 	Address    string                                    `json:"address"`
-	Balances   map[string]neoaccountsmarble.TokenBalance `json:"balances"` // key: token_type
+	Balances   map[string]neoaccountsclient.TokenBalance `json:"balances"` // key: token_type
 	CreatedAt  time.Time                                 `json:"created_at"`
 	LastUsedAt time.Time                                 `json:"last_used_at"`
 	TxCount    int64                                     `json:"tx_count"`

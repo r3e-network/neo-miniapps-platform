@@ -239,9 +239,9 @@ func New(cfg *Config) (*Service, error) {
 		return nil
 	}, commonservice.WithTickerWorkerName("delivery-checker"))
 
-	// Register service-specific routes, then standard routes so custom /info wins.
+	// Register service-specific routes, then standard routes (skip /info since we have custom implementation)
 	s.registerRoutes()
-	base.RegisterStandardRoutes()
+	base.RegisterStandardRoutesWithOptions(commonservice.RouteOptions{SkipInfo: true})
 
 	return s, nil
 }

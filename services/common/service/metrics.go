@@ -148,20 +148,20 @@ func (m *ServiceMetrics) DecrGauge(name string) {
 
 // MetricsResponse is the JSON response for metrics endpoint.
 type MetricsResponse struct {
-	Service   string         `json:"service"`
-	Uptime    string         `json:"uptime"`
-	Requests  RequestMetrics `json:"requests"`
+	Service   string           `json:"service"`
+	Uptime    string           `json:"uptime"`
+	Requests  RequestMetrics   `json:"requests"`
 	Latency   map[string]int64 `json:"latency_buckets"`
 	Errors    map[string]int64 `json:"errors,omitempty"`
 	Gauges    map[string]int64 `json:"gauges,omitempty"`
-	Timestamp time.Time      `json:"timestamp"`
+	Timestamp time.Time        `json:"timestamp"`
 }
 
 // RequestMetrics contains request-related metrics.
 type RequestMetrics struct {
-	Total      int64   `json:"total"`
-	Success    int64   `json:"success"`
-	Failed     int64   `json:"failed"`
+	Total       int64   `json:"total"`
+	Success     int64   `json:"success"`
+	Failed      int64   `json:"failed"`
 	SuccessRate float64 `json:"success_rate"`
 }
 

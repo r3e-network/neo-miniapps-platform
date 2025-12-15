@@ -133,8 +133,8 @@ func (p *ProbeManager) StartupHandler() http.HandlerFunc {
 
 		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(map[string]any{
-			"started":       false,
-			"startup_time":  time.Since(p.startTime).String(),
+			"started":         false,
+			"startup_time":    time.Since(p.startTime).String(),
 			"grace_remaining": (p.startupGrace - time.Since(p.startTime)).String(),
 		})
 	}

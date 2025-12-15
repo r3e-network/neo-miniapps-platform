@@ -118,11 +118,24 @@ func InfoHandler(s *BaseService) http.HandlerFunc {
 // Route Registration
 // =============================================================================
 
-// RegisterStandardRoutes registers the standard /health and /info endpoints.
+// RouteOptions configures which standard routes to register.
+type RouteOptions struct {
+	SkipInfo bool // Skip /info registration (for services with custom /info)
+}
+
+// RegisterStandardRoutes registers the standard /health, /ready, and /info endpoints.
 // This should be called by services that want consistent endpoint behavior.
 func (b *BaseService) RegisterStandardRoutes() {
+	b.RegisterStandardRoutesWithOptions(RouteOptions{})
+}
+
+// RegisterStandardRoutesWithOptions registers standard routes with configurable options.
+// Use SkipInfo: true when the service provides a custom /info endpoint.
+func (b *BaseService) RegisterStandardRoutesWithOptions(opts RouteOptions) {
 	router := b.Router()
 	router.HandleFunc("/health", HealthHandler(b)).Methods("GET")
 	router.HandleFunc("/ready", ReadinessHandler(b)).Methods("GET")
-	router.HandleFunc("/info", InfoHandler(b)).Methods("GET")
+	if !opts.SkipInfo {
+		router.HandleFunc("/info", InfoHandler(b)).Methods("GET")
+	}
 }

@@ -2,7 +2,7 @@ package txsubmitter
 
 import (
 	"context"
-	
+
 	"net/http"
 	"strconv"
 	"time"

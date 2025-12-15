@@ -83,10 +83,10 @@ func (tb *TokenBucket) refill() {
 
 // RateLimiter manages rate limiting for multiple services.
 type RateLimiter struct {
-	mu            sync.RWMutex
-	globalBucket  *TokenBucket
+	mu             sync.RWMutex
+	globalBucket   *TokenBucket
 	serviceBuckets map[string]*TokenBucket
-	config        *RateLimitConfig
+	config         *RateLimitConfig
 }
 
 // NewRateLimiter creates a new rate limiter.
