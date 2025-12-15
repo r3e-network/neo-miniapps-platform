@@ -15,7 +15,7 @@ import (
 
 	signerpb "github.com/R3E-Network/service_layer/api/gen/signer"
 	"github.com/R3E-Network/service_layer/internal/marble"
-	"github.com/R3E-Network/service_layer/services/tee-signer/signer"
+	"github.com/R3E-Network/service_layer/services/teesigner/signer"
 	"google.golang.org/grpc/test/bufconn"
 )
 

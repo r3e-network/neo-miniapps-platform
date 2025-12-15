@@ -96,5 +96,5 @@ data:
   MIXER_MAX_TRANSFERS_PER_HOUR: "100"
 
   # TEE Signer configuration
-  TEE_SIGNER_SERVICE_URL: "https://tee-signer:9443"
+  TEE_SIGNER_SERVICE_URL: "https://teesigner:9443"
   TEE_SIGNER_KEY_ROTATION_DAYS: "30"

@@ -34,7 +34,7 @@ import (
 
 	signerpb "github.com/R3E-Network/service_layer/api/gen/signer"
 	"github.com/R3E-Network/service_layer/internal/headergate"
-	"github.com/R3E-Network/service_layer/services/tee-signer/signer"
+	"github.com/R3E-Network/service_layer/services/teesigner/signer"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"

@@ -9,7 +9,7 @@ resources:
   - sgx-qcnl-configmap.yaml
   - gateway-deployment.yaml
   - services-deployment.yaml
-  - tee-signer-deployment.yaml
+  - teesigner-deployment.yaml
   - ../platform/cronjob-key-rotation.yaml
 
 labels:
