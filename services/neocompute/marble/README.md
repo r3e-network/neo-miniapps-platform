@@ -211,7 +211,7 @@ POST /execute
 |---------|---------|
 | `internal/crypto` | AES-GCM, HMAC, hashing |
 | `internal/marble` | MarbleRun TEE utilities |
-| `internal/secretstore` | NeoStore secret fetch over mTLS |
+| `services/neostore/client` | NeoStore secret fetch over mTLS |
 | `internal/database` | Framework DB access (optional) |
 | `services/common/service` | Base service framework |
 

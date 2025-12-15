@@ -4,6 +4,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	gasclient "github.com/R3E-Network/service_layer/services/gasaccounting/client"
@@ -18,11 +19,23 @@ type GasAccountingAdapter struct {
 }
 
 // NewGasAccountingAdapter creates a new GasAccounting adapter.
-func NewGasAccountingAdapter(baseURL, serviceID string) *GasAccountingAdapter {
-	return &GasAccountingAdapter{
-		client:    gasclient.New(baseURL, serviceID),
-		serviceID: serviceID,
+func NewGasAccountingAdapter(baseURL, serviceID string) (*GasAccountingAdapter, error) {
+	if strings.TrimSpace(baseURL) == "" {
+		return &GasAccountingAdapter{client: nil, serviceID: serviceID}, nil
 	}
+
+	client, err := gasclient.New(gasclient.Config{
+		BaseURL:   baseURL,
+		ServiceID: serviceID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &GasAccountingAdapter{
+		client:    client,
+		serviceID: serviceID,
+	}, nil
 }
 
 // WithErrorLogger sets an error logging callback for non-fatal errors.

@@ -30,8 +30,8 @@ import (
 	"github.com/R3E-Network/service_layer/internal/database"
 	"github.com/R3E-Network/service_layer/internal/marble"
 	"github.com/R3E-Network/service_layer/internal/runtime"
-	"github.com/R3E-Network/service_layer/internal/secretstore"
 	commonservice "github.com/R3E-Network/service_layer/services/common/service"
+	neostoreclient "github.com/R3E-Network/service_layer/services/neostore/client"
 )
 
 const (
@@ -76,7 +76,7 @@ type Service struct {
 	*commonservice.BaseService
 	masterKey       []byte
 	signingKey      []byte // Derived key for HMAC signing
-	secretClient    *secretstore.Client
+	secretClient    *neostoreclient.Client
 	jobs            sync.Map // map[jobID]jobEntry
 	resultTTL       time.Duration
 	cleanupInterval time.Duration
@@ -165,10 +165,10 @@ func New(cfg Config) (*Service, error) {
 		if httpClient == nil && cfg.Marble != nil {
 			httpClient = cfg.Marble.HTTPClient()
 		}
-		client, err := secretstore.New(secretstore.Config{
-			BaseURL:         secretsBaseURL,
-			HTTPClient:      httpClient,
-			CallerServiceID: ServiceID,
+		client, err := neostoreclient.New(neostoreclient.Config{
+			BaseURL:    secretsBaseURL,
+			HTTPClient: httpClient,
+			ServiceID:  ServiceID,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("neocompute: configure secret store client: %w", err)

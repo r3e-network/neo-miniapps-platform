@@ -13,13 +13,13 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/R3E-Network/service_layer/internal/database"
-	"github.com/R3E-Network/service_layer/internal/headergate"
 	"github.com/R3E-Network/service_layer/internal/httputil"
 	sllogging "github.com/R3E-Network/service_layer/internal/logging"
+	slmiddleware "github.com/R3E-Network/service_layer/internal/middleware"
 )
 
 func HeaderGateMiddleware(sharedSecret string) func(http.Handler) http.Handler {
-	return headergate.Middleware(sharedSecret)
+	return slmiddleware.HeaderGateMiddleware(sharedSecret)
 }
 
 func authMiddleware(db *database.Repository) mux.MiddlewareFunc {

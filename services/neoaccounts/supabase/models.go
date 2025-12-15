@@ -1,12 +1,16 @@
 // Package supabase provides NeoAccounts-specific database operations.
 package supabase
 
-import "time"
+import (
+	"time"
+
+	neoaccountstypes "github.com/R3E-Network/service_layer/services/neoaccounts/types"
+)
 
 // Well-known token configurations
 const (
-	TokenTypeNEO = "NEO"
-	TokenTypeGAS = "GAS"
+	TokenTypeNEO = neoaccountstypes.TokenTypeNEO
+	TokenTypeGAS = neoaccountstypes.TokenTypeGAS
 
 	// Neo N3 MainNet script hashes
 	NEOScriptHash = "0xef4073a0f2b305a38ec4050e4d3d28bc40ea63f5"
@@ -42,13 +46,7 @@ type AccountBalance struct {
 }
 
 // TokenBalance is the API representation of a token balance.
-type TokenBalance struct {
-	TokenType  string    `json:"token_type"`
-	ScriptHash string    `json:"script_hash"`
-	Amount     int64     `json:"amount"`
-	Decimals   int       `json:"decimals"`
-	UpdatedAt  time.Time `json:"updated_at,omitempty"`
-}
+type TokenBalance = neoaccountstypes.TokenBalance
 
 // AccountWithBalances combines account metadata with all token balances.
 type AccountWithBalances struct {
@@ -57,13 +55,7 @@ type AccountWithBalances struct {
 }
 
 // TokenStats represents aggregated statistics for a token type.
-type TokenStats struct {
-	TokenType        string `json:"token_type"`
-	ScriptHash       string `json:"script_hash"`
-	TotalBalance     int64  `json:"total_balance"`
-	LockedBalance    int64  `json:"locked_balance"`
-	AvailableBalance int64  `json:"available_balance"`
-}
+type TokenStats = neoaccountstypes.TokenStats
 
 // NewAccountWithBalances creates an AccountWithBalances from an Account.
 func NewAccountWithBalances(acc *Account) *AccountWithBalances {

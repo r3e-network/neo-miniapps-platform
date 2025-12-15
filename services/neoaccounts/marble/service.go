@@ -10,8 +10,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"math/big"
-	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -137,8 +135,7 @@ func (s *Service) initializePool(ctx context.Context) error {
 		if runtime.StrictIdentityMode() {
 			return err
 		}
-		env := strings.ToLower(strings.TrimSpace(os.Getenv("MARBLE_ENV")))
-		if env == "development" || env == "testing" {
+		if runtime.IsDevelopmentOrTesting() {
 			s.Logger().WithContext(ctx).WithError(err).Warn("database unavailable; skipping pool initialization")
 			return nil
 		}

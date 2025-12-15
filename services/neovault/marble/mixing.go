@@ -82,7 +82,7 @@ func (s *Service) startMixing(ctx context.Context, request *MixRequest) {
 			request.PoolAccounts = append(request.PoolAccounts, acc.ID)
 		}
 		// Update balance via neoaccounts
-		if err := s.updateAccountBalance(ctx, acc.ID, splitAmounts[i]); err != nil {
+		if err := s.updateAccountBalance(ctx, acc.ID, request.TokenType, splitAmounts[i]); err != nil {
 			s.Logger().WithContext(ctx).WithError(err).WithFields(map[string]interface{}{
 				"account_id": acc.ID,
 				"delta":      splitAmounts[i],
@@ -91,7 +91,7 @@ func (s *Service) startMixing(ctx context.Context, request *MixRequest) {
 		}
 	}
 	// Deduct from deposit account
-	if err := s.updateAccountBalance(ctx, depositAccountID, -request.NetAmount); err != nil {
+	if err := s.updateAccountBalance(ctx, depositAccountID, request.TokenType, -request.NetAmount); err != nil {
 		s.Logger().WithContext(ctx).WithError(err).WithFields(map[string]interface{}{
 			"account_id": depositAccountID,
 			"delta":      -request.NetAmount,
@@ -163,14 +163,14 @@ func (s *Service) executeMixingTransaction(ctx context.Context) {
 	amount := cfg.MinTxAmount + secureInt64n(maxAmount-cfg.MinTxAmount)
 
 	// Update balances via neoaccounts service
-	if err := s.updateAccountBalance(ctx, source.ID, -amount); err != nil {
+	if err := s.updateAccountBalance(ctx, source.ID, DefaultToken, -amount); err != nil {
 		s.Logger().WithContext(ctx).WithError(err).WithFields(map[string]interface{}{
 			"source_account": source.ID,
 			"delta":          -amount,
 		}).Warn("mixing tx: failed to deduct from source")
 		return
 	}
-	if err := s.updateAccountBalance(ctx, dest.ID, amount); err != nil {
+	if err := s.updateAccountBalance(ctx, dest.ID, DefaultToken, amount); err != nil {
 		s.Logger().WithContext(ctx).WithError(err).WithFields(map[string]interface{}{
 			"dest_account": dest.ID,
 			"delta":        amount,
@@ -212,7 +212,7 @@ func (s *Service) deliverTokens(ctx context.Context, request *MixRequest) {
 		s.Logger().WithContext(ctx).WithError(err).WithField("request_id", request.ID).Warn("failed to create neoaccounts client")
 		return
 	}
-	accounts, err := client.GetLockedAccounts(ctx, nil)
+	accounts, err := client.GetLockedAccounts(ctx, "", nil)
 	if err != nil {
 		return
 	}

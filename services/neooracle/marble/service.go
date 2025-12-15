@@ -9,8 +9,8 @@ import (
 
 	"github.com/R3E-Network/service_layer/internal/marble"
 	"github.com/R3E-Network/service_layer/internal/runtime"
-	"github.com/R3E-Network/service_layer/internal/secretstore"
 	commonservice "github.com/R3E-Network/service_layer/services/common/service"
+	neostoreclient "github.com/R3E-Network/service_layer/services/neostore/client"
 )
 
 const (
@@ -22,7 +22,7 @@ const (
 // Service implements the oracle.
 type Service struct {
 	*commonservice.BaseService
-	secretClient *secretstore.Client
+	secretClient *neostoreclient.Client
 	httpClient   *http.Client
 	maxBodyBytes int64
 	allowlist    URLAllowlist
@@ -67,12 +67,12 @@ func New(cfg Config) (*Service, error) {
 		httpClient = &http.Client{Timeout: 15 * time.Second}
 	}
 
-	var secretClient *secretstore.Client
+	var secretClient *neostoreclient.Client
 	if secretsBaseURL := strings.TrimSpace(cfg.SecretsBaseURL); secretsBaseURL != "" {
-		client, err := secretstore.New(secretstore.Config{
-			BaseURL:         secretsBaseURL,
-			HTTPClient:      httpClient,
-			CallerServiceID: ServiceID,
+		client, err := neostoreclient.New(neostoreclient.Config{
+			BaseURL:    secretsBaseURL,
+			HTTPClient: httpClient,
+			ServiceID:  ServiceID,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("neooracle: configure secret store client: %w", err)

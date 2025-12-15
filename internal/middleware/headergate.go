@@ -1,4 +1,4 @@
-package headergate
+package middleware
 
 import (
 	"context"
@@ -16,7 +16,7 @@ type auditEvent struct {
 	reason    string
 	method    string
 	path      string
-	vercelID string
+	vercelID  string
 	clientIP  string
 	userAgent string
 }
@@ -38,7 +38,7 @@ func enqueueAudit(event auditEvent) {
 					"reason":     auditEvent.reason,
 					"method":     auditEvent.method,
 					"path":       auditEvent.path,
-					"vercel_id": auditEvent.vercelID,
+					"vercel_id":  auditEvent.vercelID,
 					"client_ip":  auditEvent.clientIP,
 					"user_agent": auditEvent.userAgent,
 				}
@@ -54,7 +54,7 @@ func enqueueAudit(event auditEvent) {
 	}
 }
 
-func Middleware(sharedSecret string) func(http.Handler) http.Handler {
+func HeaderGateMiddleware(sharedSecret string) func(http.Handler) http.Handler {
 	// Use a fixed-length digest so constant-time comparisons don't short-circuit on length.
 	expectedSecretHash := sha256.Sum256([]byte(sharedSecret))
 
@@ -75,7 +75,7 @@ func Middleware(sharedSecret string) func(http.Handler) http.Handler {
 					reason:    "missing_headers",
 					method:    r.Method,
 					path:      r.URL.Path,
-					vercelID: vercelID,
+					vercelID:  vercelID,
 					clientIP:  httputil.ClientIP(r),
 					userAgent: r.UserAgent(),
 				})
@@ -90,7 +90,7 @@ func Middleware(sharedSecret string) func(http.Handler) http.Handler {
 					reason:    "invalid_secret",
 					method:    r.Method,
 					path:      r.URL.Path,
-					vercelID: vercelID,
+					vercelID:  vercelID,
 					clientIP:  httputil.ClientIP(r),
 					userAgent: r.UserAgent(),
 				})

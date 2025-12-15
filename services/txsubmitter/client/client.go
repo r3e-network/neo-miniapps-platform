@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -51,23 +50,9 @@ func New(cfg Config) (*Client, error) {
 		timeout = defaultTimeout
 	}
 
-	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
-	if baseURL == "" {
-		return nil, fmt.Errorf("txsubmitter: BaseURL is required")
-	}
-
-	parsed, err := url.Parse(baseURL)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return nil, fmt.Errorf("txsubmitter: BaseURL must be a valid URL")
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return nil, fmt.Errorf("txsubmitter: BaseURL scheme must be http or https")
-	}
-	if parsed.User != nil {
-		return nil, fmt.Errorf("txsubmitter: BaseURL must not include user info")
-	}
-	if slhttputil.StrictIdentityMode() && parsed.Scheme != "https" {
-		return nil, fmt.Errorf("txsubmitter: BaseURL must use https in strict identity mode")
+	baseURL, _, err := slhttputil.NormalizeServiceBaseURL(cfg.BaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("txsubmitter: %w", err)
 	}
 
 	client := cfg.HTTPClient

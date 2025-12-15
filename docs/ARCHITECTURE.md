@@ -32,6 +32,42 @@ Every layer provides security:
 - Network access restricted by manifest
 - File system access limited to memfs
 
+## Codebase Layout & Responsibilities
+
+This section defines **where code belongs** to avoid duplication and keep modules cohesive.
+
+### Top-Level Layout
+
+- `cmd/`: entrypoints/binaries (`gateway`, `marble`, tooling).
+- `internal/`: shared libraries used across services; **no service-specific business logic**.
+- `services/`: service modules (NeoRand, NeoVault, NeoFeeds, etc.) and shared service framework.
+- `docs/`: architecture, deployment and operational guidance.
+
+### Shared Packages (Single Responsibility)
+
+- `internal/runtime`: runtime/environment detection (e.g., `MARBLE_ENV`), strict identity mode gating, and other runtime-only helpers.
+- `internal/middleware`: **all HTTP middleware** (logging, recovery, auth/service-auth, CORS, body limits, rate limiting, metrics instrumentation).
+- `internal/httputil`: HTTP handler utilities (JSON envelopes, request decoding, safe body reads, identity extraction from verified mTLS).
+- `internal/marble`: MarbleRun integration (secrets, attestation identity, mTLS HTTP clients) + minimal `marble.Service` base.
+- `services/common/service`: service framework (`BaseService`) with lifecycle hooks, worker helpers, and standard endpoints (`/health`, `/ready`, `/info`). This package intentionally does **not** define generic HTTP middleware.
+- `internal/chain`: Neo RPC + contract execution helpers. Services should avoid direct chain writes and instead submit transactions via `services/txsubmitter`.
+
+### Per-Service Module Structure
+
+Each service should follow the same package breakdown:
+
+- `services/<svc>/marble`: HTTP surface + orchestration (route registration, background workers, adapters to other services).
+- `services/<svc>/supabase`: service-specific repository interface + models (database only, no HTTP).
+- `services/<svc>/chain`: contract wrappers/event parsing (chain only, no DB/HTTP).
+- `services/<svc>/client`: service-to-service client SDKs (mTLS-ready), with strict URL validation and bounded response reads.
+
+### Conventions (Enforced by Refactors)
+
+- Services embed `*services/common/service.BaseService` and call `RegisterStandardRoutes()` (or the ServeMux variants) for standard probes.
+- New middleware must live in `internal/middleware` (avoid ad-hoc middleware in service packages).
+- New environment/running-mode detection must live in `internal/runtime` (avoid repeating `MARBLE_ENV` parsing across modules).
+- Use `internal/httputil` for response envelopes and identity extraction to keep handler behavior consistent and secure.
+
 ## Component Details
 
 ### MarbleRun Coordinator

@@ -408,38 +408,6 @@ func TestPaginationParams(t *testing.T) {
 	}
 }
 
-func TestCORSMiddleware(t *testing.T) {
-	nextCalled := false
-	handler := CORSMiddleware([]string{"https://example.com"})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		nextCalled = true
-		w.WriteHeader(http.StatusOK)
-	}))
-
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("Origin", "https://example.com")
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	if rr.Header().Get("Access-Control-Allow-Origin") != "https://example.com" {
-		t.Fatalf("allow-origin = %q, want https://example.com", rr.Header().Get("Access-Control-Allow-Origin"))
-	}
-	if !nextCalled {
-		t.Fatalf("expected next handler to be called")
-	}
-
-	// Preflight requests should short-circuit.
-	nextCalled = false
-	req = httptest.NewRequest(http.MethodOptions, "/", nil)
-	req.Header.Set("Origin", "https://example.com")
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	if rr.Code != http.StatusNoContent {
-		t.Fatalf("status = %d, want 204", rr.Code)
-	}
-	if nextCalled {
-		t.Fatalf("preflight should not call next handler")
-	}
-}
-
 func TestWrapError(t *testing.T) {
 	if WrapError(nil, "context") != nil {
 		t.Fatalf("WrapError(nil) should return nil")

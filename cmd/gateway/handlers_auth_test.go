@@ -226,7 +226,7 @@ func TestHeaderGateMiddleware_MetricsBypassesValidation(t *testing.T) {
 }
 
 func TestHeaderGateMiddleware_UsesConstantTimeCompare(t *testing.T) {
-	src, err := os.ReadFile("../../internal/headergate/middleware.go")
+	src, err := os.ReadFile("../../internal/middleware/headergate.go")
 	if err != nil {
 		t.Fatalf("read internal header gate middleware: %v", err)
 	}

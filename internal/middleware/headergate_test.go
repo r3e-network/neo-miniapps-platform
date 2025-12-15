@@ -1,4 +1,4 @@
-package headergate
+package middleware
 
 import (
 	"net/http"
@@ -7,7 +7,7 @@ import (
 )
 
 func TestMiddleware_HealthExempt(t *testing.T) {
-	handler := Middleware("test-secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := HeaderGateMiddleware("test-secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -21,7 +21,7 @@ func TestMiddleware_HealthExempt(t *testing.T) {
 }
 
 func TestMiddleware_MetricsExempt(t *testing.T) {
-	handler := Middleware("test-secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := HeaderGateMiddleware("test-secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -35,7 +35,7 @@ func TestMiddleware_MetricsExempt(t *testing.T) {
 }
 
 func TestMiddleware_MissingHeaders(t *testing.T) {
-	handler := Middleware("test-secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := HeaderGateMiddleware("test-secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -49,7 +49,7 @@ func TestMiddleware_MissingHeaders(t *testing.T) {
 }
 
 func TestMiddleware_MissingVercelID(t *testing.T) {
-	handler := Middleware("test-secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := HeaderGateMiddleware("test-secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -64,7 +64,7 @@ func TestMiddleware_MissingVercelID(t *testing.T) {
 }
 
 func TestMiddleware_MissingSecret(t *testing.T) {
-	handler := Middleware("test-secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := HeaderGateMiddleware("test-secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -79,7 +79,7 @@ func TestMiddleware_MissingSecret(t *testing.T) {
 }
 
 func TestMiddleware_WrongSecret(t *testing.T) {
-	handler := Middleware("correct-secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := HeaderGateMiddleware("correct-secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -95,7 +95,7 @@ func TestMiddleware_WrongSecret(t *testing.T) {
 }
 
 func TestMiddleware_CorrectHeaders(t *testing.T) {
-	handler := Middleware("test-secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := HeaderGateMiddleware("test-secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -112,7 +112,7 @@ func TestMiddleware_CorrectHeaders(t *testing.T) {
 
 func TestMiddleware_ConstantTimeCompare(t *testing.T) {
 	// Verify that different length secrets don't short-circuit
-	handler := Middleware("short")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := HeaderGateMiddleware("short")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -128,7 +128,7 @@ func TestMiddleware_ConstantTimeCompare(t *testing.T) {
 }
 
 func BenchmarkMiddleware(b *testing.B) {
-	handler := Middleware("benchmark-secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := HeaderGateMiddleware("benchmark-secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 

@@ -43,11 +43,7 @@ func NewClient(cfg Config) (*Client, error) {
 		key = os.Getenv("SUPABASE_SERVICE_KEY")
 	}
 
-	env := strings.ToLower(strings.TrimSpace(os.Getenv("MARBLE_ENV")))
-	if env == "" {
-		env = "development"
-	}
-	isDev := env == "development" || env == "testing"
+	isDev := runtime.IsDevelopmentOrTesting()
 	strict := runtime.StrictIdentityMode()
 
 	usingMockURL := false

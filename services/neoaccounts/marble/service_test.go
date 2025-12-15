@@ -2175,6 +2175,8 @@ func TestInitializePoolAlreadyFull(t *testing.T) {
 }
 
 func TestInitializePoolError(t *testing.T) {
+	// Fail closed in strict/production mode.
+	t.Setenv("MARBLE_ENV", "production")
 	svc, mockRepo := newTestServiceWithMock(t)
 
 	mockRepo.simulateError = true

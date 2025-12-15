@@ -3,19 +3,18 @@ package marble
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"sync"
-	"time"
 
 	"github.com/gorilla/mux"
 
 	"github.com/R3E-Network/service_layer/internal/database"
-	"github.com/R3E-Network/service_layer/internal/httputil"
 )
 
-// Service represents a base service that runs as a Marble.
+// Service is a minimal base for Marble-hosted services.
+//
+// Prefer embedding `services/common/service.BaseService` in actual services; it
+// wraps this type and provides lifecycle hooks, workers, and standard routes.
 type Service struct {
 	mu sync.RWMutex
 
@@ -31,7 +30,6 @@ type Service struct {
 
 	// State
 	running bool
-	stopCh  chan struct{}
 }
 
 // ServiceConfig holds service configuration.
@@ -52,7 +50,6 @@ func NewService(cfg ServiceConfig) *Service {
 		marble:  cfg.Marble,
 		db:      cfg.DB,
 		router:  mux.NewRouter(),
-		stopCh:  make(chan struct{}),
 	}
 }
 
@@ -109,7 +106,6 @@ func (s *Service) Stop() error {
 	}
 
 	s.running = false
-	close(s.stopCh)
 	return nil
 }
 
@@ -118,127 +114,4 @@ func (s *Service) IsRunning() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.running
-}
-
-// =============================================================================
-// Request/Response Types
-// =============================================================================
-
-// Request represents a service request.
-type Request struct {
-	ID        string          `json:"id"`
-	UserID    string          `json:"user_id"`
-	Service   string          `json:"service"`
-	Method    string          `json:"method"`
-	Payload   json.RawMessage `json:"payload"`
-	Timestamp time.Time       `json:"timestamp"`
-}
-
-// Response represents a service response.
-type Response struct {
-	ID        string          `json:"id"`
-	RequestID string          `json:"request_id"`
-	Success   bool            `json:"success"`
-	Result    json.RawMessage `json:"result,omitempty"`
-	Error     string          `json:"error,omitempty"`
-	GasUsed   int64           `json:"gas_used"`
-	Timestamp time.Time       `json:"timestamp"`
-	Signature []byte          `json:"signature,omitempty"`
-}
-
-// =============================================================================
-// Service Handler Interface
-// =============================================================================
-
-// Handler defines the interface for service handlers.
-type Handler interface {
-	// Handle processes a service request.
-	Handle(ctx context.Context, req *Request) (*Response, error)
-
-	// Methods returns the list of supported methods.
-	Methods() []string
-}
-
-// =============================================================================
-// HTTP Middleware
-// =============================================================================
-
-// AuthMiddleware validates JWT tokens.
-//
-// Deprecated: use `internal/middleware.AuthMiddleware` (or a service-specific auth middleware).
-func AuthMiddleware(marble *Marble) mux.MiddlewareFunc {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Extract token from Authorization header
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
-				http.Error(w, "missing authorization header", http.StatusUnauthorized)
-				return
-			}
-
-			// Legacy minimal check: only validates Bearer prefix.
-			// Use `internal/middleware.AuthMiddleware` for full JWT validation.
-			if len(authHeader) < 7 || authHeader[:7] != "Bearer " {
-				http.Error(w, "invalid authorization header", http.StatusUnauthorized)
-				return
-			}
-
-			// Add user context and continue
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
-// LoggingMiddleware logs requests.
-//
-// Deprecated: use `internal/middleware.LoggingMiddleware`.
-func LoggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		next.ServeHTTP(w, r)
-		fmt.Printf("[%s] %s %s %v\n", time.Now().Format(time.RFC3339), r.Method, r.URL.Path, time.Since(start))
-	})
-}
-
-// RecoveryMiddleware recovers from panics.
-//
-// Deprecated: use `internal/middleware.NewRecoveryMiddleware(logger).Handler`.
-func RecoveryMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
-			if err := recover(); err != nil {
-				fmt.Printf("panic recovered: %v\n", err)
-				http.Error(w, "internal server error", http.StatusInternalServerError)
-			}
-		}()
-		next.ServeHTTP(w, r)
-	})
-}
-
-// =============================================================================
-// Health Check
-// =============================================================================
-
-// HealthResponse represents a health check response.
-type HealthResponse struct {
-	Status    string `json:"status"`
-	Service   string `json:"service"`
-	Version   string `json:"version"`
-	Enclave   bool   `json:"enclave"`
-	Timestamp string `json:"timestamp"`
-}
-
-// HealthHandler returns a health check handler.
-func HealthHandler(s *Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		resp := HealthResponse{
-			Status:    "healthy",
-			Service:   s.Name(),
-			Version:   s.Version(),
-			Enclave:   s.Marble().IsEnclave(),
-			Timestamp: time.Now().Format(time.RFC3339),
-		}
-
-		httputil.WriteJSON(w, http.StatusOK, resp)
-	}
 }

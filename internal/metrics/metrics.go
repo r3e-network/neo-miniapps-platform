@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/R3E-Network/service_layer/internal/runtime"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -227,14 +228,7 @@ func (m *Metrics) DecrementInFlight() {
 // Helper functions
 
 func getEnvironment() string {
-	env := strings.TrimSpace(os.Getenv("MARBLE_ENV"))
-	if env == "" {
-		env = strings.TrimSpace(os.Getenv("ENVIRONMENT"))
-	}
-	if env == "" {
-		env = "development"
-	}
-	return env
+	return string(runtime.Env())
 }
 
 // Enabled returns whether Prometheus metrics should be exposed.
@@ -245,8 +239,7 @@ func getEnvironment() string {
 func Enabled() bool {
 	raw := strings.ToLower(strings.TrimSpace(os.Getenv("METRICS_ENABLED")))
 	if raw == "" {
-		env := strings.ToLower(strings.TrimSpace(os.Getenv("MARBLE_ENV")))
-		return env != "production"
+		return !runtime.IsProduction()
 	}
 	switch raw {
 	case "1", "true", "yes", "on":

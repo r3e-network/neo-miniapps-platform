@@ -3,7 +3,6 @@ package contract
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -103,63 +102,6 @@ func TestE2EFullMixingFlow(t *testing.T) {
 		if request.Amount < neovaultSvc.GetTokenConfig("GAS").MinTxAmount {
 			t.Errorf("amount below minimum")
 		}
-	})
-
-	t.Run("step 4: neoaccounts client integration", func(t *testing.T) {
-		client := neovault.NewNeoAccountsClient(apServer.URL, "neovault")
-		ctx := context.Background()
-
-		mux := http.NewServeMux()
-		mux.HandleFunc("/request", func(w http.ResponseWriter, r *http.Request) {
-			if r.Method != "POST" {
-				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-				return
-			}
-
-			var input map[string]interface{}
-			json.NewDecoder(r.Body).Decode(&input)
-
-			accounts := []neoaccounts.AccountInfo{
-				{ID: "e2e-acc-1", Address: "NAddr1", Balances: map[string]neoaccounts.TokenBalance{"GAS": {Amount: 1000000}}},
-				{ID: "e2e-acc-2", Address: "NAddr2", Balances: map[string]neoaccounts.TokenBalance{"GAS": {Amount: 1000000}}},
-				{ID: "e2e-acc-3", Address: "NAddr3", Balances: map[string]neoaccounts.TokenBalance{"GAS": {Amount: 1000000}}},
-			}
-
-			json.NewEncoder(w).Encode(neoaccounts.RequestAccountsResponse{
-				Accounts: accounts,
-				LockID:   "e2e-lock-1",
-			})
-		})
-
-		mux.HandleFunc("/release", func(w http.ResponseWriter, r *http.Request) {
-			json.NewEncoder(w).Encode(map[string]int{"released_count": 3})
-		})
-
-		mockServer := httptest.NewServer(mux)
-		defer mockServer.Close()
-
-		mockClient := neovault.NewNeoAccountsClient(mockServer.URL, "neovault")
-
-		resp, err := mockClient.RequestAccounts(ctx, 3, "e2e-mixing")
-		if err != nil {
-			t.Fatalf("RequestAccounts: %v", err)
-		}
-
-		if len(resp.Accounts) != 3 {
-			t.Errorf("expected 3 accounts, got %d", len(resp.Accounts))
-		}
-
-		accountIDs := make([]string, len(resp.Accounts))
-		for i, acc := range resp.Accounts {
-			accountIDs[i] = acc.ID
-		}
-
-		err = mockClient.ReleaseAccounts(ctx, accountIDs)
-		if err != nil {
-			t.Fatalf("ReleaseAccounts: %v", err)
-		}
-
-		_ = client
 	})
 }
 

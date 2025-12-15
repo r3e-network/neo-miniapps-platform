@@ -1,4 +1,4 @@
-package secretstore
+package client
 
 import "testing"
 

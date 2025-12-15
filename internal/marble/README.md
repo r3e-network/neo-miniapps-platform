@@ -24,33 +24,25 @@ m, err := marble.New(marble.Config{
 
 ### Service (`service.go`)
 
-Base service class that all TEE services embed.
+Low-level service base (identity + router + dependency holders).
+
+Most services should embed `services/common/service.BaseService`, which wraps
+`*marble.Service` and adds:
+- Lifecycle hooks (`Start/Stop`) with safe shutdown handling
+- Background worker registration helpers
+- Standard endpoints (`/health`, `/ready`, `/info`)
 
 ```go
-type MyService struct {
-    *marble.Service
-    // service-specific fields
-}
+base := commonservice.NewBase(&commonservice.BaseConfig{
+    ID:      "myservice",
+    Name:    "My Service",
+    Version: "1.0.0",
+    Marble:  cfg.Marble,
+    DB:      cfg.DB,
+})
 
-func New(cfg Config) (*MyService, error) {
-    base := marble.NewService(marble.ServiceConfig{
-        ID:      "myservice",
-        Name:    "My Service",
-        Version: "1.0.0",
-        Marble:  cfg.Marble,
-        DB:      cfg.DB,
-    })
-    return &MyService{Service: base}, nil
-}
+base.RegisterStandardRoutes()
 ```
-
-### Worker (`worker.go`)
-
-Background worker management for services.
-
-### Config (`config.go`)
-
-Configuration management for Marble services.
 
 ## Secret Management
 
@@ -58,7 +50,7 @@ Secrets are injected by MarbleRun Coordinator and accessed via the Marble instan
 
 ```go
 // Get secret (returns false if not found)
-secret, ok := m.GetSecret("VRF_PRIVATE_KEY")
+secret, ok := m.Secret("VRF_PRIVATE_KEY")
 if !ok {
     return errors.New("VRF_PRIVATE_KEY not configured")
 }
@@ -99,11 +91,7 @@ resp, err := httpClient.Get("https://api.coingecko.com/api/v3/ping")
 ## Service Lifecycle
 
 ```go
-// Start service
-err := svc.Start(ctx)
-
-// Stop service
-err := svc.Stop()
+// Service lifecycle and workers are provided by `services/common/service.BaseService`.
 
 // Get service info
 id := svc.ID()
@@ -115,25 +103,6 @@ router := svc.Router()
 
 // Get database repository
 db := svc.DB()
-```
-
-## Health Handler
-
-Standard health endpoint handler:
-
-```go
-router.HandleFunc("/health", marble.HealthHandler(svc.Service)).Methods("GET")
-```
-
-Returns:
-```json
-{
-    "status": "healthy",
-    "service": "vrf",
-    "version": "2.0.0",
-    "enclave": true,
-    "timestamp": "2025-12-08T00:00:00Z"
-}
 ```
 
 ## Testing

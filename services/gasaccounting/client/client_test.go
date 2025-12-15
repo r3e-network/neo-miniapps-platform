@@ -10,10 +10,25 @@ import (
 	"time"
 )
 
+func newTestClient(t *testing.T, baseURL, serviceID string) *Client {
+	t.Helper()
+	client, err := New(Config{
+		BaseURL:   baseURL,
+		ServiceID: serviceID,
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	return client
+}
+
 func TestNew(t *testing.T) {
-	client := New("http://localhost:8080", "test-service")
-	if client == nil {
-		t.Fatal("New() returned nil")
+	client, err := New(Config{
+		BaseURL:   "http://localhost:8080",
+		ServiceID: "test-service",
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
 	}
 	if client.baseURL != "http://localhost:8080" {
 		t.Errorf("baseURL = %s, want http://localhost:8080", client.baseURL)
@@ -43,7 +58,7 @@ func TestGetBalance(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test")
+	client := newTestClient(t, server.URL, "test")
 	resp, err := client.GetBalance(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("GetBalance() error = %v", err)
@@ -60,7 +75,7 @@ func TestGetBalanceError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test")
+	client := newTestClient(t, server.URL, "test")
 	_, err := client.GetBalance(context.Background(), 1)
 	if err == nil {
 		t.Error("GetBalance() expected error")
@@ -88,7 +103,7 @@ func TestDeposit(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test")
+	client := newTestClient(t, server.URL, "test")
 	resp, err := client.Deposit(context.Background(), &DepositRequest{
 		UserID: 1,
 		Amount: 100000,
@@ -117,7 +132,7 @@ func TestConsume(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test-service")
+	client := newTestClient(t, server.URL, "test-service")
 	resp, err := client.Consume(context.Background(), 1, 5000, "req-001", "VRF request")
 	if err != nil {
 		t.Fatalf("Consume() error = %v", err)
@@ -143,7 +158,7 @@ func TestReserve(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test-service")
+	client := newTestClient(t, server.URL, "test-service")
 	resp, err := client.Reserve(context.Background(), 1, 10000, "req-001", 10*time.Minute)
 	if err != nil {
 		t.Fatalf("Reserve() error = %v", err)
@@ -169,7 +184,7 @@ func TestRelease(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test")
+	client := newTestClient(t, server.URL, "test")
 	resp, err := client.Release(context.Background(), "res-123", true, 8000)
 	if err != nil {
 		t.Fatalf("Release() error = %v", err)
@@ -197,7 +212,7 @@ func TestGetHistory(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test")
+	client := newTestClient(t, server.URL, "test")
 	resp, err := client.GetHistory(context.Background(), 1, "deposit", 10, 0)
 	if err != nil {
 		t.Fatalf("GetHistory() error = %v", err)
@@ -214,7 +229,7 @@ func TestGetHistoryNoFilters(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test")
+	client := newTestClient(t, server.URL, "test")
 	_, err := client.GetHistory(context.Background(), 1, "", 0, 0)
 	if err != nil {
 		t.Fatalf("GetHistory() error = %v", err)
@@ -222,7 +237,7 @@ func TestGetHistoryNoFilters(t *testing.T) {
 }
 
 func TestClientHTTPError(t *testing.T) {
-	client := New("http://invalid-host-that-does-not-exist:99999", "test")
+	client := newTestClient(t, "http://invalid-host-that-does-not-exist:99999", "test")
 	_, err := client.GetBalance(context.Background(), 1)
 	if err == nil {
 		t.Error("Expected error for invalid host")
@@ -235,7 +250,7 @@ func TestClientDecodeError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test")
+	client := newTestClient(t, server.URL, "test")
 	_, err := client.GetBalance(context.Background(), 1)
 	if err == nil {
 		t.Error("Expected error for invalid JSON response")
@@ -249,7 +264,7 @@ func TestClient400Error(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test")
+	client := newTestClient(t, server.URL, "test")
 	_, err := client.Deposit(context.Background(), &DepositRequest{UserID: 0})
 	if err == nil {
 		t.Error("Expected error for 400 response")
@@ -262,7 +277,7 @@ func TestClient400ErrorNoBody(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test")
+	client := newTestClient(t, server.URL, "test")
 	_, err := client.Deposit(context.Background(), &DepositRequest{UserID: 0})
 	if err == nil {
 		t.Error("Expected error for 400 response without body")
@@ -276,7 +291,7 @@ func TestConsumeError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test")
+	client := newTestClient(t, server.URL, "test")
 	_, err := client.Consume(context.Background(), 1, 999999, "req-err", "test")
 	if err == nil {
 		t.Error("Expected error for consume failure")
@@ -290,7 +305,7 @@ func TestReserveError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test")
+	client := newTestClient(t, server.URL, "test")
 	_, err := client.Reserve(context.Background(), 1, 999999, "req-err", 5*time.Minute)
 	if err == nil {
 		t.Error("Expected error for reserve failure")
@@ -304,7 +319,7 @@ func TestReleaseError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test")
+	client := newTestClient(t, server.URL, "test")
 	_, err := client.Release(context.Background(), "non-existent", false, 0)
 	if err == nil {
 		t.Error("Expected error for release failure")
@@ -318,7 +333,7 @@ func TestGetHistoryError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test")
+	client := newTestClient(t, server.URL, "test")
 	_, err := client.GetHistory(context.Background(), 1, "", 10, 0)
 	if err == nil {
 		t.Error("Expected error for history failure")
@@ -331,7 +346,7 @@ func TestDepositDecodeError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test")
+	client := newTestClient(t, server.URL, "test")
 	_, err := client.Deposit(context.Background(), &DepositRequest{UserID: 1, Amount: 100})
 	if err == nil {
 		t.Error("Expected error for invalid JSON")
@@ -344,7 +359,7 @@ func TestConsumeDecodeError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test")
+	client := newTestClient(t, server.URL, "test")
 	_, err := client.Consume(context.Background(), 1, 100, "req", "desc")
 	if err == nil {
 		t.Error("Expected error for invalid JSON")
@@ -357,7 +372,7 @@ func TestReserveDecodeError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test")
+	client := newTestClient(t, server.URL, "test")
 	_, err := client.Reserve(context.Background(), 1, 100, "req", time.Minute)
 	if err == nil {
 		t.Error("Expected error for invalid JSON")
@@ -370,7 +385,7 @@ func TestReleaseDecodeError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test")
+	client := newTestClient(t, server.URL, "test")
 	_, err := client.Release(context.Background(), "res-1", false, 0)
 	if err == nil {
 		t.Error("Expected error for invalid JSON")
@@ -383,7 +398,7 @@ func TestGetHistoryDecodeError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test")
+	client := newTestClient(t, server.URL, "test")
 	_, err := client.GetHistory(context.Background(), 1, "", 10, 0)
 	if err == nil {
 		t.Error("Expected error for invalid JSON")

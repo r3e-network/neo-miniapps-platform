@@ -137,18 +137,15 @@ func main() {
 	} else if envSecret := os.Getenv("JWT_SECRET"); envSecret != "" {
 		jwtSecret = []byte(envSecret)
 	} else {
-		env := strings.ToLower(strings.TrimSpace(os.Getenv("MARBLE_ENV")))
-		if env == "" {
-			env = "development"
-		}
+		env := runtime.Env()
 		strict := runtime.StrictIdentityMode() || m.IsEnclave()
 
 		// In development/testing outside enclaves, allow an insecure default to keep
 		// local onboarding friction low. Never allow this in production or on
 		// enclave hardware.
-		if !strict && (env == "development" || env == "testing") {
+		if !strict && (env == runtime.Development || env == runtime.Testing) {
 			log.Printf("WARNING: Using insecure default JWT secret - DO NOT USE IN PRODUCTION")
-			jwtSecret = []byte("development-insecure-secret-32bytes-minimum-" + env)
+			jwtSecret = []byte("development-insecure-secret-32bytes-minimum-" + string(env))
 		} else {
 			log.Fatalf("CRITICAL: JWT_SECRET is required in production. Set via MarbleRun secrets or JWT_SECRET env var")
 		}

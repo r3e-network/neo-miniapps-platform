@@ -9,22 +9,6 @@ import (
 	"github.com/edgelesssys/ego/enclave"
 )
 
-// MasterKeyAttestation is a non-sensitive bundle proving the master key hash
-// is bound to enclave report data. The quote is intended for off-chain
-// verification; the account pool does not parse or validate it here.
-type MasterKeyAttestation struct {
-	Hash      string `json:"hash"`
-	PubKey    string `json:"pubkey,omitempty"`
-	Quote     string `json:"quote,omitempty"`
-	MRENCLAVE string `json:"mrenclave,omitempty"`
-	MRSIGNER  string `json:"mrsigner,omitempty"`
-	ProdID    uint16 `json:"prod_id,omitempty"`
-	ISVSVN    uint16 `json:"isvsvn,omitempty"`
-	Timestamp string `json:"timestamp"`
-	Source    string `json:"source"`
-	Simulated bool   `json:"simulated"`
-}
-
 func (s *Service) buildMasterKeyAttestation() MasterKeyAttestation {
 	summary := s.masterKeySummary()
 	att := MasterKeyAttestation{

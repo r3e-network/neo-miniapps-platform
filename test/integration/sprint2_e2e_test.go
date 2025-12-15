@@ -33,7 +33,7 @@ import (
 	"time"
 
 	signerpb "github.com/R3E-Network/service_layer/api/gen/signer"
-	"github.com/R3E-Network/service_layer/internal/headergate"
+	slmiddleware "github.com/R3E-Network/service_layer/internal/middleware"
 	"github.com/R3E-Network/service_layer/services/teesigner/signer"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -505,7 +505,7 @@ func TestSprint2_HeaderGateToAPIFlow_AllowsAuthorizedRequests(t *testing.T) {
 		called = true
 		w.WriteHeader(http.StatusNoContent)
 	})
-	handler := headergate.Middleware(sharedSecret)(base)
+	handler := slmiddleware.HeaderGateMiddleware(sharedSecret)(base)
 
 	req := httptest.NewRequest(http.MethodGet, "http://example/api/v1/me", nil)
 	req.Header.Set("X-Vercel-Id", "vercel-app")
@@ -717,7 +717,7 @@ func TestSprint2_FullRequestPath_VercelToSignerResponse(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 	gatewayMux.Handle("/api/sign", serviceHandler)
-	gatewayHandler := headergate.Middleware(sharedSecret)(gatewayMux)
+	gatewayHandler := slmiddleware.HeaderGateMiddleware(sharedSecret)(gatewayMux)
 
 	t.Run("health_bypasses_header_gate", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "http://gateway/health", nil)
@@ -801,7 +801,7 @@ func BenchmarkSprint2_HeaderGate_Baseline(b *testing.B) {
 
 func BenchmarkSprint2_HeaderGate_WithMiddleware(b *testing.B) {
 	sharedSecret := "bench-secret"
-	handler := headergate.Middleware(sharedSecret)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := slmiddleware.HeaderGateMiddleware(sharedSecret)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 

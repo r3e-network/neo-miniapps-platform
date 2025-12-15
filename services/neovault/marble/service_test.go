@@ -2,7 +2,6 @@ package neovaultmarble
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,7 +9,6 @@ import (
 	"time"
 
 	"github.com/R3E-Network/service_layer/internal/marble"
-	"github.com/R3E-Network/service_layer/internal/testutil"
 	neoaccounts "github.com/R3E-Network/service_layer/services/neoaccounts/client"
 	neovaultsupabase "github.com/R3E-Network/service_layer/services/neovault/supabase"
 )
@@ -180,16 +178,6 @@ func TestRequestRoundTrip(t *testing.T) {
 	}
 }
 
-func TestNeoAccountsClientCreation(t *testing.T) {
-	client := NewNeoAccountsClient("http://localhost:8090", "neovault")
-	if client.baseURL != "http://localhost:8090" {
-		t.Fatalf("baseURL mismatch: got %s want http://localhost:8090", client.baseURL)
-	}
-	if client.serviceID != "neovault" {
-		t.Fatalf("serviceID mismatch: got %s want neovault", client.serviceID)
-	}
-}
-
 // =============================================================================
 // Token Configuration Tests
 // =============================================================================
@@ -299,154 +287,6 @@ func TestConvertTargetsToDB(t *testing.T) {
 	}
 	if dbTargets[0].Address != "addr1" || dbTargets[0].Amount != 100 {
 		t.Errorf("dbTargets[0] = %+v, want {addr1, 100}", dbTargets[0])
-	}
-}
-
-// =============================================================================
-// NeoAccountsClient Tests with Mock Server
-// =============================================================================
-
-func TestNeoAccountsClientGetPoolInfo(t *testing.T) {
-	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/pool-info" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(neoaccounts.PoolInfoResponse{
-			TotalAccounts:    10,
-			ActiveAccounts:   8,
-			LockedAccounts:   2,
-			RetiringAccounts: 0,
-			TokenStats: map[string]neoaccounts.TokenStats{
-				"GAS": {TokenType: "GAS", TotalBalance: 1000000},
-			},
-		})
-	}))
-	defer mockServer.Close()
-
-	client := NewNeoAccountsClient(mockServer.URL, "neovault")
-	info, err := client.GetPoolInfo(context.Background())
-	if err != nil {
-		t.Fatalf("GetPoolInfo() error = %v", err)
-	}
-	if info.TotalAccounts != 10 {
-		t.Errorf("TotalAccounts = %d, want 10", info.TotalAccounts)
-	}
-	if gasStats, ok := info.TokenStats["GAS"]; !ok || gasStats.TotalBalance != 1000000 {
-		t.Errorf("TokenStats[GAS].TotalBalance = %v, want 1000000", info.TokenStats)
-	}
-}
-
-func TestNeoAccountsClientRequestAccounts(t *testing.T) {
-	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/request" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
-		if r.Method != "POST" {
-			t.Errorf("unexpected method: %s", r.Method)
-		}
-
-		var body map[string]interface{}
-		json.NewDecoder(r.Body).Decode(&body)
-		if body["service_id"] != "neovault" {
-			t.Errorf("service_id = %v, want neovault", body["service_id"])
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(neoaccounts.RequestAccountsResponse{
-			Accounts: []neoaccounts.AccountInfo{
-				{ID: "acc-1", Address: "NAddr1", Balances: map[string]neoaccounts.TokenBalance{"GAS": {Amount: 1000}}},
-				{ID: "acc-2", Address: "NAddr2", Balances: map[string]neoaccounts.TokenBalance{"GAS": {Amount: 2000}}},
-			},
-			LockID: "lock-123",
-		})
-	}))
-	defer mockServer.Close()
-
-	client := NewNeoAccountsClient(mockServer.URL, "neovault")
-	resp, err := client.RequestAccounts(context.Background(), 2, "test")
-	if err != nil {
-		t.Fatalf("RequestAccounts() error = %v", err)
-	}
-	if len(resp.Accounts) != 2 {
-		t.Errorf("len(Accounts) = %d, want 2", len(resp.Accounts))
-	}
-	if resp.LockID != "lock-123" {
-		t.Errorf("LockID = %s, want lock-123", resp.LockID)
-	}
-}
-
-func TestNeoAccountsClientReleaseAccounts(t *testing.T) {
-	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/release" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer mockServer.Close()
-
-	client := NewNeoAccountsClient(mockServer.URL, "neovault")
-	err := client.ReleaseAccounts(context.Background(), []string{"acc-1", "acc-2"})
-	if err != nil {
-		t.Fatalf("ReleaseAccounts() error = %v", err)
-	}
-}
-
-func TestNeoAccountsClientUpdateBalance(t *testing.T) {
-	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/balance" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer mockServer.Close()
-
-	client := NewNeoAccountsClient(mockServer.URL, "neovault")
-	err := client.UpdateBalance(context.Background(), "acc-1", 1000, nil)
-	if err != nil {
-		t.Fatalf("UpdateBalance() error = %v", err)
-	}
-}
-
-func TestNeoAccountsClientWithHTTPClient(t *testing.T) {
-	client := NewNeoAccountsClient("http://localhost:8090", "neovault")
-	customClient := &http.Client{Timeout: 60 * time.Second}
-
-	client = client.WithHTTPClient(customClient)
-	if client.httpClient != customClient {
-		t.Error("WithHTTPClient did not set custom client")
-	}
-
-	// Test with nil client (should not change)
-	originalClient := client.httpClient
-	client = client.WithHTTPClient(nil)
-	if client.httpClient != originalClient {
-		t.Error("WithHTTPClient(nil) should not change client")
-	}
-}
-
-func TestNeoAccountsClientErrorHandling(t *testing.T) {
-	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("internal error"))
-	}))
-	defer mockServer.Close()
-
-	client := NewNeoAccountsClient(mockServer.URL, "neovault")
-
-	_, err := client.GetPoolInfo(context.Background())
-	if err == nil {
-		t.Error("GetPoolInfo() should return error on 500")
-	}
-
-	_, err = client.RequestAccounts(context.Background(), 1, "test")
-	if err == nil {
-		t.Error("RequestAccounts() should return error on 500")
-	}
-
-	err = client.ReleaseAccounts(context.Background(), []string{"acc-1"})
-	if err == nil {
-		t.Error("ReleaseAccounts() should return error on 500")
 	}
 }
 
@@ -672,180 +512,6 @@ func BenchmarkMixRequestMarshal(b *testing.B) {
 }
 
 // =============================================================================
-// Additional NeoAccountsClient Tests
-// =============================================================================
-
-func TestNeoAccountsClientGetLockedAccounts(t *testing.T) {
-	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/accounts" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
-		if r.URL.Query().Get("service_id") != "neovault" {
-			t.Errorf("service_id = %s, want neovault", r.URL.Query().Get("service_id"))
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(neoaccounts.ListAccountsResponse{
-			Accounts: []neoaccounts.AccountInfo{
-				{ID: "acc-1", Address: "NAddr1", Balances: map[string]neoaccounts.TokenBalance{"GAS": {Amount: 1000}}},
-				{ID: "acc-2", Address: "NAddr2", Balances: map[string]neoaccounts.TokenBalance{"GAS": {Amount: 2000}}},
-			},
-		})
-	}))
-	defer mockServer.Close()
-
-	client := NewNeoAccountsClient(mockServer.URL, "neovault")
-	accounts, err := client.GetLockedAccounts(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("GetLockedAccounts() error = %v", err)
-	}
-	if len(accounts) != 2 {
-		t.Errorf("len(accounts) = %d, want 2", len(accounts))
-	}
-}
-
-func TestNeoAccountsClientGetLockedAccountsWithMinBalance(t *testing.T) {
-	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("min_balance") != "1000" {
-			t.Errorf("min_balance = %s, want 1000", r.URL.Query().Get("min_balance"))
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(neoaccounts.ListAccountsResponse{
-			Accounts: []neoaccounts.AccountInfo{
-				{ID: "acc-1", Address: "NAddr1", Balances: map[string]neoaccounts.TokenBalance{"GAS": {Amount: 2000}}},
-			},
-		})
-	}))
-	defer mockServer.Close()
-
-	client := NewNeoAccountsClient(mockServer.URL, "neovault")
-	minBalance := int64(1000)
-	accounts, err := client.GetLockedAccounts(context.Background(), &minBalance)
-	if err != nil {
-		t.Fatalf("GetLockedAccounts() error = %v", err)
-	}
-	if len(accounts) != 1 {
-		t.Errorf("len(accounts) = %d, want 1", len(accounts))
-	}
-}
-
-func TestNeoAccountsClientSignTransaction(t *testing.T) {
-	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/sign" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
-		if r.Method != "POST" {
-			t.Errorf("unexpected method: %s", r.Method)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(SignTransactionResult{
-			AccountID: "acc-1",
-			Signature: "c2lnbmF0dXJl", // base64 "signature"
-			PublicKey: "cHVia2V5",     // base64 "pubkey"
-		})
-	}))
-	defer mockServer.Close()
-
-	client := NewNeoAccountsClient(mockServer.URL, "neovault")
-	result, err := client.SignTransaction(context.Background(), "acc-1", []byte("txhash"))
-	if err != nil {
-		t.Fatalf("SignTransaction() error = %v", err)
-	}
-	if result.AccountID != "acc-1" {
-		t.Errorf("AccountID = %s, want acc-1", result.AccountID)
-	}
-	if result.Signature == "" {
-		t.Error("Signature should not be empty")
-	}
-}
-
-func TestNeoAccountsClientTransfer(t *testing.T) {
-	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/transfer" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
-		if r.Method != "POST" {
-			t.Errorf("unexpected method: %s", r.Method)
-		}
-
-		var body TransferRequest
-		json.NewDecoder(r.Body).Decode(&body)
-		if body.ServiceID != "neovault" {
-			t.Errorf("ServiceID = %s, want neovault", body.ServiceID)
-		}
-		if body.Amount != 1000 {
-			t.Errorf("Amount = %d, want 1000", body.Amount)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(TransferResult{
-			TxHash:    "0x123abc",
-			AccountID: "acc-1",
-			Amount:    1000,
-		})
-	}))
-	defer mockServer.Close()
-
-	client := NewNeoAccountsClient(mockServer.URL, "neovault")
-	result, err := client.Transfer(context.Background(), "acc-1", "NTargetAddr", 1000, "")
-	if err != nil {
-		t.Fatalf("Transfer() error = %v", err)
-	}
-	if result.TxHash != "0x123abc" {
-		t.Errorf("TxHash = %s, want 0x123abc", result.TxHash)
-	}
-	if result.Amount != 1000 {
-		t.Errorf("Amount = %d, want 1000", result.Amount)
-	}
-}
-
-func TestNeoAccountsClientTransferError(t *testing.T) {
-	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("insufficient balance"))
-	}))
-	defer mockServer.Close()
-
-	client := NewNeoAccountsClient(mockServer.URL, "neovault")
-	_, err := client.Transfer(context.Background(), "acc-1", "NTargetAddr", 1000, "")
-	if err == nil {
-		t.Error("Transfer() should return error on 400")
-	}
-}
-
-func TestNeoAccountsClientSignTransactionError(t *testing.T) {
-	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte("account not locked by service"))
-	}))
-	defer mockServer.Close()
-
-	client := NewNeoAccountsClient(mockServer.URL, "neovault")
-	_, err := client.SignTransaction(context.Background(), "acc-1", []byte("txhash"))
-	if err == nil {
-		t.Error("SignTransaction() should return error on 403")
-	}
-}
-
-func TestNeoAccountsClientUpdateBalanceWithAbsolute(t *testing.T) {
-	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]interface{}
-		json.NewDecoder(r.Body).Decode(&body)
-		if body["absolute"] == nil {
-			t.Error("absolute should be set")
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer mockServer.Close()
-
-	client := NewNeoAccountsClient(mockServer.URL, "neovault")
-	absolute := int64(5000)
-	err := client.UpdateBalance(context.Background(), "acc-1", 0, &absolute)
-	if err != nil {
-		t.Fatalf("UpdateBalance() error = %v", err)
-	}
-}
-
-// =============================================================================
 // Handler Tests (Basic validation only - handlers require full service setup)
 // =============================================================================
 
@@ -1005,79 +671,9 @@ func TestMixOptionDurations(t *testing.T) {
 	}
 }
 
-func TestSignTransactionRequestJSON(t *testing.T) {
-	req := SignTransactionRequest{
-		ServiceID: "neovault",
-		AccountID: "acc-1",
-		TxHash:    "dHhoYXNo", // base64 "txhash"
-	}
-
-	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("Marshal error: %v", err)
-	}
-
-	var decoded SignTransactionRequest
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		t.Fatalf("Unmarshal error: %v", err)
-	}
-
-	if decoded.ServiceID != req.ServiceID {
-		t.Errorf("ServiceID = %s, want %s", decoded.ServiceID, req.ServiceID)
-	}
-	if decoded.TxHash != req.TxHash {
-		t.Errorf("TxHash = %s, want %s", decoded.TxHash, req.TxHash)
-	}
-}
-
-func TestTransferRequestJSON(t *testing.T) {
-	req := TransferRequest{
-		ServiceID: "neovault",
-		AccountID: "acc-1",
-		ToAddress: "NTargetAddr",
-		Amount:    1000,
-		TokenHash: "0xd2a4cff31913016155e38e474a2c06d08be276cf",
-	}
-
-	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("Marshal error: %v", err)
-	}
-
-	var decoded TransferRequest
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		t.Fatalf("Unmarshal error: %v", err)
-	}
-
-	if decoded.Amount != req.Amount {
-		t.Errorf("Amount = %d, want %d", decoded.Amount, req.Amount)
-	}
-	if decoded.TokenHash != req.TokenHash {
-		t.Errorf("TokenHash = %s, want %s", decoded.TokenHash, req.TokenHash)
-	}
-}
-
 // =============================================================================
 // Additional Benchmarks
 // =============================================================================
-
-func BenchmarkNeoAccountsClientRequestAccounts(b *testing.B) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(neoaccounts.RequestAccountsResponse{
-			Accounts: []neoaccounts.AccountInfo{{ID: "acc-1", Address: "NAddr1", Balances: map[string]neoaccounts.TokenBalance{"GAS": {Amount: 1000}}}},
-			LockID:   "lock-123",
-		})
-	}))
-	defer mockServer.Close()
-
-	client := NewNeoAccountsClient(mockServer.URL, "neovault")
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = client.RequestAccounts(context.Background(), 1, "test")
-	}
-}
 
 func BenchmarkConvertTargetsToDB(b *testing.B) {
 	targets := []TargetAddress{

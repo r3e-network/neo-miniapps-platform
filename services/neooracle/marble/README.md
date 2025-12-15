@@ -53,7 +53,7 @@ The NeoOracle Marble service implements secure external data fetching:
 ```go
 type Service struct {
     *commonservice.BaseService
-    secretClient *secretstore.Client
+    secretClient *neostoreclient.Client
     httpClient   *http.Client
     maxBodyBytes int64
     allowlist    URLAllowlist
@@ -65,10 +65,10 @@ type Service struct {
 Fetches decrypted secrets from the NeoStore service over mTLS:
 
 ```go
-client, err := secretstore.New(secretstore.Config{
-    BaseURL:         secretsBaseURL,  // typically from SECRETS_BASE_URL
-    HTTPClient:      marbleHTTPClient, // use Marble mTLS client
-    CallerServiceID: ServiceID,        // dev-only fallback identity
+client, err := neostoreclient.New(neostoreclient.Config{
+    BaseURL:    secretsBaseURL,   // typically from SECRETS_BASE_URL
+    HTTPClient: marbleHTTPClient, // use Marble mTLS client
+    ServiceID:  ServiceID,        // dev-only fallback identity
 })
 ```
 

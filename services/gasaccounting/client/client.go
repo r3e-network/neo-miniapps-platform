@@ -9,25 +9,77 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
+
+	slhttputil "github.com/R3E-Network/service_layer/internal/httputil"
+	"github.com/R3E-Network/service_layer/internal/serviceauth"
 )
 
 // Client is a GasAccounting service client.
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
-	serviceID  string
+	baseURL      string
+	httpClient   *http.Client
+	serviceID    string
+	maxBodyBytes int64
 }
 
+// Config holds GasAccounting client configuration.
+type Config struct {
+	BaseURL string
+	// ServiceID identifies the caller. In strict identity mode this is redundant
+	// (caller identity is enforced by MarbleRun mTLS), but it's still useful for
+	// local development and debugging.
+	ServiceID string
+	Timeout   time.Duration
+	// HTTPClient optionally overrides the client used to execute requests.
+	// For MarbleRun mesh calls, prefer using `marble.Marble.HTTPClient()` so
+	// requests are sent over verified mTLS.
+	HTTPClient *http.Client
+	// MaxBodyBytes caps responses to prevent memory exhaustion.
+	MaxBodyBytes int64
+}
+
+const (
+	defaultTimeout     = 30 * time.Second
+	defaultMaxBodySize = 1 << 20 // 1MiB
+)
+
 // New creates a new GasAccounting client.
-func New(baseURL, serviceID string) *Client {
-	return &Client{
-		baseURL:   baseURL,
-		serviceID: serviceID,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+func New(cfg Config) (*Client, error) {
+	timeout := cfg.Timeout
+	if timeout == 0 {
+		timeout = defaultTimeout
 	}
+
+	baseURL, _, err := slhttputil.NormalizeServiceBaseURL(cfg.BaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("gasaccounting: %w", err)
+	}
+
+	client := cfg.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: timeout}
+	} else {
+		// Avoid mutating a caller-supplied client.
+		copied := *client
+		if copied.Timeout == 0 || cfg.Timeout != 0 {
+			copied.Timeout = timeout
+		}
+		client = &copied
+	}
+
+	maxBodyBytes := cfg.MaxBodyBytes
+	if maxBodyBytes <= 0 {
+		maxBodyBytes = defaultMaxBodySize
+	}
+
+	return &Client{
+		baseURL:      baseURL,
+		serviceID:    strings.TrimSpace(cfg.ServiceID),
+		httpClient:   client,
+		maxBodyBytes: maxBodyBytes,
+	}, nil
 }
 
 // =============================================================================
@@ -289,6 +341,17 @@ func (c *Client) GetHistory(ctx context.Context, userID int64, entryType string,
 // =============================================================================
 
 func (c *Client) do(req *http.Request, result any) error {
+	if c == nil {
+		return fmt.Errorf("gasaccounting: client is nil")
+	}
+	if c.httpClient == nil {
+		return fmt.Errorf("gasaccounting: http client not configured")
+	}
+
+	if req != nil && c.serviceID != "" && req.Header.Get(serviceauth.ServiceIDHeader) == "" {
+		req.Header.Set(serviceauth.ServiceIDHeader, c.serviceID)
+	}
+
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("http request: %w", err)
@@ -296,17 +359,40 @@ func (c *Client) do(req *http.Request, result any) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		var errResp struct {
-			Error string `json:"error"`
+		body, truncated, readErr := slhttputil.ReadAllWithLimit(resp.Body, 32<<10)
+		if readErr != nil {
+			return fmt.Errorf("gasaccounting error: %s (failed to read body: %v)", resp.Status, readErr)
 		}
-		if err := json.NewDecoder(resp.Body).Decode(&errResp); err == nil && errResp.Error != "" {
-			return fmt.Errorf("gasaccounting error: %s", errResp.Error)
+
+		msg := strings.TrimSpace(string(body))
+		if msg != "" {
+			var errResp struct {
+				Error   string `json:"error"`
+				Message string `json:"message"`
+			}
+			if err := json.Unmarshal(body, &errResp); err == nil {
+				if errResp.Error != "" {
+					return fmt.Errorf("gasaccounting error: %s", errResp.Error)
+				}
+				if errResp.Message != "" {
+					return fmt.Errorf("gasaccounting error: %s", errResp.Message)
+				}
+			}
+			if truncated {
+				msg += "...(truncated)"
+			}
+			return fmt.Errorf("gasaccounting error: %s - %s", resp.Status, msg)
 		}
-		return fmt.Errorf("gasaccounting error: status %d", resp.StatusCode)
+
+		return fmt.Errorf("gasaccounting error: %s", resp.Status)
 	}
 
 	if result != nil {
-		if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
+		respBody, err := slhttputil.ReadAllStrict(resp.Body, c.maxBodyBytes)
+		if err != nil {
+			return fmt.Errorf("read response: %w", err)
+		}
+		if err := json.Unmarshal(respBody, result); err != nil {
 			return fmt.Errorf("decode response: %w", err)
 		}
 	}

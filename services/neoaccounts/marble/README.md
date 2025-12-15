@@ -103,16 +103,23 @@ NO enclave identity (MRENCLAVE/MRSIGNER) is used in derivation.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/health` | GET | Service health check |
-| `/info` | GET | Pool statistics |
+| `/health` | GET | Liveness probe |
+| `/ready` | GET | Readiness probe |
+| `/info` | GET | Standard service info (ID/name/version) |
+| `/pool-info` | GET | Pool statistics (accounts + per-token stats) |
+| `/master-key` | GET | Master key attestation bundle (cacheable) |
 | `/accounts` | GET | List accounts by service |
 | `/request` | POST | Request and lock accounts |
 | `/release` | POST | Release locked accounts |
 | `/sign` | POST | Sign transaction hash |
 | `/batch-sign` | POST | Sign multiple transactions |
 | `/balance` | POST | Update account balance |
+| `/transfer` | POST | Transfer tokens from a pool account |
 
 ## Request/Response Types
+
+Canonical request/response DTOs live in `services/neoaccounts/types` to avoid
+duplicated/inconsistent API types across server and clients.
 
 ### RequestAccountsInput
 
@@ -130,13 +137,25 @@ type RequestAccountsInput struct {
 type AccountInfo struct {
     ID         string    `json:"id"`
     Address    string    `json:"address"`
-    Balance    int64     `json:"balance"`
+    Balances   map[string]TokenBalance `json:"balances"` // key: token_type (e.g. "GAS", "NEO")
     CreatedAt  time.Time `json:"created_at"`
     LastUsedAt time.Time `json:"last_used_at"`
     TxCount    int64     `json:"tx_count"`
     IsRetiring bool      `json:"is_retiring"`
     LockedBy   string    `json:"locked_by,omitempty"`
     LockedAt   time.Time `json:"locked_at,omitempty"`
+}
+```
+
+### TokenStats
+
+```go
+type TokenStats struct {
+    TokenType        string `json:"token_type"`
+    ScriptHash       string `json:"script_hash"`
+    TotalBalance     int64  `json:"total_balance"`
+    LockedBalance    int64  `json:"locked_balance"`
+    AvailableBalance int64  `json:"available_balance"`
 }
 ```
 
@@ -168,7 +187,7 @@ type PoolInfoResponse struct {
     ActiveAccounts   int   `json:"active_accounts"`
     LockedAccounts   int   `json:"locked_accounts"`
     RetiringAccounts int   `json:"retiring_accounts"`
-    TotalBalance     int64 `json:"total_balance"`
+    TokenStats       map[string]TokenStats `json:"token_stats"` // key: token_type
 }
 ```
 
@@ -196,7 +215,11 @@ type Config struct {
 - Master key never leaves MarbleRun TEE
 - Private keys derived on-demand, zeroed after use
 - Signatures computed inside TEE
-- Only public info (address, balance) exposed via API
+- Only public info (address, per-token balances) exposed via API
+
+In strict identity mode (production/SGX/MarbleRun TLS), caller identity is
+derived from verified mTLS peer identity; inter-service calls should use the
+MarbleRun-provided mTLS HTTP client.
 
 ### Account Locking
 
