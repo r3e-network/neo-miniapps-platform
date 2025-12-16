@@ -38,14 +38,6 @@ const (
 	ServiceFeePerExecution = 50000 // 0.0005 GAS
 )
 
-// Trigger type constants (matching contract)
-const (
-	TriggerTypeTime      uint8 = 1 // Cron-based time trigger
-	TriggerTypePrice     uint8 = 2 // Price threshold trigger
-	TriggerTypeEvent     uint8 = 3 // On-chain event trigger
-	TriggerTypeThreshold uint8 = 4 // Balance/value threshold
-)
-
 // Service implements the NeoFlow service.
 type Service struct {
 	*commonservice.BaseService

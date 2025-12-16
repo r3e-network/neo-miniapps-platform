@@ -35,8 +35,8 @@ Only these services are considered “product services” right now:
 Each service should follow the same internal pattern:
 
 - `services/<svc>/marble`: enclave runtime + HTTP handlers + worker loops.
-- `services/<svc>/chain`: service-specific contract calls / event parsing (no raw RPC clients here).
 - `services/<svc>/supabase`: service-specific persistence repository (if needed).
+- `services/<svc>/contract`: Neo N3 smart contract source (C#; compiled into `contracts/build/`).
 
 ### `cmd/` (binaries)
 
@@ -87,4 +87,4 @@ In code, this is primarily:
 - **Middleware lives in `infrastructure/middleware`** (no per-service copies).
 - **Services may not talk to Neo RPC directly** except via `infrastructure/chain`.
 - **Services may not duplicate “service base” lifecycle** (use `infrastructure/service.BaseService`).
-- **Service-specific contract wrappers live under `services/<svc>/chain`**, not in infrastructure.
+- **Contract bindings/event parsing live in `infrastructure/chain`** (`contracts_*.go`, `listener_events_*.go`) to avoid duplication.

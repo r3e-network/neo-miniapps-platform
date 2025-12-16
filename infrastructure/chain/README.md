@@ -78,12 +78,11 @@ _ = txHash
 ## Responsibility Rules
 
 - Services should **not** talk to Neo RPC directly.
-- Services may add service-specific wrappers under `services/<svc>/chain`, but
-  they must use `infrastructure/chain` for RPC, tx submission, and event I/O.
+- Contract bindings and typed event parsing live in `infrastructure/chain`
+  (`contracts_*.go`, `listener_events_*.go`) so services don't duplicate chain I/O.
 
 ## Testing
 
 ```bash
 go test ./infrastructure/chain/... -v
 ```
-

@@ -19,7 +19,6 @@ import (
 
 	"github.com/R3E-Network/service_layer/infrastructure/chain"
 	"github.com/R3E-Network/service_layer/infrastructure/runtime"
-	neoflowchain "github.com/R3E-Network/service_layer/services/automation/chain"
 	neoflowsupabase "github.com/R3E-Network/service_layer/services/automation/supabase"
 )
 
@@ -429,7 +428,7 @@ func (s *Service) checkChainTriggers(ctx context.Context) {
 	s.scheduler.mu.RUnlock()
 
 	for _, trigger := range triggers {
-		if trigger.Status != neoflowchain.TriggerStatusActive {
+		if trigger.Status != chain.NeoFlowTriggerStatusActive {
 			continue
 		}
 
@@ -447,14 +446,14 @@ func (s *Service) checkChainTriggers(ctx context.Context) {
 // evaluateTriggerCondition evaluates whether a trigger's condition is met.
 func (s *Service) evaluateTriggerCondition(ctx context.Context, trigger *chain.Trigger) (shouldExecute bool, executionData []byte) {
 	switch trigger.TriggerType {
-	case TriggerTypeTime:
+	case chain.NeoFlowTriggerTypeTime:
 		return s.evaluateTimeTrigger(trigger)
-	case TriggerTypePrice:
+	case chain.NeoFlowTriggerTypePrice:
 		return s.evaluatePriceTrigger(ctx, trigger)
-	case TriggerTypeEvent:
+	case chain.NeoFlowTriggerTypeEvent:
 		// Event triggers are handled by the event listener
 		return false, nil
-	case TriggerTypeThreshold:
+	case chain.NeoFlowTriggerTypeThreshold:
 		return s.evaluateThresholdTrigger(ctx, trigger)
 	default:
 		return false, nil
@@ -664,7 +663,7 @@ func (s *Service) executeChainTrigger(ctx context.Context, trigger *chain.Trigge
 
 		// Check if max executions reached
 		if t.MaxExecutions.Cmp(big.NewInt(0)) > 0 && t.ExecutionCount.Cmp(t.MaxExecutions) >= 0 {
-			t.Status = neoflowchain.TriggerStatusExpired
+			t.Status = chain.NeoFlowTriggerStatusExpired
 		}
 	}
 	s.scheduler.mu.Unlock()
@@ -678,13 +677,13 @@ func (s *Service) SetupEventTriggerListener() {
 
 	// Listen for TriggerRegistered events to add new triggers
 	s.eventListener.On("TriggerRegistered", func(event *chain.ContractEvent) error {
-		parsed, err := neoflowchain.ParseNeoFlowTriggerRegisteredEvent(event)
+		parsed, err := chain.ParseNeoFlowTriggerRegisteredEvent(event)
 		if err != nil {
 			return err
 		}
 
 		// Fetch full trigger details from contract
-		neoflowContract := neoflowchain.NewNeoFlowContract(s.chainClient, s.neoflowHash, nil)
+		neoflowContract := chain.NewNeoFlowContract(s.chainClient, s.neoflowHash, nil)
 		if parsed.TriggerID > uint64(math.MaxInt64) {
 			return fmt.Errorf("triggerID overflows int64: %d", parsed.TriggerID)
 		}
@@ -699,7 +698,7 @@ func (s *Service) SetupEventTriggerListener() {
 
 	// Listen for TriggerCancelled events to remove triggers
 	s.eventListener.On("TriggerCancelled", func(event *chain.ContractEvent) error {
-		parsed, err := neoflowchain.ParseNeoFlowTriggerCancelledEvent(event)
+		parsed, err := chain.ParseNeoFlowTriggerCancelledEvent(event)
 		if err != nil {
 			return err
 		}
@@ -709,14 +708,14 @@ func (s *Service) SetupEventTriggerListener() {
 
 	// Listen for TriggerPaused events
 	s.eventListener.On("TriggerPaused", func(event *chain.ContractEvent) error {
-		parsed, err := neoflowchain.ParseNeoFlowTriggerPausedEvent(event)
+		parsed, err := chain.ParseNeoFlowTriggerPausedEvent(event)
 		if err != nil {
 			return err
 		}
 
 		s.scheduler.mu.Lock()
 		if t, ok := s.scheduler.chainTriggers[parsed.TriggerID]; ok {
-			t.Status = neoflowchain.TriggerStatusPaused
+			t.Status = chain.NeoFlowTriggerStatusPaused
 		}
 		s.scheduler.mu.Unlock()
 		return nil
@@ -724,14 +723,14 @@ func (s *Service) SetupEventTriggerListener() {
 
 	// Listen for TriggerResumed events
 	s.eventListener.On("TriggerResumed", func(event *chain.ContractEvent) error {
-		parsed, err := neoflowchain.ParseNeoFlowTriggerResumedEvent(event)
+		parsed, err := chain.ParseNeoFlowTriggerResumedEvent(event)
 		if err != nil {
 			return err
 		}
 
 		s.scheduler.mu.Lock()
 		if t, ok := s.scheduler.chainTriggers[parsed.TriggerID]; ok {
-			t.Status = neoflowchain.TriggerStatusActive
+			t.Status = chain.NeoFlowTriggerStatusActive
 		}
 		s.scheduler.mu.Unlock()
 		return nil

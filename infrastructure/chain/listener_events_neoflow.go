@@ -1,16 +1,10 @@
-package neoflowchain
+package chain
 
-import (
-	"fmt"
-
-	"github.com/R3E-Network/service_layer/infrastructure/chain"
-)
+import "fmt"
 
 // =============================================================================
-// NeoFlow Service Events (Trigger-Based Pattern)
+// NeoFlow Events (NeoFlowService contract)
 // =============================================================================
-// Note: NeoFlow uses trigger pattern - users register triggers via Gateway,
-// TEE monitors conditions and executes callbacks when conditions are met.
 
 // NeoFlowTriggerRegisteredEvent represents a TriggerRegistered event.
 // Event: TriggerRegistered(triggerId, owner, targetContract, triggerType, condition)
@@ -23,7 +17,7 @@ type NeoFlowTriggerRegisteredEvent struct {
 }
 
 // ParseNeoFlowTriggerRegisteredEvent parses a TriggerRegistered event.
-func ParseNeoFlowTriggerRegisteredEvent(event *chain.ContractEvent) (*NeoFlowTriggerRegisteredEvent, error) {
+func ParseNeoFlowTriggerRegisteredEvent(event *ContractEvent) (*NeoFlowTriggerRegisteredEvent, error) {
 	if event.EventName != "TriggerRegistered" {
 		return nil, fmt.Errorf("not a TriggerRegistered event")
 	}
@@ -31,36 +25,41 @@ func ParseNeoFlowTriggerRegisteredEvent(event *chain.ContractEvent) (*NeoFlowTri
 		return nil, fmt.Errorf("invalid event state: expected 5 items, got %d", len(event.State))
 	}
 
-	triggerID, err := chain.ParseInteger(event.State[0])
+	triggerID, err := ParseInteger(event.State[0])
 	if err != nil {
 		return nil, fmt.Errorf("parse triggerId: %w", err)
 	}
 
-	owner, err := chain.ParseHash160(event.State[1])
+	owner, err := ParseHash160(event.State[1])
 	if err != nil {
 		return nil, fmt.Errorf("parse owner: %w", err)
 	}
 
-	targetContract, err := chain.ParseHash160(event.State[2])
+	targetContract, err := ParseHash160(event.State[2])
 	if err != nil {
 		return nil, fmt.Errorf("parse targetContract: %w", err)
 	}
 
-	triggerType, err := chain.ParseInteger(event.State[3])
+	triggerType, err := ParseInteger(event.State[3])
 	if err != nil {
 		return nil, fmt.Errorf("parse triggerType: %w", err)
 	}
 
-	condition, err := chain.ParseStringFromItem(event.State[4])
+	condition, err := ParseStringFromItem(event.State[4])
 	if err != nil {
 		return nil, fmt.Errorf("parse condition: %w", err)
+	}
+
+	triggerTypeU8, err := uint8FromBigInt(triggerType)
+	if err != nil {
+		return nil, fmt.Errorf("parse triggerType: %w", err)
 	}
 
 	return &NeoFlowTriggerRegisteredEvent{
 		TriggerID:      triggerID.Uint64(),
 		Owner:          owner,
 		TargetContract: targetContract,
-		TriggerType:    uint8(triggerType.Int64()),
+		TriggerType:    triggerTypeU8,
 		Condition:      condition,
 	}, nil
 }
@@ -75,7 +74,7 @@ type NeoFlowTriggerExecutedEvent struct {
 }
 
 // ParseNeoFlowTriggerExecutedEvent parses a TriggerExecuted event.
-func ParseNeoFlowTriggerExecutedEvent(event *chain.ContractEvent) (*NeoFlowTriggerExecutedEvent, error) {
+func ParseNeoFlowTriggerExecutedEvent(event *ContractEvent) (*NeoFlowTriggerExecutedEvent, error) {
 	if event.EventName != "TriggerExecuted" {
 		return nil, fmt.Errorf("not a TriggerExecuted event")
 	}
@@ -83,22 +82,22 @@ func ParseNeoFlowTriggerExecutedEvent(event *chain.ContractEvent) (*NeoFlowTrigg
 		return nil, fmt.Errorf("invalid event state: expected 4 items, got %d", len(event.State))
 	}
 
-	triggerID, err := chain.ParseInteger(event.State[0])
+	triggerID, err := ParseInteger(event.State[0])
 	if err != nil {
 		return nil, fmt.Errorf("parse triggerId: %w", err)
 	}
 
-	targetContract, err := chain.ParseHash160(event.State[1])
+	targetContract, err := ParseHash160(event.State[1])
 	if err != nil {
 		return nil, fmt.Errorf("parse targetContract: %w", err)
 	}
 
-	success, err := chain.ParseBoolean(event.State[2])
+	success, err := ParseBoolean(event.State[2])
 	if err != nil {
 		return nil, fmt.Errorf("parse success: %w", err)
 	}
 
-	timestamp, err := chain.ParseInteger(event.State[3])
+	timestamp, err := ParseInteger(event.State[3])
 	if err != nil {
 		return nil, fmt.Errorf("parse timestamp: %w", err)
 	}
@@ -118,7 +117,7 @@ type NeoFlowTriggerPausedEvent struct {
 }
 
 // ParseNeoFlowTriggerPausedEvent parses a TriggerPaused event.
-func ParseNeoFlowTriggerPausedEvent(event *chain.ContractEvent) (*NeoFlowTriggerPausedEvent, error) {
+func ParseNeoFlowTriggerPausedEvent(event *ContractEvent) (*NeoFlowTriggerPausedEvent, error) {
 	if event.EventName != "TriggerPaused" {
 		return nil, fmt.Errorf("not a TriggerPaused event")
 	}
@@ -126,7 +125,7 @@ func ParseNeoFlowTriggerPausedEvent(event *chain.ContractEvent) (*NeoFlowTrigger
 		return nil, fmt.Errorf("invalid event state: expected 1 item, got %d", len(event.State))
 	}
 
-	triggerID, err := chain.ParseInteger(event.State[0])
+	triggerID, err := ParseInteger(event.State[0])
 	if err != nil {
 		return nil, fmt.Errorf("parse triggerId: %w", err)
 	}
@@ -143,7 +142,7 @@ type NeoFlowTriggerResumedEvent struct {
 }
 
 // ParseNeoFlowTriggerResumedEvent parses a TriggerResumed event.
-func ParseNeoFlowTriggerResumedEvent(event *chain.ContractEvent) (*NeoFlowTriggerResumedEvent, error) {
+func ParseNeoFlowTriggerResumedEvent(event *ContractEvent) (*NeoFlowTriggerResumedEvent, error) {
 	if event.EventName != "TriggerResumed" {
 		return nil, fmt.Errorf("not a TriggerResumed event")
 	}
@@ -151,7 +150,7 @@ func ParseNeoFlowTriggerResumedEvent(event *chain.ContractEvent) (*NeoFlowTrigge
 		return nil, fmt.Errorf("invalid event state: expected 1 item, got %d", len(event.State))
 	}
 
-	triggerID, err := chain.ParseInteger(event.State[0])
+	triggerID, err := ParseInteger(event.State[0])
 	if err != nil {
 		return nil, fmt.Errorf("parse triggerId: %w", err)
 	}
@@ -168,7 +167,7 @@ type NeoFlowTriggerCancelledEvent struct {
 }
 
 // ParseNeoFlowTriggerCancelledEvent parses a TriggerCancelled event.
-func ParseNeoFlowTriggerCancelledEvent(event *chain.ContractEvent) (*NeoFlowTriggerCancelledEvent, error) {
+func ParseNeoFlowTriggerCancelledEvent(event *ContractEvent) (*NeoFlowTriggerCancelledEvent, error) {
 	if event.EventName != "TriggerCancelled" {
 		return nil, fmt.Errorf("not a TriggerCancelled event")
 	}
@@ -176,7 +175,7 @@ func ParseNeoFlowTriggerCancelledEvent(event *chain.ContractEvent) (*NeoFlowTrig
 		return nil, fmt.Errorf("invalid event state: expected 1 item, got %d", len(event.State))
 	}
 
-	triggerID, err := chain.ParseInteger(event.State[0])
+	triggerID, err := ParseInteger(event.State[0])
 	if err != nil {
 		return nil, fmt.Errorf("parse triggerId: %w", err)
 	}
@@ -185,3 +184,4 @@ func ParseNeoFlowTriggerCancelledEvent(event *chain.ContractEvent) (*NeoFlowTrig
 		TriggerID: triggerID.Uint64(),
 	}, nil
 }
+

@@ -237,7 +237,12 @@ func (n *NeoExpress) FastForward(blocks int) error {
 }
 
 func FindContractArtifacts(contractName string) (nefPath, manifestPath string, err error) {
-	basePath := filepath.Join("..", "..", "contracts", strings.ToLower(contractName))
+	contractName = strings.TrimSpace(contractName)
+	if contractName == "" {
+		return "", "", fmt.Errorf("contract name is required")
+	}
+
+	basePath := filepath.Join("..", "..", "contracts", "build")
 
 	nefPath = filepath.Join(basePath, contractName+".nef")
 	manifestPath = filepath.Join(basePath, contractName+".manifest.json")
@@ -263,9 +268,9 @@ func SkipIfNoNeoExpress(t *testing.T) {
 
 func SkipIfNoCompiledContracts(t *testing.T) {
 	t.Helper()
-	contractDir := filepath.Join("..", "..", "contracts", "gateway")
+	contractDir := filepath.Join("..", "..", "contracts", "build")
 	nefPath := filepath.Join(contractDir, "ServiceLayerGateway.nef")
 	if _, err := os.Stat(nefPath); os.IsNotExist(err) {
-		t.Skip("contracts not compiled, run 'make build-contracts' first")
+		t.Skip("contracts not compiled, run './contracts/build.sh' first")
 	}
 }

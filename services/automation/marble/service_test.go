@@ -657,10 +657,10 @@ func TestTriggerTypeConstants(t *testing.T) {
 		constant uint8
 		want     uint8
 	}{
-		{"TriggerTypeTime", TriggerTypeTime, 1},
-		{"TriggerTypePrice", TriggerTypePrice, 2},
-		{"TriggerTypeEvent", TriggerTypeEvent, 3},
-		{"TriggerTypeThreshold", TriggerTypeThreshold, 4},
+		{"TriggerTypeTime", chain.NeoFlowTriggerTypeTime, 1},
+		{"TriggerTypePrice", chain.NeoFlowTriggerTypePrice, 2},
+		{"TriggerTypeEvent", chain.NeoFlowTriggerTypeEvent, 3},
+		{"TriggerTypeThreshold", chain.NeoFlowTriggerTypeThreshold, 4},
 	}
 
 	for _, tt := range tests {
@@ -1193,9 +1193,9 @@ func TestRegisterUnregisterChainTrigger(t *testing.T) {
 	trigger := &chain.Trigger{
 		TriggerID:      big.NewInt(123),
 		Owner:          "owner",
-		TriggerType:    TriggerTypeTime,
+		TriggerType:    chain.NeoFlowTriggerTypeTime,
 		Condition:      "0 * * * *",
-		Status:         1,
+		Status:         chain.NeoFlowTriggerStatusActive,
 		ExecutionCount: big.NewInt(0),
 		MaxExecutions:  big.NewInt(10),
 	}
@@ -1243,7 +1243,7 @@ func TestEvaluateTriggerConditionEventType(t *testing.T) {
 
 	trigger := &chain.Trigger{
 		TriggerID:   big.NewInt(1),
-		TriggerType: TriggerTypeEvent,
+		TriggerType: chain.NeoFlowTriggerTypeEvent,
 	}
 
 	shouldExecute, data := svc.evaluateTriggerCondition(context.Background(), trigger)
@@ -1261,7 +1261,7 @@ func TestEvaluateTimeTriggerEmptyCondition(t *testing.T) {
 
 	trigger := &chain.Trigger{
 		TriggerID:   big.NewInt(1),
-		TriggerType: TriggerTypeTime,
+		TriggerType: chain.NeoFlowTriggerTypeTime,
 		Condition:   "",
 	}
 
@@ -1277,7 +1277,7 @@ func TestEvaluateTimeTriggerInvalidCron(t *testing.T) {
 
 	trigger := &chain.Trigger{
 		TriggerID:   big.NewInt(1),
-		TriggerType: TriggerTypeTime,
+		TriggerType: chain.NeoFlowTriggerTypeTime,
 		Condition:   "invalid",
 	}
 
@@ -1293,7 +1293,7 @@ func TestEvaluatePriceTriggerNoContract(t *testing.T) {
 
 	trigger := &chain.Trigger{
 		TriggerID:   big.NewInt(1),
-		TriggerType: TriggerTypePrice,
+		TriggerType: chain.NeoFlowTriggerTypePrice,
 		Condition:   `{"feed_id":"BTC/USD","operator":">","threshold":100000}`,
 	}
 
@@ -1309,7 +1309,7 @@ func TestEvaluatePriceTriggerInvalidCondition(t *testing.T) {
 
 	trigger := &chain.Trigger{
 		TriggerID:   big.NewInt(1),
-		TriggerType: TriggerTypePrice,
+		TriggerType: chain.NeoFlowTriggerTypePrice,
 		Condition:   "invalid json",
 	}
 
@@ -1325,7 +1325,7 @@ func TestEvaluateThresholdTriggerInvalidCondition(t *testing.T) {
 
 	trigger := &chain.Trigger{
 		TriggerID:   big.NewInt(1),
-		TriggerType: TriggerTypeThreshold,
+		TriggerType: chain.NeoFlowTriggerTypeThreshold,
 		Condition:   "invalid json",
 	}
 
@@ -1341,7 +1341,7 @@ func TestEvaluateThresholdTriggerValidCondition(t *testing.T) {
 
 	trigger := &chain.Trigger{
 		TriggerID:   big.NewInt(1),
-		TriggerType: TriggerTypeThreshold,
+		TriggerType: chain.NeoFlowTriggerTypeThreshold,
 		Condition:   `{"address":"NAddr123","asset":"GAS","operator":"<","threshold":1000000000}`,
 	}
 

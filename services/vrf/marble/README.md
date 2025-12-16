@@ -159,6 +159,6 @@ go test ./services/vrf/marble/... -v -cover
 ## Related Documentation
 
 - [NeoRand Service Overview](../README.md)
-- [Chain Integration](../chain/README.md)
+- [Chain Integration](../../../infrastructure/chain/README.md)
 - [Smart Contract](../contract/README.md)
 - [Database Layer](../supabase/README.md)

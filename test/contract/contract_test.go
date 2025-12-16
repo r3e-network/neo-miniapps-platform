@@ -33,40 +33,52 @@ func TestNeoExpressSetup(t *testing.T) {
 func TestContractCompilation(t *testing.T) {
 	SkipIfNoNeoExpress(t)
 
-	contracts := []string{
-		"ServiceLayerGateway",
-		"VRFService",
-		"NeoFeedsService",
-		"NeoFlowService",
+	type contractSpec struct {
+		name       string // artifact base name (matches contracts/build/*.nef)
+		sourceFile string // main source file for sanity checks
 	}
 
-	contractBase := filepath.Join("..", "..", "contracts")
+	specs := []contractSpec{
+		{
+			name:       "ServiceLayerGateway",
+			sourceFile: filepath.Join("..", "..", "contracts", "gateway", "ServiceLayerGateway.cs"),
+		},
+		{
+			name:       "VRFService",
+			sourceFile: filepath.Join("..", "..", "services", "vrf", "contract", "NeoRandService.cs"),
+		},
+		{
+			name:       "DataFeedsService",
+			sourceFile: filepath.Join("..", "..", "services", "datafeed", "contract", "NeoFeedsService.cs"),
+		},
+		{
+			name:       "NeoFlowService",
+			sourceFile: filepath.Join("..", "..", "services", "automation", "contract", "NeoFlowService.cs"),
+		},
+		{
+			name:       "ConfidentialService",
+			sourceFile: filepath.Join("..", "..", "services", "confcompute", "contract", "NeoComputeService.cs"),
+		},
+		{
+			name:       "OracleService",
+			sourceFile: filepath.Join("..", "..", "services", "conforacle", "contract", "NeoOracleService.cs"),
+		},
+	}
 
-	for _, contract := range contracts {
-		t.Run(contract, func(t *testing.T) {
-			var contractDir string
-			switch contract {
-			case "ServiceLayerGateway":
-				contractDir = "gateway"
-			case "VRFService":
-				contractDir = "neorand"
-			case "NeoFeedsService":
-				contractDir = "neofeeds"
-			case "NeoFlowService":
-				contractDir = "neoflow"
+	for _, spec := range specs {
+		spec := spec
+		t.Run(spec.name, func(t *testing.T) {
+			if _, err := os.Stat(spec.sourceFile); os.IsNotExist(err) {
+				t.Fatalf("source file not found: %s", spec.sourceFile)
 			}
 
-			sourceFile := filepath.Join(contractBase, contractDir, contract+".cs")
-			if _, err := os.Stat(sourceFile); os.IsNotExist(err) {
-				t.Skipf("source file not found: %s", sourceFile)
-			}
-
-			nefFile := filepath.Join(contractBase, contractDir, contract+".nef")
-			manifestFile := filepath.Join(contractBase, contractDir, contract+".manifest.json")
+			contractBase := filepath.Join("..", "..", "contracts", "build")
+			nefFile := filepath.Join(contractBase, spec.name+".nef")
+			manifestFile := filepath.Join(contractBase, spec.name+".manifest.json")
 
 			if _, err := os.Stat(nefFile); os.IsNotExist(err) {
 				t.Logf("NEF file not found, contract needs compilation: %s", nefFile)
-				t.Skip("contracts not compiled - run build.sh in contracts directory")
+				t.Skip("contracts not compiled - run ./contracts/build.sh")
 			}
 
 			if _, err := os.Stat(manifestFile); os.IsNotExist(err) {

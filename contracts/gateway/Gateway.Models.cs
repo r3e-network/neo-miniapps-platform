@@ -1,4 +1,4 @@
-using Neo;
+using Neo.SmartContract.Framework;
 using System.Numerics;
 
 namespace ServiceLayer.Gateway

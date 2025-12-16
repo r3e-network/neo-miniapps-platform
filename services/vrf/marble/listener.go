@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/R3E-Network/service_layer/infrastructure/chain"
-	vrfchain "github.com/R3E-Network/service_layer/services/vrf/chain"
 )
 
 // =============================================================================
@@ -24,7 +23,7 @@ func (s *Service) runEventListener(ctx context.Context) {
 
 	listener := s.eventListener
 	listener.On("VRFRequest", func(event *chain.ContractEvent) error {
-		parsed, err := vrfchain.ParseVRFRequestEvent(event)
+		parsed, err := chain.ParseVRFRequestEvent(event)
 		if err != nil {
 			return err
 		}
@@ -38,7 +37,7 @@ func (s *Service) runEventListener(ctx context.Context) {
 }
 
 // handleVRFRequestEvent processes a single VRF request event.
-func (s *Service) handleVRFRequestEvent(ctx context.Context, event *vrfchain.VRFRequestEvent) {
+func (s *Service) handleVRFRequestEvent(ctx context.Context, event *chain.VRFRequestEvent) {
 	s.mu.Lock()
 	if _, exists := s.requests[strconv.FormatUint(event.RequestID, 10)]; exists {
 		s.mu.Unlock()

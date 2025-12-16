@@ -205,5 +205,5 @@ neo-sdk compile NeoRandService.cs
 ## Related Documentation
 
 - [Marble Service](../marble/README.md)
-- [Chain Integration](../chain/README.md)
+- [Chain Integration](../../../infrastructure/chain/README.md)
 - [Service Overview](../README.md)

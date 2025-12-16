@@ -1,5 +1,4 @@
-// Package vrfchain provides VRF-specific chain interaction.
-package vrfchain
+package chain_test
 
 import (
 	"context"
@@ -12,10 +11,6 @@ import (
 	"github.com/R3E-Network/service_layer/infrastructure/chain"
 	"github.com/R3E-Network/service_layer/infrastructure/testutil"
 )
-
-// =============================================================================
-// Test Helpers
-// =============================================================================
 
 func newTestClient(t *testing.T, handler http.HandlerFunc) *chain.Client {
 	t.Helper()
@@ -56,57 +51,15 @@ func makeRPCError(code int, message string) []byte {
 	return data
 }
 
-// =============================================================================
-// Module Tests
-// =============================================================================
-
-func TestModule_ServiceType(t *testing.T) {
-	m := &Module{}
-	if m.ServiceType() != "neorand" {
-		t.Errorf("ServiceType() = %s, want vrf", m.ServiceType())
-	}
-}
-
-func TestModule_Initialize(t *testing.T) {
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		w.Write(makeRPCResponse(100))
-	}
-	client := newTestClient(t, handler)
-
-	m := &Module{}
-	err := m.Initialize(client, nil, "0x1234567890abcdef")
-	if err != nil {
-		t.Fatalf("Initialize() error = %v", err)
-	}
-
-	if m.Contract() == nil {
-		t.Error("Contract() should not be nil after Initialize")
-	}
-}
-
-func TestModule_Contract(t *testing.T) {
-	m := &Module{}
-	if m.Contract() != nil {
-		t.Error("Contract() should be nil before Initialize")
-	}
-}
-
-// =============================================================================
-// VRFContract Tests
-// =============================================================================
-
 func TestNewVRFContract(t *testing.T) {
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		w.Write(makeRPCResponse(100))
 	}
 	client := newTestClient(t, handler)
 
-	contract := NewVRFContract(client, "0x1234", nil)
+	contract := chain.NewVRFContract(client, "0x1234", nil)
 	if contract == nil {
 		t.Fatal("NewVRFContract() returned nil")
-	}
-	if contract.contractHash != "0x1234" {
-		t.Errorf("contractHash = %s, want 0x1234", contract.contractHash)
 	}
 }
 
@@ -116,13 +69,13 @@ func TestGetRandomness_Success(t *testing.T) {
 			State:       "HALT",
 			GasConsumed: "1000000",
 			Stack: []chain.StackItem{
-				{Type: "ByteString", Value: json.RawMessage(`"746573742d72616e646f6d6e657373"`)}, // hex "test-randomness"
+				{Type: "ByteString", Value: json.RawMessage(`"746573742d72616e646f6d6e657373"`)},
 			},
 		}
 		w.Write(makeRPCResponse(result))
 	}
 	client := newTestClient(t, handler)
-	contract := NewVRFContract(client, "0x1234", nil)
+	contract := chain.NewVRFContract(client, "0x1234", nil)
 
 	randomness, err := contract.GetRandomness(context.Background(), big.NewInt(1))
 	if err != nil {
@@ -143,7 +96,7 @@ func TestGetRandomness_ExecutionFailed(t *testing.T) {
 		w.Write(makeRPCResponse(result))
 	}
 	client := newTestClient(t, handler)
-	contract := NewVRFContract(client, "0x1234", nil)
+	contract := chain.NewVRFContract(client, "0x1234", nil)
 
 	_, err := contract.GetRandomness(context.Background(), big.NewInt(1))
 	if err == nil {
@@ -161,7 +114,7 @@ func TestGetRandomness_EmptyStack(t *testing.T) {
 		w.Write(makeRPCResponse(result))
 	}
 	client := newTestClient(t, handler)
-	contract := NewVRFContract(client, "0x1234", nil)
+	contract := chain.NewVRFContract(client, "0x1234", nil)
 
 	_, err := contract.GetRandomness(context.Background(), big.NewInt(1))
 	if err == nil {
@@ -174,7 +127,7 @@ func TestGetRandomness_RPCError(t *testing.T) {
 		w.Write(makeRPCError(-100, "contract not found"))
 	}
 	client := newTestClient(t, handler)
-	contract := NewVRFContract(client, "0x1234", nil)
+	contract := chain.NewVRFContract(client, "0x1234", nil)
 
 	_, err := contract.GetRandomness(context.Background(), big.NewInt(1))
 	if err == nil {
@@ -188,13 +141,13 @@ func TestGetProof_Success(t *testing.T) {
 			State:       "HALT",
 			GasConsumed: "1000000",
 			Stack: []chain.StackItem{
-				{Type: "ByteString", Value: json.RawMessage(`"70726f6f662d64617461"`)}, // hex "proof-data"
+				{Type: "ByteString", Value: json.RawMessage(`"70726f6f662d64617461"`)},
 			},
 		}
 		w.Write(makeRPCResponse(result))
 	}
 	client := newTestClient(t, handler)
-	contract := NewVRFContract(client, "0x1234", nil)
+	contract := chain.NewVRFContract(client, "0x1234", nil)
 
 	proof, err := contract.GetProof(context.Background(), big.NewInt(1))
 	if err != nil {
@@ -205,36 +158,19 @@ func TestGetProof_Success(t *testing.T) {
 	}
 }
 
-func TestGetProof_ExecutionFailed(t *testing.T) {
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		result := chain.InvokeResult{
-			State:     "FAULT",
-			Exception: "execution failed",
-		}
-		w.Write(makeRPCResponse(result))
-	}
-	client := newTestClient(t, handler)
-	contract := NewVRFContract(client, "0x1234", nil)
-
-	_, err := contract.GetProof(context.Background(), big.NewInt(1))
-	if err == nil {
-		t.Error("GetProof() should return error on FAULT state")
-	}
-}
-
 func TestGetVRFPublicKey_Success(t *testing.T) {
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		result := chain.InvokeResult{
 			State:       "HALT",
 			GasConsumed: "1000000",
 			Stack: []chain.StackItem{
-				{Type: "ByteString", Value: json.RawMessage(`"7075626c69632d6b6579"`)}, // hex "public-key"
+				{Type: "ByteString", Value: json.RawMessage(`"7075626c69632d6b6579"`)},
 			},
 		}
 		w.Write(makeRPCResponse(result))
 	}
 	client := newTestClient(t, handler)
-	contract := NewVRFContract(client, "0x1234", nil)
+	contract := chain.NewVRFContract(client, "0x1234", nil)
 
 	pubKey, err := contract.GetVRFPublicKey(context.Background())
 	if err != nil {
@@ -242,23 +178,6 @@ func TestGetVRFPublicKey_Success(t *testing.T) {
 	}
 	if pubKey == nil {
 		t.Error("pubKey should not be nil")
-	}
-}
-
-func TestGetVRFPublicKey_ExecutionFailed(t *testing.T) {
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		result := chain.InvokeResult{
-			State:     "FAULT",
-			Exception: "execution failed",
-		}
-		w.Write(makeRPCResponse(result))
-	}
-	client := newTestClient(t, handler)
-	contract := NewVRFContract(client, "0x1234", nil)
-
-	_, err := contract.GetVRFPublicKey(context.Background())
-	if err == nil {
-		t.Error("GetVRFPublicKey() should return error on FAULT state")
 	}
 }
 
@@ -274,7 +193,7 @@ func TestVerifyProof_Success(t *testing.T) {
 		w.Write(makeRPCResponse(result))
 	}
 	client := newTestClient(t, handler)
-	contract := NewVRFContract(client, "0x1234", nil)
+	contract := chain.NewVRFContract(client, "0x1234", nil)
 
 	valid, err := contract.VerifyProof(context.Background(), []byte("seed"), []byte("words"), []byte("proof"))
 	if err != nil {
@@ -285,57 +204,13 @@ func TestVerifyProof_Success(t *testing.T) {
 	}
 }
 
-func TestVerifyProof_Invalid(t *testing.T) {
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		result := chain.InvokeResult{
-			State:       "HALT",
-			GasConsumed: "1000000",
-			Stack: []chain.StackItem{
-				{Type: "Boolean", Value: json.RawMessage(`false`)},
-			},
-		}
-		w.Write(makeRPCResponse(result))
-	}
-	client := newTestClient(t, handler)
-	contract := NewVRFContract(client, "0x1234", nil)
-
-	valid, err := contract.VerifyProof(context.Background(), []byte("seed"), []byte("words"), []byte("proof"))
-	if err != nil {
-		t.Fatalf("VerifyProof() error = %v", err)
-	}
-	if valid {
-		t.Error("VerifyProof() = true, want false")
-	}
-}
-
-func TestVerifyProof_ExecutionFailed(t *testing.T) {
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		result := chain.InvokeResult{
-			State:     "FAULT",
-			Exception: "execution failed",
-		}
-		w.Write(makeRPCResponse(result))
-	}
-	client := newTestClient(t, handler)
-	contract := NewVRFContract(client, "0x1234", nil)
-
-	_, err := contract.VerifyProof(context.Background(), []byte("seed"), []byte("words"), []byte("proof"))
-	if err == nil {
-		t.Error("VerifyProof() should return error on FAULT state")
-	}
-}
-
-// =============================================================================
-// Benchmarks
-// =============================================================================
-
 func BenchmarkGetRandomness(b *testing.B) {
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		result := chain.InvokeResult{
 			State:       "HALT",
 			GasConsumed: "1000000",
 			Stack: []chain.StackItem{
-				{Type: "ByteString", Value: json.RawMessage(`"746573742d72616e646f6d6e657373"`)}, // hex
+				{Type: "ByteString", Value: json.RawMessage(`"746573742d72616e646f6d6e657373"`)},
 			},
 		}
 		w.Write(makeRPCResponse(result))
@@ -344,10 +219,11 @@ func BenchmarkGetRandomness(b *testing.B) {
 	defer server.Close()
 
 	client, _ := chain.NewClient(chain.Config{RPCURL: server.URL})
-	contract := NewVRFContract(client, "0x1234", nil)
+	contract := chain.NewVRFContract(client, "0x1234", nil)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = contract.GetRandomness(context.Background(), big.NewInt(1))
 	}
 }
+

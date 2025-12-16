@@ -46,7 +46,7 @@ namespace ServiceLayer.Confidential
                 throw new Exception("Computation type required");
 
             // Calculate input commitment (hash of encrypted input for verification)
-            byte[] inputCommitment = CryptoLib.Sha256((ByteString)request.EncryptedInput);
+            byte[] inputCommitment = (byte[])CryptoLib.Sha256((ByteString)request.EncryptedInput);
 
             // Store request
             ConfidentialStoredRequest stored = new ConfidentialStoredRequest
@@ -112,11 +112,12 @@ namespace ServiceLayer.Confidential
         /// <summary>Verify that encrypted input matches stored commitment</summary>
         public static bool VerifyInputCommitment(BigInteger requestId, byte[] encryptedInput)
         {
-            byte[] storedCommitment = GetInputCommitment(requestId);
+            StorageMap commitmentMap = new StorageMap(Storage.CurrentContext, PREFIX_COMMITMENT);
+            ByteString storedCommitment = commitmentMap.Get(requestId.ToByteArray());
             if (storedCommitment == null) return false;
 
-            byte[] computedCommitment = CryptoLib.Sha256((ByteString)encryptedInput);
-            return storedCommitment == computedCommitment;
+            ByteString computedCommitment = CryptoLib.Sha256((ByteString)encryptedInput);
+            return StdLib.MemoryCompare(storedCommitment, computedCommitment) == 0;
         }
     }
 }

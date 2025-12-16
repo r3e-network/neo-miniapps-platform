@@ -117,8 +117,9 @@ All Neo chain communication belongs to `infrastructure/chain`:
 - event monitoring/listeners
 - shared contract parsing helpers
 
-Services may add **service-specific contract wrappers** and event parsers under
-`services/<svc>/chain`, but they must use `infrastructure/chain` for RPC/tx work.
+Contract wrappers and typed event parsing also live in `infrastructure/chain`
+(`contracts_*.go`, `listener_events_*.go`) to keep services free of duplicated
+chain bindings.
 
 ## Global Signer (TEE-Managed Signing)
 
@@ -156,8 +157,8 @@ Only these services are considered product services right now:
 Each service follows the same internal pattern:
 
 - `services/<svc>/marble`: HTTP handlers + workers (enclave runtime).
-- `services/<svc>/chain`: contract wrappers/event parsing (no raw RPC here).
 - `services/<svc>/supabase`: service-specific persistence (only when needed).
+- `services/<svc>/contract`: Neo N3 smart contract source (C#).
 
 ## EGo Boundary (What belongs in the enclave)
 
@@ -172,4 +173,3 @@ Keep outside-TEE code focused on:
 - user workflows and web-facing APIs
 - data modeling and storage (Supabase)
 - deployment glue and observability
-

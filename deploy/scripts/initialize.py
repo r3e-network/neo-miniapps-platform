@@ -4,8 +4,7 @@ Service Layer Contract Initialization Script
 
 This script initializes all deployed Service Layer contracts:
 1. Registers TEE accounts with the Gateway
-2. Sets service fees
-3. Registers services with the Gateway
+2. Registers request/response services with the Gateway
 4. Configures service contracts with Gateway address
 5. Funds user accounts for testing
 
@@ -21,6 +20,7 @@ import json
 import os
 import sys
 import time
+import shutil
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional, Dict, Any
@@ -31,20 +31,29 @@ PROJECT_ROOT = SCRIPT_DIR.parent.parent
 CONFIG_DIR = PROJECT_ROOT / "deploy" / "config"
 DEPLOYED_FILE = CONFIG_DIR / "deployed_contracts.json"
 
-# Service fees in GAS (8 decimals)
-SERVICE_FEES = {
-    "oracle": 10000000,      # 0.1 GAS
-    "vrf": 10000000,         # 0.1 GAS
-    "datafeeds": 5000000,    # 0.05 GAS
-    "automation": 20000000,  # 0.2 GAS
-    "confidential": 100000000,  # 1.0 GAS
-}
+def reverse_hash160(value: str) -> str:
+    """
+    Reverse a Hash160 (UInt160) hex string by bytes.
 
-# Service contract mapping
-SERVICE_CONTRACTS = {
+    Neo tooling is inconsistent about endianness between RPC/display and
+    contract invocation arguments. For neoxp `contract run`, Hash160 arguments
+    are interpreted in the opposite byte order of the deployment output.
+
+    This helper normalizes by taking a 20-byte hex string and reversing bytes.
+    """
+    if not value:
+        return ""
+    hex_value = value[2:] if value.startswith("0x") else value
+    raw = bytes.fromhex(hex_value)
+    if len(raw) != 20:
+        raise ValueError(f"expected 20-byte Hash160, got {len(raw)} bytes")
+    return "0x" + raw[::-1].hex()
+
+# Request/response services that are routed through the Gateway.
+# NOTE: DataFeeds is a push-style contract and is not invoked via Gateway.requestService.
+GATEWAY_SERVICES = {
     "oracle": "OracleService",
     "vrf": "VRFService",
-    "datafeeds": "DataFeedsService",
     "automation": "NeoFlowService",
     "confidential": "ConfidentialService",
 }
@@ -82,7 +91,36 @@ class ContractInitializer:
             raise ValueError(f"Unknown network: {network}")
 
         self.deployed = self._load_deployed_contracts()
+        self.neoxp = self._resolve_neoxp()
+        self.dotnet_env = self._resolve_dotnet_env()
         self.tee_pubkey = self._get_tee_pubkey()
+
+    def _resolve_neoxp(self) -> str:
+        """Resolve the neoxp binary path (supports dotnet-tool installs)."""
+        override = os.environ.get("NEOXP", "neoxp")
+        resolved = shutil.which(override)
+        if resolved:
+            return resolved
+
+        dotnet_tool = Path.home() / ".dotnet" / "tools" / "neoxp"
+        if dotnet_tool.exists():
+            return str(dotnet_tool)
+
+        raise FileNotFoundError(
+            "neoxp not found. Install with `dotnet tool install -g Neo.Express` "
+            "and ensure `$HOME/.dotnet/tools` is on PATH."
+        )
+
+    def _resolve_dotnet_env(self) -> Dict[str, str]:
+        """Ensure DOTNET_ROOT is set when using dotnet-local installs (~/.dotnet)."""
+        env = dict(os.environ)
+        if env.get("DOTNET_ROOT"):
+            return env
+
+        dotnet_root = Path.home() / ".dotnet"
+        if (dotnet_root / "dotnet").exists():
+            env["DOTNET_ROOT"] = str(dotnet_root)
+        return env
 
     def _load_deployed_contracts(self) -> Dict[str, str]:
         """Load deployed contract addresses."""
@@ -95,36 +133,48 @@ class ContractInitializer:
     def _get_tee_pubkey(self) -> str:
         """Get TEE account public key."""
         if self.network.neo_express_config:
-            # For Neo Express, get from wallet
+            # For Neo Express, resolve from `neoxp wallet list --json` (non-interactive).
             return self._get_wallet_pubkey("tee")
         return os.environ.get("TEE_PUBKEY", "")
 
     def _get_wallet_pubkey(self, wallet_name: str) -> str:
-        """Get public key from Neo Express wallet."""
+        """Get compressed public key from Neo Express wallet (hex, 33 bytes)."""
         import subprocess
-        import json
+        account = self._get_wallet_account(wallet_name)
+        if not account:
+            return ""
+        return account.get("public-key", "")
+
+    def _get_wallet_account(self, wallet_name: str) -> Dict[str, Any]:
+        """Get the first account from a Neo Express wallet."""
+        import subprocess
 
         result = subprocess.run(
-            ["neoxp", "wallet", "export", wallet_name, "-i", self.network.neo_express_config],
+            [self.neoxp, "wallet", "list", "-i", self.network.neo_express_config, "--json"],
             capture_output=True,
             text=True,
+            env=self.dotnet_env,
         )
         if result.returncode != 0:
-            print(f"  Warning: Failed to export wallet {wallet_name}: {result.stderr}")
-            return ""
+            raise RuntimeError(f"Failed to list wallets: {result.stderr or result.stdout}")
 
         try:
-            wallet_data = json.loads(result.stdout)
-            # Neo Express exports wallet with accounts array containing public keys
-            if "accounts" in wallet_data and len(wallet_data["accounts"]) > 0:
-                account = wallet_data["accounts"][0]
-                if "key" in account:
-                    # The key field contains the public key in hex format
-                    return account.get("key", "")
-            return ""
+            wallets = json.loads(result.stdout)
+            wallet_entry = wallets.get(wallet_name)
+            if wallet_entry is None:
+                return {}
+
+            # Neo Express JSON shape:
+            # - most wallets: { "<wallet>": [ {account}, ... ] }
+            # - genesis: { "genesis": {account} }
+            if isinstance(wallet_entry, list):
+                return wallet_entry[0] if wallet_entry else {}
+            if isinstance(wallet_entry, dict):
+                return wallet_entry
+            return {}
         except json.JSONDecodeError:
-            print(f"  Warning: Failed to parse wallet export for {wallet_name}")
-            return ""
+            print("  Warning: Failed to parse wallet list JSON")
+            return {}
 
     def invoke(self, contract: str, method: str, *args) -> Dict[str, Any]:
         """Invoke a contract method."""
@@ -142,19 +192,17 @@ class ContractInitializer:
         """Invoke using Neo Express."""
         import subprocess
 
-        # Build args string
-        args_str = " ".join(str(a) for a in args)
-
         cmd = [
-            "neoxp", "contract", "invoke",
-            contract_hash, method,
+            self.neoxp, "contract", "run",
             "-i", self.network.neo_express_config,
-            "--account", "owner",
+            "-a", "owner",
+            contract_hash, method,
         ]
-        if args_str:
-            cmd.extend(args_str.split())
+        cmd.extend(str(a) for a in args)
 
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, env=self.dotnet_env)
+        if result.returncode != 0:
+            raise RuntimeError(f"neoxp invoke failed: {result.stderr or result.stdout}")
         return {"stdout": result.stdout, "stderr": result.stderr, "returncode": result.returncode}
 
     def _invoke_rpc(self, contract_hash: str, method: str, args: tuple) -> Dict[str, Any]:
@@ -181,21 +229,23 @@ class ContractInitializer:
 
         # 1. Register TEE account
         print("  Registering TEE account...")
-        tee_address = self._get_wallet_address("tee")
-        self.invoke("ServiceLayerGateway", "registerTEEAccount", tee_address, self.tee_pubkey)
+        tee_account = self._get_wallet_account("tee")
+        tee_hash = tee_account.get("script-hash", "")
+        if not tee_hash or not self.tee_pubkey:
+            print("  Warning: Missing TEE wallet info (script-hash/public-key); skipping TEE registration")
+        else:
+            tee_pubkey_arg = self.tee_pubkey
+            if tee_pubkey_arg and not tee_pubkey_arg.startswith("0x"):
+                tee_pubkey_arg = f"0x{tee_pubkey_arg}"
+            # Hash160 args passed via neoxp require byte-reversal to match the VM's internal ordering.
+            self.invoke("ServiceLayerGateway", "registerTEEAccount", reverse_hash160(tee_hash), tee_pubkey_arg)
 
-        # 2. Set service fees
-        print("  Setting service fees...")
-        for service_type, fee in SERVICE_FEES.items():
-            self.invoke("ServiceLayerGateway", "setServiceFee", service_type, fee)
-            print(f"    {service_type}: {fee / 100000000} GAS")
-
-        # 3. Register services
+        # 2. Register services
         print("  Registering services...")
-        for service_type, contract_name in SERVICE_CONTRACTS.items():
+        for service_type, contract_name in GATEWAY_SERVICES.items():
             contract_hash = self.deployed.get(contract_name)
             if contract_hash:
-                self.invoke("ServiceLayerGateway", "registerService", service_type, contract_hash)
+                self.invoke("ServiceLayerGateway", "registerService", service_type, reverse_hash160(contract_hash))
                 print(f"    {service_type} -> {contract_hash}")
 
     def initialize_services(self):
@@ -206,12 +256,13 @@ class ContractInitializer:
         if not gateway_hash:
             print("  Error: ServiceLayerGateway not deployed")
             return
+        gateway_arg = reverse_hash160(gateway_hash)
 
-        for service_type, contract_name in SERVICE_CONTRACTS.items():
+        for service_type, contract_name in GATEWAY_SERVICES.items():
             contract_hash = self.deployed.get(contract_name)
             if contract_hash:
                 print(f"  Configuring {contract_name}...")
-                self.invoke(contract_name, "setGateway", gateway_hash)
+                self.invoke(contract_name, "setGateway", gateway_arg)
 
     def initialize_examples(self):
         """Initialize example consumer contracts."""
@@ -219,6 +270,8 @@ class ContractInitializer:
 
         gateway_hash = self.deployed.get("ServiceLayerGateway")
         datafeeds_hash = self.deployed.get("DataFeedsService")
+        gateway_arg = reverse_hash160(gateway_hash) if gateway_hash else ""
+        datafeeds_arg = reverse_hash160(datafeeds_hash) if datafeeds_hash else ""
 
         examples = ["ExampleConsumer", "VRFLottery", "DeFiPriceConsumer"]
 
@@ -226,11 +279,11 @@ class ContractInitializer:
             contract_hash = self.deployed.get(example)
             if contract_hash:
                 print(f"  Configuring {example}...")
-                self.invoke(example, "setGateway", gateway_hash)
+                self.invoke(example, "setGateway", gateway_arg)
 
                 # DeFiPriceConsumer also needs DataFeeds address
-                if example == "DeFiPriceConsumer" and datafeeds_hash:
-                    self.invoke(example, "setDataFeedsContract", datafeeds_hash)
+                if example == "DeFiPriceConsumer" and datafeeds_arg:
+                    self.invoke(example, "setDataFeedsContract", datafeeds_arg)
 
     def fund_accounts(self):
         """Fund test accounts with GAS for service fees."""
@@ -243,45 +296,13 @@ class ContractInitializer:
         import subprocess
 
         # Fund user account
-        subprocess.run([
-            "neoxp", "transfer", "100", "GAS", "genesis", "user",
+        result = subprocess.run([
+            self.neoxp, "transfer", "100", "GAS", "genesis", "user",
             "-i", self.network.neo_express_config,
-        ], capture_output=True)
-        print("  Funded user account with 100 GAS")
-
-        # Deposit to Gateway for user
-        user_address = self._get_wallet_address("user")
-        subprocess.run([
-            "neoxp", "transfer", "10", "GAS", "user", self.deployed.get("ServiceLayerGateway", ""),
-            "-i", self.network.neo_express_config,
-        ], capture_output=True)
-        print("  Deposited 10 GAS to Gateway for user")
-
-    def _get_wallet_address(self, wallet_name: str) -> str:
-        """Get wallet address from Neo Express."""
-        import subprocess
-        import json
-
-        result = subprocess.run(
-            ["neoxp", "wallet", "list", "-i", self.network.neo_express_config, "--json"],
-            capture_output=True,
-            text=True,
-        )
+        ], capture_output=True, env=self.dotnet_env, text=True)
         if result.returncode != 0:
-            print(f"  Warning: Failed to list wallets: {result.stderr}")
-            return ""
-
-        try:
-            wallets = json.loads(result.stdout)
-            for wallet in wallets:
-                if wallet.get("name") == wallet_name:
-                    accounts = wallet.get("accounts", [])
-                    if accounts:
-                        return accounts[0].get("address", "")
-            return ""
-        except json.JSONDecodeError:
-            print(f"  Warning: Failed to parse wallet list")
-            return ""
+            print(f"  Warning: Failed to fund user: {result.stderr or result.stdout}")
+        print("  Funded user account with 100 GAS")
 
     def run(self):
         """Run full initialization."""
