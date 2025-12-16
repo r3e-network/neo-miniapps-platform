@@ -1,10 +1,7 @@
 package crypto
 
 import (
-	"bytes"
-	"crypto/ecdsa"
 	"crypto/elliptic"
-	crand "crypto/rand"
 	"math/big"
 	"strings"
 	"testing"
@@ -175,71 +172,5 @@ func TestPublicKeyToAddress_DeterministicAndValidPrefix(t *testing.T) {
 	}
 	if addr1[0] != 'N' {
 		t.Fatalf("PublicKeyToAddress() prefix = %q, want 'N'", addr1[0])
-	}
-}
-
-func TestVRFProofHelpersAndErrorPaths(t *testing.T) {
-	kp, err := GenerateKeyPair()
-	if err != nil {
-		t.Fatalf("GenerateKeyPair: %v", err)
-	}
-
-	// Serialize nil proof.
-	if got := SerializeVRFProof(nil); got != nil {
-		t.Fatalf("SerializeVRFProof(nil) = %v, want nil", got)
-	}
-
-	// Deserialize invalid proof lengths.
-	if _, proofErr := DeserializeVRFProof([]byte{0x01}); proofErr == nil {
-		t.Fatalf("expected error for invalid proof length")
-	}
-
-	// Deserialize invalid Gamma point.
-	invalid := make([]byte, 97) // all zeros => invalid compressed point
-	if _, proofErr := DeserializeVRFProof(invalid); proofErr == nil {
-		t.Fatalf("expected error for invalid Gamma point")
-	}
-
-	// VerifyVRF wrapper should reject invalid proof bytes.
-	if VerifyVRF(kp.PublicKey, []byte("alpha"), &VRFProof{Proof: []byte("short")}) {
-		t.Fatalf("VerifyVRF() returned true for invalid proof format")
-	}
-
-	// VerifyVRFProof should reject invalid Gamma points.
-	proof, err := GenerateVRF(kp.PrivateKey, []byte("alpha"))
-	if err != nil {
-		t.Fatalf("GenerateVRF: %v", err)
-	}
-	proofData, err := DeserializeVRFProof(proof.Proof)
-	if err != nil {
-		t.Fatalf("DeserializeVRFProof(valid): %v", err)
-	}
-
-	badProof := *proofData
-	badProof.GammaX = big.NewInt(0)
-	badProof.GammaY = big.NewInt(0)
-	if _, ok := VerifyVRFProof(kp.PublicKey, []byte("alpha"), &badProof); ok {
-		t.Fatalf("VerifyVRFProof() returned true for invalid Gamma point")
-	}
-
-	// VerifyVRF wrapper should reject mismatched output.
-	proof.Output = bytes.Repeat([]byte{0xFF}, len(proof.Output))
-	if VerifyVRF(kp.PublicKey, []byte("alpha"), proof) {
-		t.Fatalf("VerifyVRF() returned true for mismatched output")
-	}
-}
-
-func TestGenerateVRFProof_ErrorPaths(t *testing.T) {
-	if _, err := GenerateVRFProof(nil, []byte("alpha")); err == nil {
-		t.Fatalf("expected error when private key is nil")
-	}
-
-	// Wrong curve.
-	privWrong, err := ecdsa.GenerateKey(elliptic.P224(), crand.Reader)
-	if err != nil {
-		t.Fatalf("ecdsa.GenerateKey(P224): %v", err)
-	}
-	if _, err := GenerateVRFProof(privWrong, []byte("alpha")); err == nil {
-		t.Fatalf("expected error for unsupported curve")
 	}
 }

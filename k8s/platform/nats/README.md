@@ -9,7 +9,7 @@ NATS JetStream 提供持久化消息队列，支持异步事件处理和 at-leas
 根据架构文档 Section 3.2：
 
 - **Stream 设计**: 单一 `neo-events` stream，使用 subject 过滤
-- **Subjects**: `neo.vrf.*`, `neo.vault.*`, `neo.datafeed.*`, 等
+- **Subjects**: `neo.datafeed.*`, `neo.flow.*`, `neo.accounts.*`, 等
 - **保留策略**: 7 天或 10GB (先达到者)
 - **存储**: 文件存储 (PVC 5Gi)
 
@@ -87,7 +87,7 @@ nats stream info neo-events
 
 ```bash
 # 发布测试消息
-nats pub neo.vrf.request '{"requestId":"test-001","seed":"abc123"}'
+nats pub neo.datafeed.update '{"feedId":"BTC/USD","price":"45000","decimals":8}'
 
 # 查看消息
 nats stream view neo-events
@@ -120,7 +120,7 @@ func main() {
     }
 
     // 发布消息
-    ack, err := js.Publish("neo.vrf.request", []byte(`{"requestId":"vrf-001"}`))
+    ack, err := js.Publish("neo.datafeed.update", []byte(`{"feedId":"BTC/USD","price":"45000","decimals":8}`))
     if err != nil {
         log.Fatal(err)
     }
@@ -132,12 +132,12 @@ func main() {
 
 ```go
 func consumeMessages(js nats.JetStreamContext) {
-    // 订阅 Consumer
-    sub, err := js.PullSubscribe(
-        "neo.vrf.*",
-        "neorand-consumer",
-        nats.ManualAck(),
-    )
+	    // 订阅 Consumer
+	    sub, err := js.PullSubscribe(
+	        "neo.datafeed.*",
+	        "neofeeds-consumer",
+	        nats.ManualAck(),
+	    )
     if err != nil {
         log.Fatal(err)
     }
@@ -169,10 +169,10 @@ func consumeMessages(js nats.JetStreamContext) {
 ```go
 func subscribePush(js nats.JetStreamContext) {
     // Push Consumer (自动推送)
-    sub, err := js.Subscribe(
-        "neo.vrf.*",
-        func(msg *nats.Msg) {
-            log.Printf("Received: %s\n", string(msg.Data))
+	    sub, err := js.Subscribe(
+	        "neo.datafeed.*",
+	        func(msg *nats.Msg) {
+	            log.Printf("Received: %s\n", string(msg.Data))
 
             // 处理消息
             if err := processMessage(msg.Data); err != nil {
@@ -181,9 +181,9 @@ func subscribePush(js nats.JetStreamContext) {
                 msg.Ack()
             }
         },
-        nats.Durable("neorand-consumer"),
-        nats.ManualAck(),
-    )
+	        nats.Durable("neofeeds-consumer"),
+	        nats.ManualAck(),
+	    )
     if err != nil {
         log.Fatal(err)
     }
@@ -203,7 +203,7 @@ type MessageProcessor struct {
 
 func (p *MessageProcessor) Process(msg *nats.Msg) error {
     // 解析消息
-    var event VRFRequest
+    var event DataFeedUpdate
     if err := json.Unmarshal(msg.Data, &event); err != nil {
         return err
     }
@@ -224,7 +224,7 @@ func (p *MessageProcessor) Process(msg *nats.Msg) error {
     }
 
     // 处理业务逻辑
-    if err := p.processVRF(event); err != nil {
+    if err := p.processDataFeedUpdate(event); err != nil {
         return err
     }
 
@@ -254,8 +254,8 @@ func (p *MessageProcessor) Process(msg *nats.Msg) error {
 
 ### Subject 通配符
 
-- `neo.*`: 匹配单层 (如 `neo.vrf`)
-- `neo.>`: 匹配多层 (如 `neo.vrf.request`, `neo.vrf.fulfilled`)
+- `neo.*`: 匹配单层 (如 `neo.datafeed`)
+- `neo.>`: 匹配多层 (如 `neo.datafeed.update`, `neo.flow.triggered`)
 
 ## 监控
 
@@ -295,10 +295,10 @@ kubectl logs -n nats-io -l app=nack
 
 ```bash
 # 检查 Consumer 配置
-kubectl get consumer neorand-consumer -n platform -o yaml
+kubectl get consumer neofeeds-consumer -n platform -o yaml
 
 # 使用 nats CLI 调试
-nats consumer info neo-events neorand-consumer
+nats consumer info neo-events neofeeds-consumer
 ```
 
 ### 消息积压
@@ -330,7 +330,7 @@ kubectl edit pvc nats-jetstream-pvc -n platform
 var futures []nats.PubAckFuture
 for _, event := range events {
     data, _ := json.Marshal(event)
-    future, _ := js.PublishAsync("neo.vrf.request", data)
+    future, _ := js.PublishAsync("neo.datafeed.update", data)
     futures = append(futures, future)
 }
 
@@ -359,7 +359,7 @@ func processWithDLQ(msg *nats.Msg, js nats.JetStreamContext) {
         // 超过最大重试次数，发送到 DLQ
         meta, _ := msg.Metadata()
         if meta.NumDelivered >= 3 {
-            js.Publish("neo.dlq.vrf", msg.Data)
+            js.Publish("neo.dlq.datafeed", msg.Data)
             msg.Ack()  // 确认原消息
         } else {
             msg.NakWithDelay(5 * time.Second)  // 延迟重试

@@ -14,12 +14,6 @@
       "state": "HALT"
     },
     {
-      "name": "VRFService",
-      "hash": "0x0536c9ee25a6a9cbbae6d824c32ba1ec259d9810",
-      "gas_consumed": "1001167420",
-      "state": "HALT"
-    },
-    {
       "name": "NeoFlowService",
       "hash": "0x85c4697f9a2b0b1fe7325ffb73b362e198b16bf7",
       "gas_consumed": "1004595910",

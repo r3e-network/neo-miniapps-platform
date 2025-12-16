@@ -122,12 +122,12 @@ func TestNeoAccountsSignEndpointValidation(t *testing.T) {
 		},
 		{
 			name:     "missing account_id",
-			input:    neoaccounts.SignTransactionInput{ServiceID: "neorand", TxHash: []byte("hash")},
+			input:    neoaccounts.SignTransactionInput{ServiceID: "neocompute", TxHash: []byte("hash")},
 			wantCode: http.StatusBadRequest,
 		},
 		{
 			name:     "missing tx_hash",
-			input:    neoaccounts.SignTransactionInput{ServiceID: "neorand", AccountID: "acc-1"},
+			input:    neoaccounts.SignTransactionInput{ServiceID: "neocompute", AccountID: "acc-1"},
 			wantCode: http.StatusBadRequest,
 		},
 	}
@@ -185,7 +185,7 @@ func TestNeoAccountsBalanceEndpointValidation(t *testing.T) {
 		},
 		{
 			name:     "missing account_id",
-			input:    neoaccounts.UpdateBalanceInput{ServiceID: "neorand", Delta: 100},
+			input:    neoaccounts.UpdateBalanceInput{ServiceID: "neocompute", Delta: 100},
 			wantCode: http.StatusBadRequest,
 		},
 	}

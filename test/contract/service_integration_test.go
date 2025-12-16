@@ -12,33 +12,43 @@ import (
 
 	neoaccounts "github.com/R3E-Network/service_layer/infrastructure/accountpool/marble"
 	"github.com/R3E-Network/service_layer/infrastructure/marble"
-	vrf "github.com/R3E-Network/service_layer/services/vrf/marble"
+	neocompute "github.com/R3E-Network/service_layer/services/confcompute/marble"
 )
 
 // TestServiceContractIntegration tests the integration between services and contracts.
 func TestServiceContractIntegration(t *testing.T) {
-	t.Run("vrf service can sign for contracts", func(t *testing.T) {
-		m, err := marble.New(marble.Config{MarbleType: "neorand"})
+	t.Run("neocompute can protect results", func(t *testing.T) {
+		m, err := marble.New(marble.Config{MarbleType: "neocompute"})
 		if err != nil {
 			t.Fatalf("marble.New: %v", err)
 		}
-		m.SetTestSecret("VRF_PRIVATE_KEY", []byte("test-vrf-private-key-32-bytes!!!"))
+		m.SetTestSecret("COMPUTE_MASTER_KEY", []byte("test-compute-master-key-32-bytes!!"))
 
-		svc, err := vrf.New(vrf.Config{Marble: m})
+		svc, err := neocompute.New(neocompute.Config{Marble: m})
 		if err != nil {
-			t.Fatalf("vrf.New: %v", err)
+			t.Fatalf("neocompute.New: %v", err)
 		}
 
-		if svc.ID() != "neorand" {
-			t.Errorf("expected ID 'neorand', got '%s'", svc.ID())
+		resp, err := svc.Execute(context.Background(), "user-123", &neocompute.ExecuteRequest{
+			Script: `
+function main() {
+  return { ok: true };
+}
+`,
+			EntryPoint: "main",
+		})
+		if err != nil {
+			t.Fatalf("Execute: %v", err)
 		}
 
-		req := httptest.NewRequest("GET", "/health", nil)
-		w := httptest.NewRecorder()
-		svc.Router().ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Errorf("health check failed: status %d", w.Code)
+		if resp.Status != "completed" {
+			t.Fatalf("status = %q, want %q (error=%q)", resp.Status, "completed", resp.Error)
+		}
+		if resp.OutputHash == "" {
+			t.Fatalf("expected OutputHash to be set")
+		}
+		if resp.Signature == "" {
+			t.Fatalf("expected Signature to be set")
 		}
 	})
 
@@ -83,7 +93,7 @@ func TestNeoAccountsSigningForContracts(t *testing.T) {
 		}()
 
 		input := neoaccounts.SignTransactionInput{
-			ServiceID: "neorand",
+			ServiceID: "neocompute",
 			AccountID: "test-account-1",
 			TxHash:    []byte("mock-transaction-hash-for-contract"),
 		}
@@ -113,7 +123,7 @@ func TestNeoAccountsSigningForContracts(t *testing.T) {
 		}()
 
 		input := neoaccounts.BatchSignInput{
-			ServiceID: "neorand",
+			ServiceID: "neocompute",
 			Requests: []neoaccounts.SignRequest{
 				{AccountID: "account-1", TxHash: []byte("tx-hash-1")},
 				{AccountID: "account-2", TxHash: []byte("tx-hash-2")},
@@ -155,7 +165,7 @@ func TestContractEventMonitoring(t *testing.T) {
 		event.State.RequestID = 12345
 		event.State.UserContract = "NXV7ZhHiyM1aHXwpVsRZC6BwNFP2jghXAq"
 		event.State.Caller = "NMockCallerAddress12345678901234567"
-		event.State.ServiceType = "neorand"
+		event.State.ServiceType = "neocompute"
 		event.State.Payload = []byte(`{"num_words": 3}`)
 
 		eventJSON, err := json.Marshal(event)
@@ -168,8 +178,8 @@ func TestContractEventMonitoring(t *testing.T) {
 			t.Fatalf("unmarshal event: %v", err)
 		}
 
-		if parsed.State.ServiceType != "neorand" {
-			t.Errorf("expected service type 'vrf', got '%s'", parsed.State.ServiceType)
+		if parsed.State.ServiceType != "neocompute" {
+			t.Errorf("expected service type 'neocompute', got '%s'", parsed.State.ServiceType)
 		}
 		if parsed.State.RequestID != 12345 {
 			t.Errorf("expected request ID 12345, got %d", parsed.State.RequestID)

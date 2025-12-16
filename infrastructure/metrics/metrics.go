@@ -24,7 +24,6 @@ type Metrics struct {
 	// Business metrics
 	BlockchainTxTotal    *prometheus.CounterVec
 	BlockchainTxDuration *prometheus.HistogramVec
-	VRFRequestsTotal     *prometheus.CounterVec
 
 	// Database metrics
 	DatabaseQueriesTotal    *prometheus.CounterVec
@@ -92,13 +91,6 @@ func NewWithRegistry(serviceName string, registerer prometheus.Registerer) *Metr
 			},
 			[]string{"service", "chain", "operation"},
 		),
-		VRFRequestsTotal: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "vrf_requests_total",
-				Help: "Total number of VRF requests",
-			},
-			[]string{"service", "status"},
-		),
 
 		// Database metrics
 		DatabaseQueriesTotal: prometheus.NewCounterVec(
@@ -148,7 +140,6 @@ func NewWithRegistry(serviceName string, registerer prometheus.Registerer) *Metr
 			m.ErrorsTotal,
 			m.BlockchainTxTotal,
 			m.BlockchainTxDuration,
-			m.VRFRequestsTotal,
 			m.DatabaseQueriesTotal,
 			m.DatabaseQueryDuration,
 			m.DatabaseConnectionsOpen,
@@ -178,11 +169,6 @@ func (m *Metrics) RecordError(service, errorType, operation string) {
 func (m *Metrics) RecordBlockchainTx(service, chain, operation, status string, duration time.Duration) {
 	m.BlockchainTxTotal.WithLabelValues(service, chain, operation, status).Inc()
 	m.BlockchainTxDuration.WithLabelValues(service, chain, operation).Observe(duration.Seconds())
-}
-
-// RecordVRFRequest records a VRF request
-func (m *Metrics) RecordVRFRequest(service, status string) {
-	m.VRFRequestsTotal.WithLabelValues(service, status).Inc()
 }
 
 // RecordDatabaseQuery records a database query

@@ -8,9 +8,10 @@
   "network_magic": 877933390,
   "contracts": {
     "ServiceLayerGateway": null,
-    "VRFService": null,
-    "NeoFeedsService": null,
-    "NeoFlowService": null
+    "DataFeedsService": null,
+    "NeoFlowService": null,
+    "ConfidentialService": null,
+    "OracleService": null
   },
   "wallets": {
     "owner": {
@@ -25,10 +26,9 @@
   },
   "service_fees": {
     "oracle": 10000000,
-    "vrf": 10000000,
-    "neofeeds": 5000000,
-    "neoflow": 20000000,
-    "neocompute": 100000000
+    "datafeeds": 5000000,
+    "automation": 20000000,
+    "confidential": 100000000
   },
   "notes": [
     "Set environment variables before deployment:",

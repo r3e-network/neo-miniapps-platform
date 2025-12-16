@@ -8,7 +8,6 @@ import { Secrets } from "./pages/Secrets";
 import { GasBank } from "./pages/GasBank";
 import { NeoFlow } from "./pages/NeoFlow";
 import { Settings } from "./pages/Settings";
-import { VRF } from "./pages/VRF";
 import { Login } from "./pages/Login";
 import { AuthCallback } from "./pages/AuthCallback";
 import { api } from "./api/client";
@@ -69,7 +68,6 @@ export default function App() {
           <Route element={<ProtectedLayout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/services" element={<Services />} />
-            <Route path="/neorand" element={<VRF />} />
             <Route path="/secrets" element={<Secrets />} />
             <Route path="/gasbank" element={<GasBank />} />
             <Route path="/neoflow" element={<NeoFlow />} />

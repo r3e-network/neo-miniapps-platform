@@ -26,7 +26,6 @@ The goal is **one module = one responsibility**, with **no duplicated chain I/O*
 
 Only these services are considered “product services” right now:
 
-- `services/vrf`: verifiable randomness (VRF).
 - `services/datafeed`: data feeds (push pattern).
 - `services/automation`: automation / triggers.
 - `services/confcompute`: confidential compute (JS execution).
@@ -53,7 +52,6 @@ User-facing apps consuming the gateway API. These should not contain service-lay
 
 Keep enclave code focused on sensitive operations and verifiable execution:
 
-- VRF computation
 - confidential compute execution
 - oracle fetch (when results need enclave-origin proofs)
 - any key material that must not leave the enclave (e.g. “global signer”)

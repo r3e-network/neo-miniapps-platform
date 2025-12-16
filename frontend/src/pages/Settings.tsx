@@ -93,7 +93,6 @@ export function Settings() {
   };
 
   const availableScopes = [
-    { id: 'neorand', label: 'VRF (neorand)' },
     { id: 'neofeeds', label: 'DataFeeds (neofeeds)' },
     { id: 'neoflow', label: 'Automation (neoflow)' },
     { id: 'neocompute', label: 'ConfCompute (neocompute)' },

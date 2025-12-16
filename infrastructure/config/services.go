@@ -54,11 +54,6 @@ func DefaultServicesConfig() *ServicesConfig {
 				Port:        8092,
 				Description: "TEE master key management and domain-separated signing",
 			},
-			"neorand": {
-				Enabled:     true,
-				Port:        8081,
-				Description: "Verifiable random number generation",
-			},
 			"neofeeds": {
 				Enabled:     true,
 				Port:        8083,
@@ -90,7 +85,6 @@ func DefaultServicesConfig() *ServicesConfig {
 
 // ServiceNameMapping provides mapping from old service names to new Neo names
 var ServiceNameMapping = map[string]string{
-	"vrf":         "neorand",
 	"oracle":      "neooracle",
 	"neofeeds":    "neofeeds",
 	"neoaccounts": "neoaccounts",

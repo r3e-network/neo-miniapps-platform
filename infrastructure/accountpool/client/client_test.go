@@ -28,7 +28,7 @@ func TestNew(t *testing.T) {
 	t.Setenv("MARBLE_ENV", "development")
 	client, err := New(Config{
 		BaseURL:   "http://localhost:8090/",
-		ServiceID: "neorand",
+		ServiceID: "neocompute",
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -36,8 +36,8 @@ func TestNew(t *testing.T) {
 	if client.baseURL != "http://localhost:8090" {
 		t.Errorf("baseURL = %s, want http://localhost:8090", client.baseURL)
 	}
-	if client.serviceID != "neorand" {
-		t.Errorf("serviceID = %s, want neorand", client.serviceID)
+	if client.serviceID != "neocompute" {
+		t.Errorf("serviceID = %s, want neocompute", client.serviceID)
 	}
 }
 
@@ -45,7 +45,7 @@ func TestNew_StrictModeRequiresHTTPS(t *testing.T) {
 	t.Setenv("MARBLE_ENV", "production")
 	_, err := New(Config{
 		BaseURL:   "http://localhost:8090",
-		ServiceID: "neorand",
+		ServiceID: "neocompute",
 	})
 	if err == nil {
 		t.Fatal("New() error = nil, want error in strict identity mode")
@@ -57,8 +57,8 @@ func TestGetPoolInfo(t *testing.T) {
 		if r.URL.Path != "/pool-info" {
 			t.Errorf("Path = %s, want /pool-info", r.URL.Path)
 		}
-		if got := r.Header.Get(serviceauth.ServiceIDHeader); got != "neorand" {
-			t.Errorf("%s = %s, want neorand", serviceauth.ServiceIDHeader, got)
+		if got := r.Header.Get(serviceauth.ServiceIDHeader); got != "neocompute" {
+			t.Errorf("%s = %s, want neocompute", serviceauth.ServiceIDHeader, got)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -74,7 +74,7 @@ func TestGetPoolInfo(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newTestClient(t, server.URL, "neorand")
+	client := newTestClient(t, server.URL, "neocompute")
 	info, err := client.GetPoolInfo(context.Background())
 	if err != nil {
 		t.Fatalf("GetPoolInfo() error = %v", err)
@@ -100,8 +100,8 @@ func TestRequestAccounts(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		if input.ServiceID != "neorand" {
-			t.Errorf("ServiceID = %s, want neorand", input.ServiceID)
+		if input.ServiceID != "neocompute" {
+			t.Errorf("ServiceID = %s, want neocompute", input.ServiceID)
 		}
 		if input.Count != 2 {
 			t.Errorf("Count = %d, want 2", input.Count)
@@ -118,7 +118,7 @@ func TestRequestAccounts(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newTestClient(t, server.URL, "neorand")
+	client := newTestClient(t, server.URL, "neocompute")
 	resp, err := client.RequestAccounts(context.Background(), 2, "test")
 	if err != nil {
 		t.Fatalf("RequestAccounts() error = %v", err)
@@ -144,7 +144,7 @@ func TestReleaseAccounts(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newTestClient(t, server.URL, "neorand")
+	client := newTestClient(t, server.URL, "neocompute")
 	resp, err := client.ReleaseAccounts(context.Background(), []string{"acc-1", "acc-2"})
 	if err != nil {
 		t.Fatalf("ReleaseAccounts() error = %v", err)
@@ -173,7 +173,7 @@ func TestUpdateBalance(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newTestClient(t, server.URL, "neorand")
+	client := newTestClient(t, server.URL, "neocompute")
 	_, err := client.UpdateBalance(context.Background(), "acc-1", "GAS", 1000, nil)
 	if err != nil {
 		t.Fatalf("UpdateBalance() error = %v", err)
@@ -201,7 +201,7 @@ func TestUpdateBalanceWithAbsolute(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newTestClient(t, server.URL, "neorand")
+	client := newTestClient(t, server.URL, "neocompute")
 	_, err := client.UpdateBalance(context.Background(), "acc-1", "GAS", 0, &absolute)
 	if err != nil {
 		t.Fatalf("UpdateBalance() error = %v", err)
@@ -213,8 +213,8 @@ func TestGetLockedAccounts(t *testing.T) {
 		if r.URL.Path != "/accounts" {
 			t.Errorf("Path = %s, want /accounts", r.URL.Path)
 		}
-		if r.URL.Query().Get("service_id") != "neorand" {
-			t.Errorf("service_id = %s, want neorand", r.URL.Query().Get("service_id"))
+		if r.URL.Query().Get("service_id") != "neocompute" {
+			t.Errorf("service_id = %s, want neocompute", r.URL.Query().Get("service_id"))
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(ListAccountsResponse{
@@ -226,7 +226,7 @@ func TestGetLockedAccounts(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newTestClient(t, server.URL, "neorand")
+	client := newTestClient(t, server.URL, "neocompute")
 	accounts, err := client.GetLockedAccounts(context.Background(), "", nil)
 	if err != nil {
 		t.Fatalf("GetLockedAccounts() error = %v", err)
@@ -251,7 +251,7 @@ func TestGetLockedAccountsWithMinBalance(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newTestClient(t, server.URL, "neorand")
+	client := newTestClient(t, server.URL, "neocompute")
 	accounts, err := client.GetLockedAccounts(context.Background(), "", &minBalance)
 	if err != nil {
 		t.Fatalf("GetLockedAccounts() error = %v", err)
@@ -274,8 +274,8 @@ func TestSignTransaction(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		if input.ServiceID != "neorand" {
-			t.Errorf("ServiceID = %s, want neorand", input.ServiceID)
+		if input.ServiceID != "neocompute" {
+			t.Errorf("ServiceID = %s, want neocompute", input.ServiceID)
 		}
 		if input.AccountID != "acc-1" {
 			t.Errorf("AccountID = %s, want acc-1", input.AccountID)
@@ -293,7 +293,7 @@ func TestSignTransaction(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newTestClient(t, server.URL, "neorand")
+	client := newTestClient(t, server.URL, "neocompute")
 	result, err := client.SignTransaction(context.Background(), "acc-1", []byte("txhash"))
 	if err != nil {
 		t.Fatalf("SignTransaction() error = %v", err)
@@ -319,8 +319,8 @@ func TestTransfer(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		if body.ServiceID != "neorand" {
-			t.Errorf("ServiceID = %s, want neorand", body.ServiceID)
+		if body.ServiceID != "neocompute" {
+			t.Errorf("ServiceID = %s, want neocompute", body.ServiceID)
 		}
 		if body.Amount != 1000 {
 			t.Errorf("Amount = %d, want 1000", body.Amount)
@@ -336,7 +336,7 @@ func TestTransfer(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newTestClient(t, server.URL, "neorand")
+	client := newTestClient(t, server.URL, "neocompute")
 	result, err := client.Transfer(context.Background(), "acc-1", "NTargetAddr", 1000, "")
 	if err != nil {
 		t.Fatalf("Transfer() error = %v", err)
@@ -356,7 +356,7 @@ func TestErrorHandling(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newTestClient(t, server.URL, "neorand")
+	client := newTestClient(t, server.URL, "neocompute")
 
 	_, err := client.GetPoolInfo(context.Background())
 	if err == nil {
@@ -387,7 +387,7 @@ func BenchmarkRequestAccounts(b *testing.B) {
 
 	client, err := New(Config{
 		BaseURL:   server.URL,
-		ServiceID: "neorand",
+		ServiceID: "neocompute",
 	})
 	if err != nil {
 		b.Fatalf("New() error = %v", err)
@@ -405,7 +405,7 @@ func TestTimeoutOverrideDoesNotMutateHTTPClient(t *testing.T) {
 	shared := &http.Client{Timeout: 0}
 	client, err := New(Config{
 		BaseURL:      "http://localhost:8090",
-		ServiceID:    "neorand",
+		ServiceID:    "neocompute",
 		Timeout:      10 * time.Second,
 		HTTPClient:   shared,
 		MaxBodyBytes: 1,

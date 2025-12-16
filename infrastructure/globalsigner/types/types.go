@@ -179,7 +179,7 @@ type RotateResponse struct {
 
 // SignRequest is a request for domain-separated signing.
 type SignRequest struct {
-	// Domain is the signing domain (e.g., "neorand", "neoaccounts").
+	// Domain is the signing domain (e.g., "neocompute", "neoaccounts").
 	Domain string `json:"domain"`
 
 	// Data is the data to sign (hex-encoded).

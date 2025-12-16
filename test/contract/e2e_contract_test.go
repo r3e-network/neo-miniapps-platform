@@ -12,30 +12,30 @@ import (
 
 	neoaccounts "github.com/R3E-Network/service_layer/infrastructure/accountpool/marble"
 	"github.com/R3E-Network/service_layer/infrastructure/marble"
-	vrf "github.com/R3E-Network/service_layer/services/vrf/marble"
+	neocompute "github.com/R3E-Network/service_layer/services/confcompute/marble"
 )
 
-// TestE2EVRFFlow tests the VRF service flow for contract integration.
-func TestE2EVRFFlow(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "neorand"})
-	m.SetTestSecret("VRF_PRIVATE_KEY", []byte("e2e-vrf-private-key-32-bytes!!!!"))
+// TestE2ENeoComputeFlow tests a minimal confidential compute flow.
+func TestE2ENeoComputeFlow(t *testing.T) {
+	m, _ := marble.New(marble.Config{MarbleType: "neocompute"})
+	m.SetTestSecret("COMPUTE_MASTER_KEY", []byte("e2e-compute-master-key-32-bytes!!!"))
 
-	svc, err := vrf.New(vrf.Config{Marble: m})
+	svc, err := neocompute.New(neocompute.Config{Marble: m})
 	if err != nil {
-		t.Fatalf("vrf.New: %v", err)
+		t.Fatalf("neocompute.New: %v", err)
 	}
 
 	server := httptest.NewServer(svc.Router())
 	defer server.Close()
 
-	t.Run("vrf request-response flow", func(t *testing.T) {
-		request := vrf.DirectRandomRequest{
-			Seed:     "user-provided-seed-for-randomness",
-			NumWords: 3,
-		}
-
-		if request.Seed == "" {
-			t.Error("seed should not be empty")
+	t.Run("execute script flow", func(t *testing.T) {
+		request := neocompute.ExecuteRequest{
+			Script: `
+function main() {
+  return { random_hex: crypto.randomBytes(32) };
+}
+`,
+			EntryPoint: "main",
 		}
 
 		body, err := json.Marshal(request)
@@ -43,34 +43,37 @@ func TestE2EVRFFlow(t *testing.T) {
 			t.Fatalf("marshal request: %v", err)
 		}
 
-		resp, err := http.Post(server.URL+"/random", "application/json", bytes.NewReader(body))
+		httpReq, err := http.NewRequest(http.MethodPost, server.URL+"/execute", bytes.NewReader(body))
 		if err != nil {
-			t.Fatalf("post /random: %v", err)
+			t.Fatalf("new request: %v", err)
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("X-User-ID", "user-123")
+
+		resp, err := http.DefaultClient.Do(httpReq)
+		if err != nil {
+			t.Fatalf("post /execute: %v", err)
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("expected status %d, got %d", http.StatusOK, resp.StatusCode)
 		}
 
-		var vrfResp vrf.DirectRandomResponse
-		if err := json.NewDecoder(resp.Body).Decode(&vrfResp); err != nil {
+		var computeResp neocompute.ExecuteResponse
+		if err := json.NewDecoder(resp.Body).Decode(&computeResp); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
 
-		if vrfResp.Seed != request.Seed {
-			t.Fatalf("expected seed %q, got %q", request.Seed, vrfResp.Seed)
+		if computeResp.Status != "completed" {
+			t.Fatalf("expected status 'completed', got %q (error=%q)", computeResp.Status, computeResp.Error)
 		}
-		if len(vrfResp.RandomWords) != request.NumWords {
-			t.Fatalf("expected %d random words, got %d", request.NumWords, len(vrfResp.RandomWords))
+		if computeResp.Output == nil {
+			t.Fatalf("expected output to be non-nil")
 		}
-		if vrfResp.Proof == "" {
-			t.Fatal("expected proof to be non-empty")
+		if _, ok := computeResp.Output["random_hex"]; !ok {
+			t.Fatalf("expected output.random_hex to be present, got %#v", computeResp.Output)
 		}
-		if vrfResp.PublicKey == "" {
-			t.Fatal("expected public_key to be non-empty")
-		}
-
-		t.Logf("VRF response: seed=%s words=%d", vrfResp.Seed, len(vrfResp.RandomWords))
+		t.Logf("NeoCompute output: %#v", computeResp.Output)
 	})
 }
 
@@ -92,9 +95,10 @@ func TestE2EContractDeploymentFlow(t *testing.T) {
 
 		steps := []DeploymentStep{
 			{1, "ServiceLayerGateway", "Deploy main gateway contract", false},
-			{2, "VRFService", "Deploy VRF service contract", false},
-			{3, "NeoFeedsService", "Deploy data feeds contract", false},
-			{4, "NeoFlowService", "Deploy neoflow contract", false},
+			{2, "NeoFeedsService", "Deploy data feeds contract", false},
+			{3, "NeoFlowService", "Deploy neoflow contract", false},
+			{4, "ConfidentialService", "Deploy confidential compute contract", false},
+			{5, "OracleService", "Deploy confidential oracle contract", false},
 		}
 
 		for _, step := range steps {
@@ -111,7 +115,8 @@ func TestE2EContractDeploymentFlow(t *testing.T) {
 		}
 
 		registrations := []ServiceRegistration{
-			{"neorand", "0x1111111111111111111111111111111111111111", 10000000, "0xTEE1"},
+			{"neofeeds", "0x1111111111111111111111111111111111111111", 5000000, "0xTEE1"},
+			{"neoflow", "0x2222222222222222222222222222222222222222", 20000000, "0xTEE1"},
 			{"oracle", "0x3333333333333333333333333333333333333333", 10000000, "0xTEE1"},
 		}
 
@@ -128,9 +133,9 @@ func TestE2EConcurrentServiceOperations(t *testing.T) {
 	apMarble.SetTestSecret("POOL_MASTER_KEY", []byte("concurrent-e2e-pool-key-32bytes!"))
 	apSvc, _ := neoaccounts.New(neoaccounts.Config{Marble: apMarble})
 
-	vrfMarble, _ := marble.New(marble.Config{MarbleType: "neorand"})
-	vrfMarble.SetTestSecret("VRF_PRIVATE_KEY", []byte("concurrent-e2e-vrf-key-32bytes!!"))
-	vrfSvc, _ := vrf.New(vrf.Config{Marble: vrfMarble})
+	computeMarble, _ := marble.New(marble.Config{MarbleType: "neocompute"})
+	computeMarble.SetTestSecret("COMPUTE_MASTER_KEY", []byte("concurrent-e2e-compute-key-32bytes"))
+	computeSvc, _ := neocompute.New(neocompute.Config{Marble: computeMarble})
 
 	var wg sync.WaitGroup
 	results := make(chan bool, 100)
@@ -152,7 +157,7 @@ func TestE2EConcurrentServiceOperations(t *testing.T) {
 			defer wg.Done()
 			req := httptest.NewRequest("GET", "/health", nil)
 			w := httptest.NewRecorder()
-			vrfSvc.Router().ServeHTTP(w, req)
+			computeSvc.Router().ServeHTTP(w, req)
 			results <- (w.Code == http.StatusOK)
 		}()
 	}
@@ -223,14 +228,14 @@ func TestE2EServiceMetadata(t *testing.T) {
 			expectedID: "neoaccounts",
 		},
 		{
-			name:       "VRF",
-			marbleType: "neorand",
-			secretKey:  "VRF_PRIVATE_KEY",
-			secretVal:  []byte("metadata-test-vrf-key-32-bytes!!"),
+			name:       "NeoCompute",
+			marbleType: "neocompute",
+			secretKey:  "COMPUTE_MASTER_KEY",
+			secretVal:  []byte("metadata-test-compute-key-32-bytes!"),
 			createFunc: func(m *marble.Marble) (interface{ ID() string }, error) {
-				return vrf.New(vrf.Config{Marble: m})
+				return neocompute.New(neocompute.Config{Marble: m})
 			},
-			expectedID: "neorand",
+			expectedID: "neocompute",
 		},
 	}
 

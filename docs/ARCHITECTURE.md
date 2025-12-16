@@ -148,11 +148,12 @@ product-facing API.
 
 Only these services are considered product services right now:
 
-- **NeoRand (`neorand`)**: VRF computation + optional on-chain fulfillment loop.
 - **NeoFeeds (`neofeeds`)**: aggregate prices, sign responses, optionally push updates on-chain.
 - **NeoFlow (`neoflow`)**: schedule triggers, run webhooks, optionally execute on-chain actions.
 - **NeoCompute (`neocompute`)**: execute JS with strict limits + optional secret injection.
 - **NeoOracle (`neooracle`)**: fetch external data with allowlist + optional secret injection.
+
+Randomness can be produced via NeoCompute scripts (e.g. `crypto.randomBytes(32)`); there is no standalone VRF service.
 
 Each service follows the same internal pattern:
 

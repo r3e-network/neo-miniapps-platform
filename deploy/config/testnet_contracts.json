@@ -15,13 +15,6 @@
       "deployed_at": "2025-12-07T17:07:50Z"
     },
     {
-      "name": "VRFService",
-      "hash": "",
-      "tx_hash": "",
-      "gas_consumed": "1000035927",
-      "deployed_at": "2025-12-07T17:07:50Z"
-    },
-    {
       "name": "NeoFlowService",
       "hash": "",
       "tx_hash": "",

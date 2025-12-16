@@ -6,8 +6,6 @@
 //	slcli logout                                     - Logout and clear credentials
 //	slcli whoami                                     - Show current user info
 //	slcli balance                                    - Check user balance
-//	slcli vrf request --seed <SEED>                  - Request VRF random number
-//	slcli vrf get --request-id <ID>                  - Get VRF result
 //	slcli secrets create --name <NAME> --value <VAL> - Create secret
 //	slcli secrets list                               - List secrets
 package main
@@ -66,8 +64,6 @@ func main() {
 		cmdWhoami(args)
 	case "balance":
 		cmdBalance(args)
-	case "vrf":
-		cmdVRF(args)
 	case "secrets":
 		cmdSecrets(args)
 	case "help", "-h", "--help":
@@ -94,9 +90,6 @@ Authentication Commands:
 
 Service Commands:
   balance                            Check user GAS balance
-  vrf request --seed <SEED>          Request VRF random number
-  vrf get --request-id <ID>          Get VRF result
-  vrf list                           List VRF requests
   secrets create --name <N> --value <V>  Create secret
   secrets list                       List secrets
   secrets delete --name <NAME>       Delete secret
@@ -110,7 +103,6 @@ Examples:
   slcli login --token eyJhbGc...
   slcli whoami
   slcli balance
-  slcli vrf request --seed "my-random-seed"
   slcli secrets create --name api_key --value "secret-value"
   slcli logout`)
 }
@@ -272,63 +264,6 @@ func cmdBalance(args []string) {
 	fmt.Printf("Balance:   %d (%.8f GAS)\n", account.Balance, float64(account.Balance)/1e8)
 	fmt.Printf("Reserved:  %d (%.8f GAS)\n", account.Reserved, float64(account.Reserved)/1e8)
 	fmt.Printf("Available: %d (%.8f GAS)\n", available, float64(available)/1e8)
-}
-
-func cmdVRF(args []string) {
-	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: slcli vrf <request|get|list>")
-		os.Exit(1)
-	}
-
-	subcmd := args[0]
-	subargs := args[1:]
-
-	switch subcmd {
-	case "request":
-		cmdVRFRequest(subargs)
-	case "get":
-		cmdVRFGet(subargs)
-	case "list":
-		cmdVRFList(subargs)
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown vrf subcommand: %s\n", subcmd)
-		os.Exit(1)
-	}
-}
-
-func cmdVRFRequest(args []string) {
-	if len(args) < 2 || args[0] != "--seed" {
-		fmt.Fprintln(os.Stderr, "Usage: slcli vrf request --seed <SEED>")
-		os.Exit(1)
-	}
-
-	seed := args[1]
-	payload := map[string]interface{}{
-		"seed":      seed,
-		"num_words": 1,
-	}
-
-	data, err := apiRequest("POST", "/vrf/random", payload)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Println("✓ VRF request created")
-	fmt.Println(string(data))
-}
-
-func cmdVRFGet(args []string) {
-	if len(args) < 2 || args[0] != "--request-id" {
-		fmt.Fprintln(os.Stderr, "Usage: slcli vrf get --request-id <ID>")
-		os.Exit(1)
-	}
-
-	fmt.Println("Note: VRF get endpoint not yet implemented")
-}
-
-func cmdVRFList(args []string) {
-	fmt.Println("Note: VRF list endpoint not yet implemented")
 }
 
 func cmdSecrets(args []string) {

@@ -86,28 +86,6 @@ func TestCryptoSigning(t *testing.T) {
 	}
 }
 
-func TestVRFGeneration(t *testing.T) {
-	keyPair, err := crypto.GenerateKeyPair()
-	if err != nil {
-		t.Fatalf("Failed to generate key pair: %v", err)
-	}
-
-	alpha := []byte("test seed")
-
-	proof, err := crypto.GenerateVRF(keyPair.PrivateKey, alpha)
-	if err != nil {
-		t.Fatalf("Failed to generate VRF: %v", err)
-	}
-
-	if len(proof.Output) != 32 {
-		t.Errorf("Expected 32-byte output, got %d bytes", len(proof.Output))
-	}
-
-	if !crypto.VerifyVRF(keyPair.PublicKey, alpha, proof) {
-		t.Error("VRF verification failed")
-	}
-}
-
 func TestServiceFramework(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "test"})
 
@@ -244,16 +222,6 @@ func BenchmarkSigning(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = crypto.Sign(keyPair.PrivateKey, data)
-	}
-}
-
-func BenchmarkVRF(b *testing.B) {
-	keyPair, _ := crypto.GenerateKeyPair()
-	alpha := []byte("benchmark seed")
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = crypto.GenerateVRF(keyPair.PrivateKey, alpha)
 	}
 }
 

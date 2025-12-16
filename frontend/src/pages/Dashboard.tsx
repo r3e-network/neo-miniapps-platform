@@ -33,7 +33,6 @@ export function Dashboard() {
   });
 
   const serviceNames = [
-    'VRF',
     'DataFeeds',
     'Automation',
     'ConfCompute',

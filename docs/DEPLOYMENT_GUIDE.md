@@ -119,7 +119,6 @@ OAUTH_COOKIE_MODE=true
 OAUTH_COOKIE_SAMESITE=lax  # strict|lax|none (none requires HTTPS)
 
 # Services
-VRF_SERVICE_URL=http://neorand:8081
 DATAFEEDS_SERVICE_URL=http://neofeeds:8083
 AUTOMATION_SERVICE_URL=http://neoflow:8084
 ACCOUNTPOOL_SERVICE_URL=http://neoaccounts:8085
@@ -325,13 +324,13 @@ DOCKER_BUILDKIT=1 docker build \
   -t service-layer/gateway:latest \
   .
 
-# Service (example: neorand uses SERVICE=vrf)
+# Service (example: neocompute uses SERVICE=neocompute)
 DOCKER_BUILDKIT=1 docker build \
-  --secret id=ego_private_key,src=/path/to/neorand-private.pem \
+  --secret id=ego_private_key,src=/path/to/neocompute-private.pem \
   --build-arg EGO_STRICT_SIGNING=1 \
-  --build-arg SERVICE=vrf \
+  --build-arg SERVICE=neocompute \
   -f docker/Dockerfile.service \
-  -t service-layer/neorand:latest \
+  -t service-layer/neocompute:latest \
   .
 
 # Start without building (uses the images you built/pulled)
@@ -395,7 +394,7 @@ scrape_configs:
     relabel_configs:
       - source_labels: [__meta_kubernetes_pod_label_app]
         action: keep
-        regex: gateway|neorand|neofeeds|neoflow|neoaccounts|neocompute|neooracle|globalsigner
+        regex: gateway|neofeeds|neoflow|neoaccounts|neocompute|neooracle|globalsigner
 ```
 
 ### Grafana Dashboards
@@ -652,7 +651,7 @@ kubectl set env deployment/gateway LOG_LEVEL=debug -n service-layer
 CREATE INDEX idx_accounts_locked_by ON accounts(locked_by);
 
 -- Analyze query performance
-EXPLAIN ANALYZE SELECT * FROM accounts WHERE locked_by = 'neorand';
+EXPLAIN ANALYZE SELECT * FROM accounts WHERE locked_by = 'neocompute';
 ```
 
 ### Connection Pooling

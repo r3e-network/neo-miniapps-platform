@@ -42,34 +42,28 @@ output = "contracts/build/ServiceLayerGateway"
 order = 1
 
 [[contracts]]
-name = "VRFService"
-source = "services/vrf/contract/NeoRandService.cs"
-output = "contracts/build/VRFService"
-order = 2
-
-[[contracts]]
 name = "DataFeedsService"
 source = "services/datafeed/contract/NeoFeedsService.cs"
 output = "contracts/build/DataFeedsService"
-order = 3
+order = 2
 
 [[contracts]]
 name = "NeoFlowService"
 source = "services/automation/contract/NeoFlowService.cs"
 output = "contracts/build/NeoFlowService"
-order = 4
+order = 3
 
 [[contracts]]
 name = "ConfidentialService"
 source = "services/confcompute/contract/NeoComputeService.cs"
 output = "contracts/build/ConfidentialService"
-order = 5
+order = 4
 
 [[contracts]]
 name = "OracleService"
 source = "services/conforacle/contract/NeoOracleService.cs"
 output = "contracts/build/OracleService"
-order = 6
+order = 5
 
 # Example contracts (user contracts that consume services)
 [[contracts]]
@@ -77,12 +71,6 @@ name = "ExampleConsumer"
 source = "contracts/examples/ExampleConsumer.cs"
 output = "contracts/build/ExampleConsumer"
 order = 10
-
-[[contracts]]
-name = "VRFLottery"
-source = "contracts/examples/VRFLottery.cs"
-output = "contracts/build/VRFLottery"
-order = 11
 
 [[contracts]]
 name = "DeFiPriceConsumer"
@@ -110,7 +98,6 @@ user = { path = "deploy/wallets/user.json", password = "test" }
 # Service fees in GAS (8 decimals, so 10000000 = 0.1 GAS)
 [services.fees]
 oracle = 10000000      # 0.1 GAS
-vrf = 10000000         # 0.1 GAS
 datafeeds = 5000000    # 0.05 GAS
 automation = 20000000  # 0.2 GAS
 confidential = 100000000  # 1.0 GAS

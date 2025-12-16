@@ -174,7 +174,7 @@ func TestRequestAccounts_RepositoryNotConfigured(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	_, _, reqErr := svc.RequestAccounts(context.Background(), "neorand", 1, "test")
+	_, _, reqErr := svc.RequestAccounts(context.Background(), "neocompute", 1, "test")
 	if reqErr == nil {
 		t.Fatalf("expected error when repository is not configured")
 	}
@@ -187,7 +187,7 @@ func TestRequestAccounts_PropagatesListError(t *testing.T) {
 		listAvailableWithBalancesErr: errors.New("db list failed"),
 	}
 
-	_, _, err := svc.RequestAccounts(context.Background(), "neorand", 1, "test")
+	_, _, err := svc.RequestAccounts(context.Background(), "neocompute", 1, "test")
 	if err == nil || !strings.Contains(err.Error(), "list accounts") {
 		t.Fatalf("RequestAccounts() error = %v, want wrapped list error", err)
 	}
@@ -200,7 +200,7 @@ func TestRequestAccounts_ReturnsNoAccountsAvailableWhenCreateFails(t *testing.T)
 		createErr:           errors.New("create failed"),
 	}
 
-	_, _, err := svc.RequestAccounts(context.Background(), "neorand", 1, "test")
+	_, _, err := svc.RequestAccounts(context.Background(), "neocompute", 1, "test")
 	if err == nil || !strings.Contains(err.Error(), "no accounts available") {
 		t.Fatalf("RequestAccounts() error = %v, want no accounts available", err)
 	}
@@ -229,7 +229,7 @@ func TestRequestAccounts_SkipsLockFailuresAndReturnsOtherAccounts(t *testing.T) 
 		updateErrForID:            map[string]error{"acc-1": errors.New("update failed")},
 	}
 
-	accounts, lockID, err := svc.RequestAccounts(context.Background(), "neorand", 2, "test")
+	accounts, lockID, err := svc.RequestAccounts(context.Background(), "neocompute", 2, "test")
 	if err != nil {
 		t.Fatalf("RequestAccounts() error = %v", err)
 	}
@@ -249,16 +249,16 @@ func TestRequestAccounts_SkipsLockFailuresAndReturnsOtherAccounts(t *testing.T) 
 	}
 
 	got2, _ := baseRepo.GetByID(context.Background(), "acc-2")
-	if got2 == nil || got2.LockedBy != "neorand" {
-		t.Fatalf("acc-2 should be locked by neorand, got %+v", got2)
+	if got2 == nil || got2.LockedBy != "neocompute" {
+		t.Fatalf("acc-2 should be locked by neocompute, got %+v", got2)
 	}
 }
 
 func TestReleaseAccounts_SkipsMissingAndUpdateFailures(t *testing.T) {
 	svc, baseRepo := newTestServiceWithMock(t)
 
-	acc1 := &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand", LockedAt: time.Now()}
-	acc2 := &neoaccountssupabase.Account{ID: "acc-2", LockedBy: "neorand", LockedAt: time.Now()}
+	acc1 := &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute", LockedAt: time.Now()}
+	acc2 := &neoaccountssupabase.Account{ID: "acc-2", LockedBy: "neocompute", LockedAt: time.Now()}
 	_ = baseRepo.Create(context.Background(), acc1)
 	_ = baseRepo.Create(context.Background(), acc2)
 
@@ -267,7 +267,7 @@ func TestReleaseAccounts_SkipsMissingAndUpdateFailures(t *testing.T) {
 		updateErrForID:      map[string]error{"acc-1": errors.New("update failed")},
 	}
 
-	released, err := svc.ReleaseAccounts(context.Background(), "neorand", []string{"missing", "acc-1", "acc-2"})
+	released, err := svc.ReleaseAccounts(context.Background(), "neocompute", []string{"missing", "acc-1", "acc-2"})
 	if err != nil {
 		t.Fatalf("ReleaseAccounts() error = %v", err)
 	}
@@ -288,7 +288,7 @@ func TestReleaseAllByService_ReturnsErrorOnListFailure(t *testing.T) {
 		listByLockerErr:     errors.New("list by locker failed"),
 	}
 
-	if _, err := svc.ReleaseAllByService(context.Background(), "neorand"); err == nil {
+	if _, err := svc.ReleaseAllByService(context.Background(), "neocompute"); err == nil {
 		t.Fatalf("expected error when ListByLocker fails")
 	}
 }
@@ -296,8 +296,8 @@ func TestReleaseAllByService_ReturnsErrorOnListFailure(t *testing.T) {
 func TestReleaseAllByService_SkipsUpdateFailures(t *testing.T) {
 	svc, baseRepo := newTestServiceWithMock(t)
 
-	acc1 := &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand", LockedAt: time.Now()}
-	acc2 := &neoaccountssupabase.Account{ID: "acc-2", LockedBy: "neorand", LockedAt: time.Now()}
+	acc1 := &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute", LockedAt: time.Now()}
+	acc2 := &neoaccountssupabase.Account{ID: "acc-2", LockedBy: "neocompute", LockedAt: time.Now()}
 	_ = baseRepo.Create(context.Background(), acc1)
 	_ = baseRepo.Create(context.Background(), acc2)
 
@@ -306,7 +306,7 @@ func TestReleaseAllByService_SkipsUpdateFailures(t *testing.T) {
 		updateErrForID:      map[string]error{"acc-1": errors.New("update failed")},
 	}
 
-	released, err := svc.ReleaseAllByService(context.Background(), "neorand")
+	released, err := svc.ReleaseAllByService(context.Background(), "neocompute")
 	if err != nil {
 		t.Fatalf("ReleaseAllByService() error = %v", err)
 	}
@@ -327,14 +327,14 @@ func TestReleaseAllByService_SkipsUpdateFailures(t *testing.T) {
 
 func TestUpdateBalance_PropagatesBalanceLookupError(t *testing.T) {
 	svc, baseRepo := newTestServiceWithMock(t)
-	_ = baseRepo.Create(context.Background(), &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand"})
+	_ = baseRepo.Create(context.Background(), &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute"})
 
 	svc.repo = &repoWithFailures{
 		RepositoryInterface: baseRepo,
 		getBalanceErr:       errors.New("get balance failed"),
 	}
 
-	_, _, _, err := svc.UpdateBalance(context.Background(), "neorand", "acc-1", TokenTypeGAS, 1, nil)
+	_, _, _, err := svc.UpdateBalance(context.Background(), "neocompute", "acc-1", TokenTypeGAS, 1, nil)
 	if err == nil || !strings.Contains(err.Error(), "get balance") {
 		t.Fatalf("UpdateBalance() error = %v, want wrapped get balance error", err)
 	}
@@ -342,14 +342,14 @@ func TestUpdateBalance_PropagatesBalanceLookupError(t *testing.T) {
 
 func TestUpdateBalance_PropagatesUpsertError(t *testing.T) {
 	svc, baseRepo := newTestServiceWithMock(t)
-	_ = baseRepo.Create(context.Background(), &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand"})
+	_ = baseRepo.Create(context.Background(), &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute"})
 
 	svc.repo = &repoWithFailures{
 		RepositoryInterface: baseRepo,
 		upsertBalanceErr:    errors.New("upsert failed"),
 	}
 
-	_, _, _, err := svc.UpdateBalance(context.Background(), "neorand", "acc-1", TokenTypeGAS, 1, nil)
+	_, _, _, err := svc.UpdateBalance(context.Background(), "neocompute", "acc-1", TokenTypeGAS, 1, nil)
 	if err == nil || !strings.Contains(err.Error(), "upsert balance") {
 		t.Fatalf("UpdateBalance() error = %v, want wrapped upsert balance error", err)
 	}
@@ -357,14 +357,14 @@ func TestUpdateBalance_PropagatesUpsertError(t *testing.T) {
 
 func TestUpdateBalance_PropagatesAccountUpdateError(t *testing.T) {
 	svc, baseRepo := newTestServiceWithMock(t)
-	_ = baseRepo.Create(context.Background(), &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand"})
+	_ = baseRepo.Create(context.Background(), &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute"})
 
 	svc.repo = &repoWithFailures{
 		RepositoryInterface: baseRepo,
 		updateErrForID:      map[string]error{"acc-1": errors.New("update failed")},
 	}
 
-	_, _, _, err := svc.UpdateBalance(context.Background(), "neorand", "acc-1", TokenTypeGAS, 1, nil)
+	_, _, _, err := svc.UpdateBalance(context.Background(), "neocompute", "acc-1", TokenTypeGAS, 1, nil)
 	if err == nil || !strings.Contains(err.Error(), "update failed") {
 		t.Fatalf("UpdateBalance() error = %v, want update error", err)
 	}
@@ -397,13 +397,13 @@ func (failingReader) Read([]byte) (int, error) { return 0, errors.New("rng faile
 
 func TestSignTransaction_ReturnsErrorWhenSigningFails(t *testing.T) {
 	svc, mockRepo := newTestServiceWithMock(t)
-	_ = mockRepo.Create(context.Background(), &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand"})
+	_ = mockRepo.Create(context.Background(), &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute"})
 
 	origRand := rand.Reader
 	rand.Reader = failingReader{}
 	defer func() { rand.Reader = origRand }()
 
-	_, err := svc.SignTransaction(context.Background(), "neorand", "acc-1", []byte("hash"))
+	_, err := svc.SignTransaction(context.Background(), "neocompute", "acc-1", []byte("hash"))
 	if err == nil || !strings.Contains(err.Error(), "sign") {
 		t.Fatalf("SignTransaction() error = %v, want signing error", err)
 	}
@@ -421,7 +421,7 @@ func TestSignTransaction_RepositoryNotConfigured(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	_, signErr := svc.SignTransaction(context.Background(), "neorand", "acc-1", []byte("hash"))
+	_, signErr := svc.SignTransaction(context.Background(), "neocompute", "acc-1", []byte("hash"))
 	if signErr == nil || !strings.Contains(signErr.Error(), "repository not configured") {
 		t.Fatalf("SignTransaction() error = %v, want repository error", signErr)
 	}
@@ -431,7 +431,7 @@ func TestHandleSignTransaction_MissingFieldsReturnsBadRequest(t *testing.T) {
 	svc, _ := newTestServiceWithMock(t)
 
 	body, err := json.Marshal(map[string]any{
-		"service_id": "neorand",
+		"service_id": "neocompute",
 		"account_id": "acc-1",
 		// tx_hash omitted
 	})
@@ -454,7 +454,7 @@ func TestHandleUpdateBalance_MissingAccountIDReturnsBadRequest(t *testing.T) {
 	svc, _ := newTestServiceWithMock(t)
 
 	body, err := json.Marshal(map[string]any{
-		"service_id": "neorand",
+		"service_id": "neocompute",
 		"delta":      1,
 		// account_id omitted
 	})

@@ -25,7 +25,6 @@ spec:
     # Service Jobs (internal work queue)
     # =============================================================================
     # Pattern: sl.job.{serviceType}
-    - sl.job.vrf
     - sl.job.oracle
     - sl.job.automation
     - sl.job.accountpool
@@ -40,7 +39,6 @@ spec:
     # =============================================================================
     # Dead Letter Queues (failed messages for investigation)
     # =============================================================================
-    - sl.dlq.vrf
     - sl.dlq.oracle
     - sl.dlq.automation
     - sl.dlq.tx

@@ -40,18 +40,6 @@ patches:
         path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1provision
         value: "1"
 
-  # NeoRand SGX patch
-  - target:
-      kind: Deployment
-      name: neorand
-    patch: |-
-      - op: add
-        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1enclave
-        value: "1"
-      - op: add
-        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1provision
-        value: "1"
-
   # NeoFeeds SGX patch
   - target:
       kind: Deployment

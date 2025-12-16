@@ -14,20 +14,6 @@
                 "OutOfDateConfigurationNeeded"
             ]
         },
-        "neorand": {
-            "SignerID": "7f2b2e83da129dd4e7cfbb1cf2c5f1163f21fb8bb2b8d26cc41a278f07f42639",
-            "ProductID": 1,
-            "SecurityVersion": 1,
-            "Debug": false,
-            "AcceptedTCBStatuses": [
-                "UpToDate",
-                "SWHardeningNeeded",
-                "ConfigurationAndSWHardeningNeeded",
-                "ConfigurationNeeded",
-                "OutOfDate",
-                "OutOfDateConfigurationNeeded"
-            ]
-        },
         "neofeeds": {
             "SignerID": "3ebab79aad35d43f25e5ad7035c905c19ff891d0e393e2df439ef5bb0f2635eb",
             "ProductID": 1,
@@ -124,11 +110,6 @@
             "Size": 256,
             "Shared": true
         },
-        "VRF_PRIVATE_KEY": {
-            "Type": "symmetric-key",
-            "Size": 256,
-            "Shared": true
-        },
         "POOL_MASTER_KEY": {
             "Type": "symmetric-key",
             "Size": 256,
@@ -174,23 +155,6 @@
                     "JWT_SECRET": "{{ hex .Secrets.JWT_SECRET.Private }}",
                     "OAUTH_TOKENS_MASTER_KEY": "{{ hex .Secrets.OAUTH_TOKENS_MASTER_KEY.Private }}",
                     "SECRETS_MASTER_KEY": "{{ hex .Secrets.SECRETS_MASTER_KEY.Private }}",
-                    "MARBLE_CERT": "{{ pem .MarbleRun.MarbleCert.Cert }}",
-                    "MARBLE_KEY": "{{ pem .MarbleRun.MarbleCert.Private }}",
-                    "MARBLE_ROOT_CA": "{{ pem .MarbleRun.RootCA.Cert }}"
-                }
-            }
-        },
-        "neorand": {
-            "Package": "neorand",
-            "MaxActivations": 100,
-            "Parameters": {
-                "Argv": [
-                    "./service"
-                ],
-                "Env": {
-                    "EDG_MARBLE_TYPE": "neorand",
-                    "SERVICE_TYPE": "neorand",
-                    "VRF_PRIVATE_KEY": "{{ hex .Secrets.VRF_PRIVATE_KEY.Private }}",
                     "MARBLE_CERT": "{{ pem .MarbleRun.MarbleCert.Cert }}",
                     "MARBLE_KEY": "{{ pem .MarbleRun.MarbleCert.Private }}",
                     "MARBLE_ROOT_CA": "{{ pem .MarbleRun.RootCA.Cert }}"

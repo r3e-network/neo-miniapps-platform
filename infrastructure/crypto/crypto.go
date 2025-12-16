@@ -9,7 +9,6 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"math/big"
@@ -315,60 +314,6 @@ func base58Encode(input []byte) string {
 	}
 
 	return string(result)
-}
-
-// =============================================================================
-// VRF (Verifiable Random Function) - Legacy Wrappers
-// =============================================================================
-//
-// NOTE: The proper ECVRF implementation is in vrf.go.
-// These functions are kept for backward compatibility but delegate to the new implementation.
-
-// VRFProof represents a VRF proof (legacy format).
-// For new code, use VRFOutput and VRFProofData from vrf.go.
-type VRFProof struct {
-	PublicKey []byte `json:"public_key"`
-	Proof     []byte `json:"proof"`
-	Output    []byte `json:"output"`
-}
-
-// GenerateVRF generates a VRF output and proof.
-// Uses proper ECVRF-P256-SHA256-TAI as per RFC 9381.
-// This is a wrapper around GenerateVRFProof for backward compatibility.
-func GenerateVRF(privateKey *ecdsa.PrivateKey, alpha []byte) (*VRFProof, error) {
-	// Use the proper ECVRF implementation
-	output, err := GenerateVRFProof(privateKey, alpha)
-	if err != nil {
-		return nil, err
-	}
-
-	// Convert to legacy format
-	proofBytes := SerializeVRFProof(output.Pi)
-
-	return &VRFProof{
-		PublicKey: PublicKeyToBytes(&privateKey.PublicKey),
-		Proof:     proofBytes,
-		Output:    output.Beta,
-	}, nil
-}
-
-// VerifyVRF verifies a VRF proof.
-// This is a wrapper around VerifyVRFProof for backward compatibility.
-func VerifyVRF(publicKey *ecdsa.PublicKey, alpha []byte, proof *VRFProof) bool {
-	// Deserialize the proof
-	proofData, err := DeserializeVRFProof(proof.Proof)
-	if err != nil {
-		return false
-	}
-
-	// Verify using proper ECVRF
-	beta, valid := VerifyVRFProof(publicKey, alpha, proofData)
-	if !valid {
-		return false
-	}
-
-	// Verify the output matches
-	return hex.EncodeToString(beta) == hex.EncodeToString(proof.Output)
 }
 
 // =============================================================================

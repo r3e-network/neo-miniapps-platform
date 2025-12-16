@@ -13,7 +13,7 @@ Service Layer as described in `docs/ARCHITECTURE.md`.
 
 **Enclave workloads (MarbleRun + EGo)**:
 - Infrastructure marbles: `infrastructure/accountpool`, `infrastructure/globalsigner`
-- Product services: `services/vrf`, `services/datafeed`, `services/automation`, `services/confcompute`, `services/conforacle`
+- Product services: `services/datafeed`, `services/automation`, `services/confcompute`, `services/conforacle`
 
 ## Required External Dependencies
 
@@ -36,7 +36,6 @@ Injected via MarbleRun secrets (values depend on which services you run):
 
 - `POOL_MASTER_KEY` (+ `POOL_MASTER_KEY_HASH` in enclave mode) for AccountPool
 - `GLOBALSIGNER_MASTER_SEED` for GlobalSigner
-- `VRF_PRIVATE_KEY` for VRF
 - `NEOFEEDS_SIGNING_KEY` for Datafeeds
 - `COMPUTE_MASTER_KEY` for Confidential Compute
 - `TEE_PRIVATE_KEY` if you enable on-chain fulfillments/callback tx submission
@@ -47,7 +46,6 @@ Contract hashes can be set with the preferred names (legacy fallbacks are still
 supported by the codebase):
 
 - `CONTRACT_GATEWAY_HASH`
-- `CONTRACT_VRF_HASH`
 - `CONTRACT_DATAFEEDS_HASH` (fallback: `CONTRACT_NEOFEEDS_HASH`)
 - `CONTRACT_AUTOMATION_HASH` (fallback: `CONTRACT_NEOFLOW_HASH`)
 - `CONTRACT_CONFIDENTIAL_HASH` (fallback: `CONTRACT_NEOCOMPUTE_HASH`)
@@ -72,4 +70,3 @@ Local simulation:
 ```bash
 make docker-up
 ```
-

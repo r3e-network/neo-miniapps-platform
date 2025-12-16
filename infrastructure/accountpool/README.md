@@ -37,9 +37,9 @@ AccountPool-specific:
 ```json
 POST /request
 {
-  "service_id": "neorand",
+  "service_id": "neocompute",
   "count": 2,
-  "purpose": "vrf fulfillments"
+  "purpose": "compute jobs"
 }
 ```
 
@@ -69,4 +69,3 @@ Balances are stored in `pool_account_balances` keyed by:
 ```bash
 go test ./infrastructure/accountpool/... -v
 ```
-

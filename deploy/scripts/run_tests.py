@@ -13,8 +13,8 @@ Usage:
 
 Examples:
     python3 run_tests.py neoexpress           # Run all tests
-    python3 run_tests.py neoexpress vrf       # Run only VRF tests
-    python3 run_tests.py testnet lottery      # Run lottery tests on testnet
+    python3 run_tests.py neoexpress datafeeds # Run only datafeeds tests
+    python3 run_tests.py testnet datafeeds    # Run datafeeds tests on testnet
 """
 
 import json
@@ -130,7 +130,6 @@ class ServiceLayerTestBase(ABC):
         # Deploy service contracts
         services = {
             "oracle": "OracleService",
-            "vrf": "VRFService",
             "datafeeds": "DataFeedsService",
             "automation": "NeoFlowService",
             "confidential": "ConfidentialService",
@@ -149,109 +148,6 @@ class ServiceLayerTestBase(ABC):
     def run_tests(self) -> List[TestResult]:
         """Run all tests in this test class."""
         pass
-
-
-class VRFServiceTests(ServiceLayerTestBase):
-    """Tests for VRF Service and VRFLottery example."""
-
-    def run_tests(self) -> List[TestResult]:
-        results = []
-
-        # Test: VRF Request Creation
-        result = self._test_vrf_request_creation()
-        results.append(result)
-
-        # Test: VRF Callback Processing
-        result = self._test_vrf_callback()
-        results.append(result)
-
-        # Test: VRFLottery Round Lifecycle
-        result = self._test_lottery_lifecycle()
-        results.append(result)
-
-        return results
-
-    def _test_vrf_request_creation(self) -> TestResult:
-        """Test VRF request creation through Gateway."""
-        start = time.time()
-        try:
-            # Setup
-            self.setup()
-
-            # Create VRF request
-            result = self.client.invoke(
-                self.gateway_hash,
-                "requestService",
-                "vrf",
-                b'{"seed": "test-seed", "num_words": 3}',
-                "onVRFCallback"
-            )
-
-            if result.get("state") != "HALT":
-                return TestResult("vrf_request_creation", False, (time.time() - start) * 1000,
-                                 error=f"Unexpected state: {result.get('state')}")
-
-            return TestResult("vrf_request_creation", True, (time.time() - start) * 1000,
-                            gas_used=result.get("gas_consumed", 0))
-
-        except Exception as e:
-            return TestResult("vrf_request_creation", False, (time.time() - start) * 1000, error=str(e))
-
-    def _test_vrf_callback(self) -> TestResult:
-        """Test VRF callback from TEE."""
-        start = time.time()
-        try:
-            self.setup()
-
-            # Simulate TEE callback
-            vrf_result = bytes([0x42, 0x13, 0x37, 0xAB, 0xCD, 0xEF, 0x12, 0x34])
-
-            result = self.client.invoke(
-                self.gateway_hash,
-                "fulfillRequest",
-                1,  # requestId
-                vrf_result,
-                1,  # nonce
-                bytes(64),  # signature
-            )
-
-            return TestResult("vrf_callback", True, (time.time() - start) * 1000,
-                            gas_used=result.get("gas_consumed", 0))
-
-        except Exception as e:
-            return TestResult("vrf_callback", False, (time.time() - start) * 1000, error=str(e))
-
-    def _test_lottery_lifecycle(self) -> TestResult:
-        """Test VRFLottery round lifecycle."""
-        start = time.time()
-        try:
-            self.setup()
-
-            # Deploy lottery contract
-            lottery_hash = self.client.virtual_deploy(
-                str(BUILD_DIR / "VRFLottery.nef"),
-                str(BUILD_DIR / "VRFLottery.manifest.json"),
-            )
-
-            # Set gateway
-            self.client.invoke(lottery_hash, "setGateway", self.gateway_hash)
-
-            # Start round
-            self.client.invoke(lottery_hash, "startRound")
-
-            # Buy tickets (3 players)
-            for i in range(3):
-                self.client.deal(f"NPlayer{i}", "GAS", 100000000)
-                self.client.prank(f"NPlayer{i}")
-                self.client.invoke(lottery_hash, "buyTicket", 100000000)
-
-            # Close round (triggers VRF request)
-            self.client.invoke(lottery_hash, "closeRound", 1)
-
-            return TestResult("lottery_lifecycle", True, (time.time() - start) * 1000)
-
-        except Exception as e:
-            return TestResult("lottery_lifecycle", False, (time.time() - start) * 1000, error=str(e))
 
 
 class DataFeedsServiceTests(ServiceLayerTestBase):
@@ -350,7 +246,6 @@ class TestRunner:
         self.client = FairyTestClient(rpc_url)
         self.test_filter = test_filter
         self.test_classes = [
-            VRFServiceTests,
             DataFeedsServiceTests,
         ]
 

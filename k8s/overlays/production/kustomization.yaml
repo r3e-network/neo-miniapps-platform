@@ -38,19 +38,6 @@ patches:
                 app: gateway
   - target:
       kind: Deployment
-      name: neorand
-    patch: |-
-      - op: add
-        path: /spec/template/spec/topologySpreadConstraints
-        value:
-          - maxSkew: 1
-            topologyKey: kubernetes.io/hostname
-            whenUnsatisfiable: ScheduleAnyway
-            labelSelector:
-              matchLabels:
-                app: neorand
-  - target:
-      kind: Deployment
       name: neooracle
     patch: |-
       - op: add
@@ -66,8 +53,6 @@ patches:
 # Production replicas
 replicas:
   - name: gateway
-    count: 2
-  - name: neorand
     count: 2
   - name: neooracle
     count: 2

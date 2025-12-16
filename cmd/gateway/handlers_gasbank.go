@@ -125,7 +125,6 @@ func listTransactionsHandler(db *database.Repository) http.HandlerFunc {
 // Service endpoint configuration from environment
 var serviceEndpoints = map[string]string{
 	// Canonical service IDs.
-	"neorand":     getEnvFirst([]string{"VRF_SERVICE_URL", "NEORAND_SERVICE_URL"}, "http://localhost:8081"),
 	"neofeeds":    getEnvFirst([]string{"DATAFEEDS_SERVICE_URL", "NEOFEEDS_SERVICE_URL"}, "http://localhost:8083"),
 	"neoflow":     getEnvFirst([]string{"AUTOMATION_SERVICE_URL", "NEOFLOW_SERVICE_URL"}, "http://localhost:8084"),
 	"neoaccounts": getEnvFirst([]string{"ACCOUNTPOOL_SERVICE_URL", "NEOACCOUNTS_SERVICE_URL"}, "http://localhost:8085"),
@@ -133,7 +132,6 @@ var serviceEndpoints = map[string]string{
 	"neooracle":   getEnvFirst([]string{"ORACLE_SERVICE_URL", "NEOORACLE_SERVICE_URL"}, "http://localhost:8088"),
 
 	// Backward-compatible aliases.
-	"vrf":    getEnvFirst([]string{"VRF_SERVICE_URL", "NEORAND_SERVICE_URL"}, "http://localhost:8081"),
 	"oracle": getEnvFirst([]string{"ORACLE_SERVICE_URL", "NEOORACLE_SERVICE_URL"}, "http://localhost:8088"),
 }
 

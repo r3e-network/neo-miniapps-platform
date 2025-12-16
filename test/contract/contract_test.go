@@ -44,10 +44,6 @@ func TestContractCompilation(t *testing.T) {
 			sourceFile: filepath.Join("..", "..", "contracts", "gateway", "ServiceLayerGateway.cs"),
 		},
 		{
-			name:       "VRFService",
-			sourceFile: filepath.Join("..", "..", "services", "vrf", "contract", "NeoRandService.cs"),
-		},
-		{
 			name:       "DataFeedsService",
 			sourceFile: filepath.Join("..", "..", "services", "datafeed", "contract", "NeoFeedsService.cs"),
 		},
@@ -163,22 +159,5 @@ func TestGatewayContract(t *testing.T) {
 
 	t.Run("request flow", func(t *testing.T) {
 		t.Skip("requires deployed contract")
-	})
-}
-
-func TestVRFServiceContract(t *testing.T) {
-	SkipIfNoNeoExpress(t)
-	SkipIfNoCompiledContracts(t)
-
-	if testing.Short() {
-		t.Skip("skipping VRF test in short mode")
-	}
-
-	t.Run("random number request", func(t *testing.T) {
-		t.Skip("requires deployed contract and TEE service")
-	})
-
-	t.Run("fulfillment", func(t *testing.T) {
-		t.Skip("requires deployed contract and TEE service")
 	})
 }

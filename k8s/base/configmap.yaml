@@ -37,7 +37,6 @@ data:
   OAUTH_COOKIE_SAMESITE: "lax"
   # Service ports
   GATEWAY_PORT: "8080"
-  VRF_PORT: "8081"
   NEOFEEDS_PORT: "8083"
   NEOFLOW_PORT: "8084"
   NEOACCOUNTS_PORT: "8085"
@@ -54,7 +53,6 @@ data:
   # On-chain contract hashes (0x-prefixed little-endian Uint160 strings).
   # Set these per environment after deploying contracts.
   CONTRACT_GATEWAY_HASH: ""
-  CONTRACT_VRF_HASH: ""
   CONTRACT_DATAFEEDS_HASH: ""
   CONTRACT_AUTOMATION_HASH: ""
   CONTRACT_CONFIDENTIAL_HASH: ""
@@ -67,7 +65,6 @@ data:
   NEOFLOW_WEBHOOK_ALLOW_PRIVATE_NETWORKS: "false"
 
   # Internal service endpoints (used by gateway/service-to-service clients)
-  VRF_SERVICE_URL: "https://neorand:8081"
   DATAFEEDS_SERVICE_URL: "https://neofeeds:8083"
   AUTOMATION_SERVICE_URL: "https://neoflow:8084"
   ACCOUNTPOOL_SERVICE_URL: "https://neoaccounts:8085"

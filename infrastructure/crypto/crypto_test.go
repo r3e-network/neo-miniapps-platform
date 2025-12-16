@@ -349,83 +349,6 @@ func TestScriptHashToAddressDeterministic(t *testing.T) {
 }
 
 // =============================================================================
-// VRF Tests
-// =============================================================================
-
-func TestGenerateVRF(t *testing.T) {
-	kp, _ := GenerateKeyPair()
-	alpha := []byte("test seed")
-
-	proof, err := GenerateVRF(kp.PrivateKey, alpha)
-	if err != nil {
-		t.Fatalf("GenerateVRF() error = %v", err)
-	}
-
-	if len(proof.Output) != 32 {
-		t.Errorf("GenerateVRF() output length = %d, want 32", len(proof.Output))
-	}
-
-	if len(proof.Proof) != 97 {
-		t.Errorf("GenerateVRF() proof length = %d, want 97", len(proof.Proof))
-	}
-
-	if len(proof.PublicKey) != 33 {
-		t.Errorf("GenerateVRF() public key length = %d, want 33", len(proof.PublicKey))
-	}
-}
-
-func TestVerifyVRF(t *testing.T) {
-	kp, _ := GenerateKeyPair()
-	alpha := []byte("test seed")
-
-	proof, _ := GenerateVRF(kp.PrivateKey, alpha)
-
-	if !VerifyVRF(kp.PublicKey, alpha, proof) {
-		t.Error("VerifyVRF() returned false for valid proof")
-	}
-}
-
-func TestVerifyVRFWithWrongAlpha(t *testing.T) {
-	kp, _ := GenerateKeyPair()
-	alpha := []byte("test seed")
-
-	proof, _ := GenerateVRF(kp.PrivateKey, alpha)
-
-	wrongAlpha := []byte("wrong seed")
-	if VerifyVRF(kp.PublicKey, wrongAlpha, proof) {
-		t.Error("VerifyVRF() should return false for wrong alpha")
-	}
-}
-
-func TestVerifyVRFWithWrongKey(t *testing.T) {
-	kp1, _ := GenerateKeyPair()
-	kp2, _ := GenerateKeyPair()
-	alpha := []byte("test seed")
-
-	proof, _ := GenerateVRF(kp1.PrivateKey, alpha)
-
-	if VerifyVRF(kp2.PublicKey, alpha, proof) {
-		t.Error("VerifyVRF() should return false for wrong public key")
-	}
-}
-
-func TestVRFDeterministic(t *testing.T) {
-	kp, _ := GenerateKeyPair()
-	alpha := []byte("test seed")
-
-	proof1, _ := GenerateVRF(kp.PrivateKey, alpha)
-	proof2, _ := GenerateVRF(kp.PrivateKey, alpha)
-
-	// Output should be deterministic for same key and alpha
-	// Note: Due to ECDSA randomness, proofs may differ but outputs should be consistent
-	// In a proper VRF implementation, both would be deterministic
-	if !bytes.Equal(proof1.Output, proof2.Output) {
-		// This is expected with our simplified VRF implementation
-		t.Log("VRF outputs differ due to ECDSA randomness (expected in simplified implementation)")
-	}
-}
-
-// =============================================================================
 // Utility Function Tests
 // =============================================================================
 
@@ -536,16 +459,6 @@ func BenchmarkVerify(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = Verify(kp.PublicKey, data, signature)
-	}
-}
-
-func BenchmarkGenerateVRF(b *testing.B) {
-	kp, _ := GenerateKeyPair()
-	alpha := []byte("benchmark seed")
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = GenerateVRF(kp.PrivateKey, alpha)
 	}
 }
 

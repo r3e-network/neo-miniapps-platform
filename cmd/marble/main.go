@@ -41,8 +41,6 @@ import (
 	neocompute "github.com/R3E-Network/service_layer/services/confcompute/marble"
 	neooracle "github.com/R3E-Network/service_layer/services/conforacle/marble"
 	neofeeds "github.com/R3E-Network/service_layer/services/datafeed/marble"
-	neorand "github.com/R3E-Network/service_layer/services/vrf/marble"
-	neorandsupabase "github.com/R3E-Network/service_layer/services/vrf/supabase"
 )
 
 // ServiceRunner interface for all Neo services
@@ -60,7 +58,6 @@ var availableServices = []string{
 	"neofeeds",
 	"neoflow",
 	"neooracle",
-	"neorand",
 }
 
 func main() {
@@ -129,7 +126,6 @@ func main() {
 	// Initialize repositories
 	globalSignerRepo := globalsignersupabase.NewRepository(db)
 	neoaccountsRepo := neoaccountssupabase.NewRepository(db)
-	neorandRepo := neorandsupabase.NewRepository(db)
 	neoflowRepo := neoflowsupabase.NewRepository(db)
 
 	// Chain configuration
@@ -177,13 +173,6 @@ func main() {
 	}
 	if chainClient != nil && gatewayHash == "" {
 		log.Printf("Warning: CONTRACT_GATEWAY_HASH not set; TEE callbacks disabled")
-	}
-
-	vrfHash := trimHexPrefix(contracts.VRF)
-	if vrfHash == "" {
-		if secret, ok := m.Secret("CONTRACT_VRF_HASH"); ok && len(secret) > 0 {
-			vrfHash = trimHexPrefix(string(secret))
-		}
 	}
 
 	dataFeedsHash := trimHexPrefix(contracts.NeoFeeds)
@@ -267,7 +256,6 @@ func main() {
 			Client: chainClient,
 			Contracts: chain.ContractAddresses{
 				Gateway:  gatewayHash,
-				VRF:      vrfHash,
 				NeoFeeds: dataFeedsHash,
 				NeoFlow:  automationHash,
 			},
@@ -349,17 +337,6 @@ func main() {
 			SecretProvider: newServiceSecretsProvider(m, db, neooracle.ServiceID),
 			URLAllowlist:   oracleAllowlist,
 		})
-	case "neorand":
-		var randSvc *neorand.Service
-		randSvc, err = neorand.New(neorand.Config{
-			Marble:        m,
-			DB:            db,
-			NeoRandRepo:   neorandRepo,
-			ChainClient:   chainClient,
-			TEEFulfiller:  teeFulfiller,
-			EventListener: eventListener,
-		})
-		svc = randSvc
 	default:
 		log.Fatalf("Unknown service: %s. Available: %v", serviceType, availableServices)
 	}

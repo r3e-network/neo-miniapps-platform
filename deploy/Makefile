@@ -92,8 +92,5 @@ show-deployed:
 	@cat deploy/config/deployed_contracts.json 2>/dev/null || echo "No contracts deployed yet"
 
 # Test single service
-test-vrf:
-	python3 deploy/scripts/run_tests.py $(NETWORK) vrf
-
 test-datafeeds:
 	python3 deploy/scripts/run_tests.py $(NETWORK) datafeeds

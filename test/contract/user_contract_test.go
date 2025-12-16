@@ -3,7 +3,6 @@ package contract
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"math/big"
 	"net/http"
@@ -14,141 +13,8 @@ import (
 
 	neoaccounts "github.com/R3E-Network/service_layer/infrastructure/accountpool/marble"
 	"github.com/R3E-Network/service_layer/infrastructure/marble"
-	vrf "github.com/R3E-Network/service_layer/services/vrf/marble"
+	neocompute "github.com/R3E-Network/service_layer/services/confcompute/marble"
 )
-
-// ============================================================================
-// VRF Lottery Contract Tests
-// ============================================================================
-
-// VRFLotteryRound represents a lottery round state
-type VRFLotteryRound struct {
-	RoundID       int64  `json:"round_id"`
-	Status        string `json:"status"`
-	TicketCount   int64  `json:"ticket_count"`
-	PrizePool     int64  `json:"prize_pool"`
-	VRFRequestID  int64  `json:"vrf_request_id"`
-	VRFResult     []byte `json:"vrf_result"`
-	Winner        string `json:"winner"`
-	WinningTicket int64  `json:"winning_ticket"`
-}
-
-// VRFPayload represents a VRF request payload
-type VRFPayload struct {
-	Seed     []byte `json:"seed"`
-	NumWords int    `json:"num_words"`
-}
-
-func TestVRFLotteryContractFlow(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "neorand"})
-	m.SetTestSecret("VRF_PRIVATE_KEY", []byte("lottery-test-vrf-key-32-bytes!!!"))
-
-	vrfSvc, err := vrf.New(vrf.Config{Marble: m})
-	if err != nil {
-		t.Fatalf("vrf.New: %v", err)
-	}
-
-	t.Run("lottery round lifecycle simulation", func(t *testing.T) {
-		// Simulate round creation
-		round := VRFLotteryRound{
-			RoundID:     1,
-			Status:      "Open",
-			TicketCount: 0,
-			PrizePool:   0,
-		}
-
-		// Simulate ticket purchases
-		ticketPrice := int64(100000000) // 1 GAS
-		players := []string{
-			"NPlayer1Address1234567890123456789",
-			"NPlayer2Address1234567890123456789",
-			"NPlayer3Address1234567890123456789",
-		}
-
-		for _, player := range players {
-			round.TicketCount++
-			round.PrizePool += ticketPrice
-			t.Logf("Player %s bought ticket #%d", player[:10], round.TicketCount)
-		}
-
-		if round.TicketCount != 3 {
-			t.Errorf("expected 3 tickets, got %d", round.TicketCount)
-		}
-
-		// Close round and request VRF
-		round.Status = "Drawing"
-		seed := append(big.NewInt(round.RoundID).Bytes(), big.NewInt(time.Now().Unix()).Bytes()...)
-
-		vrfPayload := VRFPayload{
-			Seed:     seed,
-			NumWords: 1,
-		}
-
-		payloadJSON, _ := json.Marshal(vrfPayload)
-		t.Logf("VRF Request payload: %s", string(payloadJSON))
-
-		// Simulate VRF service processing
-		req := httptest.NewRequest("GET", "/health", nil)
-		w := httptest.NewRecorder()
-		vrfSvc.Router().ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Errorf("VRF service unhealthy: %d", w.Code)
-		}
-
-		// Simulate VRF result (in real scenario, this comes from TEE)
-		mockVRFResult := []byte{0x42, 0x13, 0x37, 0xAB, 0xCD, 0xEF, 0x12, 0x34}
-		round.VRFResult = mockVRFResult
-
-		// Select winner using VRF result
-		randomNumber := new(big.Int).SetBytes(mockVRFResult)
-		winningTicket := new(big.Int).Mod(randomNumber, big.NewInt(round.TicketCount))
-		round.WinningTicket = winningTicket.Int64()
-		round.Winner = players[round.WinningTicket]
-		round.Status = "Completed"
-
-		t.Logf("VRF Result: %s", hex.EncodeToString(mockVRFResult))
-		t.Logf("Winning ticket: %d", round.WinningTicket)
-		t.Logf("Winner: %s", round.Winner)
-
-		if round.Status != "Completed" {
-			t.Error("round should be completed")
-		}
-	})
-
-	t.Run("lottery callback structure", func(t *testing.T) {
-		type VRFCallback struct {
-			RequestID int64  `json:"request_id"`
-			Success   bool   `json:"success"`
-			Result    []byte `json:"result"`
-			Error     string `json:"error"`
-		}
-
-		// Success callback
-		successCallback := VRFCallback{
-			RequestID: 12345,
-			Success:   true,
-			Result:    []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08},
-			Error:     "",
-		}
-
-		if !successCallback.Success {
-			t.Error("success callback should have Success=true")
-		}
-
-		// Failure callback
-		failureCallback := VRFCallback{
-			RequestID: 12346,
-			Success:   false,
-			Result:    nil,
-			Error:     "VRF computation failed",
-		}
-
-		if failureCallback.Success {
-			t.Error("failure callback should have Success=false")
-		}
-	})
-}
 
 // ============================================================================
 // DeFi Price Consumer Contract Tests
@@ -291,9 +157,9 @@ func TestFullServiceLayerContractIntegration(t *testing.T) {
 	apMarble.SetTestSecret("POOL_MASTER_KEY", []byte("full-integration-pool-key-32b!!!"))
 	apSvc, _ := neoaccounts.New(neoaccounts.Config{Marble: apMarble})
 
-	vrfMarble, _ := marble.New(marble.Config{MarbleType: "neorand"})
-	vrfMarble.SetTestSecret("VRF_PRIVATE_KEY", []byte("full-integration-vrf-key-32bytes"))
-	vrfSvc, _ := vrf.New(vrf.Config{Marble: vrfMarble})
+	computeMarble, _ := marble.New(marble.Config{MarbleType: "neocompute"})
+	computeMarble.SetTestSecret("COMPUTE_MASTER_KEY", []byte("full-integration-compute-key-32bytes"))
+	computeSvc, _ := neocompute.New(neocompute.Config{Marble: computeMarble})
 
 	t.Run("simulate gateway request routing", func(t *testing.T) {
 		// Gateway would route requests to appropriate services
@@ -306,14 +172,14 @@ func TestFullServiceLayerContractIntegration(t *testing.T) {
 			CallbackMethod string `json:"callback_method"`
 		}
 
-		// VRF request from lottery contract
-		vrfRequest := ServiceRequest{
+		// NeoCompute request (randomness can be provided via a compute script).
+		computeRequest := ServiceRequest{
 			RequestID:      1,
 			UserContract:   "0x1111111111111111111111111111111111111111",
 			Caller:         "NCallerAddress12345678901234567890",
-			ServiceType:    "neorand",
-			Payload:        []byte(`{"seed":"lottery-seed","num_words":1}`),
-			CallbackMethod: "onVRFCallback",
+			ServiceType:    "neocompute",
+			Payload:        []byte(`{"script":"function main(){ return {random_hex: crypto.randomBytes(32)} }","entry_point":"main"}`),
+			CallbackMethod: "onComputeCallback",
 		}
 
 		// Oracle request from DeFi contract
@@ -326,7 +192,7 @@ func TestFullServiceLayerContractIntegration(t *testing.T) {
 			CallbackMethod: "onOracleCallback",
 		}
 
-		requests := []ServiceRequest{vrfRequest, oracleRequest}
+		requests := []ServiceRequest{computeRequest, oracleRequest}
 
 		for _, req := range requests {
 			t.Logf("Request %d: service=%s, contract=%s, callback=%s",
@@ -338,14 +204,14 @@ func TestFullServiceLayerContractIntegration(t *testing.T) {
 		var wg sync.WaitGroup
 		results := make(chan bool, 20)
 
-		// Concurrent VRF health checks
+		// Concurrent NeoCompute health checks
 		for i := 0; i < 10; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				req := httptest.NewRequest("GET", "/health", nil)
 				w := httptest.NewRecorder()
-				vrfSvc.Router().ServeHTTP(w, req)
+				computeSvc.Router().ServeHTTP(w, req)
 				results <- (w.Code == http.StatusOK)
 			}()
 		}
@@ -410,7 +276,7 @@ func TestContractEventProcessing(t *testing.T) {
 				"request_id":    int64(12345),
 				"user_contract": "0xUserContractHash",
 				"caller":        "NCallerAddress",
-				"service_type":  "neorand",
+				"service_type":  "neocompute",
 				"payload":       "base64EncodedPayload",
 			},
 		}
@@ -422,8 +288,8 @@ func TestContractEventProcessing(t *testing.T) {
 		if event.EventName != "ServiceRequest" {
 			t.Errorf("expected ServiceRequest, got %s", event.EventName)
 		}
-		if event.State["service_type"] != "neorand" {
-			t.Errorf("expected service_type vrf, got %v", event.State["service_type"])
+		if event.State["service_type"] != "neocompute" {
+			t.Errorf("expected service_type neocompute, got %v", event.State["service_type"])
 		}
 	})
 
@@ -449,7 +315,7 @@ func TestContractEventProcessing(t *testing.T) {
 			State: map[string]interface{}{
 				"request_id":    int64(12345),
 				"user_contract": "0xUserContractHash",
-				"method":        "onVRFCallback",
+				"method":        "onComputeCallback",
 				"success":       true,
 			},
 		}

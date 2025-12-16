@@ -1,7 +1,6 @@
 import { Server, ExternalLink } from 'lucide-react';
 
 const services = [
-  { id: 'neorand', name: 'VRF', description: 'Verifiable randomness (VRF) with proofs', status: 'active' },
   { id: 'neofeeds', name: 'DataFeeds', description: 'On-chain data feeds and signed updates', status: 'active' },
   { id: 'neoflow', name: 'Automation', description: 'Trigger-based automation and callbacks', status: 'active' },
   { id: 'neocompute', name: 'ConfCompute', description: 'Confidential JavaScript execution with secret injection', status: 'active' },

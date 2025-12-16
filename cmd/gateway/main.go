@@ -483,8 +483,6 @@ func registerRoutes(router *mux.Router, db *database.Repository, m *marble.Marbl
 	services.HandleFunc("/secrets/audit", auditLogsHandler(secretsManager)).Methods("GET")
 	services.HandleFunc("/secrets/{name}/audit", secretAuditLogsHandler(secretsManager)).Methods("GET")
 
-	services.HandleFunc("/vrf/{path:.*}", proxyHandler("vrf", m)).Methods("GET", "POST")
-	services.HandleFunc("/neorand/{path:.*}", proxyHandler("neorand", m)).Methods("GET", "POST")
 	services.HandleFunc("/neofeeds/{path:.*}", proxyHandler("neofeeds", m)).Methods("GET", "POST")
 	services.HandleFunc("/neoflow/{path:.*}", proxyHandler("neoflow", m)).Methods("GET", "POST", "PUT", "DELETE")
 	services.HandleFunc("/neocompute/{path:.*}", proxyHandler("neocompute", m)).Methods("GET", "POST")

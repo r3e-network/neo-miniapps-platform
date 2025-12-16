@@ -265,8 +265,6 @@ func isMeshHostname(rawHost string) bool {
 	switch host {
 	case "gateway",
 		"globalsigner",
-		"neorand",
-		"vrf",
 		"neofeeds",
 		"neoflow",
 		"neoaccounts",

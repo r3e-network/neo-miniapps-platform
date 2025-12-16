@@ -12,7 +12,7 @@ import (
 
 	neoaccounts "github.com/R3E-Network/service_layer/infrastructure/accountpool/marble"
 	"github.com/R3E-Network/service_layer/infrastructure/marble"
-	vrf "github.com/R3E-Network/service_layer/services/vrf/marble"
+	neocompute "github.com/R3E-Network/service_layer/services/confcompute/marble"
 )
 
 // TestNeoAccountsSmoke performs basic smoke tests on the NeoAccounts service.
@@ -65,18 +65,18 @@ func TestNeoAccountsSmoke(t *testing.T) {
 	})
 }
 
-// TestVRFSmoke performs basic smoke tests on the VRF service.
-func TestVRFSmoke(t *testing.T) {
+// TestNeoComputeSmoke performs basic smoke tests on the NeoCompute service.
+func TestNeoComputeSmoke(t *testing.T) {
 	t.Run("service creates successfully", func(t *testing.T) {
-		m, err := marble.New(marble.Config{MarbleType: "neorand"})
+		m, err := marble.New(marble.Config{MarbleType: "neocompute"})
 		if err != nil {
 			t.Fatalf("marble.New: %v", err)
 		}
-		m.SetTestSecret("VRF_PRIVATE_KEY", []byte("smoke-test-vrf-key-32-bytes!!!!!"))
+		m.SetTestSecret("COMPUTE_MASTER_KEY", []byte("smoke-test-compute-master-key-32b!!"))
 
-		svc, err := vrf.New(vrf.Config{Marble: m})
+		svc, err := neocompute.New(neocompute.Config{Marble: m})
 		if err != nil {
-			t.Fatalf("vrf.New: %v", err)
+			t.Fatalf("neocompute.New: %v", err)
 		}
 		if svc == nil {
 			t.Fatal("service should not be nil")
@@ -84,9 +84,9 @@ func TestVRFSmoke(t *testing.T) {
 	})
 
 	t.Run("health endpoint responds", func(t *testing.T) {
-		m, _ := marble.New(marble.Config{MarbleType: "neorand"})
-		m.SetTestSecret("VRF_PRIVATE_KEY", []byte("smoke-test-vrf-key-32-bytes!!!!!"))
-		svc, _ := vrf.New(vrf.Config{Marble: m})
+		m, _ := marble.New(marble.Config{MarbleType: "neocompute"})
+		m.SetTestSecret("COMPUTE_MASTER_KEY", []byte("smoke-test-compute-master-key-32b!!"))
+		svc, _ := neocompute.New(neocompute.Config{Marble: m})
 
 		req := httptest.NewRequest("GET", "/health", nil)
 		w := httptest.NewRecorder()
@@ -98,12 +98,15 @@ func TestVRFSmoke(t *testing.T) {
 	})
 
 	t.Run("service metadata correct", func(t *testing.T) {
-		m, _ := marble.New(marble.Config{MarbleType: "neorand"})
-		m.SetTestSecret("VRF_PRIVATE_KEY", []byte("smoke-test-vrf-key-32-bytes!!!!!"))
-		svc, _ := vrf.New(vrf.Config{Marble: m})
+		m, _ := marble.New(marble.Config{MarbleType: "neocompute"})
+		m.SetTestSecret("COMPUTE_MASTER_KEY", []byte("smoke-test-compute-master-key-32b!!"))
+		svc, _ := neocompute.New(neocompute.Config{Marble: m})
 
-		if svc.ID() != "neorand" {
-			t.Errorf("expected ID 'neorand', got '%s'", svc.ID())
+		if svc.ID() != "neocompute" {
+			t.Errorf("expected ID 'neocompute', got '%s'", svc.ID())
+		}
+		if svc.Name() != "NeoCompute Service" {
+			t.Errorf("expected name 'NeoCompute Service', got '%s'", svc.Name())
 		}
 	})
 }

@@ -226,7 +226,7 @@ func TestServiceRequestJSON(t *testing.T) {
 	req := ServiceRequest{
 		ID:          "req-123",
 		UserID:      "user-456",
-		ServiceType: "vrf",
+		ServiceType: "neocompute",
 		Status:      "pending",
 		Payload:     json.RawMessage(`{"pair":"BTC/USD"}`),
 		GasUsed:     1000,
@@ -402,12 +402,12 @@ func TestRepositoryCreateUser(t *testing.T) {
 
 func TestRepositoryGetServiceRequests(t *testing.T) {
 	client := newClientWithHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]ServiceRequest{
-			{ID: "req-1", ServiceType: "vrf"},
-			{ID: "req-2", ServiceType: "neofeeds"},
-		})
-	}))
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode([]ServiceRequest{
+				{ID: "req-1", ServiceType: "neocompute"},
+				{ID: "req-2", ServiceType: "neofeeds"},
+			})
+		}))
 	repo := NewRepository(client)
 
 	ctx := context.Background()

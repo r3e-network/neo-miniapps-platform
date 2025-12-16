@@ -18,7 +18,7 @@ Options:
                Build SGX images locally using a single enclave signing key (BuildKit secret).
   --signing-key-dir DIR
                Build SGX images locally using per-package keys named <package>.pem
-               (or <package>-private.pem) for gateway/neorand/neofeeds/.../globalsigner
+               (or <package>-private.pem) for gateway/neofeeds/.../globalsigner
   --skip-signer-check
                Skip comparing key-derived SignerIDs against manifests/manifest.json (not recommended).
   -h, --help   Show this help.
@@ -248,7 +248,6 @@ fi
 default_service_binary() {
   local pkg="$1"
   case "$pkg" in
-    neorand) echo "vrf" ;;
     neoaccounts) echo "accountpool" ;;
     *) echo "$pkg" ;;
   esac
@@ -333,7 +332,7 @@ ego_signerid_from_private_key() {
 }
 
 build_signed_images() {
-  local packages=(gateway neorand neofeeds neoflow neoaccounts neocompute neooracle globalsigner)
+  local packages=(gateway neofeeds neoflow neoaccounts neocompute neooracle globalsigner)
   local pkg
 
   export DOCKER_BUILDKIT=1

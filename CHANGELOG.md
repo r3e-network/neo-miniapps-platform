@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Deprecated review documents (12 files)
 - Deprecated scripts: `find_duplications.sh`, `split_large_files.sh`
+- NeoRand (VRF) service and contracts (randomness is provided via NeoCompute scripts)
 
 ### Fixed
 

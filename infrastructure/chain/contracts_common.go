@@ -16,7 +16,6 @@ import (
 // ContractAddresses holds the deployed contract addresses.
 type ContractAddresses struct {
 	Gateway    string `json:"gateway"`
-	VRF        string `json:"neorand"`
 	NeoFeeds   string `json:"neofeeds"`
 	NeoFlow    string `json:"neoflow"`
 	NeoCompute string `json:"neocompute"`
@@ -28,9 +27,6 @@ type ContractAddresses struct {
 func (c *ContractAddresses) LoadFromEnv() {
 	if h := os.Getenv("CONTRACT_GATEWAY_HASH"); h != "" {
 		c.Gateway = h
-	}
-	if h := os.Getenv("CONTRACT_VRF_HASH"); h != "" {
-		c.VRF = h
 	}
 	if h := firstNonEmptyEnv("CONTRACT_DATAFEEDS_HASH", "CONTRACT_NEOFEEDS_HASH"); h != "" {
 		c.NeoFeeds = h

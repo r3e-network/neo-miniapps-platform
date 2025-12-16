@@ -134,8 +134,8 @@ This will:
 Run a specific service:
 
 ```bash
-# Run VRF service (NeoRand)
-OE_SIMULATION=1 SERVICE_TYPE=neorand go run ./cmd/marble
+# Run confidential compute (NeoCompute)
+OE_SIMULATION=1 SERVICE_TYPE=neocompute go run ./cmd/marble
 
 # Run confidential oracle (NeoOracle)
 OE_SIMULATION=1 SERVICE_TYPE=neooracle go run ./cmd/marble
@@ -310,9 +310,8 @@ curl http://localhost:8080/metrics
 # - http_request_duration_seconds: Request latency
 # - errors_total: Total errors
 # - blockchain_transactions_total: Blockchain transactions
-# - neorand_requests_total: VRF requests
-# - neofeeds_updates_total: NeoFeeds updates (if enabled)
-# - neoflow_executions_total: NeoFlow executions
+# - database_queries_total: Database queries
+# - service_uptime_seconds: Service uptime
 ```
 
 ### Logging

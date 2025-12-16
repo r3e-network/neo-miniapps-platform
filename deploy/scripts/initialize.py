@@ -53,7 +53,6 @@ def reverse_hash160(value: str) -> str:
 # NOTE: DataFeeds is a push-style contract and is not invoked via Gateway.requestService.
 GATEWAY_SERVICES = {
     "oracle": "OracleService",
-    "vrf": "VRFService",
     "automation": "NeoFlowService",
     "confidential": "ConfidentialService",
 }
@@ -273,7 +272,7 @@ class ContractInitializer:
         gateway_arg = reverse_hash160(gateway_hash) if gateway_hash else ""
         datafeeds_arg = reverse_hash160(datafeeds_hash) if datafeeds_hash else ""
 
-        examples = ["ExampleConsumer", "VRFLottery", "DeFiPriceConsumer"]
+        examples = ["ExampleConsumer", "DeFiPriceConsumer"]
 
         for example in examples:
             contract_hash = self.deployed.get(example)

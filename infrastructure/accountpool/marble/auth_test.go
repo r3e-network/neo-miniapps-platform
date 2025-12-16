@@ -12,7 +12,7 @@ func TestHandleRequestAccounts_ProductionRequiresServiceAuthContext(t *testing.T
 
 	svc, _ := newTestServiceWithMock(t)
 
-	body := []byte(`{"service_id":"neorand","count":1}`)
+	body := []byte(`{"service_id":"neocompute","count":1}`)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()

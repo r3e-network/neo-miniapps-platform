@@ -130,15 +130,15 @@ func TestResolveServiceID_Behavior(t *testing.T) {
 
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	rr = httptest.NewRecorder()
-	svc, ok := resolveServiceID(rr, req, "neorand")
-	if !ok || svc != "neorand" {
-		t.Fatalf("resolveServiceID() = (%q,%v), want (neorand,true)", svc, ok)
+	svc, ok := resolveServiceID(rr, req, "neocompute")
+	if !ok || svc != "neocompute" {
+		t.Fatalf("resolveServiceID() = (%q,%v), want (neocompute,true)", svc, ok)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("X-Service-ID", "neooracle")
 	rr = httptest.NewRecorder()
-	if _, ok := resolveServiceID(rr, req, "neorand"); ok {
+	if _, ok := resolveServiceID(rr, req, "neocompute"); ok {
 		t.Fatalf("expected mismatched service_id to be rejected")
 	}
 	if rr.Code != http.StatusForbidden {
@@ -155,7 +155,7 @@ func TestResolveServiceID_ProductionRejectsMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rsaKeyForTest: %v", err)
 	}
-	gen := middleware.NewServiceTokenGenerator(privateKey, "neorand", time.Hour)
+	gen := middleware.NewServiceTokenGenerator(privateKey, "neocompute", time.Hour)
 	token, err := gen.GenerateToken()
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
@@ -164,7 +164,7 @@ func TestResolveServiceID_ProductionRejectsMismatch(t *testing.T) {
 	auth := middleware.NewServiceAuthMiddleware(middleware.ServiceAuthConfig{
 		PublicKey:       &privateKey.PublicKey,
 		Logger:          logging.New("test", "error", "text"),
-		AllowedServices: []string{"neorand"},
+		AllowedServices: []string{"neocompute"},
 	})
 
 	body := []byte(`{"service_id":"neooracle","count":1}`)
@@ -172,7 +172,7 @@ func TestResolveServiceID_ProductionRejectsMismatch(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(middleware.ServiceTokenHeader, token)
 	req.TLS = &tls.ConnectionState{
-		VerifiedChains: [][]*x509.Certificate{{&x509.Certificate{DNSNames: []string{"neorand"}}}},
+		VerifiedChains: [][]*x509.Certificate{{&x509.Certificate{DNSNames: []string{"neocompute"}}}},
 	}
 
 	rr := httptest.NewRecorder()

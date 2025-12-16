@@ -15,11 +15,10 @@ namespace ServiceLayer.Examples
     ///
     /// This contract shows how to:
     /// 1. Request Oracle data
-    /// 2. Request VRF random numbers
-    /// 3. Handle callbacks from Service Layer
+    /// 2. Handle callbacks from Service Layer
     ///
     /// Flow:
-    /// 1. User calls ExampleConsumer.requestPrice() or requestRandom()
+    /// 1. User calls ExampleConsumer.requestPrice()
     /// 2. ExampleConsumer calls Gateway.RequestService()
     /// 3. TEE processes request off-chain
     /// 4. Gateway calls ExampleConsumer.onServiceCallback()
@@ -36,15 +35,11 @@ namespace ServiceLayer.Examples
         private const byte PREFIX_OWNER = 0x01;
         private const byte PREFIX_GATEWAY = 0x02;
         private const byte PREFIX_PRICE = 0x10;
-        private const byte PREFIX_RANDOM = 0x20;
         private const byte PREFIX_PENDING = 0x30;
 
         // Events
         [DisplayName("PriceUpdated")]
         public static event Action<string, BigInteger, ulong> OnPriceUpdated;
-
-        [DisplayName("RandomReceived")]
-        public static event Action<BigInteger, byte[]> OnRandomReceived;
 
         [DisplayName("RequestFailed")]
         public static event Action<BigInteger, string> OnRequestFailed;
@@ -124,44 +119,6 @@ namespace ServiceLayer.Examples
         }
 
         // ============================================================================
-        // VRF: Request Random Numbers
-        // ============================================================================
-
-        /// <summary>
-        /// Request verifiable random numbers.
-        /// </summary>
-        public static BigInteger RequestRandom(byte[] seed, BigInteger numWords)
-        {
-            UInt160 gateway = GetGateway();
-            if (gateway == null) throw new Exception("Gateway not set");
-
-            // Build VRF payload
-            VRFPayload payload = new VRFPayload
-            {
-                Seed = seed,
-                NumWords = numWords
-            };
-
-            byte[] payloadBytes = (byte[])StdLib.Serialize(payload);
-
-            // Call Gateway to request VRF service
-            BigInteger requestId = (BigInteger)Contract.Call(gateway, "requestService", CallFlags.All,
-                new object[] { "vrf", payloadBytes, "onServiceCallback" });
-
-            // Store pending request
-            PendingRequest pending = new PendingRequest
-            {
-                RequestId = requestId,
-                ServiceType = "vrf"
-            };
-
-            StorageMap pendingMap = new StorageMap(Storage.CurrentContext, PREFIX_PENDING);
-            pendingMap.Put(requestId.ToByteArray(), StdLib.Serialize(pending));
-
-            return requestId;
-        }
-
-        // ============================================================================
         // Callback Handler (Called by Gateway)
         // ============================================================================
 
@@ -199,10 +156,6 @@ namespace ServiceLayer.Examples
             {
                 HandleOracleResult(pending, result);
             }
-            else if (pending.ServiceType == "vrf")
-            {
-                HandleVRFResult(requestId, result);
-            }
 
             // Clean up
             pendingMap.Delete(requestId.ToByteArray());
@@ -225,15 +178,6 @@ namespace ServiceLayer.Examples
             OnPriceUpdated(pending.Pair, price, Runtime.Time);
         }
 
-        private static void HandleVRFResult(BigInteger requestId, byte[] result)
-        {
-            // Store random result
-            StorageMap randomMap = new StorageMap(Storage.CurrentContext, PREFIX_RANDOM);
-            randomMap.Put(requestId.ToByteArray(), result);
-
-            OnRandomReceived(requestId, result);
-        }
-
         // ============================================================================
         // Query Functions
         // ============================================================================
@@ -245,13 +189,6 @@ namespace ServiceLayer.Examples
             ByteString data = priceMap.Get(pair);
             if (data == null) return null;
             return (PriceData)StdLib.Deserialize((ByteString)data);
-        }
-
-        /// <summary>Get random result for a request</summary>
-        public static byte[] GetRandom(BigInteger requestId)
-        {
-            StorageMap randomMap = new StorageMap(Storage.CurrentContext, PREFIX_RANDOM);
-            return (byte[])randomMap.Get(requestId.ToByteArray());
         }
     }
 
@@ -266,12 +203,6 @@ namespace ServiceLayer.Examples
         public string Headers;
         public string Body;
         public string JsonPath;
-    }
-
-    public class VRFPayload
-    {
-        public byte[] Seed;
-        public BigInteger NumWords;
     }
 
     public class PendingRequest

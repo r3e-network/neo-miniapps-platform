@@ -62,7 +62,6 @@ func NewEventListener(cfg *ListenerConfig) *EventListener {
 	contractHashes := make(map[string]bool)
 	for _, contractHash := range []string{
 		cfg.Contracts.Gateway,
-		cfg.Contracts.VRF,
 		cfg.Contracts.NeoFeeds,
 		cfg.Contracts.NeoFlow,
 		cfg.Contracts.NeoCompute,

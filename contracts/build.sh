@@ -96,7 +96,6 @@ build_sources() {
 # Format: "directory:ContractName"
 service_contracts=(
     "../services/conforacle/contract:NeoOracleService"
-    "../services/vrf/contract:NeoRandService"
     "../services/datafeed/contract:NeoFeedsService"
     "../services/automation/contract:NeoFlowService"
     "../services/confcompute/contract:NeoComputeService"
@@ -111,7 +110,6 @@ gateway_contracts=(
 # Example contracts
 examples=(
     "examples/ExampleConsumer"
-    "examples/VRFLottery"
     "examples/DeFiPriceConsumer"
 )
 

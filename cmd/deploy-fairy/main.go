@@ -16,7 +16,6 @@ import (
 
 var coreContracts = []string{
 	"ServiceLayerGateway",
-	"VRFService",
 	"DataFeedsService",
 	"NeoFlowService",
 	"ConfidentialService",

@@ -16,7 +16,6 @@ import (
 
 var contracts = []string{
 	"ServiceLayerGateway",
-	"VRFService",
 	"DataFeedsService",
 	"NeoFlowService",
 	"ConfidentialService",
@@ -25,7 +24,6 @@ var contracts = []string{
 
 var exampleContracts = []string{
 	"ExampleConsumer",
-	"VRFLottery",
 	"DeFiPriceConsumer",
 }
 

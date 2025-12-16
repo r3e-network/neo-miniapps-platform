@@ -2,24 +2,6 @@
 # 为每个 Neo* 服务创建 Consumer
 
 ---
-# NeoRand Consumer
-apiVersion: jetstream.nats.io/v1beta2
-kind: Consumer
-metadata:
-  name: neorand-consumer
-  namespace: platform
-spec:
-  streamName: neo-events
-  durableName: neorand-consumer
-  deliverPolicy: all
-  ackPolicy: explicit
-  ackWait: 30s
-  maxDeliver: 3
-  filterSubject: neo.vrf.*
-  replayPolicy: instant
-  deliverGroup: neorand-workers
-
----
 # NeoFeeds Consumer
 apiVersion: jetstream.nats.io/v1beta2
 kind: Consumer

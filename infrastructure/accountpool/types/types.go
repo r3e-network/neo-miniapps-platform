@@ -3,7 +3,7 @@
 // This package is intentionally free of HTTP/DB dependencies so it can be used by:
 // - the account pool server implementation (`infrastructure/accountpool/marble`)
 // - service-to-service clients (`infrastructure/accountpool/client`)
-// - other services consuming the API (e.g. `neorand`)
+// - other services consuming the API (e.g. `neocompute`)
 package types
 
 import "time"
@@ -48,7 +48,7 @@ type AccountInfo struct {
 
 // RequestAccountsInput requests accounts from the pool.
 type RequestAccountsInput struct {
-	ServiceID string `json:"service_id"` // ID of requesting service (e.g., "neorand")
+	ServiceID string `json:"service_id"` // ID of requesting service (e.g., "neocompute")
 	Count     int    `json:"count"`      // Number of accounts needed
 	Purpose   string `json:"purpose"`    // Description of purpose (for audit)
 }

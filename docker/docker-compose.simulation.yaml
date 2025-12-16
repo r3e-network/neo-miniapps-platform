@@ -64,7 +64,6 @@ services:
       - GITHUB_CLIENT_ID
       - GITHUB_CLIENT_SECRET
       - SECRETS_MASTER_KEY
-      - VRF_SERVICE_URL=${VRF_SERVICE_URL:-http://neorand:8081}
       - DATAFEEDS_SERVICE_URL=${DATAFEEDS_SERVICE_URL:-http://neofeeds:8083}
       - AUTOMATION_SERVICE_URL=${AUTOMATION_SERVICE_URL:-http://neoflow:8084}
       - ACCOUNTPOOL_SERVICE_URL=${ACCOUNTPOOL_SERVICE_URL:-http://neoaccounts:8085}
@@ -72,39 +71,6 @@ services:
       - ORACLE_SERVICE_URL=${ORACLE_SERVICE_URL:-http://neooracle:8088}
     volumes:
       - gateway-data:/marble
-    depends_on:
-      - coordinator
-    restart: unless-stopped
-
-  # =============================================================================
-  # NeoRand Service Marble (legacy VRF) - Simulation Mode
-  # =============================================================================
-  neorand:
-    image: service-layer/neorand:latest
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.service
-      args:
-        SERVICE: vrf
-        EGO_VERSION: ${EGO_VERSION:-1.8.0}
-        EGO_STRICT_SIGNING: 0
-    container_name: service-neorand
-    environment:
-      - EDG_MARBLE_COORDINATOR_ADDR=${COORDINATOR_MESH_ADDR:-coordinator:2001}
-      - EDG_MARBLE_TYPE=neorand
-      - EDG_MARBLE_DNS_NAMES=localhost,neorand,vrf
-      - SERVICE_TYPE=neorand
-      - OE_SIMULATION=${OE_SIMULATION:-1}
-      - PORT=${NEORAND_PORT:-8081}
-      - MARBLE_ENV=${MARBLE_ENV:-development}
-      - METRICS_ENABLED
-      - SUPABASE_URL
-      - SUPABASE_SERVICE_KEY
-      - NEO_RPC_URL
-      - NEO_NETWORK_MAGIC
-      - CONTRACT_GATEWAY_HASH
-      - CONTRACT_VRF_HASH
-      - TEE_PRIVATE_KEY
     depends_on:
       - coordinator
     restart: unless-stopped

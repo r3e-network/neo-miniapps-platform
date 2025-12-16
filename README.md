@@ -8,11 +8,12 @@ For the canonical, up-to-date architecture overview see `docs/ARCHITECTURE.md`.
 
 **Product services** (only these are in scope right now):
 
-- `services/vrf` (`service_id`: `neorand`)
 - `services/datafeed` (`service_id`: `neofeeds`)
 - `services/automation` (`service_id`: `neoflow`)
 - `services/confcompute` (`service_id`: `neocompute`)
 - `services/conforacle` (`service_id`: `neooracle`)
+
+Randomness is provided via `neocompute` scripts (e.g. `crypto.randomBytes(...)`); there is no standalone VRF service.
 
 **Infrastructure marbles** (shared capabilities):
 
@@ -50,7 +51,7 @@ make frontend-dev   # optional
 Run a single service locally (outside MarbleRun) for debugging:
 
 ```bash
-SERVICE_TYPE=neorand go run ./cmd/marble
+SERVICE_TYPE=neocompute go run ./cmd/marble
 ```
 
 Run the gateway locally:
@@ -65,7 +66,7 @@ OE_SIMULATION=1 go run ./cmd/gateway
 - `JWT_SECRET`: gateway auth signing key (required in production).
 - `SECRETS_MASTER_KEY`: gateway encryption master key for `/api/v1/secrets/*`.
 - `NEO_RPC_URL` / `NEO_RPC_URLS`, `NEO_NETWORK_MAGIC`: Neo RPC configuration (services).
-- `CONTRACT_GATEWAY_HASH`, `CONTRACT_VRF_HASH`, `CONTRACT_DATAFEEDS_HASH`, `CONTRACT_AUTOMATION_HASH`, `CONTRACT_CONFIDENTIAL_HASH`, `CONTRACT_ORACLE_HASH`: contract hashes for event monitoring/callbacks (legacy names are still accepted).
+- `CONTRACT_GATEWAY_HASH`, `CONTRACT_DATAFEEDS_HASH`, `CONTRACT_AUTOMATION_HASH`, `CONTRACT_CONFIDENTIAL_HASH`, `CONTRACT_ORACLE_HASH`: contract hashes for event monitoring/callbacks (legacy names are still accepted).
 
 See `.env.example` for a full list.
 

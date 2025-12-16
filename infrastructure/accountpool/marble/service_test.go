@@ -445,7 +445,7 @@ func TestAccountInfoWithBalances(t *testing.T) {
 		ID:       "test-id",
 		Address:  "NXV7ZhHiyM1aHXwpVsRZC6BwNFP2jghXAq",
 		TxCount:  5,
-		LockedBy: "neorand",
+		LockedBy: "neocompute",
 		Balances: map[string]TokenBalance{
 			TokenTypeGAS: {
 				TokenType:  TokenTypeGAS,
@@ -478,7 +478,7 @@ func TestAccountInfoWithBalances(t *testing.T) {
 
 func TestUpdateBalanceInputWithToken(t *testing.T) {
 	input := UpdateBalanceInput{
-		ServiceID: "neorand",
+		ServiceID: "neocompute",
 		AccountID: "acc-123",
 		Token:     TokenTypeGAS,
 		Delta:     500000000,
@@ -591,7 +591,7 @@ func TestAccountInfoJSON(t *testing.T) {
 		ID:       "acc-123",
 		Address:  "NXV7ZhHiyM1aHXwpVsRZC6BwNFP2jghXAq",
 		TxCount:  10,
-		LockedBy: "neorand",
+		LockedBy: "neocompute",
 		Balances: map[string]TokenBalance{
 			TokenTypeGAS: {TokenType: TokenTypeGAS, Amount: 1000000},
 		},
@@ -620,7 +620,7 @@ func TestAccountInfoJSON(t *testing.T) {
 
 func TestUpdateBalanceInputJSON(t *testing.T) {
 	input := UpdateBalanceInput{
-		ServiceID: "neorand",
+		ServiceID: "neocompute",
 		AccountID: "acc-123",
 		Token:     TokenTypeGAS,
 		Delta:     1000,
@@ -759,7 +759,7 @@ func TestRequestAccountsWithMock(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	accounts, lockID, err := svc.RequestAccounts(ctx, "neorand", 3, "mixing operation")
+	accounts, lockID, err := svc.RequestAccounts(ctx, "neocompute", 3, "mixing operation")
 	if err != nil {
 		t.Fatalf("RequestAccounts() error = %v", err)
 	}
@@ -773,8 +773,8 @@ func TestRequestAccountsWithMock(t *testing.T) {
 
 	// Verify accounts are locked and have balances
 	for _, acc := range accounts {
-		if acc.LockedBy != "neorand" {
-			t.Errorf("account %s should be locked by neorand", acc.ID)
+		if acc.LockedBy != "neocompute" {
+			t.Errorf("account %s should be locked by neocompute", acc.ID)
 		}
 		if acc.Balances == nil {
 			t.Errorf("account %s should have balances", acc.ID)
@@ -790,7 +790,7 @@ func TestUpdateBalanceWithMockMultiToken(t *testing.T) {
 	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{
 		ID:       "acc-1",
 		Address:  "NAddr1",
-		LockedBy: "neorand",
+		LockedBy: "neocompute",
 	}
 	// Initialize GAS balance
 	mockRepo.UpsertBalance(context.Background(), "acc-1", TokenTypeGAS, neoaccountssupabase.GASScriptHash, 1000000, 8)
@@ -799,7 +799,7 @@ func TestUpdateBalanceWithMockMultiToken(t *testing.T) {
 	ctx := context.Background()
 
 	// Update GAS balance
-	oldBalance, newBalance, txCount, err := svc.UpdateBalance(ctx, "neorand", "acc-1", TokenTypeGAS, 500000, nil)
+	oldBalance, newBalance, txCount, err := svc.UpdateBalance(ctx, "neocompute", "acc-1", TokenTypeGAS, 500000, nil)
 	if err != nil {
 		t.Fatalf("UpdateBalance() error = %v", err)
 	}
@@ -815,7 +815,7 @@ func TestUpdateBalanceWithMockMultiToken(t *testing.T) {
 	}
 
 	// Update NEO balance (new token)
-	oldNeo, newNeo, txCount2, err := svc.UpdateBalance(ctx, "neorand", "acc-1", TokenTypeNEO, 10, nil)
+	oldNeo, newNeo, txCount2, err := svc.UpdateBalance(ctx, "neocompute", "acc-1", TokenTypeNEO, 10, nil)
 	if err != nil {
 		t.Fatalf("UpdateBalance(NEO) error = %v", err)
 	}
@@ -841,7 +841,7 @@ func TestGetPoolInfoWithMockMultiToken(t *testing.T) {
 		ID: "acc-1", LockedBy: "",
 	}
 	mockRepo.accounts["acc-2"] = &neoaccountssupabase.Account{
-		ID: "acc-2", LockedBy: "neorand",
+		ID: "acc-2", LockedBy: "neocompute",
 	}
 	mockRepo.accounts["acc-3"] = &neoaccountssupabase.Account{
 		ID: "acc-3", IsRetiring: true,
@@ -896,13 +896,13 @@ func TestListAccountsByServiceWithMockMultiToken(t *testing.T) {
 
 	mockRepo := newMockNeoAccountsRepo()
 	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{
-		ID: "acc-1", LockedBy: "neorand",
+		ID: "acc-1", LockedBy: "neocompute",
 	}
 	mockRepo.accounts["acc-2"] = &neoaccountssupabase.Account{
-		ID: "acc-2", LockedBy: "neorand",
+		ID: "acc-2", LockedBy: "neocompute",
 	}
 	mockRepo.accounts["acc-3"] = &neoaccountssupabase.Account{
-		ID: "acc-3", LockedBy: "neorand",
+		ID: "acc-3", LockedBy: "neocompute",
 	}
 
 	ctx := context.Background()
@@ -911,8 +911,8 @@ func TestListAccountsByServiceWithMockMultiToken(t *testing.T) {
 
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
 
-	// List all accounts for neorand
-	accounts, err := svc.ListAccountsByService(ctx, "neorand", "", nil)
+	// List all accounts for neocompute
+	accounts, err := svc.ListAccountsByService(ctx, "neocompute", "", nil)
 	if err != nil {
 		t.Fatalf("ListAccountsByService() error = %v", err)
 	}
@@ -923,7 +923,7 @@ func TestListAccountsByServiceWithMockMultiToken(t *testing.T) {
 
 	// Filter by min balance
 	minBal := int64(800000)
-	filtered, err := svc.ListAccountsByService(ctx, "neorand", TokenTypeGAS, &minBal)
+	filtered, err := svc.ListAccountsByService(ctx, "neocompute", TokenTypeGAS, &minBal)
 	if err != nil {
 		t.Fatalf("ListAccountsByService() error = %v", err)
 	}
@@ -945,14 +945,14 @@ func TestSignTransactionWithMock(t *testing.T) {
 	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{
 		ID:       "acc-1",
 		Address:  "NAddr1",
-		LockedBy: "neorand",
+		LockedBy: "neocompute",
 	}
 
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
 	ctx := context.Background()
 
 	txHash := crypto.Hash256([]byte("test transaction"))
-	resp, err := svc.SignTransaction(ctx, "neorand", "acc-1", txHash)
+	resp, err := svc.SignTransaction(ctx, "neocompute", "acc-1", txHash)
 	if err != nil {
 		t.Fatalf("SignTransaction() error = %v", err)
 	}
@@ -975,7 +975,7 @@ func TestSignTransactionWrongService(t *testing.T) {
 	mockRepo := newMockNeoAccountsRepo()
 	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{
 		ID:       "acc-1",
-		LockedBy: "neorand",
+		LockedBy: "neocompute",
 	}
 
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
@@ -997,7 +997,7 @@ func TestSignTransactionAccountNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	txHash := crypto.Hash256([]byte("test"))
-	_, err := svc.SignTransaction(ctx, "neorand", "nonexistent", txHash)
+	_, err := svc.SignTransaction(ctx, "neocompute", "nonexistent", txHash)
 	if err == nil {
 		t.Error("SignTransaction should fail for nonexistent account")
 	}
@@ -1008,8 +1008,8 @@ func TestBatchSignWithMock(t *testing.T) {
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("test-master-key-32-bytes-long!!!"))
 
 	mockRepo := newMockNeoAccountsRepo()
-	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand"}
-	mockRepo.accounts["acc-2"] = &neoaccountssupabase.Account{ID: "acc-2", LockedBy: "neorand"}
+	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute"}
+	mockRepo.accounts["acc-2"] = &neoaccountssupabase.Account{ID: "acc-2", LockedBy: "neocompute"}
 
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
 	ctx := context.Background()
@@ -1020,7 +1020,7 @@ func TestBatchSignWithMock(t *testing.T) {
 		{AccountID: "nonexistent", TxHash: crypto.Hash256([]byte("tx3"))},
 	}
 
-	resp := svc.BatchSign(ctx, "neorand", requests)
+	resp := svc.BatchSign(ctx, "neocompute", requests)
 	if len(resp.Signatures) != 2 {
 		t.Errorf("len(Signatures) = %d, want 2", len(resp.Signatures))
 	}
@@ -1038,14 +1038,14 @@ func TestReleaseAccountsWithMock(t *testing.T) {
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("test-master-key-32-bytes-long!!!"))
 
 	mockRepo := newMockNeoAccountsRepo()
-	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand"}
-	mockRepo.accounts["acc-2"] = &neoaccountssupabase.Account{ID: "acc-2", LockedBy: "neorand"}
+	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute"}
+	mockRepo.accounts["acc-2"] = &neoaccountssupabase.Account{ID: "acc-2", LockedBy: "neocompute"}
 	mockRepo.accounts["acc-3"] = &neoaccountssupabase.Account{ID: "acc-3", LockedBy: "other"}
 
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
 	ctx := context.Background()
 
-	released, err := svc.ReleaseAccounts(ctx, "neorand", []string{"acc-1", "acc-3"})
+	released, err := svc.ReleaseAccounts(ctx, "neocompute", []string{"acc-1", "acc-3"})
 	if err != nil {
 		t.Fatalf("ReleaseAccounts() error = %v", err)
 	}
@@ -1067,14 +1067,14 @@ func TestReleaseAllByServiceWithMock(t *testing.T) {
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("test-master-key-32-bytes-long!!!"))
 
 	mockRepo := newMockNeoAccountsRepo()
-	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand"}
-	mockRepo.accounts["acc-2"] = &neoaccountssupabase.Account{ID: "acc-2", LockedBy: "neorand"}
+	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute"}
+	mockRepo.accounts["acc-2"] = &neoaccountssupabase.Account{ID: "acc-2", LockedBy: "neocompute"}
 	mockRepo.accounts["acc-3"] = &neoaccountssupabase.Account{ID: "acc-3", LockedBy: "other"}
 
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
 	ctx := context.Background()
 
-	released, err := svc.ReleaseAllByService(ctx, "neorand")
+	released, err := svc.ReleaseAllByService(ctx, "neocompute")
 	if err != nil {
 		t.Fatalf("ReleaseAllByService() error = %v", err)
 	}
@@ -1093,14 +1093,14 @@ func TestUpdateBalanceInsufficientFunds(t *testing.T) {
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("test-master-key-32-bytes-long!!!"))
 
 	mockRepo := newMockNeoAccountsRepo()
-	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand"}
+	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute"}
 	mockRepo.UpsertBalance(context.Background(), "acc-1", TokenTypeGAS, neoaccountssupabase.GASScriptHash, 100, 8)
 
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
 	ctx := context.Background()
 
 	// Try to subtract more than available
-	_, _, _, err := svc.UpdateBalance(ctx, "neorand", "acc-1", TokenTypeGAS, -200, nil)
+	_, _, _, err := svc.UpdateBalance(ctx, "neocompute", "acc-1", TokenTypeGAS, -200, nil)
 	if err == nil {
 		t.Error("UpdateBalance should fail for insufficient funds")
 	}
@@ -1111,7 +1111,7 @@ func TestUpdateBalanceAbsoluteValue(t *testing.T) {
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("test-master-key-32-bytes-long!!!"))
 
 	mockRepo := newMockNeoAccountsRepo()
-	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand"}
+	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute"}
 	mockRepo.UpsertBalance(context.Background(), "acc-1", TokenTypeGAS, neoaccountssupabase.GASScriptHash, 100, 8)
 
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
@@ -1119,7 +1119,7 @@ func TestUpdateBalanceAbsoluteValue(t *testing.T) {
 
 	// Set absolute value
 	absValue := int64(999)
-	oldBal, newBal, _, err := svc.UpdateBalance(ctx, "neorand", "acc-1", TokenTypeGAS, 0, &absValue)
+	oldBal, newBal, _, err := svc.UpdateBalance(ctx, "neocompute", "acc-1", TokenTypeGAS, 0, &absValue)
 	if err != nil {
 		t.Fatalf("UpdateBalance() error = %v", err)
 	}
@@ -1137,7 +1137,7 @@ func TestUpdateBalanceWrongService(t *testing.T) {
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("test-master-key-32-bytes-long!!!"))
 
 	mockRepo := newMockNeoAccountsRepo()
-	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand"}
+	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute"}
 
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
 	ctx := context.Background()
@@ -1153,13 +1153,13 @@ func TestUpdateBalanceDefaultToken(t *testing.T) {
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("test-master-key-32-bytes-long!!!"))
 
 	mockRepo := newMockNeoAccountsRepo()
-	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand"}
+	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute"}
 
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
 	ctx := context.Background()
 
 	// Empty token should default to GAS
-	_, newBal, _, err := svc.UpdateBalance(ctx, "neorand", "acc-1", "", 100, nil)
+	_, newBal, _, err := svc.UpdateBalance(ctx, "neocompute", "acc-1", "", 100, nil)
 	if err != nil {
 		t.Fatalf("UpdateBalance() error = %v", err)
 	}
@@ -1226,13 +1226,13 @@ func TestHandleListAccountsEndpoint(t *testing.T) {
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("test-master-key-32-bytes-long!!!"))
 
 	mockRepo := newMockNeoAccountsRepo()
-	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand"}
+	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute"}
 	ctx := context.Background()
 	mockRepo.UpsertBalance(ctx, "acc-1", TokenTypeGAS, neoaccountssupabase.GASScriptHash, 1000000, 8)
 
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
 
-	req := httptest.NewRequest("GET", "/accounts?service_id=neorand", nil)
+	req := httptest.NewRequest("GET", "/accounts?service_id=neocompute", nil)
 	rr := httptest.NewRecorder()
 
 	svc.Router().ServeHTTP(rr, req)
@@ -1269,8 +1269,8 @@ func TestHandleListAccountsWithTokenFilter(t *testing.T) {
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("test-master-key-32-bytes-long!!!"))
 
 	mockRepo := newMockNeoAccountsRepo()
-	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand"}
-	mockRepo.accounts["acc-2"] = &neoaccountssupabase.Account{ID: "acc-2", LockedBy: "neorand"}
+	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute"}
+	mockRepo.accounts["acc-2"] = &neoaccountssupabase.Account{ID: "acc-2", LockedBy: "neocompute"}
 	ctx := context.Background()
 	mockRepo.UpsertBalance(ctx, "acc-1", TokenTypeGAS, neoaccountssupabase.GASScriptHash, 1000000, 8)
 	mockRepo.UpsertBalance(ctx, "acc-2", TokenTypeGAS, neoaccountssupabase.GASScriptHash, 100, 8)
@@ -1278,7 +1278,7 @@ func TestHandleListAccountsWithTokenFilter(t *testing.T) {
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
 
 	// Filter by min_balance
-	req := httptest.NewRequest("GET", "/accounts?service_id=neorand&token=GAS&min_balance=500000", nil)
+	req := httptest.NewRequest("GET", "/accounts?service_id=neocompute&token=GAS&min_balance=500000", nil)
 	rr := httptest.NewRecorder()
 
 	svc.Router().ServeHTTP(rr, req)
@@ -1304,7 +1304,7 @@ func TestHandleRequestAccountsEndpoint(t *testing.T) {
 
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
 
-	body := `{"service_id": "neorand", "count": 1, "purpose": "test"}`
+	body := `{"service_id": "neocompute", "count": 1, "purpose": "test"}`
 	req := httptest.NewRequest("POST", "/request", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -1338,11 +1338,11 @@ func TestHandleReleaseAccountsEndpoint(t *testing.T) {
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("test-master-key-32-bytes-long!!!"))
 
 	mockRepo := newMockNeoAccountsRepo()
-	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand"}
+	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute"}
 
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
 
-	body := `{"service_id": "neorand", "account_ids": ["acc-1"]}`
+	body := `{"service_id": "neocompute", "account_ids": ["acc-1"]}`
 	req := httptest.NewRequest("POST", "/release", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -1366,13 +1366,13 @@ func TestHandleReleaseAccountsAll(t *testing.T) {
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("test-master-key-32-bytes-long!!!"))
 
 	mockRepo := newMockNeoAccountsRepo()
-	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand"}
-	mockRepo.accounts["acc-2"] = &neoaccountssupabase.Account{ID: "acc-2", LockedBy: "neorand"}
+	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute"}
+	mockRepo.accounts["acc-2"] = &neoaccountssupabase.Account{ID: "acc-2", LockedBy: "neocompute"}
 
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
 
 	// Release all without specific account_ids
-	body := `{"service_id": "neorand"}`
+	body := `{"service_id": "neocompute"}`
 	req := httptest.NewRequest("POST", "/release", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -1396,12 +1396,12 @@ func TestHandleSignTransactionEndpoint(t *testing.T) {
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("test-master-key-32-bytes-long!!!"))
 
 	mockRepo := newMockNeoAccountsRepo()
-	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand"}
+	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute"}
 
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
 
 	txHash := crypto.Hash256([]byte("test tx"))
-	body := fmt.Sprintf(`{"service_id": "neorand", "account_id": "acc-1", "tx_hash": %s}`, mustMarshalJSON(txHash))
+	body := fmt.Sprintf(`{"service_id": "neocompute", "account_id": "acc-1", "tx_hash": %s}`, mustMarshalJSON(txHash))
 	req := httptest.NewRequest("POST", "/sign", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -1418,7 +1418,7 @@ func TestHandleSignTransactionMissingFields(t *testing.T) {
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("test-master-key-32-bytes-long!!!"))
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: newMockNeoAccountsRepo()})
 
-	body := `{"service_id": "neorand"}`
+	body := `{"service_id": "neocompute"}`
 	req := httptest.NewRequest("POST", "/sign", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -1435,12 +1435,12 @@ func TestHandleBatchSignEndpoint(t *testing.T) {
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("test-master-key-32-bytes-long!!!"))
 
 	mockRepo := newMockNeoAccountsRepo()
-	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand"}
+	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute"}
 
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
 
 	txHash := crypto.Hash256([]byte("test tx"))
-	body := fmt.Sprintf(`{"service_id": "neorand", "requests": [{"account_id": "acc-1", "tx_hash": %s}]}`, mustMarshalJSON(txHash))
+	body := fmt.Sprintf(`{"service_id": "neocompute", "requests": [{"account_id": "acc-1", "tx_hash": %s}]}`, mustMarshalJSON(txHash))
 	req := httptest.NewRequest("POST", "/batch-sign", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -1457,11 +1457,11 @@ func TestHandleUpdateBalanceEndpoint(t *testing.T) {
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("test-master-key-32-bytes-long!!!"))
 
 	mockRepo := newMockNeoAccountsRepo()
-	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand"}
+	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute"}
 
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
 
-	body := `{"service_id": "neorand", "account_id": "acc-1", "token": "GAS", "delta": 1000000}`
+	body := `{"service_id": "neocompute", "account_id": "acc-1", "token": "GAS", "delta": 1000000}`
 	req := httptest.NewRequest("POST", "/balance", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -1488,12 +1488,12 @@ func TestHandleUpdateBalanceDefaultToken(t *testing.T) {
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("test-master-key-32-bytes-long!!!"))
 
 	mockRepo := newMockNeoAccountsRepo()
-	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neorand"}
+	mockRepo.accounts["acc-1"] = &neoaccountssupabase.Account{ID: "acc-1", LockedBy: "neocompute"}
 
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
 
 	// No token specified - should default to GAS
-	body := `{"service_id": "neorand", "account_id": "acc-1", "delta": 500}`
+	body := `{"service_id": "neocompute", "account_id": "acc-1", "delta": 500}`
 	req := httptest.NewRequest("POST", "/balance", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -1522,7 +1522,7 @@ func TestAccountInfoFromAccount(t *testing.T) {
 		Address:    "NAddr1",
 		TxCount:    5,
 		IsRetiring: false,
-		LockedBy:   "neorand",
+		LockedBy:   "neocompute",
 	}
 
 	info := AccountInfoFromAccount(acc)
@@ -1557,13 +1557,13 @@ func TestRequestAccountsInvalidCount(t *testing.T) {
 	ctx := context.Background()
 
 	// Count 0 should fail
-	_, _, err := svc.RequestAccounts(ctx, "neorand", 0, "test")
+	_, _, err := svc.RequestAccounts(ctx, "neocompute", 0, "test")
 	if err == nil {
 		t.Error("RequestAccounts should fail for count=0")
 	}
 
 	// Count > 100 should fail
-	_, _, err = svc.RequestAccounts(ctx, "neorand", 101, "test")
+	_, _, err = svc.RequestAccounts(ctx, "neocompute", 101, "test")
 	if err == nil {
 		t.Error("RequestAccounts should fail for count>100")
 	}
@@ -1581,7 +1581,7 @@ func TestRequestAccountsNoAvailable(t *testing.T) {
 	ctx := context.Background()
 
 	// Request should create new accounts if none available
-	accounts, _, err := svc.RequestAccounts(ctx, "neorand", 1, "test")
+	accounts, _, err := svc.RequestAccounts(ctx, "neocompute", 1, "test")
 	if err != nil {
 		// May fail if createAccount requires more setup
 		t.Logf("RequestAccounts returned error (expected if createAccount not fully mocked): %v", err)
@@ -1798,7 +1798,7 @@ func TestHandleUpdateBalanceMissingFields(t *testing.T) {
 	m.SetTestSecret("POOL_MASTER_KEY", []byte("test-master-key-32-bytes-long!!!"))
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: newMockNeoAccountsRepo()})
 
-	body := `{"service_id": "neorand"}`
+	body := `{"service_id": "neocompute"}`
 	req := httptest.NewRequest("POST", "/balance", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -1820,7 +1820,7 @@ func TestHandleRequestAccountsDefaultCount(t *testing.T) {
 	svc, _ := New(Config{Marble: m, NeoAccountsRepo: mockRepo})
 
 	// Count 0 or negative should default to 1
-	body := `{"service_id": "neorand", "count": 0}`
+	body := `{"service_id": "neocompute", "count": 0}`
 	req := httptest.NewRequest("POST", "/request", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -2421,7 +2421,7 @@ func BenchmarkAccountInfoMarshal(b *testing.B) {
 		ID:       "acc-123",
 		Address:  "NXV7ZhHiyM1aHXwpVsRZC6BwNFP2jghXAq",
 		TxCount:  10,
-		LockedBy: "neorand",
+		LockedBy: "neocompute",
 		Balances: map[string]TokenBalance{
 			TokenTypeGAS: {TokenType: TokenTypeGAS, Amount: 1000000, Decimals: 8},
 			TokenTypeNEO: {TokenType: TokenTypeNEO, Amount: 10, Decimals: 0},

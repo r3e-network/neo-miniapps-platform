@@ -55,15 +55,6 @@ func TestRecordBlockchainTx(t *testing.T) {
 	m.RecordBlockchainTx("test-service", "neo", "invoke", "failed", 1*time.Second)
 }
 
-func TestRecordVRFRequest(t *testing.T) {
-	reg := prometheus.NewRegistry()
-	m := NewWithRegistry("test-service", reg)
-
-	// Should not panic
-	m.RecordVRFRequest("test-service", "success")
-	m.RecordVRFRequest("test-service", "failed")
-}
-
 func TestRecordDatabaseQuery(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m := NewWithRegistry("test-service", reg)

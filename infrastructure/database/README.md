@@ -87,20 +87,6 @@ user, err := repo.GetUserByAddress(ctx, "NAddr123...")
 
 Service-specific database operations have been moved to each service's own `supabase/` package following the **Interface Segregation Principle (ISP)**.
 
-### NeoRand (VRF) Service
-
-```go
-import vrfsupabase "github.com/R3E-Network/service_layer/services/vrf/supabase"
-
-// Create service-specific repository
-vrfRepo := vrfsupabase.NewRepository(baseRepo)
-
-// Use service-specific methods
-err := vrfRepo.Create(ctx, &vrfsupabase.Request{...})
-req, err := vrfRepo.GetByRequestID(ctx, "vrf-123")
-requests, err := vrfRepo.ListByStatus(ctx, "pending")
-```
-
 ### NeoFlow Service
 
 ```go
@@ -130,12 +116,12 @@ err := poolRepo.Update(ctx, account)
 ```go
 import secretssupabase "github.com/R3E-Network/service_layer/infrastructure/secrets/supabase"
 
-secretsRepo := secretssupabase.NewRepository(baseRepo)
+	secretsRepo := secretssupabase.NewRepository(baseRepo)
 
-err := secretsRepo.CreateSecret(ctx, &secretssupabase.Secret{...})
-secrets, err := secretsRepo.GetSecrets(ctx, userID)
-err := secretsRepo.SetAllowedServices(ctx, userID, secretName, []string{"neorand", "neoflow"})
-```
+	err := secretsRepo.CreateSecret(ctx, &secretssupabase.Secret{...})
+	secrets, err := secretsRepo.GetSecrets(ctx, userID)
+	err := secretsRepo.SetAllowedServices(ctx, userID, secretName, []string{"neocompute", "neoflow"})
+	```
 
 ## Shared Operations
 

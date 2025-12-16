@@ -162,11 +162,6 @@ spec:
                 configMapKeyRef:
                   name: service-layer-config
                   key: NEO_RPC_URL
-            - name: VRF_SERVICE_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: service-layer-config
-                  key: VRF_SERVICE_URL
             - name: DATAFEEDS_SERVICE_URL
               valueFrom:
                 configMapKeyRef:

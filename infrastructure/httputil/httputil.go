@@ -344,7 +344,6 @@ var canonicalServiceIDs = map[string]struct{}{
 	"gateway":      {},
 	"globalsigner": {},
 	"neooracle":    {},
-	"neorand":      {},
 	"neofeeds":     {},
 	"neoflow":      {},
 	"neocompute":   {},
@@ -352,7 +351,6 @@ var canonicalServiceIDs = map[string]struct{}{
 }
 
 var serviceIDAliases = map[string]string{
-	"vrf":          "neorand",
 	"oracle":       "neooracle",
 	"accountpool":  "neoaccounts",
 	"datafeeds":    "neofeeds",
@@ -374,8 +372,8 @@ func canonicalizeServiceID(raw string) string {
 	return raw
 }
 
-// CanonicalizeServiceID maps legacy service IDs and DNS names (e.g. "vrf",
-// "accountpool") to the canonical service ID used throughout the service layer.
+// CanonicalizeServiceID maps legacy service IDs and DNS names (e.g. "accountpool")
+// to the canonical service ID used throughout the service layer.
 func CanonicalizeServiceID(raw string) string {
 	return canonicalizeServiceID(raw)
 }

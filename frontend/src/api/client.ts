@@ -311,26 +311,6 @@ class ApiClient {
     });
   }
 
-  // VRF
-  async neorandRandom(seed: string, numWords = 1) {
-    return this.request('/neorand/random', {
-      method: 'POST',
-      body: { seed, num_words: numWords },
-    });
-  }
-
-  async neorandVerify(seed: string, randomWords: string[], proof: string, publicKey: string) {
-    return this.request<{ valid: boolean; error?: string }>('/neorand/verify', {
-      method: 'POST',
-      body: {
-        seed,
-        random_words: randomWords,
-        proof,
-        public_key: publicKey,
-      },
-    });
-  }
-
   // Secrets
   async listSecrets() {
     return this.request<Array<{ id: string; name: string; version: number; created_at: string; updated_at: string }>>('/secrets');

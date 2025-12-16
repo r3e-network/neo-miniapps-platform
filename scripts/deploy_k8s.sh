@@ -37,7 +37,6 @@ OVERLAY_PATH=""
 # Services to build and deploy
 SERVICES=(
     "gateway"
-    "neorand"
     "neofeeds"
     "neoflow"
     "neoaccounts"
@@ -188,7 +187,6 @@ parse_args() {
 default_service_binary() {
     # Some packages keep legacy binary names for compatibility.
     case "$1" in
-        neorand) echo "vrf" ;;
         neoaccounts) echo "accountpool" ;;
         *) echo "$1" ;;
     esac

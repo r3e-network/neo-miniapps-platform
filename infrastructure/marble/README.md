@@ -18,7 +18,7 @@ Core Marble type for TEE service configuration.
 
 ```go
 m, err := marble.New(marble.Config{
-    MarbleType: "neorand",
+    MarbleType: "neocompute",
 })
 ```
 
@@ -50,9 +50,9 @@ Secrets are injected by MarbleRun Coordinator and accessed via the Marble instan
 
 ```go
 // Get secret (returns false if not found)
-secret, ok := m.Secret("VRF_PRIVATE_KEY")
+secret, ok := m.Secret("COMPUTE_MASTER_KEY")
 if !ok {
-    return errors.New("VRF_PRIVATE_KEY not configured")
+    return errors.New("COMPUTE_MASTER_KEY not configured")
 }
 defer crypto.ZeroBytes(secret) // Always zero secrets after use
 ```
@@ -61,7 +61,6 @@ defer crypto.ZeroBytes(secret) // Always zero secrets after use
 
 | Secret | Service | Description |
 |--------|---------|-------------|
-| `VRF_PRIVATE_KEY` | VRF | ECDSA P-256 private key (32 bytes) |
 | `NEOFEEDS_SIGNING_KEY` | Datafeed | ECDSA private key for signing prices |
 | `COMPUTE_MASTER_KEY` | Confidential Compute | Master key for encryption/signing (>= 32 bytes) |
 | `POOL_MASTER_KEY` | AccountPool | HD derivation master key (>= 32 bytes) |

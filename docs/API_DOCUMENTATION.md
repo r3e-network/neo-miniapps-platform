@@ -167,70 +167,7 @@ POST /api/v1/neooracle/query
 
 ---
 
-### 3. VRF Service (NeoRand)
-
-Verifiable Random Function (VRF) service for provably fair randomness.
-
-#### Generate Randomness (Direct / Off-chain)
-
-```http
-POST /api/v1/neorand/random
-```
-
-**Request:**
-
-```json
-{
-    "seed": "user_provided_seed",
-    "num_words": 3
-}
-```
-
-**Response:**
-
-```json
-{
-    "request_id": "req_123456",
-    "seed": "user_provided_seed",
-    "random_words": ["0x...", "0x...", "0x..."],
-    "proof": "base64_or_hex_proof",
-    "public_key": "hex_public_key",
-    "timestamp": "2025-12-10T10:00:00Z"
-}
-```
-
-#### Verify Randomness
-
-```http
-POST /api/v1/neorand/verify
-```
-
-**Request:**
-
-```json
-{
-    "seed": "user_provided_seed",
-    "random_words": ["0x..."],
-    "proof": "base64_or_hex_proof",
-    "public_key": "hex_public_key"
-}
-```
-
-**Response:**
-
-```json
-{
-    "valid": true
-}
-```
-
-**Notes:**
-
-- Legacy gateway alias: `POST /api/v1/vrf/random` and `POST /api/v1/vrf/verify`.
-
----
-
-### 4. NeoFeeds Service (Data Feeds)
+### 3. NeoFeeds Service (Data Feeds)
 
 Market data aggregation + signing inside the enclave.
 
@@ -281,7 +218,7 @@ GET /api/v1/neofeeds/config
 
 ---
 
-### 5. NeoAccounts (Account Pool) Service (Internal)
+### 4. NeoAccounts (Account Pool) Service (Internal)
 
 Manages a pool of funded accounts for service operations. This service is
 intended for **internal service-to-service usage (mesh-only)** and is not
@@ -375,7 +312,7 @@ POST /balance
 
 ---
 
-### 6. NeoFlow Service
+### 5. NeoFlow Service
 
 Trigger-based automation with TEE protection.
 
@@ -449,7 +386,7 @@ GET /api/v1/neoflow/triggers/{id}/executions
 
 ---
 
-### 7. NeoCompute Service
+### 6. NeoCompute Service
 
 Secure script execution within TEE.
 
@@ -463,7 +400,7 @@ POST /api/v1/neocompute/execute
 
 ```json
 {
-    "script": "return { ok: true }",
+    "script": "function main() { return { ok: true } }",
     "entry_point": "main",
     "input": { "value": 1 },
     "secret_refs": ["my_api_key"],
@@ -485,6 +422,17 @@ The user must allow the `neocompute` service to read a secret via `PUT /api/v1/s
     "gas_used": 1000,
     "started_at": "2025-12-10T10:00:00Z",
     "duration": "100ms"
+}
+```
+
+**Randomness (recommended):**
+
+Use `crypto.randomBytes(n)` inside the script to generate secure random bytes (hex string):
+
+```json
+{
+  "script": "function main() { return { random_hex: crypto.randomBytes(32) } }",
+  "entry_point": "main"
 }
 ```
 
@@ -575,13 +523,16 @@ Example (TypeScript, API key):
 const baseUrl = "https://api.service-layer.neo.org/api/v1";
 const apiKey = "your_api_key";
 
-const resp = await fetch(`${baseUrl}/neorand/random`, {
+const resp = await fetch(`${baseUrl}/neocompute/execute`, {
     method: "POST",
     headers: {
         "Content-Type": "application/json",
         "X-API-Key": apiKey,
     },
-    body: JSON.stringify({ seed: "my_seed", num_words: 1 }),
+    body: JSON.stringify({
+        script: "function main() { return { random_hex: crypto.randomBytes(32) } }",
+        entry_point: "main",
+    }),
 });
 
 console.log(await resp.json());

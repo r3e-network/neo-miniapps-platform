@@ -3,13 +3,6 @@
 # Enable/disable services here - disabled services will exit gracefully (exit code 0).
 
 services:
-  # NeoRand - Verifiable Random Number Generation
-  # Use cases: Gaming, lotteries, fair distribution
-  neorand:
-    enabled: true
-    port: 8081
-    description: "Verifiable random number generation for gaming, lotteries, and fair distribution"
-
   # NeoFeeds - Decentralized Market Data
   # Use cases: DeFi protocols, trading algorithms
   neofeeds:
