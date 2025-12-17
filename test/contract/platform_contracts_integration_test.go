@@ -206,7 +206,7 @@ func TestPlatformContractsNeoExpressSmoke(t *testing.T) {
 	// AppRegistry register/get.
 	appID := "app-1"
 	manifestHash := "0x" + strings.Repeat("cc", 32)
-	entryURL := hexBytes("https://example.com/app")
+	entryURL := "https://example.com/app"
 	developerPubKey := "0x" + strings.Repeat("dd", 33)
 
 	if _, err := nx.InvokeWithAccount(appRegistry.Hash, "register", account,

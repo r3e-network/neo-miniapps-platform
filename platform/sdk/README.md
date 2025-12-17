@@ -59,6 +59,20 @@ await host.secrets.setPermissions("binance_api_key", ["neooracle"]);
 const list = await host.secrets.list();
 ```
 
+## App Submission (Host-only)
+
+Developer app registration is wallet-signed and routed via Supabase Edge:
+
+```ts
+const res = await host.apps.register({
+  appId: "com.example.demo",
+  entryUrl: "https://cdn.example.com/apps/demo/index.html",
+  manifestHash: "0x" + "<32-byte sha256 hex>",
+  developerPubKey: "0x" + "<33-byte compressed pubkey hex>",
+});
+// Host app: build/sign tx using res.invocation (NeoLine/O3/OneGate) and submit.
+```
+
 ## `window.MiniAppSDK`
 
 `platform/sdk/src/window.ts` contains a helper to install the SDK on `window`.

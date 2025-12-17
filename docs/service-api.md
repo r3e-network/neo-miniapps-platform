@@ -49,6 +49,15 @@ Most state-changing endpoints also require a **verified primary wallet binding**
   - executes a randomness script in `neocompute` (no dedicated VRF service)
   - optional: anchors to `RandomnessLog` via `txproxy` when enabled
 
+### Apps (App Registry)
+
+- `POST /functions/v1/app-register`
+  - body: `{ app_id: "...", manifest_hash: "0x...", entry_url: "https://...", developer_pubkey: "0x..." }`
+  - returns: an AppRegistry `register` invocation for the developer wallet to sign and submit
+- `POST /functions/v1/app-update-manifest`
+  - body: `{ app_id: "...", manifest_hash: "0x...", entry_url: "https://..." }`
+  - returns: an AppRegistry `updateManifest` invocation for the developer wallet to sign and submit
+
 ### Wallet Binding
 
 - `POST /functions/v1/wallet-nonce`

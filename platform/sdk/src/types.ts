@@ -39,6 +39,20 @@ export type RNGResponse = {
   anchored_tx?: unknown;
 };
 
+export type AppRegisterResponse = {
+  request_id: string;
+  user_id: string;
+  intent: "apps";
+  invocation: InvocationIntent;
+};
+
+export type AppUpdateManifestResponse = {
+  request_id: string;
+  user_id: string;
+  intent: "apps";
+  invocation: InvocationIntent;
+};
+
 export type WalletNonceResponse = {
   nonce: string;
   message: string;
@@ -140,6 +154,12 @@ export interface HostSDK {
       nonce: string;
       label?: string;
     }): Promise<WalletBindResponse>;
+  };
+  apps: {
+    register(params: { appId: string; entryUrl: string; manifestHash: string; developerPubKey: string }): Promise<
+      AppRegisterResponse
+    >;
+    updateManifest(params: { appId: string; entryUrl: string; manifestHash: string }): Promise<AppUpdateManifestResponse>;
   };
   secrets: {
     list(): Promise<SecretsListResponse>;

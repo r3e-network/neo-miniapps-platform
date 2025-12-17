@@ -44,3 +44,15 @@ API keys:
 Gas bank (delegated payments):
 
 - `gasbank-account`, `gasbank-deposit`, `gasbank-deposits`, `gasbank-transactions`
+
+On-chain invocations (wallet-signed):
+
+- `pay-gas`: returns a `PaymentHub.pay` invocation (**GAS only**).
+- `vote-neo`: returns a `Governance.vote` invocation (**NEO only**).
+- `app-register`: returns an `AppRegistry.register` invocation (developer wallet-signed).
+- `app-update-manifest`: returns an `AppRegistry.updateManifest` invocation (developer wallet-signed).
+
+TEE-routed:
+
+- `rng-request`: executes RNG via `neocompute` scripts and can optionally anchor to `RandomnessLog` through `txproxy`.
+- `datafeed-price`: read proxy to `neofeeds` (future: cache/SSE/WebSocket).

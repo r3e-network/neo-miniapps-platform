@@ -29,7 +29,7 @@ namespace NeoMiniAppPlatform.Contracts
             public string AppId;
             public UInt160 Developer;
             public ByteString DeveloperPubKey;
-            public ByteString EntryUrl;
+            public string EntryUrl;
             public ByteString ManifestHash;
             public AppStatus Status;
             public ByteString AllowlistHash;
@@ -82,7 +82,7 @@ namespace NeoMiniAppPlatform.Contracts
                     AppId = "",
                     Developer = null,
                     DeveloperPubKey = (ByteString)"",
-                    EntryUrl = (ByteString)"",
+                    EntryUrl = "",
                     ManifestHash = (ByteString)"",
                     Status = AppStatus.Pending,
                     AllowlistHash = (ByteString)""
@@ -91,7 +91,7 @@ namespace NeoMiniAppPlatform.Contracts
             return (AppInfo)StdLib.Deserialize(raw);
         }
 
-        public static void Register(string appId, ByteString manifestHash, ByteString entryUrl, ByteString developerPubKey)
+        public static void Register(string appId, ByteString manifestHash, string entryUrl, ByteString developerPubKey)
         {
             ExecutionEngine.Assert(appId != null && appId.Length > 0, "app id required");
             ExecutionEngine.Assert(manifestHash != null && manifestHash.Length > 0, "manifest hash required");
@@ -119,7 +119,7 @@ namespace NeoMiniAppPlatform.Contracts
             OnAppRegistered(appId, info.Developer);
         }
 
-        public static void UpdateManifest(string appId, ByteString manifestHash, ByteString entryUrl)
+        public static void UpdateManifest(string appId, ByteString manifestHash, string entryUrl)
         {
             AppInfo info = GetApp(appId);
             ExecutionEngine.Assert(info.AppId != null && info.AppId.Length > 0, "app not found");

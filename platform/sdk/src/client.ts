@@ -2,6 +2,8 @@ import type {
   APIKeyCreateResponse,
   APIKeyRevokeResponse,
   APIKeysListResponse,
+  AppRegisterResponse,
+  AppUpdateManifestResponse,
   GasBankAccountResponse,
   GasBankDepositCreateResponse,
   GasBankDepositsResponse,
@@ -119,6 +121,29 @@ export function createHostSDK(cfg: MiniAppSDKConfig): HostSDK {
             message: params.message,
             nonce: params.nonce,
             label: params.label,
+          }),
+        });
+      },
+    },
+    apps: {
+      async register(params): Promise<AppRegisterResponse> {
+        return requestJSON<AppRegisterResponse>(cfg, "/app-register", {
+          method: "POST",
+          body: JSON.stringify({
+            app_id: params.appId,
+            entry_url: params.entryUrl,
+            manifest_hash: params.manifestHash,
+            developer_pubkey: params.developerPubKey,
+          }),
+        });
+      },
+      async updateManifest(params): Promise<AppUpdateManifestResponse> {
+        return requestJSON<AppUpdateManifestResponse>(cfg, "/app-update-manifest", {
+          method: "POST",
+          body: JSON.stringify({
+            app_id: params.appId,
+            entry_url: params.entryUrl,
+            manifest_hash: params.manifestHash,
           }),
         });
       },
