@@ -26,7 +26,7 @@ namespace NeoMiniAppPlatform.Contracts
 
         public struct AppInfo
         {
-            public ByteString AppId;
+            public string AppId;
             public UInt160 Developer;
             public ByteString DeveloperPubKey;
             public ByteString EntryUrl;
@@ -36,13 +36,13 @@ namespace NeoMiniAppPlatform.Contracts
         }
 
         [DisplayName("AppRegistered")]
-        public static event Action<ByteString, UInt160> OnAppRegistered;
+        public static event Action<string, UInt160> OnAppRegistered;
 
         [DisplayName("AppUpdated")]
-        public static event Action<ByteString, ByteString> OnAppUpdated;
+        public static event Action<string, ByteString> OnAppUpdated;
 
         [DisplayName("StatusChanged")]
-        public static event Action<ByteString, AppStatus> OnStatusChanged;
+        public static event Action<string, AppStatus> OnStatusChanged;
 
         public static void _deploy(object data, bool update)
         {
@@ -65,16 +65,21 @@ namespace NeoMiniAppPlatform.Contracts
 
         private static StorageMap AppMap() => new StorageMap(Storage.CurrentContext, PREFIX_APP);
 
-        public static AppInfo GetApp(ByteString appId)
+        private static ByteString AppKey(string appId)
         {
             ExecutionEngine.Assert(appId != null && appId.Length > 0, "app id required");
-            ByteString raw = AppMap().Get(appId);
+            return (ByteString)appId;
+        }
+
+        public static AppInfo GetApp(string appId)
+        {
+            ByteString raw = AppMap().Get(AppKey(appId));
             if (raw == null)
             {
                 // Avoid returning `default` struct which may be represented as an empty VMArray.
                 return new AppInfo
                 {
-                    AppId = (ByteString)"",
+                    AppId = "",
                     Developer = null,
                     DeveloperPubKey = (ByteString)"",
                     EntryUrl = (ByteString)"",
@@ -86,14 +91,15 @@ namespace NeoMiniAppPlatform.Contracts
             return (AppInfo)StdLib.Deserialize(raw);
         }
 
-        public static void Register(ByteString appId, ByteString manifestHash, ByteString entryUrl, ByteString developerPubKey)
+        public static void Register(string appId, ByteString manifestHash, ByteString entryUrl, ByteString developerPubKey)
         {
             ExecutionEngine.Assert(appId != null && appId.Length > 0, "app id required");
             ExecutionEngine.Assert(manifestHash != null && manifestHash.Length > 0, "manifest hash required");
             ExecutionEngine.Assert(entryUrl != null && entryUrl.Length > 0, "entry url required");
             ExecutionEngine.Assert(developerPubKey != null && developerPubKey.Length > 0, "developer pubkey required");
 
-            ByteString existing = AppMap().Get(appId);
+            ByteString key = AppKey(appId);
+            ByteString existing = AppMap().Get(key);
             ExecutionEngine.Assert(existing == null, "already registered");
 
             Transaction tx = Runtime.Transaction;
@@ -109,11 +115,11 @@ namespace NeoMiniAppPlatform.Contracts
                 AllowlistHash = (ByteString)""
             };
 
-            AppMap().Put(appId, StdLib.Serialize(info));
+            AppMap().Put(key, StdLib.Serialize(info));
             OnAppRegistered(appId, info.Developer);
         }
 
-        public static void UpdateManifest(ByteString appId, ByteString manifestHash, ByteString entryUrl)
+        public static void UpdateManifest(string appId, ByteString manifestHash, ByteString entryUrl)
         {
             AppInfo info = GetApp(appId);
             ExecutionEngine.Assert(info.AppId != null && info.AppId.Length > 0, "app not found");
@@ -125,11 +131,11 @@ namespace NeoMiniAppPlatform.Contracts
             info.ManifestHash = manifestHash;
             info.EntryUrl = entryUrl;
             info.Status = AppStatus.Pending; // require re-approval
-            AppMap().Put(appId, StdLib.Serialize(info));
+            AppMap().Put(AppKey(appId), StdLib.Serialize(info));
             OnAppUpdated(appId, manifestHash);
         }
 
-        public static void SetAllowlistHash(ByteString appId, ByteString allowlistHash)
+        public static void SetAllowlistHash(string appId, ByteString allowlistHash)
         {
             AppInfo info = GetApp(appId);
             ExecutionEngine.Assert(info.AppId != null && info.AppId.Length > 0, "app not found");
@@ -137,16 +143,16 @@ namespace NeoMiniAppPlatform.Contracts
             ExecutionEngine.Assert(allowlistHash != null, "allowlist hash required");
 
             info.AllowlistHash = allowlistHash;
-            AppMap().Put(appId, StdLib.Serialize(info));
+            AppMap().Put(AppKey(appId), StdLib.Serialize(info));
         }
 
-        public static void SetStatus(ByteString appId, AppStatus status)
+        public static void SetStatus(string appId, AppStatus status)
         {
             ValidateAdmin();
             AppInfo info = GetApp(appId);
             ExecutionEngine.Assert(info.AppId != null && info.AppId.Length > 0, "app not found");
             info.Status = status;
-            AppMap().Put(appId, StdLib.Serialize(info));
+            AppMap().Put(AppKey(appId), StdLib.Serialize(info));
             OnStatusChanged(appId, status);
         }
     }

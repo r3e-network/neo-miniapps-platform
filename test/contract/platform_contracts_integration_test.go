@@ -205,17 +205,16 @@ func TestPlatformContractsNeoExpressSmoke(t *testing.T) {
 
 	// AppRegistry register/get.
 	appID := "app-1"
-	appIDBytes := hexBytes(appID)
 	manifestHash := "0x" + strings.Repeat("cc", 32)
 	entryURL := hexBytes("https://example.com/app")
 	developerPubKey := "0x" + strings.Repeat("dd", 33)
 
 	if _, err := nx.InvokeWithAccount(appRegistry.Hash, "register", account,
-		appIDBytes, manifestHash, entryURL, developerPubKey,
+		appID, manifestHash, entryURL, developerPubKey,
 	); err != nil {
 		t.Fatalf("AppRegistry.register: %v", err)
 	}
-	appInfo, err := nx.InvokeWithAccountResults(appRegistry.Hash, "getApp", account, appIDBytes)
+	appInfo, err := nx.InvokeWithAccountResults(appRegistry.Hash, "getApp", account, appID)
 	if err != nil {
 		t.Fatalf("AppRegistry.getApp: %v", err)
 	}
@@ -231,10 +230,10 @@ func TestPlatformContractsNeoExpressSmoke(t *testing.T) {
 		t.Fatalf("AppRegistry.getApp: status = %s, want 0 (Pending)", status.String())
 	}
 
-	if _, err := nx.InvokeWithAccount(appRegistry.Hash, "setStatus", account, appIDBytes, int64(1)); err != nil {
+	if _, err := nx.InvokeWithAccount(appRegistry.Hash, "setStatus", account, appID, int64(1)); err != nil {
 		t.Fatalf("AppRegistry.setStatus: %v", err)
 	}
-	appInfo2, err := nx.InvokeWithAccountResults(appRegistry.Hash, "getApp", account, appIDBytes)
+	appInfo2, err := nx.InvokeWithAccountResults(appRegistry.Hash, "getApp", account, appID)
 	if err != nil {
 		t.Fatalf("AppRegistry.getApp(after setStatus): %v", err)
 	}
