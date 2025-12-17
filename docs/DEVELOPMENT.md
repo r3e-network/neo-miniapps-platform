@@ -102,20 +102,23 @@ kubectl get nodes
 
 ### Starting Development Environment
 
-#### Option 1: Gateway Only (Fastest)
+#### Option 1: Local Stack (Docker Compose)
 
-Start just the gateway service for quick development:
+Start MarbleRun coordinator + enclave services in simulation mode:
 
 ```bash
-make dev
+make docker-up
 ```
 
 This will:
-1. Start MarbleRun coordinator in simulation mode
-2. Set the manifest
-3. Run the gateway service
+1. Start MarbleRun coordinator (simulation mode)
+2. Build + start all enabled marbles (Neo* services + infrastructure marbles)
+3. Set the MarbleRun manifest
 
-#### Option 2: Full Environment
+Note: the public gateway is **Supabase Edge Functions** and is not part of this
+Docker Compose stack.
+
+#### Option 2: Full Environment (Kubernetes)
 
 Start all services in Kubernetes:
 
@@ -258,7 +261,7 @@ func TestServiceIntegration(t *testing.T) {
 ./scripts/deploy_k8s.sh status
 
 # View logs
-kubectl -n service-layer logs -f deployment/gateway
+kubectl -n service-layer logs -f deployment/neofeeds
 ```
 
 ### Test Environment
@@ -299,11 +302,15 @@ Test deployment without making changes:
 
 ### Metrics
 
-The service exposes Prometheus metrics at `/metrics`:
+Each service exposes Prometheus metrics at `/metrics` when `METRICS_ENABLED=true`.
 
 ```bash
-# View metrics
-curl http://localhost:8080/metrics
+# When running a service locally (default port 8080):
+curl http://localhost:${PORT:-8080}/metrics
+
+# Kubernetes (example: NeoFeeds)
+kubectl -n service-layer port-forward svc/neofeeds 8083:8083
+curl http://localhost:8083/metrics
 
 # Key metrics:
 # - http_requests_total: Total HTTP requests
@@ -320,32 +327,31 @@ Structured logging with trace ID support:
 
 ```bash
 # View logs with trace ID
-kubectl -n service-layer logs -f deployment/gateway | jq 'select(.trace_id)'
+kubectl -n service-layer logs -f deployment/neofeeds | jq 'select(.trace_id)'
 
 # Filter by log level
-kubectl -n service-layer logs -f deployment/gateway | jq 'select(.level=="error")'
+kubectl -n service-layer logs -f deployment/neofeeds | jq 'select(.level=="error")'
 
 # Follow specific trace
-kubectl -n service-layer logs -f deployment/gateway | jq 'select(.trace_id=="abc-123")'
+kubectl -n service-layer logs -f deployment/neofeeds | jq 'select(.trace_id=="abc-123")'
 ```
 
 ### Health Checks
 
 ```bash
-# Check service health
-curl http://localhost:8080/health
+# When running a service locally (default port 8080):
+curl http://localhost:${PORT:-8080}/health
 
 # Check readiness
-curl http://localhost:8080/ready
+curl http://localhost:${PORT:-8080}/ready
 ```
 
 ## Project Structure
 
 ```
 service_layer/
-├── cmd/                    # Service entry points
-│   ├── gateway/           # API Gateway
-│   └── marble/            # Generic marble runner
+├── cmd/                    # Binaries (marble runner + tooling)
+│   └── marble/             # Generic marble runner
 ├── services/              # Product services (enclave workloads)
 │   ├── datafeed/          # Data feeds (NeoFeeds)
 │   ├── automation/        # Automation (NeoFlow)

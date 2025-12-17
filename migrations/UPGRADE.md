@@ -17,6 +17,8 @@ final schema consistent.
 - Apply `008_cleanup_legacy_pool.sql` to drop any leftover `neovault_pool_accounts` table after the rename/lock-column migration.
 - Apply `019_remove_neovault.sql` to remove out-of-scope legacy NeoVault/Mixer tables (if present).
 - Apply `020_remove_vrf.sql` to remove legacy `vrf_requests` persistence (randomness now uses NeoCompute scripts).
+- Apply `022_neoflow_schema.sql` to canonicalize NeoFlow persistence (`neoflow_triggers`, `neoflow_executions`) and drop legacy `automation_*` tables.
+- Apply `023_cleanup_legacy_request_tables.sql` to drop unused legacy request tables and convert `service_requests.service_type` to TEXT.
 
 ## Verification checklist
 - Table `pool_accounts` exists with columns: `id`, `address`, `created_at`, `last_used_at`, `tx_count`, `is_retiring`, `locked_by`, `locked_at`.

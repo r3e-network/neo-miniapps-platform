@@ -32,7 +32,7 @@ type masterKeyResponse struct {
 }
 
 func main() {
-	neoAccounts := flag.String("neoaccounts", "", "NeoAccounts (or gateway) base URL (https://host:port)")
+	neoAccounts := flag.String("neoaccounts", "", "NeoAccounts (account pool) base URL (https://host:port)")
 	out := flag.String("out", "", "Output file for bundle (optional)")
 	flag.Parse()
 

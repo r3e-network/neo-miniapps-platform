@@ -256,13 +256,13 @@ receivers:
 
    ```promql
    # CPU 使用率
-   sum(rate(container_cpu_usage_seconds_total{namespace="apps"}[5m])) by (pod)
+   sum(rate(container_cpu_usage_seconds_total{namespace="service-layer"}[5m])) by (pod)
 
    # 内存使用率
-   sum(container_memory_working_set_bytes{namespace="apps"}) by (pod)
+   sum(container_memory_working_set_bytes{namespace="service-layer"}) by (pod)
 
    # HTTP 请求速率
-   sum(rate(http_requests_total{namespace="apps"}[5m])) by (service)
+   sum(rate(http_requests_total{namespace="service-layer"}[5m])) by (service)
    ```
 
 ## Loki 日志查询
@@ -271,19 +271,19 @@ receivers:
 
 ```bash
 # 查询特定 namespace 的日志
-{namespace="apps"}
+{namespace="service-layer"}
 
 # 过滤包含 "error" 的日志
-{namespace="apps"} |= "error"
+{namespace="service-layer"} |= "error"
 
 # 查询特定 Pod
-{namespace="apps", pod="gateway-xxxxx"}
+{namespace="service-layer", pod=~"neofeeds-.*"}
 
 # 正则表达式过滤
-{namespace="apps"} |~ "error|fail|exception"
+{namespace="service-layer"} |~ "error|fail|exception"
 
 # JSON 解析
-{namespace="apps"} | json | level="error"
+{namespace="service-layer"} | json | level="error"
 ```
 
 ### Grafana 中查询日志
@@ -299,22 +299,22 @@ receivers:
 
 ```promql
 # Pod 就绪状态
-sum(kube_pod_status_ready{namespace="apps", condition="true"}) by (pod)
+sum(kube_pod_status_ready{namespace="service-layer", condition="true"}) by (pod)
 
 # Pod 重启次数
-rate(kube_pod_container_status_restarts_total{namespace="apps"}[15m])
+rate(kube_pod_container_status_restarts_total{namespace="service-layer"}[15m])
 ```
 
 ### 资源使用
 
 ```promql
 # CPU 使用率 (%)
-100 * sum(rate(container_cpu_usage_seconds_total{namespace="apps"}[5m])) by (pod)
-/ sum(container_spec_cpu_quota{namespace="apps"} / container_spec_cpu_period{namespace="apps"}) by (pod)
+100 * sum(rate(container_cpu_usage_seconds_total{namespace="service-layer"}[5m])) by (pod)
+/ sum(container_spec_cpu_quota{namespace="service-layer"} / container_spec_cpu_period{namespace="service-layer"}) by (pod)
 
 # 内存使用率 (%)
-100 * sum(container_memory_working_set_bytes{namespace="apps"}) by (pod)
-/ sum(container_spec_memory_limit_bytes{namespace="apps"}) by (pod)
+100 * sum(container_memory_working_set_bytes{namespace="service-layer"}) by (pod)
+/ sum(container_spec_memory_limit_bytes{namespace="service-layer"}) by (pod)
 ```
 
 ### HTTP 性能

@@ -141,4 +141,3 @@ func ParseStringFromItem(item StackItem) (string, error) {
 	}
 	return "", fmt.Errorf("unexpected type for string: %s", item.Type)
 }
-

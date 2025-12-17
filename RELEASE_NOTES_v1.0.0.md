@@ -2,6 +2,11 @@
 
 **Release Date**: December 10, 2025
 
+> Note: the repository architecture has since migrated to a **Supabase Edge**
+> gateway and removed legacy services (Go gateway, VRF, NeoVault). This document
+> is preserved for historical context; for the current scope see
+> `docs/ARCHITECTURE.md` and `CHANGELOG.md`.
+
 ## Overview
 
 We are excited to announce the first stable release of the Neo Service Layer - a production-ready, TEE-protected service infrastructure for the Neo N3 blockchain. This release represents months of development, testing, and security hardening to deliver a robust platform for neocompute computing on Neo.
@@ -12,7 +17,7 @@ We are excited to announce the first stable release of the Neo Service Layer - a
 
 - **MarbleRun Integration**: Full integration with MarbleRun for TEE orchestration and remote attestation
 - **MarbleRun/EGo Support**: All services run in MarbleRun TEE for hardware-level security
-- **Gateway Service**: Production-ready API gateway with JWT authentication, rate limiting, and request routing
+- **Gateway**: Thin gateway pattern (today implemented as Supabase Edge Functions) for auth, rate limiting, and routing
 - **Kubernetes Deployment**: Complete K8s manifests for production deployment with auto-scaling support
 
 ### Services
@@ -118,13 +123,16 @@ See [DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) for detailed instructions.
 ### Required Environment Variables
 
 ```bash
-# MarbleRun
-MARBLE_COORDINATOR_ADDR=coordinator-mesh-api.marblerun:2001
-MARBLE_TYPE=gateway
+# MarbleRun coordinator (used by marbles)
+COORDINATOR_MESH_ADDR=coordinator:2001
+COORDINATOR_CLIENT_ADDR=localhost:4433
+
+# Service selection (local runs)
+SERVICE_TYPE=neocompute  # or neofeeds/neoflow/neooracle/txproxy/neoaccounts/globalsigner
 
 # Database
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_KEY=your-supabase-service-role-key
 
 # Neo N3
 NEO_RPC_URL=https://mainnet1.neo.org:443

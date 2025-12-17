@@ -17,9 +17,9 @@ spec:
       app.kubernetes.io/part-of: service-layer
   namespaceSelector:
     matchNames:
-      - apps
+      - service-layer
   endpoints:
-    - port: metrics
+    - port: http
       path: /metrics
       interval: 30s
       scrapeTimeout: 10s

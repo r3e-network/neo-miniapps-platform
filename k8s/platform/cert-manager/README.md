@@ -91,25 +91,25 @@ kubectl get secret test-tls-secret -n cert-manager
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: gateway-ingress
+  name: neofeeds-ingress
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
   tls:
     - hosts:
-        - api.example.com
-      secretName: gateway-tls
+        - neofeeds.example.com
+      secretName: neofeeds-tls
   rules:
-    - host: api.example.com
+    - host: neofeeds.example.com
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: gateway
+                name: neofeeds
                 port:
-                  number: 8080
+                  number: 8083
 ```
 
 ## 证书续期

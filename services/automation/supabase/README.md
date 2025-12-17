@@ -6,6 +6,11 @@ Database layer for the NeoFlow automation service.
 
 This package provides NeoFlow-specific data access for triggers and execution records.
 
+The canonical schema lives in `migrations/022_neoflow_schema.sql`:
+
+- `public.neoflow_triggers`
+- `public.neoflow_executions`
+
 ## File Structure
 
 | File | Purpose |
@@ -19,15 +24,17 @@ This package provides NeoFlow-specific data access for triggers and execution re
 
 ```go
 type Trigger struct {
-    ID            string    `json:"id"`
-    UserID        string    `json:"user_id"`
-    Name          string    `json:"name"`
-    TriggerType   string    `json:"trigger_type"`
-    Condition     string    `json:"condition"` // JSON
-    Action        string    `json:"action"`    // JSON
-    Enabled       bool      `json:"enabled"`
-    NextExecution time.Time `json:"next_execution"`
-    CreatedAt     time.Time `json:"created_at"`
+    ID            string          `json:"id"`
+    UserID        string          `json:"user_id"`
+    Name          string          `json:"name"`
+    TriggerType   string          `json:"trigger_type"` // e.g. "cron", "event", "price_threshold"
+    Schedule      string          `json:"schedule,omitempty"`
+    Condition     json.RawMessage `json:"condition,omitempty"` // JSON (optional)
+    Action        json.RawMessage `json:"action"`              // JSON (required)
+    Enabled       bool            `json:"enabled"`
+    LastExecution time.Time       `json:"last_execution,omitempty"`
+    NextExecution time.Time       `json:"next_execution,omitempty"`
+    CreatedAt     time.Time       `json:"created_at"`
 }
 ```
 
@@ -35,12 +42,13 @@ type Trigger struct {
 
 ```go
 type Execution struct {
-    ID         string    `json:"id"`
-    TriggerID  string    `json:"trigger_id"`
-    Status     string    `json:"status"`
-    Result     string    `json:"result,omitempty"`
-    ExecutedAt time.Time `json:"executed_at"`
-    Error      string    `json:"error,omitempty"`
+    ID            string          `json:"id"`
+    TriggerID     string          `json:"trigger_id"`
+    ExecutedAt    time.Time       `json:"executed_at"`
+    Success       bool            `json:"success"`
+    Error         string          `json:"error,omitempty"`
+    ActionType    string          `json:"action_type,omitempty"`
+    ActionPayload json.RawMessage `json:"action_payload,omitempty"`
 }
 ```
 
@@ -75,6 +83,8 @@ err := repo.CreateTrigger(ctx, &neoflowsupabase.Trigger{
     UserID:      userID,
     Name:        "Daily Report",
     TriggerType: "cron",
+    Schedule:    "*/5 * * * *",
+    Action:      json.RawMessage(`{"type":"webhook","url":"https://example.com/hook"}`),
     Enabled:     true,
 })
 

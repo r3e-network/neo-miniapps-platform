@@ -246,11 +246,11 @@ func TestMockRepository_ServiceRequestOperations(t *testing.T) {
 	ctx := context.Background()
 
 	// Test CreateServiceRequest
-		req := &ServiceRequest{
-			UserID:      "user-123",
-			ServiceType: "neocompute",
-			Status:      "pending",
-		}
+	req := &ServiceRequest{
+		UserID:      "user-123",
+		ServiceType: "neocompute",
+		Status:      "pending",
+	}
 	if err := repo.CreateServiceRequest(ctx, req); err != nil {
 		t.Fatalf("CreateServiceRequest() error = %v", err)
 	}

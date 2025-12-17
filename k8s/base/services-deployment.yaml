@@ -156,7 +156,8 @@ spec:
   selector:
     app: neofeeds
   ports:
-  - port: 8083
+  - name: http
+    port: 8083
     targetPort: 8083
 ---
 # =============================================================================
@@ -321,7 +322,8 @@ spec:
   selector:
     app: neoflow
   ports:
-  - port: 8084
+  - name: http
+    port: 8084
     targetPort: 8084
 ---
 # =============================================================================
@@ -471,7 +473,8 @@ spec:
   selector:
     app: neoaccounts
   ports:
-  - port: 8085
+  - name: http
+    port: 8085
     targetPort: 8085
 ---
 # =============================================================================
@@ -621,7 +624,8 @@ spec:
   selector:
     app: neocompute
   ports:
-  - port: 8086
+  - name: http
+    port: 8086
     targetPort: 8086
 ---
 # =============================================================================
@@ -776,7 +780,8 @@ spec:
   selector:
     app: neooracle
   ports:
-  - port: 8088
+  - name: http
+    port: 8088
     targetPort: 8088
 # =============================================================================
 # TxProxy Service (Allowlisted Transaction Broadcast)
@@ -941,7 +946,8 @@ spec:
   selector:
     app: txproxy
   ports:
-  - port: 8090
+  - name: http
+    port: 8090
     targetPort: 8090
 ---
 # =============================================================================
@@ -1082,5 +1088,6 @@ spec:
   selector:
     app: globalsigner
   ports:
-  - port: 8092
+  - name: http
+    port: 8092
     targetPort: 8092

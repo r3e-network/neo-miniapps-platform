@@ -56,7 +56,7 @@
 **交付物**:
 
 - `k8s/platform/argocd/` - 完整配置
-- Application 定义 (Gateway, Neo\* Services)
+- Application 定义 (Neo\* Services；公共 Gateway 为 Supabase Edge，集群外管理)
 - RBAC 配置
 - AppProject 配置
 - Ingress 配置
@@ -137,7 +137,6 @@ service_layer/
 │   │   │   ├── kustomization.yaml
 │   │   │   ├── namespace.yaml
 │   │   │   ├── install.yaml
-│   │   │   ├── application-gateway.yaml
 │   │   │   ├── application-services.yaml
 │   │   │   ├── rbac-config.yaml
 │   │   │   ├── ingress.yaml
@@ -224,7 +223,6 @@ kubectl apply -f rbac-config.yaml
 
 # 4. 创建 Application
 # 注意: 先修改 repoURL 为实际仓库
-kubectl apply -f application-gateway.yaml
 kubectl apply -f application-services.yaml
 
 # 5. 获取初始密码

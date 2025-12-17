@@ -11,6 +11,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/nspcc-dev/neo-go v0.114.0
+	github.com/nspcc-dev/rfc6979 v0.2.4
 	github.com/prometheus/client_golang v1.23.2
 	github.com/sirupsen/logrus v1.9.3
 	github.com/tidwall/gjson v1.18.0
@@ -35,7 +36,6 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nspcc-dev/go-ordered-json v0.0.0-20250924154242-2d12ea836c1b // indirect
 	github.com/nspcc-dev/neofs-sdk-go v1.0.0-rc.16 // indirect
-	github.com/nspcc-dev/rfc6979 v0.2.4 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.66.1 // indirect

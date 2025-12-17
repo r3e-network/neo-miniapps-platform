@@ -70,15 +70,11 @@ kubectl apply -f rbac-config.yaml
 
 在以下文件中将 `https://github.com/yourorg/service_layer.git` 替换为实际仓库:
 
-- `application-gateway.yaml`
 - `application-services.yaml`
 
 ### 创建 Application
 
 ```bash
-# 部署 Gateway
-kubectl apply -f application-gateway.yaml
-
 # 部署 Neo* Services (选择环境)
 kubectl apply -f application-services.yaml
 ```
@@ -91,7 +87,6 @@ ArgoCD 使用 Kustomize overlays 管理不同环境:
 k8s/
 ├── base/                    # 基础配置
 │   ├── kustomization.yaml
-│   ├── gateway-deployment.yaml
 │   └── services-deployment.yaml
 └── overlays/
     ├── simulation/          # 模拟环境 (无 SGX)
