@@ -85,11 +85,16 @@ func (s *Service) handleListFeeds(w http.ResponseWriter, r *http.Request) {
 	feeds := make([]FeedSummary, 0, len(enabledFeeds))
 	for i := range enabledFeeds {
 		feed := &enabledFeeds[i]
+		sourcePair := feed.Pair
+		if normalizePair(sourcePair) == normalizePair(feed.ID) {
+			sourcePair = ""
+		}
 		feeds = append(feeds, FeedSummary{
-			ID:       feed.ID,
-			Pair:     feed.Pair,
-			Enabled:  feed.Enabled,
-			Decimals: feed.Decimals,
+			ID:         feed.ID,
+			Pair:       feed.ID,
+			SourcePair: sourcePair,
+			Enabled:    feed.Enabled,
+			Decimals:   feed.Decimals,
 		})
 	}
 	httputil.WriteJSON(w, http.StatusOK, feeds)

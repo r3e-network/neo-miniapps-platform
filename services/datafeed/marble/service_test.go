@@ -605,6 +605,49 @@ func TestHandleGetPriceSuccess(t *testing.T) {
 	}
 }
 
+func TestHandleGetPriceLegacySlashPair(t *testing.T) {
+	mockServer := testutil.NewHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"price": "50000.00"})
+	}))
+	defer mockServer.Close()
+
+	m, _ := marble.New(marble.Config{MarbleType: "neofeeds"})
+	mockConfig := &NeoFeedsConfig{
+		Version: "1.0",
+		Sources: []SourceConfig{
+			{ID: "mock", Name: "Mock", URL: mockServer.URL, JSONPath: "price", Weight: 1},
+		},
+		Feeds: []FeedConfig{
+			{ID: "BTC-USD", Pair: "BTCUSDT", Sources: []string{"mock"}, Enabled: true},
+		},
+		UpdateInterval: 60 * time.Second,
+	}
+	svc, _ := New(&Config{Marble: m, FeedsConfig: mockConfig})
+
+	req := httptest.NewRequest("GET", "/price/BTC/USD", nil)
+	req = mux.SetURLVars(req, map[string]string{"pair": "BTC/USD"})
+	rr := httptest.NewRecorder()
+
+	svc.handleGetPrice(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	var resp PriceResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if resp.FeedID != "BTC-USD" {
+		t.Errorf("FeedID = %s, want BTC-USD", resp.FeedID)
+	}
+	if resp.Pair != "BTC-USD" {
+		t.Errorf("Pair = %s, want BTC-USD", resp.Pair)
+	}
+}
+
 func TestHandleGetPriceError(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neofeeds"})
 	emptyConfig := &NeoFeedsConfig{

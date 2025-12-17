@@ -40,12 +40,12 @@ For a quick map of directory responsibilities, see `docs/LAYERING.md`.
 │   - NeoAccounts   (account pool management + rotation)                      │
 │                                                                             │
 │  Product services:                                                          │
-│   - NeoRand     (VRF)                                                       │
 │   - NeoFeeds    (data feeds)                                                │
 │   - NeoFlow     (automation)                                                │
 │   - NeoCompute  (confidential compute)                                      │
 │   - NeoOracle   (confidential oracle)                                       │
 │   - TxProxy     (allowlisted tx signing/broadcast)                           │
+│   - Randomness  (via NeoCompute scripts, optional on-chain anchoring)        │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼

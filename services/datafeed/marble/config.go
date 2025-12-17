@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -133,6 +134,11 @@ func (c *FeedsConfig) Validate() error {
 		if feed.ID == "" {
 			return fmt.Errorf("feed[%d]: id required", i)
 		}
+		feed.ID = normalizePair(feed.ID)
+		if feed.ID == "" {
+			return fmt.Errorf("feed[%d]: id required", i)
+		}
+		feed.Pair = strings.ToUpper(strings.TrimSpace(feed.Pair))
 		if feed.DataType == "" {
 			feed.DataType = DataTypePrice
 		}

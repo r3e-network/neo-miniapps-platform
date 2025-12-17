@@ -31,8 +31,7 @@ neo-miniapp-platform/
 ├─ services/            # TEE 服务层（MarbleRun + EGo）
 │  ├─ oracle-gateway/   # 隐私预言机/Datafeed 拉取+聚合
 │  ├─ datafeed-service/ # 高频价格推送（≥0.1% 变动），含阈值/去抖
-│  ├─ vrf-service/      # TEE RNG/VRF
-│  ├─ compute-service/  # 机密计算（可选 wasm/脚本）
+│  ├─ compute-service/  # 机密计算（可选 wasm/脚本；可提供 RNG/VRF 脚本）
 │  ├─ automation-service/# Keeper/定时/事件触发
 │  ├─ tx-proxy/         # 交易签名/广播，资产&方法白名单
 │  └─ marblerun/        # policy.json / manifest.json / CA
@@ -77,8 +76,8 @@ neo-miniapp-platform/
 ## 3. 服务层（MarbleRun + EGo）
 - datafeed-service：多源聚合，触发阈值 0.1%，hysteresis 0.08%，最小发布间隔 2~5s，最大发布频率/符号（如每分钟 ≤30）；异常偏差需多源一致/二次确认；写 PriceFeed。
 - oracle-gateway：外部数据抓取/聚合/校验 → 回调链上或存证。
-- vrf-service：TEE RNG → (randomness, attestation) → RandomnessLog 或回调。
 - compute-service：受限脚本/wasm 计算 → 结果+报告 → 可回调链上。
+- randomness（RNG/VRF）：通过 compute-service 执行受限脚本提供 → (randomness, attestation) → RandomnessLog 或回调。
 - automation-service：事件/时间触发 → 调用目标合约（allowlist）。
 - tx-proxy：签名/广播；资产仅 GAS/NEO；方法白名单；mTLS；防重放/额度检查。
 - marblerun：policy/manifest 管理 MRSIGNER/MRENCLAVE、证书与密钥注入、轮换。
@@ -155,7 +154,7 @@ const price = await window.MiniAppSDK.datafeed.getPrice("BTC-USD");
 
 ## 10. MVP 里程碑
 1) 测试网部署：PaymentHub(GAS)、Governance(NEO)、PriceFeed、RandomnessLog、AppRegistry、AutomationAnchor。
-2) 服务：vrf-service + datafeed-service(0.1% 阈值) + tx-proxy（EGo 仿真），MarbleRun dev policy。
+2) 服务：compute-service（含 RNG/VRF 脚本） + datafeed-service(0.1% 阈值) + tx-proxy（EGo 仿真），MarbleRun dev policy。
 3) 平台：Next.js 宿主 + SDK + iframe；Edge 鉴权/限流；Supabase 本地/云。
 4) 内置小程序：`game-lite`、`raffle`、`automation-demo`、`price-ticker`。
 5) CI 打通：合约单测、EGo 构建、前端/Edge 构建与安全检查。
@@ -173,7 +172,7 @@ const price = await window.MiniAppSDK.datafeed.getPrice("BTC-USD");
 
 ## 12. 可立即提供的文件（按需索取）
 - 合约骨架（C#）：PaymentHub / Governance(NEO-only) / PriceFeed / RandomnessLog / AppRegistry / AutomationAnchor
-- EGo/MarbleRun：policy.json / manifest.json 示例；vrf-service & datafeed-service & tx-proxy 壳
+- EGo/MarbleRun：policy.json / manifest.json 示例；compute-service（含 RNG/VRF 脚本） & datafeed-service & tx-proxy 壳
 - Supabase：RLS SQL + Edge 路由模板（鉴权/限流/资产预检/mTLS 转发）
 - 前端：Next.js 宿主 + Module Federation 脚手架 + JS SDK（payGAS/vote/rng/datafeed）
 - Dev：neo-express 配置、一键本地脚本、Supabase docker-compose

@@ -1,15 +1,48 @@
 package chain
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"strings"
 )
 
 // =============================================================================
 // Stack Item Parsers
 // =============================================================================
+
+func decodeStackBytes(value string) ([]byte, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil, nil
+	}
+
+	// Explicit hex prefix (common in client-supplied values).
+	if strings.HasPrefix(trimmed, "0x") || strings.HasPrefix(trimmed, "0X") {
+		return hex.DecodeString(trimmed[2:])
+	}
+
+	// Neo N3 RPC encodes ByteString/Buffer stack items as base64.
+	if decoded, err := base64.StdEncoding.DecodeString(trimmed); err == nil {
+		return decoded, nil
+	}
+
+	// Fallback: some tools/older endpoints may return raw hex without a prefix.
+	if len(trimmed)%2 != 0 {
+		return nil, fmt.Errorf("invalid byte string")
+	}
+	for _, c := range trimmed {
+		if (c >= '0' && c <= '9') ||
+			(c >= 'a' && c <= 'f') ||
+			(c >= 'A' && c <= 'F') {
+			continue
+		}
+		return nil, fmt.Errorf("invalid byte string")
+	}
+	return hex.DecodeString(trimmed)
+}
 
 // ParseArray extracts an array of StackItems from a parent StackItem.
 func ParseArray(item StackItem) ([]StackItem, error) {
@@ -36,9 +69,12 @@ func ParseHash160(item StackItem) (string, error) {
 		if err := json.Unmarshal(item.Value, &value); err != nil {
 			return "", err
 		}
-		bytes, err := hex.DecodeString(value)
+		bytes, err := decodeStackBytes(value)
 		if err != nil {
 			return "", err
+		}
+		if len(bytes) != 20 {
+			return "", fmt.Errorf("unexpected Hash160 length: %d", len(bytes))
 		}
 		// Reverse for big-endian display
 		reversed := make([]byte, len(bytes))
@@ -56,7 +92,7 @@ func ParseByteArray(item StackItem) ([]byte, error) {
 		if err := json.Unmarshal(item.Value, &value); err != nil {
 			return nil, err
 		}
-		return hex.DecodeString(value)
+		return decodeStackBytes(value)
 	}
 	if item.Type == "Null" {
 		return nil, nil
@@ -94,7 +130,7 @@ func ParseStringFromItem(item StackItem) (string, error) {
 		if err := json.Unmarshal(item.Value, &value); err != nil {
 			return "", err
 		}
-		bytes, err := hex.DecodeString(value)
+		bytes, err := decodeStackBytes(value)
 		if err != nil {
 			return "", err
 		}
@@ -200,193 +236,6 @@ func ParseServiceRequest(item StackItem) (*ContractServiceRequest, error) {
 	}, nil
 }
 
-func ParsePriceData(item StackItem) (*PriceData, error) {
-	if item.Type != "Array" && item.Type != "Struct" {
-		return nil, fmt.Errorf("expected Array or Struct, got %s", item.Type)
-	}
-
-	var items []StackItem
-	if err := json.Unmarshal(item.Value, &items); err != nil {
-		return nil, fmt.Errorf("unmarshal array: %w", err)
-	}
-
-	if len(items) < 5 {
-		return nil, fmt.Errorf("expected at least 5 items, got %d", len(items))
-	}
-
-	feedID, err := ParseStringFromItem(items[0])
-	if err != nil {
-		return nil, fmt.Errorf("parse feedID: %w", err)
-	}
-	price, err := ParseInteger(items[1])
-	if err != nil {
-		return nil, fmt.Errorf("parse price: %w", err)
-	}
-	decimals, err := ParseInteger(items[2])
-	if err != nil {
-		return nil, fmt.Errorf("parse decimals: %w", err)
-	}
-	timestamp, err := ParseInteger(items[3])
-	if err != nil {
-		return nil, fmt.Errorf("parse timestamp: %w", err)
-	}
-	updatedBy, err := ParseHash160(items[4])
-	if err != nil {
-		return nil, fmt.Errorf("parse updatedBy: %w", err)
-	}
-
-	return &PriceData{
-		FeedID:    feedID,
-		Price:     price,
-		Decimals:  decimals,
-		Timestamp: timestamp.Uint64(),
-		UpdatedBy: updatedBy,
-	}, nil
-}
-
-func ParseFeedConfig(item StackItem) (*ContractFeedConfig, error) {
-	if item.Type != "Array" && item.Type != "Struct" {
-		return nil, fmt.Errorf("expected Array or Struct, got %s", item.Type)
-	}
-
-	var items []StackItem
-	if err := json.Unmarshal(item.Value, &items); err != nil {
-		return nil, fmt.Errorf("unmarshal array: %w", err)
-	}
-
-	if len(items) < 5 {
-		return nil, fmt.Errorf("expected at least 5 items, got %d", len(items))
-	}
-
-	feedID, err := ParseStringFromItem(items[0])
-	if err != nil {
-		return nil, fmt.Errorf("parse feedID: %w", err)
-	}
-	description, err := ParseStringFromItem(items[1])
-	if err != nil {
-		return nil, fmt.Errorf("parse description: %w", err)
-	}
-	decimals, err := ParseInteger(items[2])
-	if err != nil {
-		return nil, fmt.Errorf("parse decimals: %w", err)
-	}
-	active, err := ParseBoolean(items[3])
-	if err != nil {
-		return nil, fmt.Errorf("parse active: %w", err)
-	}
-	createdAt, err := ParseInteger(items[4])
-	if err != nil {
-		return nil, fmt.Errorf("parse createdAt: %w", err)
-	}
-
-	return &ContractFeedConfig{
-		FeedID:      feedID,
-		Description: description,
-		Decimals:    decimals,
-		Active:      active,
-		CreatedAt:   createdAt.Uint64(),
-	}, nil
-}
-
-func ParseTrigger(item StackItem) (*Trigger, error) {
-	if item.Type != "Array" && item.Type != "Struct" {
-		return nil, fmt.Errorf("expected Array or Struct, got %s", item.Type)
-	}
-
-	var items []StackItem
-	if err := json.Unmarshal(item.Value, &items); err != nil {
-		return nil, fmt.Errorf("unmarshal array: %w", err)
-	}
-
-	if len(items) < 14 {
-		return nil, fmt.Errorf("expected at least 14 items, got %d", len(items))
-	}
-
-	triggerID, err := ParseInteger(items[0])
-	if err != nil {
-		return nil, fmt.Errorf("parse triggerID: %w", err)
-	}
-	requestID, err := ParseInteger(items[1])
-	if err != nil {
-		return nil, fmt.Errorf("parse requestID: %w", err)
-	}
-	owner, err := ParseHash160(items[2])
-	if err != nil {
-		return nil, fmt.Errorf("parse owner: %w", err)
-	}
-	targetContract, err := ParseHash160(items[3])
-	if err != nil {
-		return nil, fmt.Errorf("parse targetContract: %w", err)
-	}
-	callbackMethod, err := ParseStringFromItem(items[4])
-	if err != nil {
-		return nil, fmt.Errorf("parse callbackMethod: %w", err)
-	}
-	triggerType, err := ParseInteger(items[5])
-	if err != nil {
-		return nil, fmt.Errorf("parse triggerType: %w", err)
-	}
-	condition, err := ParseStringFromItem(items[6])
-	if err != nil {
-		return nil, fmt.Errorf("parse condition: %w", err)
-	}
-	// callbackData can be null
-	var callbackData []byte
-	if v, parseErr := ParseByteArray(items[7]); parseErr == nil {
-		callbackData = v
-	}
-	maxExecutions, err := ParseInteger(items[8])
-	if err != nil {
-		return nil, fmt.Errorf("parse maxExecutions: %w", err)
-	}
-	executionCount, err := ParseInteger(items[9])
-	if err != nil {
-		return nil, fmt.Errorf("parse executionCount: %w", err)
-	}
-	status, err := ParseInteger(items[10])
-	if err != nil {
-		return nil, fmt.Errorf("parse status: %w", err)
-	}
-	createdAt, err := ParseInteger(items[11])
-	if err != nil {
-		return nil, fmt.Errorf("parse createdAt: %w", err)
-	}
-	lastExecutedAt, err := ParseInteger(items[12])
-	if err != nil {
-		return nil, fmt.Errorf("parse lastExecutedAt: %w", err)
-	}
-	expiresAt, err := ParseInteger(items[13])
-	if err != nil {
-		return nil, fmt.Errorf("parse expiresAt: %w", err)
-	}
-
-	triggerTypeU8, err := uint8FromBigInt(triggerType)
-	if err != nil {
-		return nil, fmt.Errorf("parse triggerType: %w", err)
-	}
-	statusU8, err := uint8FromBigInt(status)
-	if err != nil {
-		return nil, fmt.Errorf("parse status: %w", err)
-	}
-
-	return &Trigger{
-		TriggerID:      triggerID,
-		RequestID:      requestID,
-		Owner:          owner,
-		TargetContract: targetContract,
-		CallbackMethod: callbackMethod,
-		TriggerType:    triggerTypeU8,
-		Condition:      condition,
-		CallbackData:   callbackData,
-		MaxExecutions:  maxExecutions,
-		ExecutionCount: executionCount,
-		Status:         statusU8,
-		CreatedAt:      createdAt.Uint64(),
-		LastExecutedAt: lastExecutedAt.Uint64(),
-		ExpiresAt:      expiresAt.Uint64(),
-	}, nil
-}
-
 func uint8FromBigInt(v *big.Int) (uint8, error) {
 	if v == nil {
 		return 0, fmt.Errorf("nil value")
@@ -396,48 +245,4 @@ func uint8FromBigInt(v *big.Int) (uint8, error) {
 	}
 	// Range checked via BitLen/Sign above.
 	return uint8(v.Uint64()), nil // #nosec G115
-}
-
-func ParseExecutionRecord(item StackItem) (*ExecutionRecord, error) {
-	if item.Type != "Array" && item.Type != "Struct" {
-		return nil, fmt.Errorf("expected Array or Struct, got %s", item.Type)
-	}
-
-	var items []StackItem
-	if err := json.Unmarshal(item.Value, &items); err != nil {
-		return nil, fmt.Errorf("unmarshal array: %w", err)
-	}
-
-	if len(items) < 5 {
-		return nil, fmt.Errorf("expected at least 5 items, got %d", len(items))
-	}
-
-	triggerID, err := ParseInteger(items[0])
-	if err != nil {
-		return nil, fmt.Errorf("parse triggerID: %w", err)
-	}
-	executionNumber, err := ParseInteger(items[1])
-	if err != nil {
-		return nil, fmt.Errorf("parse executionNumber: %w", err)
-	}
-	timestamp, err := ParseInteger(items[2])
-	if err != nil {
-		return nil, fmt.Errorf("parse timestamp: %w", err)
-	}
-	success, err := ParseBoolean(items[3])
-	if err != nil {
-		return nil, fmt.Errorf("parse success: %w", err)
-	}
-	executedBy, err := ParseHash160(items[4])
-	if err != nil {
-		return nil, fmt.Errorf("parse executedBy: %w", err)
-	}
-
-	return &ExecutionRecord{
-		TriggerID:       triggerID,
-		ExecutionNumber: executionNumber,
-		Timestamp:       timestamp.Uint64(),
-		Success:         success,
-		ExecutedBy:      executedBy,
-	}, nil
 }

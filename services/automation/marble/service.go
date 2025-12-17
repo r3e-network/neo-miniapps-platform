@@ -32,7 +32,7 @@ const (
 
 	// Polling intervals
 	SchedulerInterval    = time.Second
-	ChainTriggerInterval = 5 * time.Second
+	AnchoredTaskInterval = 5 * time.Second
 
 	// Service fee per trigger execution (in GAS smallest unit)
 	ServiceFeePerExecution = 50000 // 0.0005 GAS
@@ -46,20 +46,22 @@ type Service struct {
 	// Service-specific repository
 	repo neoflowsupabase.RepositoryInterface
 
-	// Chain interaction for trigger execution
-	chainClient      *chain.Client
-	teeFulfiller     *chain.TEEFulfiller
-	neoflowHash      string
-	neoFeedsContract *chain.NeoFeedsContract
-	eventListener    *chain.EventListener
-	enableChainExec  bool
+	// Optional chain interaction for anchored tasks (platform contracts).
+	chainClient          *chain.Client
+	chainSigner          chain.TEESigner
+	priceFeedHash        string
+	priceFeed            *chain.PriceFeedContract
+	automationAnchorHash string
+	automationAnchor     *chain.AutomationAnchorContract
+	eventListener        *chain.EventListener
+	enableChainExec      bool
 }
 
 // Scheduler manages trigger execution.
 type Scheduler struct {
 	mu            sync.RWMutex
 	triggers      map[string]*neoflowsupabase.Trigger
-	chainTriggers map[uint64]*chain.Trigger // On-chain triggers by ID
+	anchoredTasks map[string]*anchoredTaskState // Platform AutomationAnchor tasks by key
 }
 
 // Config holds NeoFlow service configuration.
@@ -68,13 +70,13 @@ type Config struct {
 	DB          database.RepositoryInterface
 	NeoFlowRepo neoflowsupabase.RepositoryInterface
 
-	// Chain configuration for trigger execution
-	ChainClient      *chain.Client
-	TEEFulfiller     *chain.TEEFulfiller
-	NeoFlowHash      string                  // Contract hash for NeoFlowService
-	NeoFeedsContract *chain.NeoFeedsContract // For price-based triggers
-	EventListener    *chain.EventListener    // For event-based triggers
-	EnableChainExec  bool                    // Enable on-chain trigger execution
+	// Optional chain configuration for anchored tasks (platform AutomationAnchor + PriceFeed).
+	ChainClient          *chain.Client
+	ChainSigner          chain.TEESigner
+	PriceFeedHash        string
+	AutomationAnchorHash string
+	EventListener        *chain.EventListener
+	EnableChainExec      bool
 }
 
 // New creates a new NeoFlow service.
@@ -96,14 +98,21 @@ func New(cfg Config) (*Service, error) { //nolint:gocritic // cfg is read once a
 		repo:        cfg.NeoFlowRepo,
 		scheduler: &Scheduler{
 			triggers:      make(map[string]*neoflowsupabase.Trigger),
-			chainTriggers: make(map[uint64]*chain.Trigger),
+			anchoredTasks: make(map[string]*anchoredTaskState),
 		},
-		chainClient:      cfg.ChainClient,
-		teeFulfiller:     cfg.TEEFulfiller,
-		neoflowHash:      cfg.NeoFlowHash,
-		neoFeedsContract: cfg.NeoFeedsContract,
-		eventListener:    cfg.EventListener,
-		enableChainExec:  cfg.EnableChainExec,
+		chainClient:          cfg.ChainClient,
+		chainSigner:          cfg.ChainSigner,
+		priceFeedHash:        cfg.PriceFeedHash,
+		automationAnchorHash: cfg.AutomationAnchorHash,
+		eventListener:        cfg.EventListener,
+		enableChainExec:      cfg.EnableChainExec,
+	}
+
+	if s.chainClient != nil && s.priceFeedHash != "" {
+		s.priceFeed = chain.NewPriceFeedContract(s.chainClient, s.priceFeedHash)
+	}
+	if s.chainClient != nil && s.automationAnchorHash != "" {
+		s.automationAnchor = chain.NewAutomationAnchorContract(s.chainClient, s.automationAnchorHash)
 	}
 
 	// Hydrate scheduler cache and register periodic workers.
@@ -112,14 +121,16 @@ func New(cfg Config) (*Service, error) { //nolint:gocritic // cfg is read once a
 		s.checkAndExecuteTriggers(ctx)
 		return nil
 	}, commonservice.WithTickerWorkerName("scheduler"))
-	base.AddTickerWorker(ChainTriggerInterval, func(ctx context.Context) error {
-		s.checkChainTriggers(ctx)
+	base.AddTickerWorker(AnchoredTaskInterval, func(ctx context.Context) error {
+		s.checkAndExecuteAnchoredTasks(ctx)
 		return nil
-	}, commonservice.WithTickerWorkerName("chain-trigger-checker"))
+	}, commonservice.WithTickerWorkerName("anchored-task-checker"))
 
-	// Setup event listeners for on-chain triggers.
-	s.SetupEventTriggerListener()
-	base.AddWorker(s.runEventListener)
+	if s.enableChainExec && s.automationAnchor != nil {
+		base.WithHydrate(s.hydrateAnchoredTasks)
+		s.setupAutomationAnchorListener()
+		base.AddWorker(s.runEventListener)
+	}
 
 	// Register statistics provider for /info endpoint
 	base.WithStats(s.statistics)
@@ -194,24 +205,26 @@ func (s *Service) statistics() map[string]any {
 			activeTriggers++
 		}
 	}
-	chainTriggers := len(s.scheduler.chainTriggers)
-	for _, t := range s.scheduler.chainTriggers {
-		if t.ExecutionCount != nil {
-			totalExecutions += t.ExecutionCount.Int64()
+	anchoredTasks := len(s.scheduler.anchoredTasks)
+	for _, t := range s.scheduler.anchoredTasks {
+		if t == nil {
+			continue
 		}
+		t.mu.Lock()
+		totalExecutions += t.executionCount
+		t.mu.Unlock()
 	}
 	s.scheduler.mu.RUnlock()
 
 	return map[string]any{
 		"active_triggers":  activeTriggers,
-		"chain_triggers":   chainTriggers,
+		"anchored_tasks":   anchoredTasks,
 		"total_executions": totalExecutions,
 		"service_fee":      ServiceFeePerExecution,
 		"trigger_types": map[string]string{
-			"time":      "Cron-based time triggers",
-			"price":     "Price threshold triggers",
-			"event":     "On-chain event triggers",
-			"threshold": "Balance/value threshold triggers",
+			"cron":           "Cron-based time triggers (stored in Supabase)",
+			"anchored_cron":  "Cron triggers anchored via AutomationAnchor",
+			"anchored_price": "Price threshold triggers using PriceFeed + AutomationAnchor",
 		},
 	}
 }

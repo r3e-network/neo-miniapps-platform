@@ -29,10 +29,11 @@ type PriceResponse struct {
 
 // FeedSummary represents a feed entry returned by GET /feeds.
 type FeedSummary struct {
-	ID       string `json:"id"`
-	Pair     string `json:"pair"`
-	Enabled  bool   `json:"enabled"`
-	Decimals int    `json:"decimals"`
+	ID         string `json:"id"`
+	Pair       string `json:"pair"` // Canonical symbol (same as ID for price feeds).
+	SourcePair string `json:"source_pair,omitempty"`
+	Enabled    bool   `json:"enabled"`
+	Decimals   int    `json:"decimals"`
 }
 
 // SourceSummary represents a configured source returned by GET /sources.

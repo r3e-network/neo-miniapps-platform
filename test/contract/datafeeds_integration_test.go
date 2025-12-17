@@ -124,7 +124,7 @@ func TestNeoFeedsHTTPHandler(t *testing.T) {
 			{ID: "mock", Name: "Mock", URL: mockServer.URL, JSONPath: "price", Weight: 1},
 		},
 		Feeds: []neofeeds.FeedConfig{
-			{ID: "BTC/USD", Pair: "BTCUSDT", Sources: []string{"mock"}, Enabled: true},
+			{ID: "BTC-USD", Pair: "BTCUSDT", Sources: []string{"mock"}, Enabled: true},
 		},
 		UpdateInterval: 60 * time.Second,
 	}
@@ -151,7 +151,7 @@ func TestNeoFeedsHTTPHandler(t *testing.T) {
 	})
 
 	t.Run("price endpoint", func(t *testing.T) {
-		// Use URL-encoded slash for feed IDs like BTC/USD
+		// Canonical symbols use BTC-USD, but legacy BTC/USD requests are accepted.
 		req := httptest.NewRequest("GET", "/price/BTC%2FUSD", nil)
 		w := httptest.NewRecorder()
 		svc.Router().ServeHTTP(w, req)
@@ -195,14 +195,14 @@ func TestNeoFeedsSignatureVerification(t *testing.T) {
 			{ID: "mock", Name: "Mock", URL: mockServer.URL, JSONPath: "price", Weight: 1},
 		},
 		Feeds: []neofeeds.FeedConfig{
-			{ID: "BTC/USD", Pair: "BTCUSDT", Sources: []string{"mock"}, Enabled: true},
+			{ID: "BTC-USD", Pair: "BTCUSDT", Sources: []string{"mock"}, Enabled: true},
 		},
 		UpdateInterval: 60 * time.Second,
 	}
 	svc, _ := neofeeds.New(&neofeeds.Config{Marble: m, DB: database.NewMockRepository(), FeedsConfig: mockConfig})
 
 	ctx := context.Background()
-	price, err := svc.GetPrice(ctx, "BTC/USD")
+	price, err := svc.GetPrice(ctx, "BTC/USD") // legacy input should still work
 	if err != nil {
 		t.Fatalf("GetPrice: %v", err)
 	}
@@ -231,9 +231,9 @@ func TestNeoExpressNeoFeedsContract(t *testing.T) {
 
 	SkipIfNoNeoExpress(t)
 
-	nefPath := filepath.Join("..", "..", "contracts", "build", "NeoFeedsService.nef")
+	nefPath := filepath.Join("..", "..", "contracts", "build", "DataFeedsService.nef")
 	if _, err := os.Stat(nefPath); os.IsNotExist(err) {
-		t.Skip("NeoFeedsService.nef not found, run 'make build-contracts' first")
+		t.Skip("DataFeedsService.nef not found, run './contracts/build.sh' first")
 	}
 
 	t.Log("Neo Express neofeeds contract test - contract deployment ready")
@@ -259,7 +259,7 @@ func TestNeoFeedsMultiplePrices(t *testing.T) {
 		t.Fatalf("neofeeds.New: %v", err)
 	}
 
-	feeds := []string{"BTC/USD", "ETH/USD", "SOL/USD", "NEO/USD", "GAS/USD"}
+	feeds := []string{"BTC-USD", "ETH-USD", "SOL-USD", "NEO-USD", "GAS-USD", "BTC/USD"} // include one legacy symbol
 	results := make(chan struct {
 		feed  string
 		price int64

@@ -86,10 +86,10 @@ namespace NeoMiniAppPlatform.Contracts
         public static void OnNEP17Payment(UInt160 from, BigInteger amount, object data)
         {
             // Enforce governance staking in NEO only.
-            //
-            // Note: Some token transfer paths may trigger NEP-17 payment callbacks on
-            // contracts involved in the transfer (including senders). To avoid breaking
-            // outbound transfers, we ignore callbacks that originate from this contract.
+            // NOTE: NEO transfers may trigger internal GAS bonus distribution. Some
+            // GAS transfers can therefore touch this contract even though governance
+            // stake accounting must remain NEO-only. We ignore non-NEO callbacks and
+            // only process explicit NEO stake deposits.
             if (Runtime.CallingScriptHash != NEO.Hash) return;
             if (amount <= 0) throw new Exception("Invalid amount");
 
@@ -97,8 +97,8 @@ namespace NeoMiniAppPlatform.Contracts
             if (from == Runtime.ExecutingScriptHash) return;
 
             // Only accept deposits coming from the explicit `Stake()` flow.
-            if (data == null) return;
-            if ((ByteString)data != (ByteString)"stake") return;
+            if (data == null) throw new Exception("Stake data required");
+            if ((ByteString)data != (ByteString)"stake") throw new Exception("Invalid stake data");
 
             BigInteger current = GetStake(from);
             StakeMap().Put(from, current + amount);

@@ -113,60 +113,6 @@ const (
 )
 
 // =============================================================================
-// NeoFeeds Types
-// =============================================================================
-
-// PriceData represents price data from the contract.
-type PriceData struct {
-	FeedID    string
-	Price     *big.Int
-	Decimals  *big.Int
-	Timestamp uint64
-	UpdatedBy string
-}
-
-// ContractFeedConfig represents on-chain price feed configuration from the smart contract.
-// Note: This is different from neofeeds.FeedConfig which is for service configuration.
-type ContractFeedConfig struct {
-	FeedID      string
-	Description string
-	Decimals    *big.Int
-	Active      bool
-	CreatedAt   uint64
-}
-
-// =============================================================================
-// NeoFlow Types
-// =============================================================================
-
-// Trigger represents an neoflow trigger from the contract.
-type Trigger struct {
-	TriggerID      *big.Int
-	RequestID      *big.Int
-	Owner          string
-	TargetContract string
-	CallbackMethod string
-	TriggerType    uint8
-	Condition      string
-	CallbackData   []byte
-	MaxExecutions  *big.Int
-	ExecutionCount *big.Int
-	Status         uint8
-	CreatedAt      uint64
-	LastExecutedAt uint64
-	ExpiresAt      uint64
-}
-
-// ExecutionRecord represents an execution record from the contract.
-type ExecutionRecord struct {
-	TriggerID       *big.Int
-	ExecutionNumber *big.Int
-	Timestamp       uint64
-	Success         bool
-	ExecutedBy      string
-}
-
-// =============================================================================
 // Common Invocation Result Checks
 // =============================================================================
 

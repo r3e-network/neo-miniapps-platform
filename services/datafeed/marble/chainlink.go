@@ -80,7 +80,7 @@ func (c *ChainlinkClient) Close() {
 
 // HasFeed returns true if Chainlink supports this feed.
 func (c *ChainlinkClient) HasFeed(feedID string) bool {
-	_, ok := c.feeds[feedID]
+	_, ok := c.feeds[normalizePair(feedID)]
 	return ok
 }
 
@@ -107,9 +107,10 @@ type rpcError struct {
 
 // GetPrice fetches the latest price from a Chainlink feed.
 func (c *ChainlinkClient) GetPrice(ctx context.Context, feedID string) (priceFloat float64, decimals int, err error) {
-	feed, ok := c.feeds[feedID]
+	normalizedID := normalizePair(feedID)
+	feed, ok := c.feeds[normalizedID]
 	if !ok {
-		return 0, 0, fmt.Errorf("chainlink feed not found: %s", feedID)
+		return 0, 0, fmt.Errorf("chainlink feed not found: %s", normalizedID)
 	}
 
 	// Build eth_call request

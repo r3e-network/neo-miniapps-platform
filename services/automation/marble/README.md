@@ -7,7 +7,7 @@ TEE-secured task automation service running inside MarbleRun enclave.
 The NeoFlow Marble service implements trigger-based task automation:
 1. Users register triggers with conditions via API
 2. TEE monitors conditions continuously
-3. When conditions are met, TEE executes callbacks
+3. When conditions are met, TEE executes callbacks (off-chain webhooks or on-chain invocations)
 
 ## Architecture
 
@@ -21,16 +21,16 @@ The NeoFlow Marble service implements trigger-based task automation:
 │  └─────────────┘    └─────────────┘     └─────┬───────┘       │
 │         │                  │                  │               │
 │  ┌──────▼──────┐    ┌──────▼──────┐           │               │
-│  │  Supabase   │    │  NeoFeeds   │           │               │
-│  │ Repository  │    │  (Prices)   │           │               │
+│  │  Supabase   │    │  Neo N3     │           │               │
+│  │ Repository  │    │  Contracts  │           │               │
 │  └─────────────┘    └─────────────┘           │               │
 └───────────────────────────────────────────────┼───────────────┘
                                                 │
                               ┌─────────────────┼───────────────┐
                               ▼                 ▼               │
                        ┌─────────────┐   ┌─────────────┐        │
-                       │NeoFlow Svc  │   │User Contract│        │
-                       │ (On-Chain)  │   │ (Callback)  │        │
+                       │Automation   │   │User Contract│        │
+                       │Anchor       │   │ (Callback)  │        │
                        └─────────────┘   └─────────────┘        │
 ```
 
@@ -58,12 +58,14 @@ type Service struct {
 
     repo neoflowsupabase.RepositoryInterface
 
-    chainClient       *chain.Client
-    teeFulfiller      *chain.TEEFulfiller
-    neoflowHash       string
-    neoFeedsContract  *chain.NeoFeedsContract
-    eventListener     *chain.EventListener
-    enableChainExec   bool
+    chainClient          *chain.Client
+    chainSigner          chain.TEESigner
+    priceFeedHash        string
+    priceFeed            *chain.PriceFeedContract
+    automationAnchorHash string
+    automationAnchor     *chain.AutomationAnchorContract
+    eventListener        *chain.EventListener
+    enableChainExec      bool
 }
 ```
 
@@ -73,19 +75,14 @@ type Service struct {
 type Scheduler struct {
     mu            sync.RWMutex
     triggers      map[string]*neoflowsupabase.Trigger
-    chainTriggers map[uint64]*chain.Trigger
-    stopCh        chan struct{}
+    anchoredTasks map[string]*anchoredTaskState
 }
 ```
 
-## Trigger Types
+## Trigger Types (Current)
 
-| Type | ID | Description |
-|------|-----|-------------|
-| Time | 1 | Cron expressions |
-| Price | 2 | Price thresholds |
-| Event | 3 | On-chain events |
-| Threshold | 4 | Balance thresholds |
+- Supabase triggers: `cron` (webhooks today)
+- Anchored tasks (AutomationAnchor): `cron`, `price` (uses on-chain `PriceFeed`)
 
 ## API Endpoints
 
@@ -109,12 +106,12 @@ type Config struct {
     Marble           *marble.Marble
     DB               database.RepositoryInterface
     NeoFlowRepo      neoflowsupabase.RepositoryInterface
-    ChainClient      *chain.Client
-    TEEFulfiller     *chain.TEEFulfiller
-    NeoFlowHash      string
-    NeoFeedsContract *chain.NeoFeedsContract
-    EventListener    *chain.EventListener
-    EnableChainExec  bool
+    ChainClient          *chain.Client
+    ChainSigner          chain.TEESigner
+    PriceFeedHash        string
+    AutomationAnchorHash string
+    EventListener        *chain.EventListener
+    EnableChainExec      bool
 }
 ```
 
@@ -123,7 +120,7 @@ type Config struct {
 | Constant | Value | Description |
 |----------|-------|-------------|
 | `SchedulerInterval` | 1 second | Trigger check frequency |
-| `ChainTriggerInterval` | 5 seconds | Chain trigger sync |
+| `AnchoredTaskInterval` | 5 seconds | Anchored task evaluation frequency |
 | `ServiceFeePerExecution` | 0.0005 GAS | Per execution fee |
 
 ## Dependencies
@@ -132,7 +129,7 @@ type Config struct {
 
 | Package | Purpose |
 |---------|---------|
-| `infrastructure/chain` | Neo N3 blockchain interaction + price feed reads (`chain.NeoFeedsContract`) |
+| `infrastructure/chain` | Neo N3 blockchain interaction + platform contract reads (`PriceFeed`, `AutomationAnchor`) |
 | `infrastructure/marble` | MarbleRun TEE utilities |
 | `infrastructure/service` | Base service |
 | `services/automation/supabase` | Repository |

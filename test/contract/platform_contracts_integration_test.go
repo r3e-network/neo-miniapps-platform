@@ -93,6 +93,33 @@ func TestPlatformContractsNeoExpressSmoke(t *testing.T) {
 		return val
 	}
 
+	stackBool := func(label string, result *chain.InvokeResult) bool {
+		t.Helper()
+		if result == nil || len(result.Stack) == 0 {
+			t.Fatalf("%s: empty stack", label)
+		}
+		if result.Stack[0].Type != "Boolean" {
+			t.Fatalf("%s: expected Boolean stack item, got %s", label, result.Stack[0].Type)
+		}
+		var value bool
+		if err := json.Unmarshal(result.Stack[0].Value, &value); err != nil {
+			t.Fatalf("%s: parse bool value: %v", label, err)
+		}
+		return value
+	}
+
+	stackArray := func(label string, result *chain.InvokeResult) []chain.StackItem {
+		t.Helper()
+		if result == nil || len(result.Stack) == 0 {
+			t.Fatalf("%s: empty stack", label)
+		}
+		items, err := chain.ParseArray(result.Stack[0])
+		if err != nil {
+			t.Fatalf("%s: parse array: %v", label, err)
+		}
+		return items
+	}
+
 	// Basic admin reads (smoke). Note: neo-devpack exports ABI method names in lowerCamelCase.
 	if _, err := nx.InvokeWithAccountResults(paymentHub.Hash, "admin", account); err != nil {
 		t.Fatalf("PaymentHub.admin: %v", err)
@@ -116,8 +143,34 @@ func TestPlatformContractsNeoExpressSmoke(t *testing.T) {
 	); err != nil {
 		t.Fatalf("PriceFeed.update: %v", err)
 	}
-	if _, err := nx.InvokeWithAccountResults(priceFeed.Hash, "getLatest", account, "BTC-USD"); err != nil {
+	latestPrice, err := nx.InvokeWithAccountResults(priceFeed.Hash, "getLatest", account, "BTC-USD")
+	if err != nil {
 		t.Fatalf("PriceFeed.getLatest: %v", err)
+	}
+	latestItems := stackArray("PriceFeed.getLatest", latestPrice)
+	if len(latestItems) < 5 {
+		t.Fatalf("PriceFeed.getLatest: expected 5 items, got %d", len(latestItems))
+	}
+	roundID, err := chain.ParseInteger(latestItems[0])
+	if err != nil {
+		t.Fatalf("PriceFeed.getLatest: parse round_id: %v", err)
+	}
+	priceValue, err := chain.ParseInteger(latestItems[1])
+	if err != nil {
+		t.Fatalf("PriceFeed.getLatest: parse price: %v", err)
+	}
+	if roundID.Int64() != 1 {
+		t.Fatalf("PriceFeed.getLatest: round_id = %s, want 1", roundID.String())
+	}
+	if priceValue.Int64() != 100000000 {
+		t.Fatalf("PriceFeed.getLatest: price = %s, want 100000000", priceValue.String())
+	}
+
+	// round_id must be monotonic
+	if _, err := nx.InvokeWithAccount(priceFeed.Hash, "update", account,
+		"BTC-USD", int64(1), int64(100000001), ts, attestationHash, int64(1),
+	); err == nil {
+		t.Fatalf("PriceFeed.update: expected non-monotonic round_id rejection")
 	}
 
 	// RandomnessLog updater flow.
@@ -135,8 +188,18 @@ func TestPlatformContractsNeoExpressSmoke(t *testing.T) {
 	); err != nil {
 		t.Fatalf("RandomnessLog.record: %v", err)
 	}
-	if _, err := nx.InvokeWithAccountResults(randomnessLog.Hash, "get", account, recordID); err != nil {
+	recordRes, err := nx.InvokeWithAccountResults(randomnessLog.Hash, "get", account, recordID)
+	if err != nil {
 		t.Fatalf("RandomnessLog.get: %v", err)
+	}
+	recordItems := stackArray("RandomnessLog.get", recordRes)
+	if len(recordItems) < 4 {
+		t.Fatalf("RandomnessLog.get: expected 4 items, got %d", len(recordItems))
+	}
+	if got, err := chain.ParseByteArray(recordItems[1]); err != nil {
+		t.Fatalf("RandomnessLog.get: parse randomness: %v", err)
+	} else if "0x"+hex.EncodeToString(got) != strings.ToLower(randomness) {
+		t.Fatalf("RandomnessLog.get: randomness mismatch")
 	}
 
 	// AppRegistry register/get.
@@ -150,8 +213,36 @@ func TestPlatformContractsNeoExpressSmoke(t *testing.T) {
 	); err != nil {
 		t.Fatalf("AppRegistry.register: %v", err)
 	}
-	if _, err := nx.InvokeWithAccountResults(appRegistry.Hash, "getApp", account, appID); err != nil {
+	appInfo, err := nx.InvokeWithAccountResults(appRegistry.Hash, "getApp", account, appID)
+	if err != nil {
 		t.Fatalf("AppRegistry.getApp: %v", err)
+	}
+	appItems := stackArray("AppRegistry.getApp", appInfo)
+	if len(appItems) < 7 {
+		t.Fatalf("AppRegistry.getApp: expected 7 items, got %d", len(appItems))
+	}
+	status, err := chain.ParseInteger(appItems[5])
+	if err != nil {
+		t.Fatalf("AppRegistry.getApp: parse status: %v", err)
+	}
+	if status.Int64() != 0 {
+		t.Fatalf("AppRegistry.getApp: status = %s, want 0 (Pending)", status.String())
+	}
+
+	if _, err := nx.InvokeWithAccount(appRegistry.Hash, "setStatus", account, appID, int64(1)); err != nil {
+		t.Fatalf("AppRegistry.setStatus: %v", err)
+	}
+	appInfo2, err := nx.InvokeWithAccountResults(appRegistry.Hash, "getApp", account, appID)
+	if err != nil {
+		t.Fatalf("AppRegistry.getApp(after setStatus): %v", err)
+	}
+	appItems2 := stackArray("AppRegistry.getApp(after setStatus)", appInfo2)
+	status2, err := chain.ParseInteger(appItems2[5])
+	if err != nil {
+		t.Fatalf("AppRegistry.getApp(after setStatus): parse status: %v", err)
+	}
+	if status2.Int64() != 1 {
+		t.Fatalf("AppRegistry.getApp(after setStatus): status = %s, want 1 (Approved)", status2.String())
 	}
 
 	// AutomationAnchor task registry + anti-replay.
@@ -172,10 +263,34 @@ func TestPlatformContractsNeoExpressSmoke(t *testing.T) {
 	}
 
 	txHashBytes := "0x" + strings.Repeat("ee", 32)
+	usedBefore, err := nx.InvokeWithAccountResults(automationAnchor.Hash, "isNonceUsed", account, taskID, int64(1))
+	if err != nil {
+		t.Fatalf("AutomationAnchor.isNonceUsed(before): %v", err)
+	}
+	if stackBool("AutomationAnchor.isNonceUsed(before)", usedBefore) {
+		t.Fatalf("AutomationAnchor.isNonceUsed(before): expected false")
+	}
+
 	if _, err := nx.InvokeWithAccount(automationAnchor.Hash, "markExecuted", account,
 		taskID, int64(1), txHashBytes,
 	); err != nil {
 		t.Fatalf("AutomationAnchor.markExecuted: %v", err)
+	}
+
+	usedAfter, err := nx.InvokeWithAccountResults(automationAnchor.Hash, "isNonceUsed", account, taskID, int64(1))
+	if err != nil {
+		t.Fatalf("AutomationAnchor.isNonceUsed(after): %v", err)
+	}
+	if !stackBool("AutomationAnchor.isNonceUsed(after)", usedAfter) {
+		t.Fatalf("AutomationAnchor.isNonceUsed(after): expected true")
+	}
+
+	if _, err := nx.InvokeWithAccount(automationAnchor.Hash, "markExecuted", account,
+		taskID, int64(1), txHashBytes,
+	); err == nil {
+		t.Fatalf("AutomationAnchor.markExecuted: expected nonce reuse rejection")
+	} else {
+		t.Logf("AutomationAnchor.markExecuted duplicate nonce rejected: %v", err)
 	}
 
 	// =========================================================================

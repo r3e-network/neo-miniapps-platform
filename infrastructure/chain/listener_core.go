@@ -67,6 +67,13 @@ func NewEventListener(cfg *ListenerConfig) *EventListener {
 		cfg.Contracts.NeoCompute,
 		cfg.Contracts.NeoOracle,
 		cfg.Contracts.GasBank,
+		// MiniApp platform contracts.
+		cfg.Contracts.PaymentHub,
+		cfg.Contracts.Governance,
+		cfg.Contracts.PriceFeed,
+		cfg.Contracts.RandomnessLog,
+		cfg.Contracts.AppRegistry,
+		cfg.Contracts.AutomationAnchor,
 	} {
 		if normalized := normalizeContractHash(contractHash); normalized != "" {
 			contractHashes[normalized] = true

@@ -30,12 +30,19 @@ import (
 // GetPrice fetches and aggregates price from multiple sources.
 // Priority: Chainlink (free, on-chain) -> HTTP sources (Binance)
 func (s *Service) GetPrice(ctx context.Context, pair string) (*PriceResponse, error) {
-	// Try to find feed config for this pair
-	feed := s.findFeedByPair(pair)
+	normalizedPair := normalizePair(pair)
+	if normalizedPair == "" {
+		return nil, fmt.Errorf("pair required")
+	}
 
-	feedID := pair
+	// Try to find feed config for this pair (supports legacy BTC/USD inputs).
+	feed := s.findFeedByPair(normalizedPair)
+
+	feedID := normalizedPair
+	responsePair := normalizedPair
 	if feed != nil {
 		feedID = feed.ID
+		responsePair = feed.ID
 	}
 
 	var prices []float64
@@ -66,7 +73,7 @@ func (s *Service) GetPrice(ctx context.Context, pair string) (*PriceResponse, er
 			go func(src *SourceConfig) {
 				defer wg.Done()
 
-				price, err := s.fetchPriceFromSource(ctx, pair, feed, src)
+				price, err := s.fetchPriceFromSource(ctx, normalizedPair, feed, src)
 				if err != nil {
 					return
 				}
@@ -84,7 +91,7 @@ func (s *Service) GetPrice(ctx context.Context, pair string) (*PriceResponse, er
 	}
 
 	if len(prices) == 0 {
-		return nil, fmt.Errorf("no prices available for %s", pair)
+		return nil, fmt.Errorf("no prices available for %s", normalizedPair)
 	}
 
 	medianPrice := s.calculateMedian(prices)
@@ -92,7 +99,7 @@ func (s *Service) GetPrice(ctx context.Context, pair string) (*PriceResponse, er
 
 	response := &PriceResponse{
 		FeedID:    feedID,
-		Pair:      pair,
+		Pair:      responsePair,
 		Price:     priceInt,
 		Decimals:  decimals,
 		Timestamp: time.Now(),
@@ -112,7 +119,7 @@ func (s *Service) GetPrice(ctx context.Context, pair string) (*PriceResponse, er
 		if err := s.DB().CreatePriceFeed(ctx, &database.PriceFeed{
 			ID:        uuid.New().String(),
 			FeedID:    feedID,
-			Pair:      pair,
+			Pair:      responsePair,
 			Price:     priceInt,
 			Decimals:  response.Decimals,
 			Timestamp: response.Timestamp,
@@ -131,9 +138,19 @@ func (s *Service) GetPrice(ctx context.Context, pair string) (*PriceResponse, er
 
 // findFeedByPair finds a feed config by pair or feed ID.
 func (s *Service) findFeedByPair(pair string) *FeedConfig {
+	query := normalizePair(pair)
+	if query == "" {
+		return nil
+	}
+
 	for i := range s.config.Feeds {
 		f := &s.config.Feeds[i]
-		if f.Pair == pair || f.ID == pair {
+		if strings.EqualFold(f.Pair, query) || strings.EqualFold(f.ID, query) {
+			return f
+		}
+
+		// Defensive: allow matching even if config contains legacy delimiters.
+		if normalizePair(f.Pair) == query || normalizePair(f.ID) == query {
 			return f
 		}
 	}
@@ -316,12 +333,12 @@ func formatSourceURLNew(tmpl, pair string, feed *FeedConfig) string {
 	if feed != nil {
 		url = strings.ReplaceAll(url, "{base}", feed.Base)
 		url = strings.ReplaceAll(url, "{quote}", feed.Quote)
-	} else if len(pair) >= 6 {
-		// Parse base/quote from pair (e.g., BTCUSDT -> BTC, USDT)
-		base := strings.ToLower(pair[:3])
-		quote := strings.ToLower(pair[3:])
-		url = strings.ReplaceAll(url, "{base}", base)
-		url = strings.ReplaceAll(url, "{quote}", quote)
+	} else {
+		base, quote := parseBaseQuoteFromPair(pair)
+		if base != "" && quote != "" {
+			url = strings.ReplaceAll(url, "{base}", base)
+			url = strings.ReplaceAll(url, "{quote}", quote)
+		}
 	}
 
 	// Legacy format support

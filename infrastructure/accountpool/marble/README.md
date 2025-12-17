@@ -6,7 +6,7 @@ TEE-secured HD-derived account pool management service running inside MarbleRun 
 
 The AccountPool Marble service manages a pool of Neo N3 accounts derived from a master key:
 1. Accounts are derived on-demand using HKDF from master key
-2. Other services (VRF, Automation, Datafeeds, etc.) can request and lock accounts
+2. Other services (Automation, Datafeeds, TxProxy, etc.) can request and lock accounts
 3. Private keys never leave the TEE - signing done internally
 4. Automatic account rotation and pool maintenance
 

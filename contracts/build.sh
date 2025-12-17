@@ -3,6 +3,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+cd "$SCRIPT_DIR"
+
 echo "Building Neo N3 Smart Contracts..."
 
 # Ensure dotnet runtime can be resolved when tools are installed under ~/.dotnet.

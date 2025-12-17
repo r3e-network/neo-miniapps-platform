@@ -49,7 +49,7 @@ platform naming in docs:
 
 ### `neofeeds` (datafeed-service)
 
-- `GET /price/{pair}`: signed price for a pair (e.g. `BTC/USD`)
+- `GET /price/{pair}`: signed price for a pair (canonical: `BTC-USD`; legacy `BTC/USD` accepted)
 - `GET /prices`: signed prices (bulk)
 - `GET /feeds`, `GET /sources`, `GET /config`: configuration inspection
 

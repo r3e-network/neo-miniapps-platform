@@ -180,15 +180,20 @@ GET /api/v1/neofeeds/price/{pair}
 Example:
 
 ```http
-GET /api/v1/neofeeds/price/BTC%2FUSD
+GET /api/v1/neofeeds/price/BTC-USD
 ```
+
+Notes:
+
+- Canonical symbols use `BASE-QUOTE` (e.g. `BTC-USD`).
+- Legacy `BASE/QUOTE` requests are accepted (URL-encode the slash, e.g. `BTC%2FUSD`) but are normalized to `BASE-QUOTE` in responses.
 
 **Response:**
 
 ```json
 {
-    "feed_id": "BTC/USD",
-    "pair": "BTC/USD",
+    "feed_id": "BTC-USD",
+    "pair": "BTC-USD",
     "price": 4500000000000,
     "decimals": 8,
     "timestamp": "2025-12-10T10:00:00Z",

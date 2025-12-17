@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"github.com/R3E-Network/service_layer/infrastructure/chain"
 	"github.com/R3E-Network/service_layer/infrastructure/marble"
 	neoflowsupabase "github.com/R3E-Network/service_layer/services/automation/supabase"
 )
@@ -186,8 +184,8 @@ func TestSchedulerInitialization(t *testing.T) {
 	if svc.scheduler.triggers == nil {
 		t.Error("scheduler.triggers should not be nil")
 	}
-	if svc.scheduler.chainTriggers == nil {
-		t.Error("scheduler.chainTriggers should not be nil")
+	if svc.scheduler.anchoredTasks == nil {
+		t.Error("scheduler.anchoredTasks should not be nil")
 	}
 }
 
@@ -651,33 +649,12 @@ func BenchmarkTriggerRequestMarshal(b *testing.B) {
 // Additional Type Tests
 // =============================================================================
 
-func TestTriggerTypeConstants(t *testing.T) {
-	tests := []struct {
-		name     string
-		constant uint8
-		want     uint8
-	}{
-		{"TriggerTypeTime", chain.NeoFlowTriggerTypeTime, 1},
-		{"TriggerTypePrice", chain.NeoFlowTriggerTypePrice, 2},
-		{"TriggerTypeEvent", chain.NeoFlowTriggerTypeEvent, 3},
-		{"TriggerTypeThreshold", chain.NeoFlowTriggerTypeThreshold, 4},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.constant != tt.want {
-				t.Errorf("%s = %d, want %d", tt.name, tt.constant, tt.want)
-			}
-		})
-	}
-}
-
 func TestServiceIntervalConstants(t *testing.T) {
 	if SchedulerInterval != time.Second {
 		t.Errorf("SchedulerInterval = %v, want %v", SchedulerInterval, time.Second)
 	}
-	if ChainTriggerInterval != 5*time.Second {
-		t.Errorf("ChainTriggerInterval = %v, want %v", ChainTriggerInterval, 5*time.Second)
+	if AnchoredTaskInterval != 5*time.Second {
+		t.Errorf("AnchoredTaskInterval = %v, want %v", AnchoredTaskInterval, 5*time.Second)
 	}
 	if ServiceFeePerExecution != 50000 {
 		t.Errorf("ServiceFeePerExecution = %d, want 50000", ServiceFeePerExecution)
@@ -916,16 +893,16 @@ func TestSchedulerMapInitialization(t *testing.T) {
 	if svc.scheduler.triggers == nil {
 		t.Error("scheduler.triggers should not be nil")
 	}
-	if svc.scheduler.chainTriggers == nil {
-		t.Error("scheduler.chainTriggers should not be nil")
+	if svc.scheduler.anchoredTasks == nil {
+		t.Error("scheduler.anchoredTasks should not be nil")
 	}
 
 	// Verify maps are empty initially
 	if len(svc.scheduler.triggers) != 0 {
 		t.Errorf("scheduler.triggers should be empty, got %d", len(svc.scheduler.triggers))
 	}
-	if len(svc.scheduler.chainTriggers) != 0 {
-		t.Errorf("scheduler.chainTriggers should be empty, got %d", len(svc.scheduler.chainTriggers))
+	if len(svc.scheduler.anchoredTasks) != 0 {
+		t.Errorf("scheduler.anchoredTasks should be empty, got %d", len(svc.scheduler.anchoredTasks))
 	}
 }
 
@@ -933,12 +910,13 @@ func TestServiceConfigFields(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neoflow"})
 
 	cfg := Config{
-		Marble:          m,
-		DB:              nil,
-		ChainClient:     nil,
-		TEEFulfiller:    nil,
-		NeoFlowHash:     "0x1234567890abcdef",
-		EnableChainExec: true,
+		Marble:               m,
+		DB:                   nil,
+		ChainClient:          nil,
+		ChainSigner:          nil,
+		PriceFeedHash:        "0x1234567890abcdef",
+		AutomationAnchorHash: "0xabcdef1234567890",
+		EnableChainExec:      true,
 	}
 
 	svc, err := New(cfg)
@@ -946,8 +924,11 @@ func TestServiceConfigFields(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	if svc.neoflowHash != cfg.NeoFlowHash {
-		t.Errorf("neoflowHash = %s, want %s", svc.neoflowHash, cfg.NeoFlowHash)
+	if svc.priceFeedHash != cfg.PriceFeedHash {
+		t.Errorf("priceFeedHash = %s, want %s", svc.priceFeedHash, cfg.PriceFeedHash)
+	}
+	if svc.automationAnchorHash != cfg.AutomationAnchorHash {
+		t.Errorf("automationAnchorHash = %s, want %s", svc.automationAnchorHash, cfg.AutomationAnchorHash)
 	}
 	if svc.enableChainExec != cfg.EnableChainExec {
 		t.Errorf("enableChainExec = %v, want %v", svc.enableChainExec, cfg.EnableChainExec)
@@ -1182,184 +1163,6 @@ func TestAllowPrivateWebhookTargets(t *testing.T) {
 	}
 }
 
-// =============================================================================
-// Chain Trigger Tests
-// =============================================================================
-
-func TestRegisterUnregisterChainTrigger(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "neoflow"})
-	svc, _ := New(Config{Marble: m})
-
-	trigger := &chain.Trigger{
-		TriggerID:      big.NewInt(123),
-		Owner:          "owner",
-		TriggerType:    chain.NeoFlowTriggerTypeTime,
-		Condition:      "0 * * * *",
-		Status:         chain.NeoFlowTriggerStatusActive,
-		ExecutionCount: big.NewInt(0),
-		MaxExecutions:  big.NewInt(10),
-	}
-
-	// Register
-	svc.RegisterChainTrigger(trigger)
-
-	svc.scheduler.mu.RLock()
-	if _, ok := svc.scheduler.chainTriggers[123]; !ok {
-		t.Error("trigger should be registered")
-	}
-	svc.scheduler.mu.RUnlock()
-
-	// Unregister
-	svc.UnregisterChainTrigger(123)
-
-	svc.scheduler.mu.RLock()
-	if _, ok := svc.scheduler.chainTriggers[123]; ok {
-		t.Error("trigger should be unregistered")
-	}
-	svc.scheduler.mu.RUnlock()
-}
-
-func TestEvaluateTriggerConditionUnknownType(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "neoflow"})
-	svc, _ := New(Config{Marble: m})
-
-	trigger := &chain.Trigger{
-		TriggerID:   big.NewInt(1),
-		TriggerType: 99, // Unknown type
-	}
-
-	shouldExecute, data := svc.evaluateTriggerCondition(context.Background(), trigger)
-	if shouldExecute {
-		t.Error("unknown trigger type should not execute")
-	}
-	if data != nil {
-		t.Error("unknown trigger type should return nil data")
-	}
-}
-
-func TestEvaluateTriggerConditionEventType(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "neoflow"})
-	svc, _ := New(Config{Marble: m})
-
-	trigger := &chain.Trigger{
-		TriggerID:   big.NewInt(1),
-		TriggerType: chain.NeoFlowTriggerTypeEvent,
-	}
-
-	shouldExecute, data := svc.evaluateTriggerCondition(context.Background(), trigger)
-	if shouldExecute {
-		t.Error("event trigger should not execute via condition check")
-	}
-	if data != nil {
-		t.Error("event trigger should return nil data")
-	}
-}
-
-func TestEvaluateTimeTriggerEmptyCondition(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "neoflow"})
-	svc, _ := New(Config{Marble: m})
-
-	trigger := &chain.Trigger{
-		TriggerID:   big.NewInt(1),
-		TriggerType: chain.NeoFlowTriggerTypeTime,
-		Condition:   "",
-	}
-
-	shouldExecute, _ := svc.evaluateTimeTrigger(trigger)
-	if shouldExecute {
-		t.Error("empty condition should not execute")
-	}
-}
-
-func TestEvaluateTimeTriggerInvalidCron(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "neoflow"})
-	svc, _ := New(Config{Marble: m})
-
-	trigger := &chain.Trigger{
-		TriggerID:   big.NewInt(1),
-		TriggerType: chain.NeoFlowTriggerTypeTime,
-		Condition:   "invalid",
-	}
-
-	shouldExecute, _ := svc.evaluateTimeTrigger(trigger)
-	if shouldExecute {
-		t.Error("invalid cron should not execute")
-	}
-}
-
-func TestEvaluatePriceTriggerNoContract(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "neoflow"})
-	svc, _ := New(Config{Marble: m})
-
-	trigger := &chain.Trigger{
-		TriggerID:   big.NewInt(1),
-		TriggerType: chain.NeoFlowTriggerTypePrice,
-		Condition:   `{"feed_id":"BTC/USD","operator":">","threshold":100000}`,
-	}
-
-	shouldExecute, _ := svc.evaluatePriceTrigger(context.Background(), trigger)
-	if shouldExecute {
-		t.Error("should not execute without neofeeds contract")
-	}
-}
-
-func TestEvaluatePriceTriggerInvalidCondition(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "neoflow"})
-	svc, _ := New(Config{Marble: m})
-
-	trigger := &chain.Trigger{
-		TriggerID:   big.NewInt(1),
-		TriggerType: chain.NeoFlowTriggerTypePrice,
-		Condition:   "invalid json",
-	}
-
-	shouldExecute, _ := svc.evaluatePriceTrigger(context.Background(), trigger)
-	if shouldExecute {
-		t.Error("invalid condition should not execute")
-	}
-}
-
-func TestEvaluateThresholdTriggerInvalidCondition(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "neoflow"})
-	svc, _ := New(Config{Marble: m})
-
-	trigger := &chain.Trigger{
-		TriggerID:   big.NewInt(1),
-		TriggerType: chain.NeoFlowTriggerTypeThreshold,
-		Condition:   "invalid json",
-	}
-
-	shouldExecute, _ := svc.evaluateThresholdTrigger(context.Background(), trigger)
-	if shouldExecute {
-		t.Error("invalid condition should not execute")
-	}
-}
-
-func TestEvaluateThresholdTriggerValidCondition(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "neoflow"})
-	svc, _ := New(Config{Marble: m})
-
-	trigger := &chain.Trigger{
-		TriggerID:   big.NewInt(1),
-		TriggerType: chain.NeoFlowTriggerTypeThreshold,
-		Condition:   `{"address":"NAddr123","asset":"GAS","operator":"<","threshold":1000000000}`,
-	}
-
-	// Currently returns false because no balance source is available
-	shouldExecute, _ := svc.evaluateThresholdTrigger(context.Background(), trigger)
-	if shouldExecute {
-		t.Error("threshold trigger should not execute without balance source")
-	}
-}
-
-func TestCheckChainTriggersDisabled(t *testing.T) {
-	m, _ := marble.New(marble.Config{MarbleType: "neoflow"})
-	svc, _ := New(Config{Marble: m, EnableChainExec: false})
-
-	// Should return early without panic
-	svc.checkChainTriggers(context.Background())
-}
-
 func TestCheckAndExecuteTriggersNoRepo(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neoflow"})
 	mockRepo := newMockNeoFlowRepo()
@@ -1418,12 +1221,12 @@ func TestExecuteTriggerWithMock(t *testing.T) {
 	}
 }
 
-func TestSetupEventTriggerListenerNil(t *testing.T) {
+func TestSetupAutomationAnchorListenerNil(t *testing.T) {
 	m, _ := marble.New(marble.Config{MarbleType: "neoflow"})
 	svc, _ := New(Config{Marble: m})
 
-	// Should return early without panic when eventListener is nil
-	svc.SetupEventTriggerListener()
+	// Should return early without panic when eventListener/anchor are nil
+	svc.setupAutomationAnchorListener()
 }
 
 // =============================================================================

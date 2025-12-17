@@ -120,6 +120,12 @@ func New(cfg *Config) (*Service, error) {
 		feedsConfig = DefaultConfig()
 	}
 
+	// Ensure defaults are applied consistently regardless of whether the config
+	// came from a file or was provided programmatically (tests, embedding, etc.).
+	if err := feedsConfig.Validate(); err != nil {
+		return nil, fmt.Errorf("validate config: %w", err)
+	}
+
 	// In production/SGX mode, enforce TLS for all outbound price sources.
 	if strict {
 		for _, src := range feedsConfig.Sources {

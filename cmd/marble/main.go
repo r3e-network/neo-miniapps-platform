@@ -195,6 +195,15 @@ func main() {
 		}
 	}
 
+	automationAnchorHash := trimHexPrefix(contracts.AutomationAnchor)
+	if automationAnchorHash == "" {
+		if secret, ok := m.Secret("CONTRACT_AUTOMATIONANCHOR_HASH"); ok && len(secret) > 0 {
+			automationAnchorHash = trimHexPrefix(string(secret))
+		} else if secret, ok := m.Secret("CONTRACT_AUTOMATION_ANCHOR_HASH"); ok && len(secret) > 0 {
+			automationAnchorHash = trimHexPrefix(string(secret))
+		}
+	}
+
 	automationHash := trimHexPrefix(contracts.NeoFlow)
 	if automationHash == "" {
 		if secret, ok := m.Secret("CONTRACT_AUTOMATION_HASH"); ok && len(secret) > 0 {
@@ -266,24 +275,21 @@ func main() {
 		eventListener = chain.NewEventListener(&chain.ListenerConfig{
 			Client: chainClient,
 			Contracts: chain.ContractAddresses{
-				Gateway:  gatewayHash,
-				NeoFeeds: dataFeedsHash,
-				NeoFlow:  automationHash,
+				Gateway:          gatewayHash,
+				NeoFeeds:         dataFeedsHash,
+				NeoFlow:          automationHash,
+				PriceFeed:        priceFeedHash,
+				AutomationAnchor: automationAnchorHash,
 			},
 			StartBlock:   startBlock,
 			PollInterval: 5 * time.Second,
 		})
 	}
 
-	var neoFeedsContract *chain.NeoFeedsContract
-	if chainClient != nil && dataFeedsHash != "" {
-		neoFeedsContract = chain.NewNeoFeedsContract(chainClient, dataFeedsHash, nil)
-	}
-
 	enablePriceFeedPush := chainClient != nil && teeSigner != nil && priceFeedHash != ""
 	enableLegacyFeedsPush := chainClient != nil && teeFulfiller != nil && dataFeedsHash != ""
 	enableChainPush := enablePriceFeedPush || enableLegacyFeedsPush
-	enableChainExec := chainClient != nil && teeFulfiller != nil && automationHash != ""
+	enableChainExec := chainClient != nil && teeSigner != nil && automationAnchorHash != ""
 	arbitrumRPC := strings.TrimSpace(os.Getenv("ARBITRUM_RPC"))
 
 	var svc ServiceRunner
@@ -326,15 +332,15 @@ func main() {
 	case "neoflow":
 		var flowSvc *neoflow.Service
 		flowSvc, err = neoflow.New(neoflow.Config{
-			Marble:           m,
-			DB:               db,
-			NeoFlowRepo:      neoflowRepo,
-			ChainClient:      chainClient,
-			TEEFulfiller:     teeFulfiller,
-			NeoFlowHash:      automationHash,
-			NeoFeedsContract: neoFeedsContract,
-			EventListener:    eventListener,
-			EnableChainExec:  enableChainExec,
+			Marble:               m,
+			DB:                   db,
+			NeoFlowRepo:          neoflowRepo,
+			ChainClient:          chainClient,
+			ChainSigner:          teeSigner,
+			PriceFeedHash:        priceFeedHash,
+			AutomationAnchorHash: automationAnchorHash,
+			EventListener:        eventListener,
+			EnableChainExec:      enableChainExec,
 		})
 		svc = flowSvc
 	case "neooracle":
