@@ -88,8 +88,8 @@ func (s *Service) pushPricesToPriceFeed(ctx context.Context) {
 	if s == nil || s.priceFeed == nil {
 		return
 	}
-	if s.chainSigner == nil {
-		s.Logger().WithContext(ctx).Warn("pricefeed push enabled but signer not configured")
+	if s.txProxy == nil {
+		s.Logger().WithContext(ctx).Warn("pricefeed push enabled but txproxy not configured")
 		return
 	}
 	if len(s.attestationHash) == 0 {
@@ -220,7 +220,7 @@ func (s *Service) tryPublishPrice(ctx context.Context, symbol string, newPrice i
 		sourceSetID = big.NewInt(0)
 	}
 
-	_, err := s.priceFeed.Update(ctx, s.chainSigner, symbol, roundBig, priceBig, timestamp, s.attestationHash, sourceSetID, false)
+	_, err := s.invokePriceFeedUpdate(ctx, symbol, roundBig, priceBig, timestamp, sourceSetID, false)
 	if err != nil {
 		// If we got out of sync (e.g., restart), resync once and retry with the correct round.
 		if s.resyncRoundID(ctx, symbol) {
@@ -234,7 +234,7 @@ func (s *Service) tryPublishPrice(ctx context.Context, symbol string, newPrice i
 				roundBig = big.NewInt(next)
 			}
 			s.publishMu.Unlock()
-			_, err = s.priceFeed.Update(ctx, s.chainSigner, symbol, roundBig, priceBig, timestamp, s.attestationHash, sourceSetID, false)
+			_, err = s.invokePriceFeedUpdate(ctx, symbol, roundBig, priceBig, timestamp, sourceSetID, false)
 		}
 		if err != nil {
 			s.Logger().WithContext(ctx).WithError(err).WithFields(map[string]interface{}{

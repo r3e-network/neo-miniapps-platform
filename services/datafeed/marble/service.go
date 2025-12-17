@@ -23,6 +23,7 @@ import (
 	"github.com/R3E-Network/service_layer/infrastructure/marble"
 	"github.com/R3E-Network/service_layer/infrastructure/runtime"
 	commonservice "github.com/R3E-Network/service_layer/infrastructure/service"
+	txproxytypes "github.com/R3E-Network/service_layer/infrastructure/txproxy/types"
 )
 
 const (
@@ -48,8 +49,8 @@ type Service struct {
 	// Chain interaction for push pattern
 	chainClient     *chain.Client
 	priceFeedHash   string
-	chainSigner     chain.TEESigner
 	priceFeed       *chain.PriceFeedContract
+	txProxy         txproxytypes.Invoker
 	attestationHash []byte
 	publishPolicy   PublishPolicyConfig
 	publishMu       sync.Mutex
@@ -69,7 +70,7 @@ type Config struct {
 	// Chain configuration for push pattern
 	ChainClient     *chain.Client
 	PriceFeedHash   string // Contract hash for platform PriceFeed (preferred)
-	ChainSigner     chain.TEESigner
+	TxProxy         txproxytypes.Invoker
 	UpdateInterval  time.Duration // How often to push prices on-chain (default: from config)
 	EnableChainPush bool          // Enable automatic on-chain price updates
 }
@@ -152,7 +153,7 @@ func New(cfg *Config) (*Service, error) {
 		sources:         make(map[string]*SourceConfig),
 		chainClient:     cfg.ChainClient,
 		priceFeedHash:   cfg.PriceFeedHash,
-		chainSigner:     cfg.ChainSigner,
+		txProxy:         cfg.TxProxy,
 		publishPolicy:   feedsConfig.PublishPolicy,
 		publishState:    make(map[string]*pricePublishState),
 		updateInterval:  updateInterval,
@@ -196,6 +197,30 @@ func New(cfg *Config) (*Service, error) {
 	// Register chain push worker if enabled.
 	// The MiniApp platform uses PriceFeed as the on-chain anchor; legacy on-chain
 	// service contracts are intentionally not supported here.
+	if s.enableChainPush && strings.TrimSpace(s.priceFeedHash) == "" {
+		if strict {
+			return nil, fmt.Errorf("neofeeds: EnableChainPush requires PriceFeedHash configured")
+		}
+		s.Logger().WithFields(nil).Warn("EnableChainPush enabled but PriceFeedHash not configured; disabling on-chain anchoring")
+		s.enableChainPush = false
+	}
+
+	if s.enableChainPush && s.priceFeedHash != "" && s.priceFeed == nil {
+		if strict {
+			return nil, fmt.Errorf("neofeeds: EnableChainPush requires chain client configured")
+		}
+		s.Logger().WithFields(nil).Warn("EnableChainPush enabled but chain client not configured; disabling on-chain anchoring")
+		s.enableChainPush = false
+	}
+
+	if s.enableChainPush && s.priceFeedHash != "" && s.txProxy == nil {
+		if strict {
+			return nil, fmt.Errorf("neofeeds: EnableChainPush requires TxProxy configured")
+		}
+		s.Logger().WithFields(nil).Warn("EnableChainPush enabled but TxProxy not configured; disabling on-chain anchoring")
+		s.enableChainPush = false
+	}
+
 	if s.enableChainPush && s.priceFeedHash != "" {
 		if s.priceFeedHash != "" {
 			base.WithHydrate(s.hydratePriceFeedState)

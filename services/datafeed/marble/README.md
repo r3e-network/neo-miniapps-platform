@@ -84,8 +84,11 @@ via `PriceFeed.update(...)`.
 
 Anchoring uses:
 
-- a TEE signer (`ChainSigner`) — ideally backed by `GlobalSigner`, and
+- `txproxy` for the signed/broadcasted invocation (`PriceFeed.update`), and
 - an attestation-derived hash included in the contract record.
+
+`txproxy` holds the TEE signing key (typically backed by `globalsigner`) and
+enforces the contract+method allowlist.
 
 The `PriceFeed` contract enforces monotonic `round_id` to prevent replay.
 

@@ -1,4 +1,4 @@
-# NeoNeoOracle Service
+# NeoOracle Service
 
 HTTP oracle proxy service for the Neo Service Layer.
 

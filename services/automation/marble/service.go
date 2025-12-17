@@ -15,13 +15,16 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/R3E-Network/service_layer/infrastructure/chain"
 	"github.com/R3E-Network/service_layer/infrastructure/database"
 	"github.com/R3E-Network/service_layer/infrastructure/marble"
+	"github.com/R3E-Network/service_layer/infrastructure/runtime"
 	commonservice "github.com/R3E-Network/service_layer/infrastructure/service"
+	txproxytypes "github.com/R3E-Network/service_layer/infrastructure/txproxy/types"
 	neoflowsupabase "github.com/R3E-Network/service_layer/services/automation/supabase"
 )
 
@@ -48,11 +51,11 @@ type Service struct {
 
 	// Optional chain interaction for anchored tasks (platform contracts).
 	chainClient          *chain.Client
-	chainSigner          chain.TEESigner
 	priceFeedHash        string
 	priceFeed            *chain.PriceFeedContract
 	automationAnchorHash string
 	automationAnchor     *chain.AutomationAnchorContract
+	txProxy              txproxytypes.Invoker
 	eventListener        *chain.EventListener
 	enableChainExec      bool
 }
@@ -72,9 +75,9 @@ type Config struct {
 
 	// Optional chain configuration for anchored tasks (platform AutomationAnchor + PriceFeed).
 	ChainClient          *chain.Client
-	ChainSigner          chain.TEESigner
 	PriceFeedHash        string
 	AutomationAnchorHash string
+	TxProxy              txproxytypes.Invoker
 	EventListener        *chain.EventListener
 	EnableChainExec      bool
 }
@@ -84,6 +87,8 @@ func New(cfg Config) (*Service, error) { //nolint:gocritic // cfg is read once a
 	if cfg.Marble == nil {
 		return nil, fmt.Errorf("marble is required")
 	}
+
+	strict := runtime.StrictIdentityMode() || cfg.Marble.IsEnclave()
 
 	base := commonservice.NewBase(&commonservice.BaseConfig{
 		ID:      ServiceID,
@@ -101,9 +106,9 @@ func New(cfg Config) (*Service, error) { //nolint:gocritic // cfg is read once a
 			anchoredTasks: make(map[string]*anchoredTaskState),
 		},
 		chainClient:          cfg.ChainClient,
-		chainSigner:          cfg.ChainSigner,
 		priceFeedHash:        cfg.PriceFeedHash,
 		automationAnchorHash: cfg.AutomationAnchorHash,
+		txProxy:              cfg.TxProxy,
 		eventListener:        cfg.EventListener,
 		enableChainExec:      cfg.EnableChainExec,
 	}
@@ -113,6 +118,30 @@ func New(cfg Config) (*Service, error) { //nolint:gocritic // cfg is read once a
 	}
 	if s.chainClient != nil && s.automationAnchorHash != "" {
 		s.automationAnchor = chain.NewAutomationAnchorContract(s.chainClient, s.automationAnchorHash)
+	}
+
+	if s.enableChainExec && strings.TrimSpace(s.automationAnchorHash) == "" {
+		if strict {
+			return nil, fmt.Errorf("neoflow: EnableChainExec requires AutomationAnchorHash configured")
+		}
+		s.Logger().WithFields(nil).Warn("EnableChainExec enabled but AutomationAnchorHash not configured; disabling on-chain automation")
+		s.enableChainExec = false
+	}
+
+	if s.enableChainExec && s.automationAnchorHash != "" && s.automationAnchor == nil {
+		if strict {
+			return nil, fmt.Errorf("neoflow: EnableChainExec requires chain client configured")
+		}
+		s.Logger().WithFields(nil).Warn("EnableChainExec enabled but chain client not configured; disabling on-chain automation")
+		s.enableChainExec = false
+	}
+
+	if s.enableChainExec && s.automationAnchorHash != "" && s.txProxy == nil {
+		if strict {
+			return nil, fmt.Errorf("neoflow: EnableChainExec requires TxProxy configured")
+		}
+		s.Logger().WithFields(nil).Warn("EnableChainExec enabled but TxProxy not configured; disabling on-chain automation")
+		s.enableChainExec = false
 	}
 
 	// Hydrate scheduler cache and register periodic workers.

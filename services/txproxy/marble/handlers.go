@@ -26,7 +26,7 @@ func (s *Service) handleInvoke(w http.ResponseWriter, r *http.Request) {
 	}
 
 	contractHash := strings.TrimSpace(req.ContractHash)
-	method := strings.TrimSpace(req.Method)
+	method := canonicalizeMethodName(req.Method)
 	if contractHash == "" || method == "" {
 		httputil.BadRequest(w, "contract_hash and method required")
 		return

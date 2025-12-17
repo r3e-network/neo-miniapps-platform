@@ -1,24 +1,7 @@
 package txproxy
 
-import "github.com/R3E-Network/service_layer/infrastructure/chain"
+import txproxytypes "github.com/R3E-Network/service_layer/infrastructure/txproxy/types"
 
-type InvokeRequest struct {
-	RequestID string `json:"request_id"`
-	// Intent optionally enables additional policy gates.
-	//
-	// Supported values:
-	// - "payments": enforce PaymentHub-only methods (GAS settlement)
-	// - "governance": enforce Governance-only methods (NEO governance)
-	Intent       string                `json:"intent,omitempty"`
-	ContractHash string                `json:"contract_hash"`
-	Method       string                `json:"method"`
-	Params       []chain.ContractParam `json:"params,omitempty"`
-	Wait         bool                  `json:"wait,omitempty"`
-}
+type InvokeRequest = txproxytypes.InvokeRequest
 
-type InvokeResponse struct {
-	RequestID string `json:"request_id"`
-	TxHash    string `json:"tx_hash,omitempty"`
-	VMState   string `json:"vm_state,omitempty"`
-	Exception string `json:"exception,omitempty"`
-}
+type InvokeResponse = txproxytypes.InvokeResponse

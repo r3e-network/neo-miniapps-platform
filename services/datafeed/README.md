@@ -4,7 +4,7 @@ Price oracle service for the Neo Service Layer.
 
 ## Overview
 
-The NeoFeeds service provides aggregated price feeds from multiple sources with TEE attestation. It fetches prices from Chainlink (Arbitrum) and Binance, aggregates them using median calculation, and signs the results with the TEE key. When configured, it also anchors updates to the platform `PriceFeed` contract on Neo N3 using the `≥0.1%` publish policy.
+The NeoFeeds service provides aggregated price feeds from multiple sources with TEE attestation. It fetches prices from Chainlink (Arbitrum) and Binance, aggregates them using median calculation, and signs the results with the TEE key. When configured, it anchors updates to the platform `PriceFeed` contract on Neo N3 via `txproxy` (allowlisted sign+broadcast) using the `≥0.1%` publish policy.
 
 ## Architecture
 

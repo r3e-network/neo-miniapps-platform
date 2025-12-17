@@ -158,10 +158,12 @@ The NeoFlow service uses a service-specific Supabase repository for database ope
 ```
 services/automation/
 ├── marble/              # Enclave runtime + HTTP handlers + workers
-├── chain/               # Contract wrappers/event parsing
 ├── supabase/            # Automation persistence (triggers + executions)
 └── README.md
 ```
+
+Neo N3 chain bindings live in `infrastructure/chain` (RPC, typed contract reads, event parsing).
+All on-chain *writes* are delegated to `services/txproxy` (allowlisted sign+broadcast).
 
 ### Repository Interface
 

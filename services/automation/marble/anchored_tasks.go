@@ -11,9 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nspcc-dev/neo-go/pkg/core/transaction"
+	"github.com/google/uuid"
 
 	"github.com/R3E-Network/service_layer/infrastructure/chain"
+	txproxytypes "github.com/R3E-Network/service_layer/infrastructure/txproxy/types"
 )
 
 type anchoredTaskTriggerSpec struct {
@@ -174,7 +175,7 @@ func (s *Service) checkAndExecuteAnchoredTasks(ctx context.Context) {
 	if s == nil || !s.enableChainExec {
 		return
 	}
-	if s.chainClient == nil || s.chainSigner == nil || s.automationAnchor == nil {
+	if s.chainClient == nil || s.txProxy == nil || s.automationAnchor == nil {
 		return
 	}
 
@@ -320,7 +321,7 @@ func (s *Service) executeAnchoredTask(ctx context.Context, task *anchoredTaskSta
 	if s == nil || task == nil || task.task == nil {
 		return
 	}
-	if s.chainClient == nil || s.chainSigner == nil || s.automationAnchor == nil {
+	if s.txProxy == nil || s.automationAnchor == nil {
 		return
 	}
 	if task.task.Target == "" || task.task.Method == "" {
@@ -343,17 +344,30 @@ func (s *Service) executeAnchoredTask(ctx context.Context, task *anchoredTaskSta
 		chain.NewByteArrayParam(payload),
 	}
 
-	txResult, err := s.chainClient.InvokeFunctionWithSignerAndWait(
-		ctx,
-		task.task.Target,
-		task.task.Method,
-		params,
-		s.chainSigner,
-		transaction.CalledByEntry,
-		true,
-	)
+	txResult, err := s.txProxy.Invoke(ctx, &txproxytypes.InvokeRequest{
+		RequestID:    "neoflow:" + uuid.NewString(),
+		ContractHash: task.task.Target,
+		Method:       task.task.Method,
+		Params:       params,
+		Wait:         true,
+	})
 	if err != nil {
 		s.Logger().WithContext(ctx).WithError(err).WithField("task_id", anchoredTaskKey(task.task.TaskID)).Warn("automation task invocation failed")
+		return
+	}
+	if txResult == nil || strings.TrimSpace(txResult.TxHash) == "" {
+		s.Logger().WithContext(ctx).WithField("task_id", anchoredTaskKey(task.task.TaskID)).Warn("automation task invocation returned empty tx hash")
+		return
+	}
+	if state := strings.TrimSpace(txResult.VMState); state != "" && !strings.HasPrefix(state, "HALT") {
+		entry := s.Logger().WithContext(ctx).WithFields(map[string]interface{}{
+			"task_id": anchoredTaskKey(task.task.TaskID),
+			"vmstate": state,
+		})
+		if msg := strings.TrimSpace(txResult.Exception); msg != "" {
+			entry = entry.WithField("exception", msg)
+		}
+		entry.Warn("automation task invocation faulted")
 		return
 	}
 
@@ -362,8 +376,30 @@ func (s *Service) executeAnchoredTask(ctx context.Context, task *anchoredTaskSta
 		txHashBytes = []byte(txResult.TxHash)
 	}
 
-	if _, err := s.automationAnchor.MarkExecuted(ctx, s.chainSigner, task.task.TaskID, nonce, txHashBytes, true); err != nil {
+	markResult, err := s.txProxy.Invoke(ctx, &txproxytypes.InvokeRequest{
+		RequestID:    "neoflow:mark:" + uuid.NewString(),
+		ContractHash: s.automationAnchorHash,
+		Method:       "markExecuted",
+		Params: []chain.ContractParam{
+			chain.NewByteArrayParam(task.task.TaskID),
+			chain.NewIntegerParam(nonce),
+			chain.NewByteArrayParam(txHashBytes),
+		},
+		Wait: true,
+	})
+	if err != nil {
 		s.Logger().WithContext(ctx).WithError(err).WithField("task_id", anchoredTaskKey(task.task.TaskID)).Warn("failed to mark task executed")
+	} else if markResult != nil {
+		if state := strings.TrimSpace(markResult.VMState); state != "" && !strings.HasPrefix(state, "HALT") {
+			entry := s.Logger().WithContext(ctx).WithFields(map[string]interface{}{
+				"task_id": anchoredTaskKey(task.task.TaskID),
+				"vmstate": state,
+			})
+			if msg := strings.TrimSpace(markResult.Exception); msg != "" {
+				entry = entry.WithField("exception", msg)
+			}
+			entry.Warn("markExecuted faulted")
+		}
 	}
 
 	task.mu.Lock()

@@ -29,6 +29,8 @@ import (
 	"github.com/R3E-Network/service_layer/infrastructure/runtime"
 	"github.com/R3E-Network/service_layer/infrastructure/secrets"
 	secretssupabase "github.com/R3E-Network/service_layer/infrastructure/secrets/supabase"
+	txproxyclient "github.com/R3E-Network/service_layer/infrastructure/txproxy/client"
+	txproxytypes "github.com/R3E-Network/service_layer/infrastructure/txproxy/types"
 
 	// Neo service imports
 	neoaccounts "github.com/R3E-Network/service_layer/infrastructure/accountpool/marble"
@@ -246,10 +248,36 @@ func main() {
 		})
 	}
 
-	enablePriceFeedPush := chainClient != nil && teeSigner != nil && priceFeedHash != ""
-	enableChainPush := enablePriceFeedPush
-	enableChainExec := chainClient != nil && teeSigner != nil && automationAnchorHash != ""
 	arbitrumRPC := strings.TrimSpace(os.Getenv("ARBITRUM_RPC"))
+
+	// TxProxy is the centralized "sign + broadcast" gatekeeper. NeoFeeds/NeoFlow
+	// delegate all on-chain writes to it (single allowlist + audit surface).
+	txproxyURL := strings.TrimSpace(os.Getenv("TXPROXY_URL"))
+	if txproxyURL == "" {
+		if secret, ok := m.Secret("TXPROXY_URL"); ok && len(secret) > 0 {
+			txproxyURL = strings.TrimSpace(string(secret))
+		}
+	}
+
+	var txProxyInvoker txproxytypes.Invoker
+	if txproxyURL != "" && serviceType != "txproxy" {
+		client, err := txproxyclient.New(txproxyclient.Config{
+			BaseURL:    txproxyURL,
+			ServiceID:  serviceType,
+			HTTPClient: m.HTTPClient(),
+			Timeout:    15 * time.Second,
+		})
+		if err != nil {
+			log.Printf("Warning: failed to create TxProxy client: %v", err)
+		} else {
+			txProxyInvoker = client
+			log.Printf("Using TxProxy for chain writes (%s)", txproxyURL)
+		}
+	}
+
+	enablePriceFeedPush := chainClient != nil && priceFeedHash != "" && txProxyInvoker != nil
+	enableChainPush := enablePriceFeedPush
+	enableChainExec := chainClient != nil && automationAnchorHash != "" && txProxyInvoker != nil
 
 	var svc ServiceRunner
 	switch serviceType {
@@ -282,7 +310,7 @@ func main() {
 			ArbitrumRPC:     arbitrumRPC,
 			ChainClient:     chainClient,
 			PriceFeedHash:   priceFeedHash,
-			ChainSigner:     teeSigner,
+			TxProxy:         txProxyInvoker,
 			EnableChainPush: enableChainPush,
 		})
 		svc = feedsSvc
@@ -293,9 +321,9 @@ func main() {
 			DB:                   db,
 			NeoFlowRepo:          neoflowRepo,
 			ChainClient:          chainClient,
-			ChainSigner:          teeSigner,
 			PriceFeedHash:        priceFeedHash,
 			AutomationAnchorHash: automationAnchorHash,
+			TxProxy:              txProxyInvoker,
 			EventListener:        eventListener,
 			EnableChainExec:      enableChainExec,
 		})
