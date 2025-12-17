@@ -34,7 +34,8 @@ func (c *RandomnessLogContract) Hash() string {
 func (c *RandomnessLogContract) Record(
 	ctx context.Context,
 	signer TxSigner,
-	requestID, randomness, attestationHash []byte,
+	requestID string,
+	randomness, attestationHash []byte,
 	timestamp uint64,
 	wait bool,
 ) (*TxResult, error) {
@@ -47,7 +48,7 @@ func (c *RandomnessLogContract) Record(
 	if signer == nil {
 		return nil, fmt.Errorf("randomnesslog: signer not configured")
 	}
-	if len(requestID) == 0 {
+	if strings.TrimSpace(requestID) == "" {
 		return nil, fmt.Errorf("randomnesslog: requestID required")
 	}
 	if len(randomness) == 0 {
@@ -61,7 +62,7 @@ func (c *RandomnessLogContract) Record(
 	}
 
 	params := []ContractParam{
-		NewByteArrayParam(requestID),
+		NewStringParam(requestID),
 		NewByteArrayParam(randomness),
 		NewByteArrayParam(attestationHash),
 		NewIntegerParam(new(big.Int).SetUint64(timestamp)),

@@ -182,7 +182,7 @@ func TestPlatformContractsNeoExpressSmoke(t *testing.T) {
 		t.Fatalf("RandomnessLog.setUpdater: %v", err)
 	}
 
-	recordID := "0x" + strings.Repeat("aa", 32)
+	recordID := "req-1"
 	randomness := "0x" + strings.Repeat("bb", 32)
 	if _, err := nx.InvokeWithAccount(randomnessLog.Hash, "record", account,
 		recordID, randomness, attestationHash, ts,
@@ -204,17 +204,18 @@ func TestPlatformContractsNeoExpressSmoke(t *testing.T) {
 	}
 
 	// AppRegistry register/get.
-	appID := hexBytes("app-1")
+	appID := "app-1"
+	appIDBytes := hexBytes(appID)
 	manifestHash := "0x" + strings.Repeat("cc", 32)
 	entryURL := hexBytes("https://example.com/app")
 	developerPubKey := "0x" + strings.Repeat("dd", 33)
 
 	if _, err := nx.InvokeWithAccount(appRegistry.Hash, "register", account,
-		appID, manifestHash, entryURL, developerPubKey,
+		appIDBytes, manifestHash, entryURL, developerPubKey,
 	); err != nil {
 		t.Fatalf("AppRegistry.register: %v", err)
 	}
-	appInfo, err := nx.InvokeWithAccountResults(appRegistry.Hash, "getApp", account, appID)
+	appInfo, err := nx.InvokeWithAccountResults(appRegistry.Hash, "getApp", account, appIDBytes)
 	if err != nil {
 		t.Fatalf("AppRegistry.getApp: %v", err)
 	}
@@ -230,10 +231,10 @@ func TestPlatformContractsNeoExpressSmoke(t *testing.T) {
 		t.Fatalf("AppRegistry.getApp: status = %s, want 0 (Pending)", status.String())
 	}
 
-	if _, err := nx.InvokeWithAccount(appRegistry.Hash, "setStatus", account, appID, int64(1)); err != nil {
+	if _, err := nx.InvokeWithAccount(appRegistry.Hash, "setStatus", account, appIDBytes, int64(1)); err != nil {
 		t.Fatalf("AppRegistry.setStatus: %v", err)
 	}
-	appInfo2, err := nx.InvokeWithAccountResults(appRegistry.Hash, "getApp", account, appID)
+	appInfo2, err := nx.InvokeWithAccountResults(appRegistry.Hash, "getApp", account, appIDBytes)
 	if err != nil {
 		t.Fatalf("AppRegistry.getApp(after setStatus): %v", err)
 	}
@@ -356,7 +357,7 @@ func TestPlatformContractsNeoExpressSmoke(t *testing.T) {
 		t.Fatalf("Governance.getStake: expected >= 10, got %d", got)
 	}
 
-	proposalID := hexBytes("proposal-1")
+	proposalID := "proposal-1"
 	if _, err := nx.InvokeWithAccount(governance.Hash, "createProposal", account,
 		proposalID, "test proposal", int64(0), int64(10_000_000_000_000),
 	); err != nil {

@@ -21,14 +21,14 @@ namespace NeoMiniAppPlatform.Contracts
 
         public struct RandomRecord
         {
-            public ByteString RequestId;
+            public string RequestId;
             public ByteString Randomness;
             public ByteString AttestationHash;
             public ulong Timestamp;
         }
 
         [DisplayName("RandomnessRecorded")]
-        public static event Action<ByteString, ByteString, ByteString, ulong> OnRandomnessRecorded;
+        public static event Action<string, ByteString, ByteString, ulong> OnRandomnessRecorded;
 
         public static void _deploy(object data, bool update)
         {
@@ -70,16 +70,21 @@ namespace NeoMiniAppPlatform.Contracts
 
         private static StorageMap RecordMap() => new StorageMap(Storage.CurrentContext, PREFIX_RECORD);
 
-        public static RandomRecord Get(ByteString requestId)
+        private static ByteString RequestKey(string requestId)
         {
             ExecutionEngine.Assert(requestId != null && requestId.Length > 0, "requestId required");
-            ByteString raw = RecordMap().Get(requestId);
+            return (ByteString)requestId;
+        }
+
+        public static RandomRecord Get(string requestId)
+        {
+            ByteString raw = RecordMap().Get(RequestKey(requestId));
             if (raw == null)
             {
                 // Avoid returning `default` struct which may be represented as an empty VMArray.
                 return new RandomRecord
                 {
-                    RequestId = (ByteString)"",
+                    RequestId = "",
                     Randomness = (ByteString)"",
                     AttestationHash = (ByteString)"",
                     Timestamp = 0
@@ -88,7 +93,7 @@ namespace NeoMiniAppPlatform.Contracts
             return (RandomRecord)StdLib.Deserialize(raw);
         }
 
-        public static void Record(ByteString requestId, ByteString randomness, ByteString attestationHash, ulong timestamp)
+        public static void Record(string requestId, ByteString randomness, ByteString attestationHash, ulong timestamp)
         {
             ValidateUpdater();
 
@@ -97,7 +102,8 @@ namespace NeoMiniAppPlatform.Contracts
             ExecutionEngine.Assert(attestationHash != null && attestationHash.Length > 0, "attestationHash required");
             ExecutionEngine.Assert(timestamp > 0, "timestamp required");
 
-            ByteString existing = RecordMap().Get(requestId);
+            ByteString key = RequestKey(requestId);
+            ByteString existing = RecordMap().Get(key);
             ExecutionEngine.Assert(existing == null, "request already recorded");
 
             RandomRecord rec = new RandomRecord
@@ -108,7 +114,7 @@ namespace NeoMiniAppPlatform.Contracts
                 Timestamp = timestamp
             };
 
-            RecordMap().Put(requestId, StdLib.Serialize(rec));
+            RecordMap().Put(key, StdLib.Serialize(rec));
             OnRandomnessRecorded(requestId, randomness, attestationHash, timestamp);
         }
     }

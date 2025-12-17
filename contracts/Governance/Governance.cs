@@ -22,7 +22,7 @@ namespace NeoMiniAppPlatform.Contracts
 
         public struct Proposal
         {
-            public ByteString ProposalId;
+            public string ProposalId;
             public string Description;
             public ulong StartTime;
             public ulong EndTime;
@@ -38,7 +38,7 @@ namespace NeoMiniAppPlatform.Contracts
         public static event Action<UInt160, BigInteger> OnUnstaked;
 
         [DisplayName("Voted")]
-        public static event Action<UInt160, ByteString, bool, BigInteger> OnVoted;
+        public static event Action<UInt160, string, bool, BigInteger> OnVoted;
 
         public static void _deploy(object data, bool update)
         {
@@ -63,6 +63,12 @@ namespace NeoMiniAppPlatform.Contracts
         private static StorageMap StakeMap() => new StorageMap(Storage.CurrentContext, PREFIX_STAKE);
         private static StorageMap ProposalMap() => new StorageMap(Storage.CurrentContext, PREFIX_PROPOSAL);
         private static StorageMap VoteMap() => new StorageMap(Storage.CurrentContext, PREFIX_VOTE);
+
+        private static ByteString ProposalKey(string proposalId)
+        {
+            ExecutionEngine.Assert(proposalId != null && proposalId.Length > 0, "proposal id required");
+            return (ByteString)proposalId;
+        }
 
         public static BigInteger GetStake(UInt160 account)
         {
@@ -128,7 +134,7 @@ namespace NeoMiniAppPlatform.Contracts
         // Proposals (minimal skeleton)
         // ============================================================================
 
-        public static void CreateProposal(ByteString proposalId, string description, ulong startTime, ulong endTime)
+        public static void CreateProposal(string proposalId, string description, ulong startTime, ulong endTime)
         {
             ValidateAdmin();
             ExecutionEngine.Assert(proposalId != null && proposalId.Length > 0, "proposal id required");
@@ -144,18 +150,18 @@ namespace NeoMiniAppPlatform.Contracts
                 No = 0,
                 Finalized = false
             };
-            ProposalMap().Put(proposalId, StdLib.Serialize(p));
+            ProposalMap().Put(ProposalKey(proposalId), StdLib.Serialize(p));
         }
 
-        public static Proposal GetProposal(ByteString proposalId)
+        public static Proposal GetProposal(string proposalId)
         {
-            ByteString raw = ProposalMap().Get(proposalId);
+            ByteString raw = ProposalMap().Get(ProposalKey(proposalId));
             if (raw == null)
             {
                 // Avoid returning `default` struct which may be represented as an empty VMArray.
                 return new Proposal
                 {
-                    ProposalId = (ByteString)"",
+                    ProposalId = "",
                     Description = "",
                     StartTime = 0,
                     EndTime = 0,
@@ -167,7 +173,7 @@ namespace NeoMiniAppPlatform.Contracts
             return (Proposal)StdLib.Deserialize(raw);
         }
 
-        public static void Vote(ByteString proposalId, bool support, BigInteger amount)
+        public static void Vote(string proposalId, bool support, BigInteger amount)
         {
             ExecutionEngine.Assert(proposalId != null && proposalId.Length > 0, "proposal id required");
             ExecutionEngine.Assert(amount > 0, "amount must be > 0");
@@ -185,7 +191,7 @@ namespace NeoMiniAppPlatform.Contracts
             ExecutionEngine.Assert(stake >= amount, "insufficient stake");
 
             // One vote record per voter+proposal (simple model).
-            byte[] voteKey = Helper.Concat((byte[])proposalId, (byte[])voter);
+            byte[] voteKey = Helper.Concat((byte[])ProposalKey(proposalId), (byte[])voter);
             ByteString prev = VoteMap().Get(voteKey);
             ExecutionEngine.Assert(prev == null, "already voted");
             VoteMap().Put(voteKey, amount.ToByteArray());
@@ -193,11 +199,11 @@ namespace NeoMiniAppPlatform.Contracts
             if (support) p.Yes += amount;
             else p.No += amount;
 
-            ProposalMap().Put(proposalId, StdLib.Serialize(p));
+            ProposalMap().Put(ProposalKey(proposalId), StdLib.Serialize(p));
             OnVoted(voter, proposalId, support, amount);
         }
 
-        public static void Finalize(ByteString proposalId)
+        public static void Finalize(string proposalId)
         {
             ValidateAdmin();
             Proposal p = GetProposal(proposalId);
@@ -206,7 +212,7 @@ namespace NeoMiniAppPlatform.Contracts
             ExecutionEngine.Assert(Runtime.Time > p.EndTime, "voting not ended");
 
             p.Finalized = true;
-            ProposalMap().Put(proposalId, StdLib.Serialize(p));
+            ProposalMap().Put(ProposalKey(proposalId), StdLib.Serialize(p));
         }
     }
 }
