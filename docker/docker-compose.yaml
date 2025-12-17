@@ -51,8 +51,8 @@ services:
       - ARBITRUM_RPC
       - BINANCE_API_KEY
       - CONTRACT_PRICEFEED_HASH
-      - TEE_PRIVATE_KEY
-      - GLOBALSIGNER_SERVICE_URL=${GLOBALSIGNER_SERVICE_URL:-http://globalsigner:8092}
+      # NeoFeeds delegates all on-chain writes to txproxy (single allowlist gate).
+      - TXPROXY_URL=${TXPROXY_URL:-https://txproxy:8090}
     volumes:
       - /var/run/aesmd:/var/run/aesmd
       - /etc/sgx_default_qcnl.conf:/etc/sgx_default_qcnl.conf:ro
@@ -91,8 +91,8 @@ services:
       - CONTRACT_PRICEFEED_HASH
       - CONTRACT_AUTOMATIONANCHOR_HASH
       - NEOFLOW_SCHEDULER_USER_ID
-      - TEE_PRIVATE_KEY
-      - GLOBALSIGNER_SERVICE_URL=${GLOBALSIGNER_SERVICE_URL:-http://globalsigner:8092}
+      # NeoFlow delegates all on-chain writes to txproxy (single allowlist gate).
+      - TXPROXY_URL=${TXPROXY_URL:-https://txproxy:8090}
     volumes:
       - /var/run/aesmd:/var/run/aesmd
       - /etc/sgx_default_qcnl.conf:/etc/sgx_default_qcnl.conf:ro
@@ -127,7 +127,6 @@ services:
       - SUPABASE_SERVICE_KEY
       - NEO_RPC_URL
       - NEO_NETWORK_MAGIC
-      - GLOBALSIGNER_SERVICE_URL=${GLOBALSIGNER_SERVICE_URL:-http://globalsigner:8092}
     volumes:
       - /var/run/aesmd:/var/run/aesmd
       - /etc/sgx_default_qcnl.conf:/etc/sgx_default_qcnl.conf:ro
@@ -163,9 +162,7 @@ services:
       - NEO_RPC_URL
       - NEO_NETWORK_MAGIC
       - SECRETS_MASTER_KEY
-      - TEE_PRIVATE_KEY
       - NEOCOMPUTE_RESULT_TTL
-      - GLOBALSIGNER_SERVICE_URL=${GLOBALSIGNER_SERVICE_URL:-http://globalsigner:8092}
     volumes:
       - /var/run/aesmd:/var/run/aesmd
       - /etc/sgx_default_qcnl.conf:/etc/sgx_default_qcnl.conf:ro
@@ -204,8 +201,6 @@ services:
       - ORACLE_HTTP_ALLOWLIST
       - ORACLE_TIMEOUT
       - ORACLE_MAX_SIZE
-      - TEE_PRIVATE_KEY
-      - GLOBALSIGNER_SERVICE_URL=${GLOBALSIGNER_SERVICE_URL:-http://globalsigner:8092}
     volumes:
       - /var/run/aesmd:/var/run/aesmd
       - /etc/sgx_default_qcnl.conf:/etc/sgx_default_qcnl.conf:ro
@@ -243,7 +238,7 @@ services:
       - CONTRACT_PAYMENTHUB_HASH
       - CONTRACT_GOVERNANCE_HASH
       - TXPROXY_ALLOWLIST
-      - GLOBALSIGNER_SERVICE_URL=${GLOBALSIGNER_SERVICE_URL:-http://globalsigner:8092}
+      - GLOBALSIGNER_SERVICE_URL=${GLOBALSIGNER_SERVICE_URL:-https://globalsigner:8092}
     volumes:
       - /var/run/aesmd:/var/run/aesmd
       - /etc/sgx_default_qcnl.conf:/etc/sgx_default_qcnl.conf:ro

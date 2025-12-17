@@ -13,7 +13,7 @@ Service Layer as described in `docs/ARCHITECTURE.md`.
 
 **Enclave workloads (MarbleRun + EGo)**:
 - Infrastructure marbles: `infrastructure/accountpool`, `infrastructure/globalsigner`
-- Product services: `services/datafeed`, `services/automation`, `services/confcompute`, `services/conforacle`
+- Product services: `services/datafeed`, `services/automation`, `services/confcompute`, `services/conforacle`, `services/txproxy`
 
 ## Required External Dependencies
 
@@ -39,7 +39,7 @@ Injected via MarbleRun secrets (values depend on which services you run):
 - `GLOBALSIGNER_MASTER_SEED` for GlobalSigner
 - `NEOFEEDS_SIGNING_KEY` for Datafeeds
 - `COMPUTE_MASTER_KEY` for Confidential Compute
-- `TEE_PRIVATE_KEY` if you enable on-chain fulfillments/callback tx submission
+- `TEE_PRIVATE_KEY` (fallback only) if `txproxy` cannot use GlobalSigner and must sign/broadcast directly
 
 ## Chain / Contract Configuration
 

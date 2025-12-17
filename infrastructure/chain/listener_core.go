@@ -231,5 +231,14 @@ func normalizeContractHash(value string) string {
 	trimmed := strings.TrimSpace(value)
 	trimmed = strings.TrimPrefix(trimmed, "0x")
 	trimmed = strings.TrimPrefix(trimmed, "0X")
-	return strings.ToLower(trimmed)
+	trimmed = strings.ToLower(trimmed)
+	if len(trimmed) != 40 {
+		return ""
+	}
+	for _, ch := range trimmed {
+		if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') {
+			return ""
+		}
+	}
+	return trimmed
 }

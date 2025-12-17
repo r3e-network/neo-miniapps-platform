@@ -122,6 +122,11 @@ Contract wrappers and typed event parsing also live in `infrastructure/chain`
 (`contracts_*.go`, `listener_events_*.go`) to keep services free of duplicated
 chain bindings.
 
+State-changing on-chain writes are centralized behind `services/txproxy`, which
+uses `infrastructure/chain` for tx building/broadcast and enforces an explicit
+contract+method allowlist. Other services should only use `infrastructure/chain`
+for **read-only** calls and event monitoring.
+
 ## Global Signer (TEE-Managed Signing)
 
 `infrastructure/globalsigner` provides a single place to manage enclave-held

@@ -26,6 +26,7 @@ The goal is **one module = one responsibility**, with **no duplicated chain I/O*
 - `infrastructure/chain`: Neo N3 RPC, tx building/submission, event monitoring, contract invocation (**chain module**).
 - `infrastructure/accountpool`: Neo N3 account pool management (**account pool**).
 - `infrastructure/globalsigner`: TEE-managed domain-separated signing + rotation (**global signer**).
+- `infrastructure/txproxy`: shared txproxy client + request/response DTOs (**chain write delegation**).
 - `infrastructure/secrets`: user secrets encryption + permissions + audit (**secrets**).
 - `infrastructure/service`, `infrastructure/httputil`, `infrastructure/errors`, `infrastructure/logging`, `infrastructure/metrics`, `infrastructure/serviceauth`: shared service framework + transport primitives (**network**).
 
