@@ -370,3 +370,165 @@ func BenchmarkServiceStartStop(b *testing.B) {
 		_ = svc.Stop()
 	}
 }
+
+// =============================================================================
+// Additional Coverage Tests
+// =============================================================================
+
+func TestMarbleExternalHTTPClient(t *testing.T) {
+	m, _ := New(Config{MarbleType: "test"})
+
+	client := m.ExternalHTTPClient()
+	if client == nil {
+		t.Error("ExternalHTTPClient() should not return nil")
+	}
+
+	// Call again to test caching
+	client2 := m.ExternalHTTPClient()
+	if client2 != client {
+		t.Error("ExternalHTTPClient() should return cached client")
+	}
+}
+
+func TestMarbleExternalHTTPClientNil(t *testing.T) {
+	var m *Marble
+	client := m.ExternalHTTPClient()
+	if client == nil {
+		t.Error("ExternalHTTPClient() on nil should not return nil")
+	}
+}
+
+func TestMarbleHTTPClientNil(t *testing.T) {
+	var m *Marble
+	client := m.HTTPClient()
+	if client == nil {
+		t.Error("HTTPClient() on nil should not return nil")
+	}
+}
+
+func TestMarbleReport(t *testing.T) {
+	m, _ := New(Config{MarbleType: "test"})
+
+	// Outside enclave, report should be nil
+	report := m.Report()
+	if report != nil {
+		t.Log("Report() returned non-nil (running in enclave)")
+	}
+}
+
+func TestMarbleSetTestSecret(t *testing.T) {
+	m, _ := New(Config{MarbleType: "test"})
+
+	m.SetTestSecret("test-key", []byte("test-value"))
+
+	secret, ok := m.Secret("test-key")
+	if !ok {
+		t.Error("SetTestSecret() should make secret available")
+	}
+	if string(secret) != "test-value" {
+		t.Errorf("Secret() = %s, want test-value", string(secret))
+	}
+}
+
+func TestMarbleSetTestReport(t *testing.T) {
+	m, _ := New(Config{MarbleType: "test"})
+
+	// Initially not in enclave
+	if m.IsEnclave() {
+		t.Skip("Already in enclave")
+	}
+
+	// This would set a report but we can't create a real one outside enclave
+	m.SetTestReport(nil)
+	if m.IsEnclave() {
+		t.Error("IsEnclave() should be false after SetTestReport(nil)")
+	}
+}
+
+func TestMarbleSecretFromEnv(t *testing.T) {
+	m, _ := New(Config{MarbleType: "test"})
+
+	// Set environment variable
+	os.Setenv("TEST_ENV_SECRET", "env-secret-value")
+	defer os.Unsetenv("TEST_ENV_SECRET")
+
+	secret, ok := m.Secret("TEST_ENV_SECRET")
+	if !ok {
+		t.Error("Secret() should find env var secret")
+	}
+	if string(secret) != "env-secret-value" {
+		t.Errorf("Secret() = %s, want env-secret-value", string(secret))
+	}
+}
+
+func TestMarbleSecretFromEnvHex(t *testing.T) {
+	m, _ := New(Config{MarbleType: "test"})
+
+	// Set hex-encoded environment variable
+	os.Setenv("TEST_HEX_SECRET", "0x48656c6c6f") // "Hello" in hex
+	defer os.Unsetenv("TEST_HEX_SECRET")
+
+	secret, ok := m.Secret("TEST_HEX_SECRET")
+	if !ok {
+		t.Error("Secret() should find hex env var secret")
+	}
+	if string(secret) != "Hello" {
+		t.Errorf("Secret() = %s, want Hello", string(secret))
+	}
+}
+
+func TestMarbleInitializeWithSecrets(t *testing.T) {
+	m, _ := New(Config{MarbleType: "test"})
+
+	os.Setenv("MARBLE_SECRETS", `{"key1":"dmFsdWUx"}`) // base64 encoded
+	os.Setenv("MARBLE_UUID", "test-uuid")
+	defer os.Unsetenv("MARBLE_SECRETS")
+	defer os.Unsetenv("MARBLE_UUID")
+
+	ctx := context.Background()
+	err := m.Initialize(ctx)
+	if err != nil {
+		t.Errorf("Initialize() error = %v", err)
+	}
+}
+
+func TestMarbleInitializeCertWithoutRootCA(t *testing.T) {
+	m, _ := New(Config{MarbleType: "test"})
+
+	// Set cert and key but no root CA - should fail
+	os.Setenv("MARBLE_CERT", "dummy-cert")
+	os.Setenv("MARBLE_KEY", "dummy-key")
+	defer os.Unsetenv("MARBLE_CERT")
+	defer os.Unsetenv("MARBLE_KEY")
+
+	ctx := context.Background()
+	err := m.Initialize(ctx)
+	if err == nil {
+		t.Error("Initialize() should fail when cert/key set without root CA")
+	}
+}
+
+func TestMarbleHTTPClientCaching(t *testing.T) {
+	m, _ := New(Config{MarbleType: "test"})
+
+	client1 := m.HTTPClient()
+	client2 := m.HTTPClient()
+
+	if client1 != client2 {
+		t.Error("HTTPClient() should return cached client")
+	}
+}
+
+func TestServiceDB(t *testing.T) {
+	m, _ := New(Config{MarbleType: "test"})
+	svc := NewService(ServiceConfig{
+		ID:     "test-service",
+		Name:   "Test Service",
+		Marble: m,
+		DB:     nil,
+	})
+
+	if svc.DB() != nil {
+		t.Error("DB() should return nil when not configured")
+	}
+}
