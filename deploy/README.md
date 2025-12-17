@@ -103,9 +103,9 @@ make init NETWORK=testnet
 After deployment, contracts are initialized with:
 
 1. **Updater Configuration (TEE signer)**
-   - `PriceFeed.SetUpdater(tee)`
-   - `RandomnessLog.SetUpdater(tee)`
-   - `AutomationAnchor.SetUpdater(tee)`
+   - `PriceFeed.setUpdater(tee)`
+   - `RandomnessLog.setUpdater(tee)`
+   - `AutomationAnchor.setUpdater(tee)`
 
 In production, the updater should be the enclave-managed signer (GlobalSigner / TxProxy).
 

@@ -138,7 +138,7 @@ func main() {
 	log.Println("For actual deployment, you can:")
 	log.Println("1. Use Fairy for local testing: go run ./cmd/deploy-fairy/main.go")
 	log.Println("2. Use neo-go CLI for testnet deployment")
-	log.Println("3. Call SetUpdater for PriceFeed/RandomnessLog/AutomationAnchor from the admin wallet")
+	log.Println("3. Call setUpdater for PriceFeed/RandomnessLog/AutomationAnchor from the admin wallet")
 }
 
 func parseGas(gasConsumed string) float64 {

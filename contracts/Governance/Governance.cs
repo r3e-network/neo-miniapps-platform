@@ -44,7 +44,7 @@ namespace NeoMiniAppPlatform.Contracts
         {
             if (update) return;
 
-            Transaction tx = (Transaction)Runtime.ScriptContainer;
+            Transaction tx = Runtime.Transaction;
             Storage.Put(Storage.CurrentContext, PREFIX_ADMIN, tx.Sender);
         }
 
@@ -75,7 +75,7 @@ namespace NeoMiniAppPlatform.Contracts
         {
             ExecutionEngine.Assert(amount > 0, "amount must be > 0");
 
-            Transaction tx = (Transaction)Runtime.ScriptContainer;
+            Transaction tx = Runtime.Transaction;
             UInt160 from = tx.Sender;
 
             // NEO-only: deposit into this contract.
@@ -109,7 +109,7 @@ namespace NeoMiniAppPlatform.Contracts
         {
             ExecutionEngine.Assert(amount > 0, "amount must be > 0");
 
-            Transaction tx = (Transaction)Runtime.ScriptContainer;
+            Transaction tx = Runtime.Transaction;
             UInt160 from = tx.Sender;
             ExecutionEngine.Assert(Runtime.CheckWitness(from), "unauthorized");
 
@@ -172,7 +172,7 @@ namespace NeoMiniAppPlatform.Contracts
             ExecutionEngine.Assert(proposalId != null && proposalId.Length > 0, "proposal id required");
             ExecutionEngine.Assert(amount > 0, "amount must be > 0");
 
-            Transaction tx = (Transaction)Runtime.ScriptContainer;
+            Transaction tx = Runtime.Transaction;
             UInt160 voter = tx.Sender;
             ExecutionEngine.Assert(Runtime.CheckWitness(voter), "unauthorized");
 

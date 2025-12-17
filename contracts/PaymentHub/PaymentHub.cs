@@ -58,7 +58,7 @@ namespace NeoMiniAppPlatform.Contracts
         {
             if (update) return;
 
-            Transaction tx = (Transaction)Runtime.ScriptContainer;
+            Transaction tx = Runtime.Transaction;
             Storage.Put(Storage.CurrentContext, PREFIX_ADMIN, tx.Sender);
             Storage.Put(Storage.CurrentContext, PREFIX_RECEIPT.Concat(KEY_RECEIPT_COUNTER), 0);
         }
@@ -209,7 +209,7 @@ namespace NeoMiniAppPlatform.Contracts
             ExecutionEngine.Assert(cfg.Owner != null && cfg.Owner.IsValid, "app not found");
             ExecutionEngine.Assert(cfg.Enabled, "app disabled");
 
-            Transaction tx = (Transaction)Runtime.ScriptContainer;
+            Transaction tx = Runtime.Transaction;
             UInt160 payer = tx.Sender;
 
             PaymentData data = new PaymentData { AppId = appId, Memo = memo ?? "" };

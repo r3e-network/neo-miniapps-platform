@@ -80,7 +80,7 @@ feeds:
 
 When `EnableChainPush` is enabled and `PriceFeedHash` is configured, NeoFeeds
 periodically evaluates all enabled feeds and anchors qualifying updates on-chain
-via `PriceFeed.Update(...)`.
+via `PriceFeed.update(...)`.
 
 Anchoring uses:
 
@@ -102,4 +102,3 @@ and pass it via `Config.ArbitrumRPC`.
 
 In strict identity / enclave mode, outbound sources must use HTTPS (enforced by
 configuration validation).
-

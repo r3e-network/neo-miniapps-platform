@@ -47,7 +47,7 @@ namespace NeoMiniAppPlatform.Contracts
         public static void _deploy(object data, bool update)
         {
             if (update) return;
-            Transaction tx = (Transaction)Runtime.ScriptContainer;
+            Transaction tx = Runtime.Transaction;
             Storage.Put(Storage.CurrentContext, PREFIX_ADMIN, tx.Sender);
         }
 
@@ -96,7 +96,7 @@ namespace NeoMiniAppPlatform.Contracts
             ByteString existing = AppMap().Get(appId);
             ExecutionEngine.Assert(existing == null, "already registered");
 
-            Transaction tx = (Transaction)Runtime.ScriptContainer;
+            Transaction tx = Runtime.Transaction;
 
             AppInfo info = new AppInfo
             {

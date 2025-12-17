@@ -5,9 +5,9 @@ Neo MiniApp Platform Contract Initialization Script
 This script initializes the **MiniApp platform** contracts after deployment:
 
 - Sets the **Updater** for platform-write contracts to the TEE signer account.
-  - `PriceFeed.SetUpdater(tee)`
-  - `RandomnessLog.SetUpdater(tee)`
-  - `AutomationAnchor.SetUpdater(tee)`
+  - `PriceFeed.setUpdater(tee)`
+  - `RandomnessLog.setUpdater(tee)`
+  - `AutomationAnchor.setUpdater(tee)`
 
 The updater is expected to be the enclave-managed signer (GlobalSigner/TxProxy)
 in production, but for Neo Express we use the `tee` wallet created by
@@ -178,14 +178,14 @@ class PlatformInitializer:
             if contract_name not in self.deployed:
                 print(f"  - {contract_name}: not deployed, skipping")
                 continue
-            print(f"  - {contract_name}.SetUpdater({tee_hash})")
-            self.invoke(contract_name, "SetUpdater", updater_arg)
+            print(f"  - {contract_name}.setUpdater({tee_hash})")
+            self.invoke(contract_name, "setUpdater", updater_arg)
 
     def run(self) -> None:
         if self.network.name != "neoexpress":
             raise RuntimeError(
                 "Only neoexpress initialization is supported by this script.\n"
-                "For testnet/mainnet: deploy contracts, then call SetUpdater from the admin wallet."
+                "For testnet/mainnet: deploy contracts, then call setUpdater from the admin wallet."
             )
 
         self.set_platform_updaters()
@@ -199,4 +199,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
