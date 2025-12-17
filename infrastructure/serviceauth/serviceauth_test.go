@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -258,4 +260,135 @@ func TestConstants(t *testing.T) {
 	if DefaultServiceTokenExpiry != time.Hour {
 		t.Errorf("DefaultServiceTokenExpiry = %v, want %v", DefaultServiceTokenExpiry, time.Hour)
 	}
+}
+
+func TestParseRSAPublicKeyFromPEMCertificate(t *testing.T) {
+	privateKey := generateTestRSAKey(t)
+
+	t.Run("CERTIFICATE format", func(t *testing.T) {
+		// Create a self-signed certificate
+		template := &x509.Certificate{
+			SerialNumber: big.NewInt(1),
+			Subject: pkix.Name{
+				Organization: []string{"Test"},
+			},
+			NotBefore:             time.Now(),
+			NotAfter:              time.Now().Add(time.Hour),
+			KeyUsage:              x509.KeyUsageDigitalSignature,
+			BasicConstraintsValid: true,
+		}
+
+		certDER, err := x509.CreateCertificate(rand.Reader, template, template, &privateKey.PublicKey, privateKey)
+		if err != nil {
+			t.Fatalf("failed to create certificate: %v", err)
+		}
+
+		pemBytes := pem.EncodeToMemory(&pem.Block{
+			Type:  "CERTIFICATE",
+			Bytes: certDER,
+		})
+
+		pub, err := ParseRSAPublicKeyFromPEM(pemBytes)
+		if err != nil {
+			t.Fatalf("ParseRSAPublicKeyFromPEM() error = %v", err)
+		}
+		if pub == nil {
+			t.Error("ParseRSAPublicKeyFromPEM() returned nil")
+		}
+	})
+
+	t.Run("invalid certificate data", func(t *testing.T) {
+		pemBytes := pem.EncodeToMemory(&pem.Block{
+			Type:  "CERTIFICATE",
+			Bytes: []byte("invalid certificate data"),
+		})
+
+		_, err := ParseRSAPublicKeyFromPEM(pemBytes)
+		if err == nil {
+			t.Error("expected error for invalid certificate")
+		}
+	})
+
+	t.Run("invalid PKIX data", func(t *testing.T) {
+		pemBytes := pem.EncodeToMemory(&pem.Block{
+			Type:  "PUBLIC KEY",
+			Bytes: []byte("invalid pkix data"),
+		})
+
+		_, err := ParseRSAPublicKeyFromPEM(pemBytes)
+		if err == nil {
+			t.Error("expected error for invalid PKIX data")
+		}
+	})
+
+	t.Run("invalid PKCS1 data", func(t *testing.T) {
+		pemBytes := pem.EncodeToMemory(&pem.Block{
+			Type:  "RSA PUBLIC KEY",
+			Bytes: []byte("invalid pkcs1 data"),
+		})
+
+		_, err := ParseRSAPublicKeyFromPEM(pemBytes)
+		if err == nil {
+			t.Error("expected error for invalid PKCS1 data")
+		}
+	})
+
+	t.Run("unsupported PEM type skipped", func(t *testing.T) {
+		// First block is unsupported, second is valid
+		pubBytes, _ := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
+		pemBytes := pem.EncodeToMemory(&pem.Block{
+			Type:  "UNSUPPORTED TYPE",
+			Bytes: []byte("data"),
+		})
+		pemBytes = append(pemBytes, pem.EncodeToMemory(&pem.Block{
+			Type:  "PUBLIC KEY",
+			Bytes: pubBytes,
+		})...)
+
+		pub, err := ParseRSAPublicKeyFromPEM(pemBytes)
+		if err != nil {
+			t.Fatalf("ParseRSAPublicKeyFromPEM() error = %v", err)
+		}
+		if pub == nil {
+			t.Error("ParseRSAPublicKeyFromPEM() returned nil")
+		}
+	})
+}
+
+func TestParseRSAPrivateKeyFromPEMEdgeCases(t *testing.T) {
+	t.Run("invalid PKCS1 data", func(t *testing.T) {
+		pemBytes := pem.EncodeToMemory(&pem.Block{
+			Type:  "RSA PRIVATE KEY",
+			Bytes: []byte("invalid pkcs1 data"),
+		})
+
+		_, err := ParseRSAPrivateKeyFromPEM(pemBytes)
+		if err == nil {
+			t.Error("expected error for invalid PKCS1 data")
+		}
+	})
+
+	t.Run("invalid PKCS8 data", func(t *testing.T) {
+		pemBytes := pem.EncodeToMemory(&pem.Block{
+			Type:  "PRIVATE KEY",
+			Bytes: []byte("invalid pkcs8 data"),
+		})
+
+		_, err := ParseRSAPrivateKeyFromPEM(pemBytes)
+		if err == nil {
+			t.Error("expected error for invalid PKCS8 data")
+		}
+	})
+
+	t.Run("unsupported PEM type only", func(t *testing.T) {
+		pemBytes := pem.EncodeToMemory(&pem.Block{
+			Type:  "EC PRIVATE KEY",
+			Bytes: []byte("data"),
+		})
+
+		_, err := ParseRSAPrivateKeyFromPEM(pemBytes)
+		if err == nil {
+			t.Error("expected error for unsupported PEM type")
+		}
+	})
 }
