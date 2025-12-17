@@ -130,10 +130,7 @@ export function createHostSDK(cfg: MiniAppSDKConfig): HostSDK {
         return requestJSON<AppRegisterResponse>(cfg, "/app-register", {
           method: "POST",
           body: JSON.stringify({
-            app_id: params.appId,
-            entry_url: params.entryUrl,
-            manifest_hash: params.manifestHash,
-            developer_pubkey: params.developerPubKey,
+            manifest: params.manifest,
           }),
         });
       },
@@ -141,9 +138,7 @@ export function createHostSDK(cfg: MiniAppSDKConfig): HostSDK {
         return requestJSON<AppUpdateManifestResponse>(cfg, "/app-update-manifest", {
           method: "POST",
           body: JSON.stringify({
-            app_id: params.appId,
-            entry_url: params.entryUrl,
-            manifest_hash: params.manifestHash,
+            manifest: params.manifest,
           }),
         });
       },

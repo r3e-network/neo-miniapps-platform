@@ -1,18 +1,18 @@
 import { handleCorsPreflight } from "../_shared/cors.ts";
 import { normalizeUInt160 } from "../_shared/contracts.ts";
 import { mustGetEnv } from "../_shared/env.ts";
-import { normalizeHexBytes } from "../_shared/hex.ts";
+import { computeManifestHashHex, enforceMiniAppAssetPolicy } from "../_shared/manifest.ts";
 import { error, json } from "../_shared/response.ts";
 import { requireAuth, requirePrimaryWallet } from "../_shared/supabase.ts";
 
 type AppUpdateManifestRequest = {
-  app_id: string;
-  manifest_hash: string;
-  entry_url: string;
+  manifest: unknown;
 };
 
 // Thin gateway:
 // - validates auth + wallet binding + shape
+// - enforces manifest policy (assets_allowed=["GAS"], governance_assets_allowed=["NEO"])
+// - computes the manifest hash deterministically
 // - returns an invocation "intent" for the SDK/wallet to sign and submit
 Deno.serve(async (req) => {
   const preflight = handleCorsPreflight(req);
@@ -31,15 +31,20 @@ Deno.serve(async (req) => {
     return error(400, "invalid JSON body", "BAD_JSON");
   }
 
-  const appId = String(body.app_id ?? "").trim();
-  if (!appId) return error(400, "app_id required", "APP_ID_REQUIRED");
+  const manifest = (body as any)?.manifest;
+  if (!manifest) return error(400, "manifest required", "MANIFEST_REQUIRED");
 
-  const entryUrl = String(body.entry_url ?? "").trim();
-  if (!entryUrl) return error(400, "entry_url required", "ENTRY_URL_REQUIRED");
-
-  let manifestHash: string;
+  let appId = "";
+  let entryUrl = "";
+  let manifestHash = "";
   try {
-    manifestHash = normalizeHexBytes(body.manifest_hash, 32, "manifest_hash");
+    enforceMiniAppAssetPolicy(manifest);
+    manifestHash = await computeManifestHashHex(manifest);
+    const m = manifest as any;
+    appId = String(m?.app_id ?? "").trim();
+    entryUrl = String(m?.entry_url ?? "").trim();
+    if (!appId) throw new Error("manifest.app_id required");
+    if (!entryUrl) throw new Error("manifest.entry_url required");
   } catch (e) {
     return error(400, (e as Error).message, "BAD_INPUT");
   }
@@ -51,6 +56,7 @@ Deno.serve(async (req) => {
     request_id: requestId,
     user_id: auth.userId,
     intent: "apps",
+    manifest_hash: manifestHash,
     invocation: {
       contract_hash: appRegistryHash,
       method: "updateManifest",

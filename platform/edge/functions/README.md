@@ -49,8 +49,8 @@ On-chain invocations (wallet-signed):
 
 - `pay-gas`: returns a `PaymentHub.pay` invocation (**GAS only**).
 - `vote-neo`: returns a `Governance.vote` invocation (**NEO only**).
-- `app-register`: returns an `AppRegistry.register` invocation (developer wallet-signed).
-- `app-update-manifest`: returns an `AppRegistry.updateManifest` invocation (developer wallet-signed).
+- `app-register`: validates a `manifest` payload, computes `manifest_hash`, and returns an `AppRegistry.register` invocation (developer wallet-signed).
+- `app-update-manifest`: validates a `manifest` payload, computes `manifest_hash`, and returns an `AppRegistry.updateManifest` invocation (developer wallet-signed).
 
 TEE-routed:
 

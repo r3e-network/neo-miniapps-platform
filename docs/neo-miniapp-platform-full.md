@@ -165,7 +165,7 @@ const price = await window.MiniAppSDK.datafeed.getPrice("BTC-USD");
 1) 用模板创建前端；填 manifest（assets_allowed 仅 GAS，governance_assets_allowed 仅 NEO）。
 2) 接入 `window.MiniAppSDK`（payGAS / rng / datafeed / vote）。
 3) 本地：neo-express + Supabase 本地 + SDK Mock/TEE 仿真，自测支付/随机数/价格订阅。
-4) 打包前端，生成 manifest_hash，提交审核；（若有）合约部署测试网。
+4) 打包前端，提交 manifest（由 Edge 计算 `manifest_hash`）并提交审核；（若有）合约部署测试网。
 5) 审核通过，上架目录；平台签名 manifest。
 
 ---

@@ -43,6 +43,7 @@ export type AppRegisterResponse = {
   request_id: string;
   user_id: string;
   intent: "apps";
+  manifest_hash?: string;
   invocation: InvocationIntent;
 };
 
@@ -50,6 +51,7 @@ export type AppUpdateManifestResponse = {
   request_id: string;
   user_id: string;
   intent: "apps";
+  manifest_hash?: string;
   invocation: InvocationIntent;
 };
 
@@ -156,10 +158,8 @@ export interface HostSDK {
     }): Promise<WalletBindResponse>;
   };
   apps: {
-    register(params: { appId: string; entryUrl: string; manifestHash: string; developerPubKey: string }): Promise<
-      AppRegisterResponse
-    >;
-    updateManifest(params: { appId: string; entryUrl: string; manifestHash: string }): Promise<AppUpdateManifestResponse>;
+    register(params: { manifest: Record<string, unknown> }): Promise<AppRegisterResponse>;
+    updateManifest(params: { manifest: Record<string, unknown> }): Promise<AppUpdateManifestResponse>;
   };
   secrets: {
     list(): Promise<SecretsListResponse>;

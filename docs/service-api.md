@@ -52,10 +52,14 @@ Most state-changing endpoints also require a **verified primary wallet binding**
 ### Apps (App Registry)
 
 - `POST /functions/v1/app-register`
-  - body: `{ app_id: "...", manifest_hash: "0x...", entry_url: "https://...", developer_pubkey: "0x..." }`
+  - body: `{ manifest: { ... } }`
+  - gateway computes `manifest_hash = sha256(canonical_json(manifest))`
+  - enforces: `assets_allowed == ["GAS"]` and `governance_assets_allowed == ["NEO"]`
   - returns: an AppRegistry `register` invocation for the developer wallet to sign and submit
 - `POST /functions/v1/app-update-manifest`
-  - body: `{ app_id: "...", manifest_hash: "0x...", entry_url: "https://..." }`
+  - body: `{ manifest: { ... } }`
+  - gateway computes `manifest_hash = sha256(canonical_json(manifest))`
+  - enforces: `assets_allowed == ["GAS"]` and `governance_assets_allowed == ["NEO"]`
   - returns: an AppRegistry `updateManifest` invocation for the developer wallet to sign and submit
 
 ### Wallet Binding

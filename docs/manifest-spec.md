@@ -14,6 +14,32 @@ This repository is evolving into a **Neo N3 MiniApp Platform**. MiniApps are loa
 - Format: JSON
 - Distribution: hosted with the MiniApp bundle (CDN) and registered on-chain via `AppRegistry` (manifest hash stored on-chain).
 
+## Manifest Hashing (AppRegistry)
+
+The platform stores a `manifest_hash` (32-byte SHA-256) on-chain in `AppRegistry`.
+
+In this repo, the hash is computed by **Supabase Edge** to avoid client-side
+inconsistency. The canonical algorithm is implemented in:
+
+- `platform/edge/functions/_shared/manifest.ts`
+
+High level:
+
+1. **Canonicalize** known fields:
+   - trim `app_id`, `entry_url`, `name`, `version`
+   - normalize `developer_pubkey` as lowercase hex (strip leading `0x`)
+   - normalize lists as sets:
+     - `assets_allowed`: uppercase + sort + unique
+     - `governance_assets_allowed`: uppercase + sort + unique
+     - `sandbox_flags`: lowercase + sort + unique
+     - `contracts_needed`: trim + sort + unique
+2. **Stable JSON** encode:
+   - recursively sort all object keys lexicographically
+   - omit `undefined` values
+3. **Hash**:
+   - `sha256(utf8(stable_json))`
+   - represented as lowercase hex (no `0x`) for `ByteArray` parameters.
+
 ### Example
 
 ```json
@@ -96,4 +122,3 @@ Suggested strings to avoid floating point ambiguity:
 - `entry_url` must use `https://` in production.
 - `permissions` must be a strict subset of supported platform permissions.
 - `limits` must be within platform policy bounds (global caps set by governance).
-

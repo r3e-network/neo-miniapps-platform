@@ -64,12 +64,20 @@ const list = await host.secrets.list();
 Developer app registration is wallet-signed and routed via Supabase Edge:
 
 ```ts
-const res = await host.apps.register({
-  appId: "com.example.demo",
-  entryUrl: "https://cdn.example.com/apps/demo/index.html",
-  manifestHash: "0x" + "<32-byte sha256 hex>",
-  developerPubKey: "0x" + "<33-byte compressed pubkey hex>",
-});
+const manifest = {
+  app_id: "com.example.demo",
+  entry_url: "https://cdn.example.com/apps/demo/index.html",
+  name: "Demo Miniapp",
+  version: "1.0.0",
+  developer_pubkey: "0x" + "<33-byte compressed pubkey hex>",
+  permissions: { payments: true, governance: false, randomness: true, datafeed: true },
+  assets_allowed: ["GAS"],
+  governance_assets_allowed: ["NEO"],
+  sandbox_flags: ["no-eval", "strict-csp"],
+  attestation_required: true,
+};
+
+const res = await host.apps.register({ manifest });
 // Host app: build/sign tx using res.invocation (NeoLine/O3/OneGate) and submit.
 ```
 

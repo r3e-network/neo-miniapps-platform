@@ -1,19 +1,18 @@
 import { handleCorsPreflight } from "../_shared/cors.ts";
 import { normalizeUInt160 } from "../_shared/contracts.ts";
 import { mustGetEnv } from "../_shared/env.ts";
-import { normalizeHexBytes } from "../_shared/hex.ts";
+import { parseMiniAppManifestCore } from "../_shared/manifest.ts";
 import { error, json } from "../_shared/response.ts";
 import { requireAuth, requirePrimaryWallet } from "../_shared/supabase.ts";
 
 type AppRegisterRequest = {
-  app_id: string;
-  manifest_hash: string;
-  entry_url: string;
-  developer_pubkey: string;
+  manifest: unknown;
 };
 
 // Thin gateway:
 // - validates auth + wallet binding + shape
+// - enforces manifest policy (assets_allowed=["GAS"], governance_assets_allowed=["NEO"])
+// - computes the manifest hash deterministically
 // - returns an invocation "intent" for the SDK/wallet to sign and submit
 Deno.serve(async (req) => {
   const preflight = handleCorsPreflight(req);
@@ -32,17 +31,12 @@ Deno.serve(async (req) => {
     return error(400, "invalid JSON body", "BAD_JSON");
   }
 
-  const appId = String(body.app_id ?? "").trim();
-  if (!appId) return error(400, "app_id required", "APP_ID_REQUIRED");
+  const manifest = (body as any)?.manifest;
+  if (!manifest) return error(400, "manifest required", "MANIFEST_REQUIRED");
 
-  const entryUrl = String(body.entry_url ?? "").trim();
-  if (!entryUrl) return error(400, "entry_url required", "ENTRY_URL_REQUIRED");
-
-  let manifestHash: string;
-  let developerPubKey: string;
+  let core;
   try {
-    manifestHash = normalizeHexBytes(body.manifest_hash, 32, "manifest_hash");
-    developerPubKey = normalizeHexBytes(body.developer_pubkey, 33, "developer_pubkey");
+    core = await parseMiniAppManifestCore(manifest);
   } catch (e) {
     return error(400, (e as Error).message, "BAD_INPUT");
   }
@@ -54,14 +48,15 @@ Deno.serve(async (req) => {
     request_id: requestId,
     user_id: auth.userId,
     intent: "apps",
+    manifest_hash: core.manifestHashHex,
     invocation: {
       contract_hash: appRegistryHash,
       method: "register",
       params: [
-        { type: "String", value: appId },
-        { type: "ByteArray", value: manifestHash },
-        { type: "String", value: entryUrl },
-        { type: "ByteArray", value: developerPubKey },
+        { type: "String", value: core.appId },
+        { type: "ByteArray", value: core.manifestHashHex },
+        { type: "String", value: core.entryUrl },
+        { type: "ByteArray", value: core.developerPubKeyHex },
       ],
     },
   });

@@ -31,8 +31,8 @@ See `platform/edge/functions/`:
 - `gasbank-transactions`: list gasbank transactions.
 - `pay-gas`: returns a PaymentHub `pay` invocation (GAS-only).
 - `vote-neo`: returns a Governance `vote` invocation (NEO-only).
-- `app-register`: returns an AppRegistry `register` invocation (developer wallet-signed).
-- `app-update-manifest`: returns an AppRegistry `updateManifest` invocation (developer wallet-signed).
+- `app-register`: validates a `manifest`, computes `manifest_hash`, and returns an AppRegistry `register` invocation (developer wallet-signed).
+- `app-update-manifest`: validates a `manifest`, computes `manifest_hash`, and returns an AppRegistry `updateManifest` invocation (developer wallet-signed).
 - `rng-request`: runs RNG via `neocompute` (no dedicated `vrf-service` in this repo).
 - `datafeed-price`: read proxy to `neofeeds`.
 
