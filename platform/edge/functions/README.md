@@ -11,6 +11,12 @@ Goals:
   - **governance = NEO only**
 - forward sensitive operations to **TEE services** over **mTLS** in production
 
+Required env vars:
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
 Notes:
 
 - These functions are scaffolds; wire them into your Supabase project under

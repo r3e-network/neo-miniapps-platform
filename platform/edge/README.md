@@ -26,6 +26,14 @@ Supabase deploys functions under:
 
 - `/functions/v1/<function-name>`
 
+## Required Env Vars
+
+At minimum, these functions expect:
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY` (to validate `Authorization: Bearer <jwt>`)
+- `SUPABASE_SERVICE_ROLE_KEY` (to read/write platform tables like `users`/`user_wallets`)
+
 ## mTLS to TEE
 
 The shared helper `platform/edge/functions/_shared/tee.ts` supports optional
