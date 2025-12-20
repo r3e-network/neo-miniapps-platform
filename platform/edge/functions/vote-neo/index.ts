@@ -5,6 +5,7 @@ import { error, json } from "../_shared/response.ts";
 import { requireRateLimit } from "../_shared/ratelimit.ts";
 import { requireScope } from "../_shared/scopes.ts";
 import { requireAuth, requirePrimaryWallet } from "../_shared/supabase.ts";
+import { enforceUsageCaps, fetchMiniAppPolicy, permissionEnabled } from "../_shared/apps.ts";
 
 type VoteNeoRequest = {
   app_id: string;
@@ -41,6 +42,12 @@ export async function handler(req: Request): Promise<Response> {
   const appId = (body.app_id ?? "").trim();
   if (!appId) return error(400, "app_id required", "APP_ID_REQUIRED", req);
 
+  const policy = await fetchMiniAppPolicy(appId, req);
+  if (policy instanceof Response) return policy;
+  if (policy && !permissionEnabled(policy.permissions, "governance")) {
+    return error(403, "app is not allowed to request governance", "PERMISSION_DENIED", req);
+  }
+
   const proposalId = String(body.proposal_id ?? "").trim();
   if (!proposalId) return error(400, "proposal_id required", "PROPOSAL_ID_REQUIRED", req);
 
@@ -50,6 +57,19 @@ export async function handler(req: Request): Promise<Response> {
   if (!/^\d+$/.test(amountStr)) return error(400, "neo_amount must be an integer string", "AMOUNT_INVALID", req);
   const amount = BigInt(amountStr);
   if (amount <= 0n) return error(400, "neo_amount must be > 0", "AMOUNT_INVALID", req);
+  if (policy?.limits.governanceCap && amount > policy.limits.governanceCap) {
+    return error(403, "neo_amount exceeds manifest limit", "LIMIT_EXCEEDED", req);
+  }
+  if (policy?.limits.governanceCap) {
+    const usageErr = await enforceUsageCaps({
+      appId,
+      userId: auth.userId,
+      governanceDelta: amount,
+      governanceCap: policy.limits.governanceCap,
+      req,
+    });
+    if (usageErr) return usageErr;
+  }
 
   const governanceHash = normalizeUInt160(mustGetEnv("CONTRACT_GOVERNANCE_HASH"));
 

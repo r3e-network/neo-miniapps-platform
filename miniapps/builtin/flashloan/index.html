@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Neo FlashLoan - Borrow GAS instantly and repay in the same transaction with 0.09% fee"
+    />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src https://*; img-src 'self' data: https:;"
+    />
+    <title>Neo FlashLoan</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+        color: #fff;
+        min-height: 100vh;
+        padding: 20px;
+      }
+      .container {
+        max-width: 700px;
+        margin: 0 auto;
+      }
+      h1 {
+        text-align: center;
+        margin-bottom: 10px;
+        color: #00ff88;
+        font-size: 2em;
+      }
+      .subtitle {
+        text-align: center;
+        color: #888;
+        margin-bottom: 30px;
+      }
+      .card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 20px;
+        backdrop-filter: blur(10px);
+      }
+      .card h2 {
+        color: #00ff88;
+        margin-bottom: 20px;
+        font-size: 1.3em;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+      }
+      @media (max-width: 480px) {
+        .stats-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .stat-box {
+        background: rgba(0, 255, 136, 0.1);
+        border-radius: 12px;
+        padding: 15px;
+        text-align: center;
+      }
+      .stat-value {
+        font-size: 1.8em;
+        font-weight: bold;
+        color: #00ff88;
+      }
+      .stat-label {
+        color: #888;
+        font-size: 0.9em;
+        margin-top: 5px;
+      }
+      .input-group {
+        margin-bottom: 20px;
+      }
+      .input-group label {
+        display: block;
+        color: #888;
+        margin-bottom: 8px;
+      }
+      .input-group input {
+        width: 100%;
+        padding: 15px;
+        border: 2px solid rgba(0, 255, 136, 0.3);
+        border-radius: 10px;
+        background: rgba(0, 0, 0, 0.3);
+        color: #fff;
+        font-size: 1.2em;
+      }
+      .input-group input:focus {
+        outline: none;
+        border-color: #00ff88;
+      }
+      .input-group input:invalid {
+        border-color: #ff6464;
+      }
+      .fee-info {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .fee-label {
+        color: #888;
+      }
+      .fee-value {
+        color: #00ff88;
+        font-weight: bold;
+      }
+      .btn {
+        width: 100%;
+        padding: 18px;
+        border: none;
+        border-radius: 12px;
+        font-size: 1.2em;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s;
+        margin-top: 15px;
+      }
+      .btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
+      .btn:focus {
+        outline: 2px solid #00ff88;
+        outline-offset: 2px;
+      }
+      .btn-primary {
+        background: linear-gradient(90deg, #00ff88, #00d9ff);
+        color: #000;
+      }
+      .activity-list {
+        max-height: 300px;
+        overflow-y: auto;
+      }
+      .activity-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        font-size: 0.9em;
+      }
+      .activity-item:hover {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .activity-address {
+        font-family: monospace;
+        color: #00d9ff;
+      }
+      .activity-amount {
+        color: #00ff88;
+        font-weight: bold;
+      }
+      .activity-time {
+        color: #666;
+        font-size: 0.8em;
+      }
+      .status {
+        padding: 15px;
+        border-radius: 10px;
+        margin-top: 15px;
+        text-align: center;
+        display: none;
+      }
+      .status.success {
+        background: rgba(0, 255, 136, 0.2);
+        color: #00ff88;
+        display: block;
+      }
+      .status.error {
+        background: rgba(255, 100, 100, 0.2);
+        color: #ff6464;
+        display: block;
+      }
+      .status.loading {
+        background: rgba(0, 217, 255, 0.2);
+        color: #00d9ff;
+        display: block;
+      }
+      .live-indicator {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        background: #00ff88;
+        border-radius: 50%;
+        animation: pulse 1s infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        border: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container" role="main">
+      <header>
+        <h1>Neo FlashLoan</h1>
+        <p class="subtitle">Borrow GAS instantly, repay in the same transaction</p>
+      </header>
+
+      <section class="card" aria-labelledby="stats-heading">
+        <h2 id="stats-heading">
+          Protocol Stats
+          <span class="live-indicator" aria-hidden="true"></span>
+          <span class="sr-only">Live data</span>
+        </h2>
+        <div class="stats-grid">
+          <div class="stat-box">
+            <div class="stat-value" id="pool-balance" aria-live="polite">0</div>
+            <div class="stat-label">Pool Balance (GAS)</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value" id="total-loans" aria-live="polite">0</div>
+            <div class="stat-label">Total Loans</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value" id="total-borrowed" aria-live="polite">0</div>
+            <div class="stat-label">Total Borrowed (GAS)</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value" id="total-fees" aria-live="polite">0</div>
+            <div class="stat-label">Fees Earned (GAS)</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="execute-heading">
+        <h2 id="execute-heading">Execute Flash Loan</h2>
+        <form
+          id="flashloan-form"
+          onsubmit="
+            event.preventDefault();
+            executeFlashLoan();
+          "
+        >
+          <div class="input-group">
+            <label for="borrow-amount">Borrow Amount (GAS)</label>
+            <input
+              type="number"
+              id="borrow-amount"
+              name="amount"
+              value="10"
+              min="0.1"
+              max="10000"
+              step="0.1"
+              required
+              aria-describedby="amount-help"
+            />
+            <span id="amount-help" class="sr-only">Enter the amount of GAS you want to borrow</span>
+          </div>
+          <div class="fee-info">
+            <span class="fee-label">Fee (0.09%)</span>
+            <span class="fee-value" id="fee-amount" aria-live="polite">0.009 GAS</span>
+          </div>
+          <div class="fee-info">
+            <span class="fee-label">Total Repayment</span>
+            <span class="fee-value" id="repay-amount" aria-live="polite">10.009 GAS</span>
+          </div>
+          <div class="fee-info">
+            <span class="fee-label">Max Available</span>
+            <span class="fee-value" id="max-borrow" aria-live="polite">0 GAS</span>
+          </div>
+          <button type="submit" class="btn btn-primary" id="btn-flashloan" aria-describedby="btn-help">
+            Execute Flash Loan
+          </button>
+          <span id="btn-help" class="sr-only">Click to execute the flash loan transaction</span>
+          <div id="status" class="status" aria-live="assertive"></div>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="activity-heading">
+        <h2 id="activity-heading">Recent Activity</h2>
+        <div class="activity-list" id="activity-list" role="list" aria-live="polite">
+          <div class="activity-item" role="listitem">
+            <span class="activity-address">Loading...</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -139,14 +139,3 @@ func TestContractInteraction(t *testing.T) {
 
 	t.Skip("requires running neo-express with deployed contracts")
 }
-
-func TestPlatformContractsPlaceholder(t *testing.T) {
-	SkipIfNoNeoExpress(t)
-	SkipIfNoCompiledContracts(t)
-
-	if testing.Short() {
-		t.Skip("skipping platform placeholder test in short mode")
-	}
-
-	t.Skip("covered by TestPlatformContractsNeoExpressSmoke")
-}

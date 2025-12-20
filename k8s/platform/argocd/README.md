@@ -194,10 +194,10 @@ argocd app set neo-services-production --sync-policy automated
 
 ```csv
 # 分配 admin 角色给用户
-g, alice@example.com, role:admin
+g, alice@miniapps.com, role:admin
 
 # 分配 developer 角色给团队
-g, team-dev@example.com, role:developer
+g, team-dev@miniapps.com, role:developer
 ```
 
 ### OAuth 集成 (可选)

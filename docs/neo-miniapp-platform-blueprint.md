@@ -13,15 +13,15 @@ constraints:
 
 ## Repo Notes (Current Implementation)
 
-This repo implements the blueprint with a few deliberate adjustments to reduce
-duplication and keep responsibilities clear:
+This repo implements the blueprint with a few deliberate adjustments to keep
+responsibilities clear:
 
-- **No dedicated `vrf-service`:** randomness is provided via `neocompute` scripts
-  (inside TEE) and can be anchored on‑chain via `RandomnessLog`.
+- **Dedicated VRF service:** randomness is provided via `neovrf` and can be
+  anchored on‑chain via `RandomnessLog`.
 - **Service naming:** runtime **service IDs** are kept stable (`neofeeds`,
-  `neocompute`, ...). See `docs/platform-mapping.md` for mapping to blueprint
-  names (`datafeed-service`, `compute-service`, ...).
-- **Edge ↔ TEE mTLS:** Supabase Edge scaffolds support optional mTLS via
+  `neocompute`, `neovrf`, ...). See `docs/platform-mapping.md` for mapping to
+  blueprint names (`datafeed-service`, `compute-service`, `vrf-service`, ...).
+- **Edge ↔ TEE mTLS:** Supabase Edge functions support optional mTLS via
   `Deno.createHttpClient`. Enclave services can additionally trust a gateway
   client CA via `MARBLE_EXTRA_CLIENT_CA`.
 
@@ -91,18 +91,20 @@ neo-miniapp-platform/
 ├── services/                   # [Go] EGo + MarbleRun TEE services
 │   ├── datafeed-service/       # Price aggregation + publish policy
 │   ├── oracle-gateway/         # Allowlisted HTTP fetch + secret injection
-│   ├── compute-service/        # Restricted scripts/compute (also RNG scripts)
+│   ├── vrf-service/            # Verifiable randomness generation
+│   ├── compute-service/        # Restricted scripts/compute
 │   ├── automation-service/     # Triggers + anchored tasks execution
 │   ├── tx-proxy/               # Allowlisted sign+broadcast gatekeeper
 │   └── marblerun/              # Manifests/policies (policy.json, manifest.json, CA)
 │
 ├── platform/                   # Host platform layer
 │   ├── host-app/               # Next.js host app (Vercel)
+│   ├── builtin-app/            # Built-in MiniApps (Module Federation remote)
 │   ├── sdk/                    # MiniAppSDK (TS)
 │   ├── edge/                   # Supabase Edge functions
 │   └── rls/                    # RLS SQL (schema lives in migrations/)
 │
-├── miniapps/                   # Mini-apps + templates
+├── miniapps/                   # Mini-apps + starter kits
 ├── docker/                     # Local dev compose (Supabase, MarbleRun, services)
 ├── deploy/                     # neo-express config + deployment scripts
 └── .github/                    # CI workflows (GitHub Actions)
@@ -113,6 +115,7 @@ Current repo mapping (actual folder names and service IDs):
 - `services/datafeed` (`neofeeds`) → `datafeed-service`
 - `services/conforacle` (`neooracle`) → `oracle-gateway`
 - `services/confcompute` (`neocompute`) → `compute-service`
+- `services/vrf` (`neovrf`) → `vrf-service`
 - `services/automation` (`neoflow`) → `automation-service`
 - `services/txproxy` (`txproxy`) → `tx-proxy`
 
@@ -162,14 +165,17 @@ All signing keys and secret material stay **inside the enclave**.
    - Aggregates (median/weighted) and publishes on ≥ 0.1% deviation
    - Hysteresis 0.08%, throttle ≥ 5s min interval, cap ~30/min/symbol
    - Anchors updates via `tx-proxy` → `PriceFeed.update`
-3. **`compute-service`**
+3. **`vrf-service`**
+   - Signs `request_id` inside the enclave and derives randomness from the signature
+   - Returns `randomness`, `signature`, `public_key`, and `attestation_hash`
+   - Optional anchoring via `RandomnessLog.record` using `tx-proxy`
+4. **`compute-service`**
    - Restricted scripts with resource limits + optional secret injection
-   - Provides RNG/VRF functionality via enclave script execution (no separate VRF service)
-   - Can optionally anchor results on-chain via `RandomnessLog.record` using `tx-proxy`
-4. **`oracle-gateway`**
+   - Used for confidential computation workloads (non-randomness)
+5. **`oracle-gateway`**
    - Allowlisted outbound HTTP fetch + optional secret injection
    - Used for “confidential oracle” workflows
-5. **`automation-service`**
+6. **`automation-service`**
    - Scheduler + triggers
    - Optional anchored tasks via `AutomationAnchor` and on-chain event monitoring
 
@@ -220,5 +226,5 @@ Canonical endpoints:
 1. Deploy contracts to local `neo-express` / TestNet:
    - PaymentHub, Governance, PriceFeed, RandomnessLog, AppRegistry, AutomationAnchor
 2. Bring up enclave services in simulation:
-   - tx-proxy, compute-service (RNG scripts), datafeed-service, automation-service, oracle-gateway
-3. Wire Supabase Edge → services (auth + routing) and Next.js host scaffold.
+   - tx-proxy, vrf-service, compute-service, datafeed-service, automation-service, oracle-gateway
+3. Wire Supabase Edge → services (auth + routing) and the Next.js host app.

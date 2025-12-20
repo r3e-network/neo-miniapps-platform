@@ -48,16 +48,17 @@ The NeoGasBank service provides:
 
 ## Configuration
 
-| Environment Variable   | Description          | Default  |
-| ---------------------- | -------------------- | -------- |
-| `NEO_RPC_URL`          | Neo N3 RPC endpoint  | Required |
-| `SUPABASE_URL`         | Supabase API URL     | Required |
-| `SUPABASE_SERVICE_KEY` | Supabase service key | Required |
+| Environment Variable       | Description                                    | Default  |
+| -------------------------- | ---------------------------------------------- | -------- |
+| `NEO_RPC_URL`              | Neo N3 RPC endpoint                            | Required |
+| `SUPABASE_URL`             | Supabase API URL                               | Required |
+| `SUPABASE_SERVICE_KEY`     | Supabase service key                           | Required |
+| `GASBANK_DEPOSIT_ADDRESS`  | Platform deposit address used for verification | Required |
 
 ## Deposit Flow
 
 1. User creates deposit request via `gasbank-deposit` edge function
-2. User sends GAS to platform deposit address
+2. User sends GAS to the platform deposit address (`GASBANK_DEPOSIT_ADDRESS`)
 3. User updates deposit with `tx_hash`
 4. NeoGasBank worker verifies transaction on-chain
 5. Upon confirmation, balance is credited

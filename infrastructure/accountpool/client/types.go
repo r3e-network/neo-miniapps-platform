@@ -32,4 +32,15 @@ type (
 	TransferInput           = neoaccountstypes.TransferInput
 	TransferResponse        = neoaccountstypes.TransferResponse
 	MasterKeyAttestation    = neoaccountstypes.MasterKeyAttestation
+
+	// Contract operation types - all signing happens inside TEE
+	ContractParam            = neoaccountstypes.ContractParam
+	DeployContractInput      = neoaccountstypes.DeployContractInput
+	DeployContractResponse   = neoaccountstypes.DeployContractResponse
+	UpdateContractInput      = neoaccountstypes.UpdateContractInput
+	UpdateContractResponse   = neoaccountstypes.UpdateContractResponse
+	InvokeContractInput      = neoaccountstypes.InvokeContractInput
+	InvokeContractResponse   = neoaccountstypes.InvokeContractResponse
+	SimulateContractInput    = neoaccountstypes.SimulateContractInput
+	SimulateContractResponse = neoaccountstypes.SimulateContractResponse
 )

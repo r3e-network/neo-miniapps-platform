@@ -44,6 +44,7 @@ import (
 	neocompute "github.com/R3E-Network/service_layer/services/confcompute/marble"
 	neooracle "github.com/R3E-Network/service_layer/services/conforacle/marble"
 	neofeeds "github.com/R3E-Network/service_layer/services/datafeed/marble"
+	neovrf "github.com/R3E-Network/service_layer/services/vrf/marble"
 	txproxy "github.com/R3E-Network/service_layer/services/txproxy/marble"
 	neogasbank "github.com/R3E-Network/service_layer/services/gasbank/marble"
 )
@@ -64,6 +65,7 @@ var availableServices = []string{
 	"neoflow",
 	"neogasbank",
 	"neooracle",
+	"neovrf",
 	"txproxy",
 }
 
@@ -389,6 +391,11 @@ func main() {
 			Timeout:        oracleTimeout,
 			MaxBodyBytes:   oracleMaxBodyBytes,
 			URLAllowlist:   oracleAllowlist,
+		})
+	case "neovrf":
+		svc, err = neovrf.New(neovrf.Config{
+			Marble: m,
+			DB:     db,
 		})
 	case "neogasbank":
 		svc, err = neogasbank.New(neogasbank.Config{

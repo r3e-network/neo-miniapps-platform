@@ -1,7 +1,8 @@
 import { handleCorsPreflight } from "../_shared/cors.ts";
 import { normalizeUInt160 } from "../_shared/contracts.ts";
 import { mustGetEnv } from "../_shared/env.ts";
-import { computeManifestHashHex, enforceMiniAppAssetPolicy } from "../_shared/manifest.ts";
+import { upsertMiniAppManifest } from "../_shared/apps.ts";
+import { canonicalizeMiniAppManifest, parseMiniAppManifestCore } from "../_shared/manifest.ts";
 import { error, json } from "../_shared/response.ts";
 import { requireRateLimit } from "../_shared/ratelimit.ts";
 import { requireScope } from "../_shared/scopes.ts";
@@ -40,20 +41,23 @@ export async function handler(req: Request): Promise<Response> {
   const manifest = (body as any)?.manifest;
   if (!manifest) return error(400, "manifest required", "MANIFEST_REQUIRED", req);
 
-  let appId = "";
-  let entryUrl = "";
-  let manifestHash = "";
+  let core;
+  let canonical;
   try {
-    enforceMiniAppAssetPolicy(manifest);
-    manifestHash = await computeManifestHashHex(manifest);
-    const m = manifest as any;
-    appId = String(m?.app_id ?? "").trim();
-    entryUrl = String(m?.entry_url ?? "").trim();
-    if (!appId) throw new Error("manifest.app_id required");
-    if (!entryUrl) throw new Error("manifest.entry_url required");
+    core = await parseMiniAppManifestCore(manifest);
+    canonical = canonicalizeMiniAppManifest(manifest);
   } catch (e) {
     return error(400, (e as Error).message, "BAD_INPUT", req);
   }
+
+  const upsertErr = await upsertMiniAppManifest({
+    core,
+    canonicalManifest: canonical,
+    developerUserId: auth.userId,
+    mode: "update",
+    req,
+  });
+  if (upsertErr) return upsertErr;
 
   const appRegistryHash = normalizeUInt160(mustGetEnv("CONTRACT_APPREGISTRY_HASH"));
   const requestId = crypto.randomUUID();
@@ -62,14 +66,14 @@ export async function handler(req: Request): Promise<Response> {
     request_id: requestId,
     user_id: auth.userId,
     intent: "apps",
-    manifest_hash: manifestHash,
+    manifest_hash: core.manifestHashHex,
     invocation: {
       contract_hash: appRegistryHash,
       method: "updateManifest",
       params: [
-        { type: "String", value: appId },
-        { type: "ByteArray", value: manifestHash },
-        { type: "String", value: entryUrl },
+        { type: "String", value: core.appId },
+        { type: "ByteArray", value: core.manifestHashHex },
+        { type: "String", value: core.entryUrl },
       ],
     },
   }, {}, req);

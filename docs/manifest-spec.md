@@ -48,15 +48,15 @@ High level:
 ```json
 {
   "app_id": "your-app-id",
-  "entry_url": "https://cdn.example.com/apps/demo/index.html",
-  "name": "Demo Miniapp",
+  "entry_url": "https://cdn.miniapps.com/apps/neo-game/index.html",
+  "name": "Neo MiniApp",
   "version": "1.0.0",
   "developer_pubkey": "0x...",
   "permissions": {
     "wallet": ["read-address"],
     "payments": true,
     "governance": false,
-    "randomness": true,
+    "rng": true,
     "datafeed": true,
     "storage": ["kv"]
   },
@@ -92,14 +92,23 @@ High level:
 - `sandbox_flags` (array of strings): e.g. `no-eval`, `strict-csp`.
 - `attestation_required` (bool): host must enforce enclave attestation for sensitive services.
 
+`entry_url` supports two modes:
+
+- `https://...` for iframe-hosted MiniApps.
+- `mf://<remote>?app=<app_id>` for Module Federation built-ins. The host resolves
+  `<remote>` via `NEXT_PUBLIC_MF_REMOTES` and loads `builtin/App` without an iframe.
+
 ### Permissions
 
-- `permissions.wallet`: allowed wallet reads (no signing permissions here; signing goes via SDK).
+- `permissions.wallet`: allowed wallet reads (only `read-address`; no signing permissions here).
 - `permissions.payments`: enables GAS payments via `PaymentHub`.
 - `permissions.governance`: enables NEO governance calls via `Governance`.
-- `permissions.randomness`: enables VRF/RNG requests via the TEE services.
+- `permissions.rng`: enables VRF/RNG requests via the TEE services.
 - `permissions.datafeed`: enables reading/subscribing to price feeds.
 - `permissions.storage`: storage scopes (e.g. `kv`).
+
+If you use the shorthand array form (`"permissions": ["wallet", "payments"]`),
+the `wallet` entry is treated as `["read-address"]`.
 
 ### Allowlisted Assets
 
@@ -122,6 +131,8 @@ Suggested strings to avoid floating point ambiguity:
 
 - `assets_allowed` must be exactly `["GAS"]`.
 - `governance_assets_allowed` must be exactly `["NEO"]`.
-- `entry_url` must use `https://` in production.
+- `entry_url` must use `https://` in production unless it uses the `mf://` scheme.
 - `permissions` must be a strict subset of supported platform permissions.
 - `limits` must be within platform policy bounds (global caps set by governance).
+- `limits.daily_gas_cap_per_user` and `limits.governance_cap` are enforced by the gateway
+  via `miniapp_usage_bump(...)` (daily usage tracking).

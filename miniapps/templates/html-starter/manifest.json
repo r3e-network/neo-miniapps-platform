@@ -1,16 +1,16 @@
 {
-  "app_id": "community-template",
-  "entry_url": "https://cdn.example.com/miniapps/community/template/index.html",
-  "name": "MiniApp Community Template",
-  "version": "0.1.0",
-  "developer_pubkey": "0x020000000000000000000000000000000000000000000000000000000000000000",
+  "app_id": "com.miniapps.html-starter",
+  "entry_url": "https://cdn.miniapps.com/miniapps/templates/html-starter/index.html",
+  "name": "MiniApp HTML Starter",
+  "version": "1.0.0",
+  "developer_pubkey": "0x032f688077b771dc1061007294843d2b063feaa63b137f16930e969ef265f66926",
   "permissions": {
     "wallet": [
       "read-address"
     ],
     "payments": true,
     "governance": true,
-    "randomness": true,
+    "rng": true,
     "datafeed": true,
     "storage": [
       "kv"

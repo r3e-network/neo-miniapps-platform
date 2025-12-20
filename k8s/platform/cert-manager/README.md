@@ -97,10 +97,10 @@ metadata:
 spec:
   tls:
     - hosts:
-        - neofeeds.example.com
+        - neofeeds.miniapps.com
       secretName: neofeeds-tls
   rules:
-    - host: neofeeds.example.com
+    - host: neofeeds.miniapps.com
       http:
         paths:
           - path: /

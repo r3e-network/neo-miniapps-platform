@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MiniApp Template</title>
+    <title>MiniApp HTML Starter</title>
     <style>
       body {
         font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
@@ -77,10 +77,10 @@
   </head>
   <body>
     <div class="card">
-      <h1>MiniApp Community Template</h1>
+      <h1>MiniApp HTML Starter</h1>
       <p>
-        This MiniApp expects the host to install <code>window.MiniAppSDK</code>.
-        Open this inside the host app or embed it in an iframe.
+        This MiniApp expects the host to provide <code>window.MiniAppSDK</code>.
+        Load it inside the platform host or embed it in a sandboxed iframe.
       </p>
 
       <div class="row">
@@ -89,7 +89,7 @@
       </div>
 
       <div class="row">
-        <input id="app-id" value="community-template" placeholder="app_id" />
+        <input id="app-id" value="com.miniapps.html-starter" />
       </div>
 
       <div class="row">
@@ -100,7 +100,7 @@
 
       <div class="row">
         <input id="pay-amount" value="0.1" />
-        <input id="pay-memo" placeholder="memo (optional)" />
+        <input id="pay-memo" aria-label="memo" value="" />
         <button id="btn-pay">Pay GAS</button>
       </div>
 

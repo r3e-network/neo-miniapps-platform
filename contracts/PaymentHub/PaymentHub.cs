@@ -11,8 +11,11 @@ using Neo.SmartContract.Framework.Services;
 namespace NeoMiniAppPlatform.Contracts
 {
     [DisplayName("PaymentHub")]
-    [ManifestExtra("Author", "Neo MiniApp Platform")]
+    [ManifestExtra("Author", "R3E Network")]
+    [ManifestExtra("Email", "dev@r3e.network")]
+    [ManifestExtra("Version", "1.0.0")]
     [ManifestExtra("Description", "GAS-only payments & settlement hub")]
+    [ContractPermission("*", "onNEP17Payment")]
     public class PaymentHub : SmartContract
     {
         private static readonly byte[] PREFIX_ADMIN = new byte[] { 0x01 };
@@ -152,6 +155,12 @@ namespace NeoMiniAppPlatform.Contracts
             ValidateAdmin();
             ExecutionEngine.Assert(newAdmin != null && newAdmin.IsValid, "invalid admin");
             Storage.Put(Storage.CurrentContext, PREFIX_ADMIN, newAdmin);
+        }
+
+        public static void Update(ByteString nefFile, string manifest)
+        {
+            ValidateAdmin();
+            ContractManagement.Update(nefFile, manifest, null);
         }
 
         public static void ConfigureApp(string appId, UInt160 owner, UInt160[] recipients, BigInteger[] sharesBps, bool enabled)

@@ -22,7 +22,7 @@ Platform contracts only:
 - `PaymentHub` (**GAS-only** settlement)
 - `Governance` (**NEO-only** staking/voting)
 - `PriceFeed` (datafeed anchoring)
-- `RandomnessLog` (randomness anchoring; randomness is provided via compute scripts)
+- `RandomnessLog` (randomness anchoring; randomness is provided via NeoVRF)
 - `AppRegistry` (manifest hash + allowlist anchors)
 - `AutomationAnchor` (task registry + nonce anti-replay)
 
@@ -34,8 +34,9 @@ Outside-the-enclave “web2 plumbing” that can run on Supabase/Vercel:
 
 - `platform/edge`: Supabase Edge Functions (thin gateway; auth, nonce, rate limits, routing)
 - `platform/sdk`: TypeScript SDK shapes (`window.MiniAppSDK`)
-- `platform/host-app`: Next.js host scaffold (micro-frontends via iframe/Module Federation)
-- `platform/rls`: RLS policy scaffolding (actual schema lives in `migrations/`)
+- `platform/host-app`: Next.js host app (micro-frontends via iframe/Module Federation)
+- `platform/builtin-app`: built-in MiniApps served as Module Federation remote
+- `platform/rls`: RLS policy set (actual schema lives in `migrations/`)
 
 Rules:
 
@@ -48,7 +49,8 @@ Product services (only these):
 
 - `services/datafeed` (`neofeeds`): multi-source price aggregation + optional on-chain anchoring (≥0.1% threshold)
 - `services/conforacle` (`neooracle`): allowlisted external fetch + optional secret injection
-- `services/confcompute` (`neocompute`): restricted scripts + optional secret injection; provides RNG via scripts
+- `services/vrf` (`neovrf`): verifiable randomness + signature + attestation
+- `services/confcompute` (`neocompute`): restricted scripts + optional secret injection
 - `services/automation` (`neoflow`): triggers/scheduler + optional anchored tasks via `AutomationAnchor`
 - `services/txproxy` (`txproxy`): allowlisted sign+broadcast gatekeeper (single surface for chain writes)
 
@@ -106,4 +108,3 @@ These rules prevent “same functionality everywhere” drift.
 Enforcement lives in:
 
 - `test/layering/layering_test.go`
-

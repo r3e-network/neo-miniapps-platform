@@ -1,8 +1,8 @@
 /**
- * Neo N3 Mini-App Platform SDK - Basic Usage Examples
+ * Neo N3 MiniApp Platform SDK - Usage Guide
  *
- * This file demonstrates the basic usage patterns for the MiniApp SDK.
- * These examples show how to interact with the platform services.
+ * This file captures production-oriented usage patterns for the MiniApp SDK.
+ * It shows how to interact with the platform services end-to-end.
  */
 
 import { createMiniAppSDK, createHostSDK } from "../src";
@@ -20,17 +20,30 @@ import type {
 // Configuration
 // =============================================================================
 
+const requireEnv = (name: string): string => {
+  const value = String(process.env[name] ?? "").trim();
+  if (!value) {
+    throw new Error(`${name} is required`);
+  }
+  return value;
+};
+
+const EDGE_BASE_URL = requireEnv("EDGE_BASE_URL");
+const AUTH_TOKEN = requireEnv("SUPABASE_AUTH_JWT");
+const HOST_API_KEY = requireEnv("HOST_API_KEY");
+const MINIAPP_APP_ID = requireEnv("MINIAPP_APP_ID");
+const AUTOMATION_WEBHOOK_URL = requireEnv("AUTOMATION_WEBHOOK_URL");
+const SECRET_NAME = requireEnv("SECRET_NAME");
+const SECRET_VALUE = requireEnv("SECRET_VALUE");
+
 const SDK_CONFIG = {
-  edgeBaseUrl: "https://your-project.supabase.co/functions/v1",
-  // For authenticated requests, provide a token getter
-  getAuthToken: async () => {
-    // In a real app, get this from your auth provider (e.g., Supabase Auth)
-    return "your-jwt-token";
-  },
+  edgeBaseUrl: EDGE_BASE_URL,
+  // For authenticated requests, provide a token getter.
+  getAuthToken: async () => AUTH_TOKEN,
 };
 
 // =============================================================================
-// Example 1: Basic SDK Initialization
+// Workflow 1: Basic MiniApp SDK Initialization
 // =============================================================================
 
 async function initializeSDK(): Promise<MiniAppSDK> {
@@ -40,7 +53,20 @@ async function initializeSDK(): Promise<MiniAppSDK> {
 }
 
 // =============================================================================
-// Example 2: Get User Wallet Address
+// Workflow 2: Host SDK Initialization
+// =============================================================================
+
+async function initializeHostSDK(): Promise<HostSDK> {
+  const host = createHostSDK({
+    edgeBaseUrl: EDGE_BASE_URL,
+    getAPIKey: async () => HOST_API_KEY,
+  });
+  console.log("Host SDK initialized successfully");
+  return host;
+}
+
+// =============================================================================
+// Workflow 3: Get User Wallet Address
 // =============================================================================
 
 async function getWalletAddress(sdk: MiniAppSDK): Promise<string> {
@@ -55,7 +81,7 @@ async function getWalletAddress(sdk: MiniAppSDK): Promise<string> {
 }
 
 // =============================================================================
-// Example 3: Pay with GAS (Payment Flow)
+// Workflow 4: Pay with GAS (Payment Flow)
 // =============================================================================
 
 async function payWithGAS(sdk: MiniAppSDK, appId: string, amount: string, memo?: string): Promise<PayGASResponse> {
@@ -83,7 +109,7 @@ async function payWithGAS(sdk: MiniAppSDK, appId: string, amount: string, memo?:
 }
 
 // =============================================================================
-// Example 4: Vote with NEO (Governance Flow)
+// Workflow 5: Vote with NEO (Governance Flow)
 // =============================================================================
 
 async function voteWithNEO(
@@ -112,7 +138,7 @@ async function voteWithNEO(
 }
 
 // =============================================================================
-// Example 5: Request Random Number (RNG)
+// Workflow 6: Request Random Number (RNG)
 // =============================================================================
 
 async function requestRandomNumber(sdk: MiniAppSDK, appId: string): Promise<RNGResponse> {
@@ -124,7 +150,9 @@ async function requestRandomNumber(sdk: MiniAppSDK, appId: string): Promise<RNGR
     console.log("Random number received:", {
       requestId: response.request_id,
       randomness: response.randomness,
-      reportHash: response.report_hash,
+      signature: response.signature,
+      publicKey: response.public_key,
+      attestationHash: response.attestation_hash,
     });
 
     return response;
@@ -135,7 +163,7 @@ async function requestRandomNumber(sdk: MiniAppSDK, appId: string): Promise<RNGR
 }
 
 // =============================================================================
-// Example 6: Get Price Feed Data
+// Workflow 7: Get Price Feed Data
 // =============================================================================
 
 async function getPriceData(sdk: MiniAppSDK, symbol: string): Promise<PriceResponse> {
@@ -161,7 +189,7 @@ async function getPriceData(sdk: MiniAppSDK, symbol: string): Promise<PriceRespo
 }
 
 // =============================================================================
-// Example 7: Host SDK - GasBank Operations
+// Workflow 8: Host SDK - GasBank Operations
 // =============================================================================
 
 async function gasBankOperations(hostSdk: HostSDK): Promise<void> {
@@ -193,7 +221,7 @@ async function gasBankOperations(hostSdk: HostSDK): Promise<void> {
 }
 
 // =============================================================================
-// Example 8: Host SDK - Secrets Management
+// Workflow 9: Host SDK - Secrets Management
 // =============================================================================
 
 async function secretsManagement(hostSdk: HostSDK): Promise<void> {
@@ -205,7 +233,7 @@ async function secretsManagement(hostSdk: HostSDK): Promise<void> {
 
     // Upsert a secret
     console.log("Creating/updating secret...");
-    const upsertResponse = await hostSdk.secrets.upsert("MY_API_KEY", "secret-value-here");
+    const upsertResponse = await hostSdk.secrets.upsert(SECRET_NAME, SECRET_VALUE);
     console.log("Secret upserted:", {
       name: upsertResponse.secret.name,
       version: upsertResponse.secret.version,
@@ -214,7 +242,7 @@ async function secretsManagement(hostSdk: HostSDK): Promise<void> {
 
     // Get a secret
     console.log("Retrieving secret...");
-    const getResponse = await hostSdk.secrets.get("MY_API_KEY");
+    const getResponse = await hostSdk.secrets.get(SECRET_NAME);
     console.log("Secret retrieved:", {
       name: getResponse.name,
       version: getResponse.version,
@@ -222,7 +250,7 @@ async function secretsManagement(hostSdk: HostSDK): Promise<void> {
 
     // Set permissions
     console.log("Setting secret permissions...");
-    await hostSdk.secrets.setPermissions("MY_API_KEY", ["neofeeds", "neooracle"]);
+    await hostSdk.secrets.setPermissions(SECRET_NAME, ["neofeeds", "neooracle"]);
     console.log("Permissions updated");
   } catch (error) {
     console.error("Secrets operation failed:", error);
@@ -231,7 +259,7 @@ async function secretsManagement(hostSdk: HostSDK): Promise<void> {
 }
 
 // =============================================================================
-// Example 9: Host SDK - Automation Triggers
+// Workflow 10: Host SDK - Automation Triggers
 // =============================================================================
 
 async function automationTriggers(hostSdk: HostSDK): Promise<void> {
@@ -244,7 +272,7 @@ async function automationTriggers(hostSdk: HostSDK): Promise<void> {
       schedule: "0 0 * * *", // Daily at midnight
       action: {
         type: "webhook",
-        url: "https://my-app.com/webhook",
+        url: AUTOMATION_WEBHOOK_URL,
       },
     });
     console.log("Trigger created:", trigger.id);
@@ -267,11 +295,11 @@ async function automationTriggers(hostSdk: HostSDK): Promise<void> {
 }
 
 // =============================================================================
-// Example 10: Complete Mini-App Flow
+// Workflow 11: Complete MiniApp Flow
 // =============================================================================
 
 async function completeMiniAppFlow(): Promise<void> {
-  console.log("=== Neo N3 Mini-App Platform SDK Demo ===\n");
+  console.log("=== Neo N3 MiniApp Platform SDK Run ===\n");
 
   // Initialize SDK
   const sdk = await initializeSDK();
@@ -281,22 +309,22 @@ async function completeMiniAppFlow(): Promise<void> {
   console.log(`Connected wallet: ${address}\n`);
 
   // Get price data
-  const price = await getPriceData(sdk, "NEO/USD");
+  const price = await getPriceData(sdk, "NEO-USD");
   console.log(`Current NEO price: $${price.price}\n`);
 
   // Request random number for a game
-  const rng = await requestRandomNumber(sdk, "my-game-app");
+  const rng = await requestRandomNumber(sdk, MINIAPP_APP_ID);
   console.log(`Random number for game: ${rng.randomness}\n`);
 
   // Create a payment intent
-  const payment = await payWithGAS(sdk, "my-game-app", "1.0", "Game purchase");
+  const payment = await payWithGAS(sdk, MINIAPP_APP_ID, "1.0", "Game purchase");
   console.log(`Payment intent: ${payment.request_id}\n`);
 
-  console.log("=== Demo Complete ===");
+  console.log("=== Run Complete ===");
 }
 
 // =============================================================================
-// Run Examples
+// Run Workflows
 // =============================================================================
 
 // Uncomment to run:
@@ -304,6 +332,7 @@ async function completeMiniAppFlow(): Promise<void> {
 
 export {
   initializeSDK,
+  initializeHostSDK,
   getWalletAddress,
   payWithGAS,
   voteWithNEO,

@@ -1,0 +1,26 @@
+{
+  "app_id": "builtin-flashloan",
+  "name": "Neo FlashLoan",
+  "description": "Decentralized flash loan protocol - borrow GAS instantly and repay in the same transaction with 0.09% fee",
+  "version": "1.0.0",
+  "icon": "https://cdn.miniapps.com/miniapps/builtin/flashloan/icon.png",
+  "entry_url": "mf://builtin?app=builtin-flashloan",
+  "developer_pubkey": "0x03f35d7ba09f0a14f0a0f8fdd2cd2db39647c80270f65a52d03d2cceb36b5250c5",
+  "permissions": {
+    "payments": true,
+    "governance": false,
+    "rng": false,
+    "datafeed": false
+  },
+  "assets_allowed": ["GAS"],
+  "governance_assets_allowed": ["NEO"],
+  "limits": {
+    "max_gas_per_tx": "1000",
+    "daily_gas_cap_per_user": "10000"
+  },
+  "contracts_needed": ["PaymentHub"],
+  "sandbox_flags": ["no-eval", "strict-csp"],
+  "attestation_required": true,
+  "category": "defi",
+  "tags": ["flashloan", "lending", "defi", "gas"]
+}

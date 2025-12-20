@@ -56,7 +56,7 @@ services/gasbank/marble/
 ## Deposit Verification Flow
 
 ```
-1. User initiates GAS transfer to platform deposit address
+1. User initiates GAS transfer to platform deposit address (`GASBANK_DEPOSIT_ADDRESS`)
 2. User calls /gasbank-deposit Edge Function with tx_hash
 3. Edge Function creates pending deposit record
 4. Deposit Verification Worker (every 15s):
@@ -86,11 +86,12 @@ if !resp.Success {
 
 ## Configuration
 
-| Environment Variable   | Description          | Required          |
-| ---------------------- | -------------------- | ----------------- |
-| `NEO_RPC_URL`          | Neo N3 RPC endpoint  | Yes (strict mode) |
-| `SUPABASE_URL`         | Supabase project URL | Yes               |
-| `SUPABASE_SERVICE_KEY` | Supabase service key | Yes               |
+| Environment Variable      | Description                                    | Required          |
+| ------------------------- | ---------------------------------------------- | ----------------- |
+| `NEO_RPC_URL`             | Neo N3 RPC endpoint                            | Yes (strict mode) |
+| `SUPABASE_URL`            | Supabase project URL                           | Yes               |
+| `SUPABASE_SERVICE_KEY`    | Supabase service key                           | Yes               |
+| `GASBANK_DEPOSIT_ADDRESS` | Platform deposit address used for verification | Yes (strict mode) |
 
 ## Constants
 
@@ -137,7 +138,7 @@ GASContractHash          = "0xd2a4cff31913016155e38e474a2c06d08be276cf"
 | amount        | bigint    | Expected deposit amount                |
 | tx_hash       | text      | On-chain transaction hash              |
 | from_address  | text      | Sender Neo address                     |
-| status        | text      | pending, confirming, confirmed, failed |
+| status        | text      | pending, confirming, confirmed, failed, expired |
 | confirmations | int       | Current confirmation count             |
 | created_at    | timestamp | Request creation time                  |
 | confirmed_at  | timestamp | Confirmation time                      |

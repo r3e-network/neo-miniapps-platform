@@ -18,7 +18,7 @@ spec:
 #   envsubst < cluster-issuer.yaml | kubectl apply -f -
 #
 # Or manually replace the example email:
-#   sed -i 's/devops@example.com/devops@yourdomain.com/g' cluster-issuer.yaml
+#   sed -i 's/devops@miniapps.com/devops@yourdomain.com/g' cluster-issuer.yaml
 #
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
@@ -27,7 +27,7 @@ metadata:
 spec:
   acme:
     server: https://acme-staging-v02.api.letsencrypt.org/directory
-    email: ${CERT_MANAGER_EMAIL:-devops@example.com}  # MUST be replaced with real email
+    email: ${CERT_MANAGER_EMAIL:-devops@miniapps.com}  # MUST be replaced with real email
     privateKeySecretRef:
       name: letsencrypt-staging-key
     solvers:
@@ -50,7 +50,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: ${CERT_MANAGER_EMAIL:-devops@example.com}  # MUST be replaced with real email
+    email: ${CERT_MANAGER_EMAIL:-devops@miniapps.com}  # MUST be replaced with real email
     privateKeySecretRef:
       name: letsencrypt-prod-key
     solvers:

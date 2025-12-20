@@ -131,6 +131,25 @@ async function requestJSON<T>(cfg: MiniAppSDKConfig, path: string, init: Request
   return JSON.parse(text) as T;
 }
 
+async function requestHostJSON<T>(cfg: MiniAppSDKConfig, path: string, init: RequestInit): Promise<T> {
+  const base = cfg.edgeBaseUrl.replace(/\/$/, "");
+  const url = `${base}${path.startsWith("/") ? "" : "/"}${path}`;
+
+  const headers = new Headers(init.headers);
+  headers.set("Content-Type", "application/json");
+
+  const apiKey = cfg.getAPIKey ? await cfg.getAPIKey() : undefined;
+  if (!apiKey) {
+    throw new Error("API key required for host-only endpoint");
+  }
+  headers.set("X-API-Key", apiKey);
+
+  const resp = await fetch(url, { ...init, headers });
+  const text = await resp.text();
+  if (!resp.ok) throw new Error(text || `request failed (${resp.status})`);
+  return JSON.parse(text) as T;
+}
+
 export function createMiniAppSDK(cfg: MiniAppSDKConfig): MiniAppSDK {
   const pendingInvocations = new Map<string, InvocationIntent>();
 
@@ -262,7 +281,7 @@ export function createHostSDK(cfg: MiniAppSDKConfig): HostSDK {
     },
     oracle: {
       async query(params: OracleQueryRequest): Promise<OracleQueryResponse> {
-        return requestJSON<OracleQueryResponse>(cfg, "/oracle-query", {
+        return requestHostJSON<OracleQueryResponse>(cfg, "/oracle-query", {
           method: "POST",
           body: JSON.stringify(params),
         });
@@ -270,59 +289,59 @@ export function createHostSDK(cfg: MiniAppSDKConfig): HostSDK {
     },
     compute: {
       async execute(params: ComputeExecuteRequest): Promise<ComputeJob> {
-        return requestJSON<ComputeJob>(cfg, "/compute-execute", {
+        return requestHostJSON<ComputeJob>(cfg, "/compute-execute", {
           method: "POST",
           body: JSON.stringify(params),
         });
       },
       async listJobs(): Promise<ComputeJob[]> {
-        return requestJSON<ComputeJob[]>(cfg, "/compute-jobs", { method: "GET" });
+        return requestHostJSON<ComputeJob[]>(cfg, "/compute-jobs", { method: "GET" });
       },
       async getJob(id: string): Promise<ComputeJob> {
-        return requestJSON<ComputeJob>(cfg, `/compute-job?id=${encodeURIComponent(id)}`, { method: "GET" });
+        return requestHostJSON<ComputeJob>(cfg, `/compute-job?id=${encodeURIComponent(id)}`, { method: "GET" });
       },
     },
     automation: {
       async listTriggers(): Promise<AutomationTrigger[]> {
-        return requestJSON<AutomationTrigger[]>(cfg, "/automation-triggers", { method: "GET" });
+        return requestHostJSON<AutomationTrigger[]>(cfg, "/automation-triggers", { method: "GET" });
       },
       async createTrigger(params: AutomationTriggerRequest): Promise<AutomationTrigger> {
-        return requestJSON<AutomationTrigger>(cfg, "/automation-triggers", {
+        return requestHostJSON<AutomationTrigger>(cfg, "/automation-triggers", {
           method: "POST",
           body: JSON.stringify(params),
         });
       },
       async getTrigger(id: string): Promise<AutomationTrigger> {
-        return requestJSON<AutomationTrigger>(cfg, `/automation-trigger?id=${encodeURIComponent(id)}`, {
+        return requestHostJSON<AutomationTrigger>(cfg, `/automation-trigger?id=${encodeURIComponent(id)}`, {
           method: "GET",
         });
       },
       async updateTrigger(id: string, params: AutomationTriggerRequest): Promise<AutomationTrigger> {
-        return requestJSON<AutomationTrigger>(cfg, "/automation-trigger-update", {
+        return requestHostJSON<AutomationTrigger>(cfg, "/automation-trigger-update", {
           method: "POST",
           body: JSON.stringify({ id, ...params }),
         });
       },
       async deleteTrigger(id: string): Promise<AutomationDeleteResponse> {
-        return requestJSON<AutomationDeleteResponse>(cfg, "/automation-trigger-delete", {
+        return requestHostJSON<AutomationDeleteResponse>(cfg, "/automation-trigger-delete", {
           method: "POST",
           body: JSON.stringify({ id }),
         });
       },
       async enableTrigger(id: string): Promise<AutomationStatusResponse> {
-        return requestJSON<AutomationStatusResponse>(cfg, "/automation-trigger-enable", {
+        return requestHostJSON<AutomationStatusResponse>(cfg, "/automation-trigger-enable", {
           method: "POST",
           body: JSON.stringify({ id }),
         });
       },
       async disableTrigger(id: string): Promise<AutomationStatusResponse> {
-        return requestJSON<AutomationStatusResponse>(cfg, "/automation-trigger-disable", {
+        return requestHostJSON<AutomationStatusResponse>(cfg, "/automation-trigger-disable", {
           method: "POST",
           body: JSON.stringify({ id }),
         });
       },
       async resumeTrigger(id: string): Promise<AutomationStatusResponse> {
-        return requestJSON<AutomationStatusResponse>(cfg, "/automation-trigger-resume", {
+        return requestHostJSON<AutomationStatusResponse>(cfg, "/automation-trigger-resume", {
           method: "POST",
           body: JSON.stringify({ id }),
         });
@@ -330,32 +349,34 @@ export function createHostSDK(cfg: MiniAppSDKConfig): HostSDK {
       async listExecutions(id: string, limit?: number): Promise<AutomationExecution[]> {
         const qs = new URLSearchParams({ id });
         if (typeof limit === "number" && Number.isFinite(limit)) qs.set("limit", String(limit));
-        return requestJSON<AutomationExecution[]>(cfg, `/automation-trigger-executions?${qs.toString()}`, {
+        return requestHostJSON<AutomationExecution[]>(cfg, `/automation-trigger-executions?${qs.toString()}`, {
           method: "GET",
         });
       },
     },
     secrets: {
       async list(): Promise<SecretsListResponse> {
-        return requestJSON<SecretsListResponse>(cfg, "/secrets-list", { method: "GET" });
+        return requestHostJSON<SecretsListResponse>(cfg, "/secrets-list", { method: "GET" });
       },
       async get(name: string): Promise<SecretsGetResponse> {
-        return requestJSON<SecretsGetResponse>(cfg, `/secrets-get?name=${encodeURIComponent(name)}`, { method: "GET" });
+        return requestHostJSON<SecretsGetResponse>(cfg, `/secrets-get?name=${encodeURIComponent(name)}`, {
+          method: "GET",
+        });
       },
       async upsert(name: string, value: string): Promise<SecretsUpsertResponse> {
-        return requestJSON<SecretsUpsertResponse>(cfg, "/secrets-upsert", {
+        return requestHostJSON<SecretsUpsertResponse>(cfg, "/secrets-upsert", {
           method: "POST",
           body: JSON.stringify({ name, value }),
         });
       },
       async delete(name: string): Promise<SecretsDeleteResponse> {
-        return requestJSON<SecretsDeleteResponse>(cfg, "/secrets-delete", {
+        return requestHostJSON<SecretsDeleteResponse>(cfg, "/secrets-delete", {
           method: "POST",
           body: JSON.stringify({ name }),
         });
       },
       async setPermissions(name: string, services: string[]): Promise<SecretsPermissionsResponse> {
-        return requestJSON<SecretsPermissionsResponse>(cfg, "/secrets-permissions", {
+        return requestHostJSON<SecretsPermissionsResponse>(cfg, "/secrets-permissions", {
           method: "POST",
           body: JSON.stringify({ name, services }),
         });

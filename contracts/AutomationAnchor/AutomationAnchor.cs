@@ -11,7 +11,9 @@ using Neo.SmartContract.Framework.Services;
 namespace NeoMiniAppPlatform.Contracts
 {
     [DisplayName("AutomationAnchor")]
-    [ManifestExtra("Author", "Neo MiniApp Platform")]
+    [ManifestExtra("Author", "R3E Network")]
+    [ManifestExtra("Email", "dev@r3e.network")]
+    [ManifestExtra("Version", "1.0.0")]
     [ManifestExtra("Description", "On-chain automation task anchoring with nonce-based anti-replay")]
     public class AutomationAnchor : SmartContract
     {
@@ -158,6 +160,19 @@ namespace NeoMiniAppPlatform.Contracts
             };
             ExecMap().Put(nonceKey, StdLib.Serialize(rec));
             OnExecuted(taskId, nonce, txHash);
+        }
+
+        public static void SetAdmin(UInt160 newAdmin)
+        {
+            ValidateAdmin();
+            ExecutionEngine.Assert(newAdmin != null && newAdmin.IsValid, "invalid admin");
+            Storage.Put(Storage.CurrentContext, PREFIX_ADMIN, newAdmin);
+        }
+
+        public static void Update(ByteString nefFile, string manifest)
+        {
+            ValidateAdmin();
+            ContractManagement.Update(nefFile, manifest, null);
         }
     }
 }

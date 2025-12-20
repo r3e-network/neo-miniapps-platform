@@ -71,8 +71,8 @@ Deno.serve({ port }, async (req) => {
       status: "ok",
       port,
       routes: {
-        preferred_base_url: `http://localhost:${port}${FUNCTIONS_PREFIX.replace(/\\/$/, "")}`,
-        rpc_compat_base_url: `http://localhost:${port}${RPC_PREFIX.replace(/\\/$/, "")}`,
+        preferred_base_url: `http://localhost:${port}${FUNCTIONS_PREFIX.replace(/\/$/, "")}`,
+        rpc_compat_base_url: `http://localhost:${port}${RPC_PREFIX.replace(/\/$/, "")}`,
         also_supported: `http://localhost:${port}`,
       },
       functions: Array.from(available).sort(),

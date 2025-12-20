@@ -6,15 +6,12 @@ import { requireRateLimit } from "../_shared/ratelimit.ts";
 import { requireScope } from "../_shared/scopes.ts";
 import { requireAuth, requirePrimaryWallet } from "../_shared/supabase.ts";
 import { postJSON } from "../_shared/tee.ts";
+import { fetchMiniAppPolicy, permissionEnabled } from "../_shared/apps.ts";
 
 type RNGRequest = {
   app_id: string;
 };
 
-const RNG_SCRIPT =
-  "function main() { return { randomness: crypto.randomBytes(32) }; }";
-
-// RNG is provided via NeoCompute scripts (no dedicated VRF service).
 export async function handler(req: Request): Promise<Response> {
   const preflight = handleCorsPreflight(req);
   if (preflight) return preflight;
@@ -38,23 +35,41 @@ export async function handler(req: Request): Promise<Response> {
   const appId = (body.app_id ?? "").trim();
   if (!appId) return error(400, "app_id required", "APP_ID_REQUIRED", req);
 
+  const policy = await fetchMiniAppPolicy(appId, req);
+  if (policy instanceof Response) return policy;
+  if (policy) {
+    const allowed = permissionEnabled(policy.permissions, "rng");
+    if (!allowed) {
+      return error(403, "app is not allowed to request randomness", "PERMISSION_DENIED", req);
+    }
+  }
+
   const requestId = crypto.randomUUID();
 
-  const neocomputeURL = mustGetEnv("NEOCOMPUTE_URL");
-  const execResult = await postJSON(
-    `${neocomputeURL.replace(/\/$/, "")}/execute`,
-    { script: RNG_SCRIPT, entry_point: "main" },
+  const neovrfURL = mustGetEnv("NEOVRF_URL");
+  const vrfResult = await postJSON(
+    `${neovrfURL.replace(/\/$/, "")}/random`,
+    { request_id: requestId },
     { "X-User-ID": auth.userId },
     req,
   );
-  if (execResult instanceof Response) return execResult;
+  if (vrfResult instanceof Response) return vrfResult;
 
-  const output = (execResult as any)?.output ?? {};
-  const randomnessHex = String(output?.randomness ?? "").trim();
-  const reportHashHex = String((execResult as any)?.output_hash ?? "").trim();
+  const responseId = String((vrfResult as any)?.request_id ?? "").trim();
+  if (responseId && responseId !== requestId) {
+    return error(502, "vrf request_id mismatch", "RNG_REQUEST_ID_MISMATCH", req);
+  }
+
+  const randomnessHex = String((vrfResult as any)?.randomness ?? "").trim();
+  const signatureHex = String((vrfResult as any)?.signature ?? "").trim();
+  const publicKeyHex = String((vrfResult as any)?.public_key ?? "").trim();
+  const attestationHex = String((vrfResult as any)?.attestation_hash ?? "").trim();
   if (!/^[0-9a-fA-F]+$/.test(randomnessHex) || randomnessHex.length < 2) {
     return error(502, "invalid randomness output", "RNG_INVALID_OUTPUT", req);
   }
+  const attestationHash = /^[0-9a-fA-F]+$/.test(attestationHex) ? attestationHex : "";
+  const signature = /^[0-9a-fA-F]+$/.test(signatureHex) ? signatureHex : "";
+  const publicKey = /^[0-9a-fA-F]+$/.test(publicKeyHex) ? publicKeyHex : "";
 
   // Optional on-chain anchoring (RandomnessLog.record) via txproxy.
   let anchoredTx: unknown = undefined;
@@ -62,6 +77,7 @@ export async function handler(req: Request): Promise<Response> {
     const txproxyURL = mustGetEnv("TXPROXY_URL");
     const randomnessLogHash = normalizeUInt160(mustGetEnv("CONTRACT_RANDOMNESSLOG_HASH"));
     const timestamp = Math.floor(Date.now() / 1000);
+    const reportHashHex = attestationHash || randomnessHex.slice(0, 64);
 
     const txRes = await postJSON(
       `${txproxyURL.replace(/\/$/, "")}/invoke`,
@@ -72,7 +88,7 @@ export async function handler(req: Request): Promise<Response> {
         params: [
           { type: "String", value: requestId },
           { type: "ByteArray", value: randomnessHex },
-          { type: "ByteArray", value: reportHashHex || randomnessHex.slice(0, 64) },
+          { type: "ByteArray", value: reportHashHex },
           { type: "Integer", value: String(timestamp) },
         ],
         wait: true,
@@ -88,7 +104,9 @@ export async function handler(req: Request): Promise<Response> {
     request_id: requestId,
     app_id: appId,
     randomness: randomnessHex,
-    report_hash: reportHashHex || undefined,
+    signature: signature || undefined,
+    public_key: publicKey || undefined,
+    attestation_hash: attestationHash || undefined,
     anchored_tx: anchoredTx,
   }, {}, req);
 }

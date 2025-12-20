@@ -1,4 +1,4 @@
-import { getEnv } from "./env.ts";
+import { isProductionEnv } from "./env.ts";
 import { bytesToHex, normalizeHex } from "./hex.ts";
 
 export type MiniAppManifestCore = {
@@ -12,7 +12,6 @@ const SUPPORTED_PERMISSION_KEYS = new Set([
   "wallet",
   "payments",
   "governance",
-  "randomness",
   "rng",
   "datafeed",
   "storage",
@@ -22,17 +21,6 @@ const SUPPORTED_PERMISSION_KEYS = new Set([
   "apps",
   "secrets",
 ]);
-
-function isProductionEnv(): boolean {
-  const candidates = [
-    getEnv("ENV"),
-    getEnv("NODE_ENV"),
-    getEnv("SUPABASE_ENV"),
-  ]
-    .filter(Boolean)
-    .map((v) => String(v).toLowerCase());
-  return candidates.includes("prod") || candidates.includes("production");
-}
 
 function stableSort(value: unknown): unknown {
   if (value === null) return null;
@@ -79,7 +67,11 @@ function normalizePermissions(value: unknown): Record<string, unknown> {
       if (!SUPPORTED_PERMISSION_KEYS.has(key)) {
         throw new Error(`manifest.permissions contains unsupported permission: ${key}`);
       }
-      out[key] = true;
+      if (key === "wallet") {
+        out[key] = ["read-address"];
+      } else {
+        out[key] = true;
+      }
     }
     return out;
   }
@@ -99,12 +91,25 @@ function normalizePermissions(value: unknown): Record<string, unknown> {
     }
 
     if (typeof rawVal === "boolean") {
-      out[key] = rawVal;
+      if (key === "wallet" && rawVal) {
+        out[key] = ["read-address"];
+      } else {
+        out[key] = rawVal;
+      }
       continue;
     }
 
     if (Array.isArray(rawVal)) {
-      out[key] = normalizeStringList(rawVal, `manifest.permissions.${key}`, "lower");
+      const list = normalizeStringList(rawVal, `manifest.permissions.${key}`, "lower");
+      if (key === "wallet") {
+        const allowedWallet = new Set(["read-address"]);
+        for (const entry of list) {
+          if (!allowedWallet.has(entry)) {
+            throw new Error(`manifest.permissions.wallet contains unsupported entry: ${entry}`);
+          }
+        }
+      }
+      out[key] = list;
       continue;
     }
 
@@ -201,6 +206,16 @@ export async function computeManifestHashHex(manifest: unknown): Promise<string>
   return computeSHA256Hex(payload);
 }
 
+function isModuleFederationEntry(entryUrl: string): boolean {
+  if (!entryUrl.startsWith("mf://")) return false;
+  try {
+    const parsed = new URL(entryUrl);
+    return Boolean(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function enforceMiniAppAssetPolicy(manifest: unknown): void {
   const canonical = canonicalizeMiniAppManifest(manifest);
 
@@ -223,8 +238,8 @@ export function enforceMiniAppAssetPolicy(manifest: unknown): void {
   }
 
   const entryUrl = String(canonical.entry_url ?? "").trim();
-  if (isProductionEnv() && !entryUrl.startsWith("https://")) {
-    throw new Error("manifest.entry_url must use https:// in production");
+  if (isProductionEnv() && !entryUrl.startsWith("https://") && !isModuleFederationEntry(entryUrl)) {
+    throw new Error("manifest.entry_url must use https:// or mf:// in production");
   }
 }
 

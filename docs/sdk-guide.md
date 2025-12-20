@@ -39,8 +39,8 @@ declare global {
         }>;
       };
       rng: {
-        // RNG is executed inside TEE (via `neocompute`), optional on-chain anchoring.
-        requestRandom(appId: string): Promise<{ request_id: string; randomness: string; report_hash?: string }>;
+        // RNG is executed inside TEE (via `neovrf`), optional on-chain anchoring.
+        requestRandom(appId: string): Promise<{ request_id: string; randomness: string; signature?: string; public_key?: string; attestation_hash?: string }>;
       };
       datafeed: {
         // Read-only price (typically proxied from `neofeeds`).
@@ -69,7 +69,9 @@ must not be exposed to untrusted MiniApps (wallet binding, secrets, API keys,
 gasbank, oracle queries, compute execution, automation triggers).
 
 Auth can be provided either as a Supabase JWT (`Authorization: Bearer`) or as a
-user API key (`X-API-Key`) via `MiniAppSDKConfig.getAPIKey`.
+user API key (`X-API-Key`) via `MiniAppSDKConfig.getAPIKey`. In production,
+host-only endpoints (oracle/compute/automation/secrets) require API keys with
+explicit scopes; bearer JWTs are rejected there.
 
 ## Example
 

@@ -35,11 +35,11 @@ while IFS= read -r path; do
 done <<<"$untracked"
 
 if [[ ${#important[@]} -eq 0 ]]; then
-  echo "[OK] untracked files exist, but none match canonical source/export scaffolds"
+  echo "[OK] untracked files exist, but none match canonical source/export paths"
   exit 0
 fi
 
-echo "[WARN] untracked files/directories found in canonical source or scaffold paths:"
+echo "[WARN] untracked files/directories found in canonical source or export paths:"
 for p in "${important[@]}"; do
   echo "  - $p"
 done
@@ -57,4 +57,3 @@ Suggested next step (review first):
     services/*/contract \
     test/e2e
 EOF
-

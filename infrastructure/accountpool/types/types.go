@@ -167,3 +167,81 @@ type MasterKeyAttestation struct {
 	Source    string `json:"source"`
 	Simulated bool   `json:"simulated"`
 }
+
+// ContractParam represents a parameter for contract invocation.
+type ContractParam struct {
+	Type  string `json:"type"`  // Hash160, Integer, String, ByteArray, Array, etc.
+	Value any    `json:"value"` // Parameter value
+}
+
+// DeployContractInput deploys a new contract using a pool account.
+// All signing happens inside TEE - private keys never leave the enclave.
+type DeployContractInput struct {
+	ServiceID    string `json:"service_id"`
+	AccountID    string `json:"account_id"`
+	NEFBase64    string `json:"nef_base64"`      // Base64-encoded NEF file
+	ManifestJSON string `json:"manifest_json"`   // JSON manifest string
+	Data         any    `json:"data,omitempty"`  // Optional deployment data
+}
+
+// DeployContractResponse returns the deployment result.
+type DeployContractResponse struct {
+	TxHash       string `json:"tx_hash"`
+	ContractHash string `json:"contract_hash"`
+	GasConsumed  string `json:"gas_consumed"`
+	AccountID    string `json:"account_id"`
+}
+
+// UpdateContractInput updates an existing contract using a pool account.
+type UpdateContractInput struct {
+	ServiceID    string `json:"service_id"`
+	AccountID    string `json:"account_id"`
+	ContractHash string `json:"contract_hash"`   // Existing contract hash to update
+	NEFBase64    string `json:"nef_base64"`      // Base64-encoded NEF file
+	ManifestJSON string `json:"manifest_json"`   // JSON manifest string
+	Data         any    `json:"data,omitempty"`  // Optional update data
+}
+
+// UpdateContractResponse returns the update result.
+type UpdateContractResponse struct {
+	TxHash       string `json:"tx_hash"`
+	ContractHash string `json:"contract_hash"`
+	GasConsumed  string `json:"gas_consumed"`
+	AccountID    string `json:"account_id"`
+}
+
+// InvokeContractInput invokes a contract method using a pool account.
+// All signing happens inside TEE - private keys never leave the enclave.
+type InvokeContractInput struct {
+	ServiceID    string          `json:"service_id"`
+	AccountID    string          `json:"account_id"`
+	ContractHash string          `json:"contract_hash"` // Contract to invoke
+	Method       string          `json:"method"`        // Method name
+	Params       []ContractParam `json:"params"`        // Method parameters
+}
+
+// InvokeContractResponse returns the invocation result.
+type InvokeContractResponse struct {
+	TxHash      string `json:"tx_hash"`
+	State       string `json:"state"`       // HALT or FAULT
+	GasConsumed string `json:"gas_consumed"`
+	Exception   string `json:"exception,omitempty"`
+	AccountID   string `json:"account_id"`
+}
+
+// SimulateContractInput simulates a contract invocation without signing.
+type SimulateContractInput struct {
+	ServiceID    string          `json:"service_id"`
+	AccountID    string          `json:"account_id"`    // Account to use as signer
+	ContractHash string          `json:"contract_hash"` // Contract to invoke
+	Method       string          `json:"method"`        // Method name
+	Params       []ContractParam `json:"params"`        // Method parameters
+}
+
+// SimulateContractResponse returns the simulation result.
+type SimulateContractResponse struct {
+	State       string `json:"state"`       // HALT or FAULT
+	GasConsumed string `json:"gas_consumed"`
+	Exception   string `json:"exception,omitempty"`
+	Stack       []any  `json:"stack,omitempty"` // Return values
+}

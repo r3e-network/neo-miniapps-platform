@@ -1,29 +1,29 @@
 # Host App (Next.js)
 
-This is a minimal **Next.js** host scaffold intended to run on **Vercel**.
+This **Next.js** host runs on **Vercel** and serves as the entry point for MiniApps.
 
-Planned responsibilities:
+Responsibilities:
 
-- enforce MiniApp manifest policy (permissions/limits/assets)
-- sandbox MiniApps (Module Federation or `iframe`)
-- strict CSP and postMessage allowlists
-- provide `window.MiniAppSDK` (injected bridge)
+- enforce MiniApp manifest policy (permissions/limits/assets) via Edge gating
+- sandbox MiniApps: **Module Federation** for built-ins, `iframe` for third-party apps
+- strict CSP + postMessage allowlists
+- provide `window.MiniAppSDK` for federated apps and same-origin iframes
+- surface wallet binding, intent submission, and AppRegistry workflows
 
-Current state:
+Current capabilities:
 
-- `pages/index.tsx` embeds a MiniApp via `iframe` (configure via UI or `entry_url` query param).
-- For **same-origin** MiniApps (served from `public/`), the host can inject a `window.MiniAppSDK`
-  object into the iframe for local demos.
-- The Settings UI also includes a minimal **wallet binding** flow (`wallet-nonce` + `wallet-bind`)
-  and an **on-chain intent** demo (`pay-gas` / `vote-neo` + NeoLine `invoke`).
-- The host UI includes a minimal **AppRegistry** demo (`app-register` / `app-update-manifest`).
-- CSP headers are set via `platform/host-app/middleware.ts` using a per-request nonce
-  (required for Next.js without falling back to `unsafe-inline` scripts).
+- `pages/index.tsx` loads MiniApps via `entry_url` (supports `mf://` for Module Federation and `iframe` URLs).
+- `pages/federated.tsx` is a dedicated Module Federation loader.
+- `window.MiniAppSDK` is exposed for federated MiniApps and injected into same-origin iframes.
+- Settings UI includes wallet binding (`wallet-nonce` + `wallet-bind`) and intents (`pay-gas` / `vote-neo`).
+- AppRegistry workflow for `app-register` / `app-update-manifest`.
+- CSP headers set via `platform/host-app/middleware.ts` with per-request nonces.
 
 ## Production Configuration
 
-- `MINIAPP_FRAME_ORIGINS`: space-separated allowlist for `frame-src` (embedded MiniApps).
-- `NEXT_PUBLIC_SUPABASE_URL`: used for `connect-src` allowlist (Edge/API calls).
+- `MINIAPP_FRAME_ORIGINS`: space-separated `frame-src` allowlist for embedded iframes.
+- `NEXT_PUBLIC_MF_REMOTES`: comma-separated Module Federation remotes (e.g. `builtin@https://cdn.miniapps.com/miniapps/builtin-mf`).
+- `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL for `connect-src` allowlist.
 
 ## `/api/rpc/*` Proxy (Blueprint Path)
 
@@ -44,39 +44,58 @@ Set `EDGE_BASE_URL` to one of:
 - `https://<project>.supabase.co/functions/v1`
 - `http://localhost:8787/functions/v1` (repo Edge dev server)
 
-## Local Demos
+## Local Runs
 
-This repo includes a couple of static demo MiniApps under:
+### Module Federation (Built-ins)
 
-- `platform/host-app/public/miniapps/builtin/price-ticker/`
-- `platform/host-app/public/miniapps/community/template/`
-- `platform/host-app/public/miniapps/_shared/` (shared bridge script used by the static demos)
+Run the built-in remote and host app together:
 
-These are exported from `miniapps/` for convenience. To refresh them:
+```bash
+cd platform/builtin-app
+npm install
+npm run dev
+```
+
+```bash
+cd platform/host-app
+NEXT_PUBLIC_MF_REMOTES=builtin@http://localhost:3001 npm run dev
+```
+
+Then open:
+
+- `http://localhost:3000/?entry_url=mf://builtin?app=builtin-price-ticker`
+
+### iframe Runs
+
+Static MiniApps are exported to the host public directory:
+
+- `platform/host-app/public/miniapps/builtin/*`
+
+Refresh them with:
 
 ```bash
 ./scripts/export_host_miniapps.sh
 ```
 
-`npm run dev` and `npm run build` run this export automatically (`predev`/`prebuild`).
-
-Run:
-
-```bash
-cd platform/host-app
-npm run dev
-```
-
 Then open:
 
-- `http://localhost:3000/?entry_url=/miniapps/builtin/price-ticker/index.html`
+- `http://localhost:3000/?entry_url=/miniapps/builtin/coin-flip/index.html`
 
-To use authenticated endpoints (e.g. RNG), set the Edge base URL and JWT/API key
-in the Settings panel.
+## Module Federation (Built-ins)
 
-## Wallet Binding + Intents (Demo)
+The built-in remote lives in `platform/builtin-app` and exposes `./App` as `builtin/App`.
+Built-in manifests use:
 
-The host expects a Neo N3 browser wallet. The demo UI currently supports **NeoLine N3**.
+```
+mf://builtin?app=<app_id>
+```
+
+The host resolves the remote URL using `NEXT_PUBLIC_MF_REMOTES` and loads the
+federated module without an iframe sandbox.
+
+## Wallet Binding + Intents
+
+The host expects a Neo N3 browser wallet. The host UI currently supports **NeoLine N3**.
 
 1. Install NeoLine N3 in your browser.
 2. In the Settings panel:
@@ -98,7 +117,7 @@ The host **cannot** directly inject JS into a cross-origin iframe. For productio
 MiniApps hosted on a CDN, the SDK must be bundled into the MiniApp itself, or
 you must implement a postMessage bridge with strict origin allowlists.
 
-This scaffold includes a minimal postMessage-based bridge:
+This host includes a minimal postMessage-based bridge:
 
 - Host handler: `platform/host-app/pages/index.tsx`
 - MiniApp script: `platform/host-app/public/sdk/miniapp-bridge.js`

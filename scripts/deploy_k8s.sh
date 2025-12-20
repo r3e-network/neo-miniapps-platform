@@ -40,6 +40,7 @@ SERVICES=(
     "neoflow"
     "neoaccounts"
     "neocompute"
+    "neovrf"
     "neooracle"
     "txproxy"
     "globalsigner"

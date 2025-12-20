@@ -244,7 +244,7 @@ func (r *Repository) UpdateDepositStatus(ctx context.Context, depositID, status 
 	if err := ValidateID(depositID); err != nil {
 		return err
 	}
-	validStatuses := []string{"pending", "confirming", "confirmed", "failed"}
+	validStatuses := []string{"pending", "confirming", "confirmed", "failed", "expired"}
 	if err := ValidateStatus(status, validStatuses); err != nil {
 		return err
 	}
@@ -263,12 +263,12 @@ func (r *Repository) UpdateDepositStatus(ctx context.Context, depositID, status 
 	return nil
 }
 
-// GetPendingDeposits retrieves all pending and confirming deposits that need verification.
+// GetPendingDeposits retrieves pending and confirming deposits that may need verification or cleanup.
 func (r *Repository) GetPendingDeposits(ctx context.Context, limit int) ([]DepositRequest, error) {
 	limit = ValidateLimit(limit, 100, 1000)
 
-	// Query for pending and confirming deposits with tx_hash set, ordered by creation time
-	query := fmt.Sprintf("status=in.(pending,confirming)&tx_hash=neq.&order=created_at.asc&limit=%d", limit)
+	// Query for pending and confirming deposits, ordered by creation time.
+	query := fmt.Sprintf("status=in.(pending,confirming)&order=created_at.asc&limit=%d", limit)
 	data, err := r.client.request(ctx, "GET", "deposit_requests", nil, query)
 	if err != nil {
 		return nil, fmt.Errorf("%w: get pending deposits: %v", ErrDatabaseError, err)

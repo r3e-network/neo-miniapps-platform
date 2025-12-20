@@ -1,7 +1,7 @@
 import { handleCorsPreflight } from "../_shared/cors.ts";
 import { error, json } from "../_shared/response.ts";
 import { requireRateLimit } from "../_shared/ratelimit.ts";
-import { requireScope } from "../_shared/scopes.ts";
+import { requireHostScope } from "../_shared/scopes.ts";
 import { ensureUserRow, requireAuth, requirePrimaryWallet, supabaseServiceClient } from "../_shared/supabase.ts";
 
 type SetPermissionsRequest = {
@@ -21,7 +21,7 @@ export async function handler(req: Request): Promise<Response> {
   if (auth instanceof Response) return auth;
   const rl = await requireRateLimit(req, "secrets-permissions", auth);
   if (rl) return rl;
-  const scopeCheck = requireScope(req, auth, "secrets-permissions");
+  const scopeCheck = requireHostScope(req, auth, "secrets-permissions");
   if (scopeCheck) return scopeCheck;
   const walletCheck = await requirePrimaryWallet(auth.userId, req);
   if (walletCheck instanceof Response) return walletCheck;

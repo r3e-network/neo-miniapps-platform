@@ -43,7 +43,9 @@ export type RNGResponse = {
   request_id: string;
   app_id: string;
   randomness: string;
-  report_hash?: string;
+  signature?: string;
+  public_key?: string;
+  attestation_hash?: string;
   anchored_tx?: unknown;
 };
 

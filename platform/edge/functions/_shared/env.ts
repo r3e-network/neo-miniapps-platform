@@ -10,3 +10,15 @@ export function mustGetEnv(name: string): string {
   return value;
 }
 
+export function isProductionEnv(): boolean {
+  const candidates = [
+    getEnv("EDGE_ENV"),
+    getEnv("DENO_ENV"),
+    getEnv("ENV"),
+    getEnv("NODE_ENV"),
+    getEnv("SUPABASE_ENV"),
+  ]
+    .filter(Boolean)
+    .map((v) => String(v).toLowerCase());
+  return candidates.includes("prod") || candidates.includes("production");
+}

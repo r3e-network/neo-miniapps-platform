@@ -1,5 +1,6 @@
 import Head from "next/head";
-import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { Component, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 type ContractParam =
   | { type: "String"; value: string }
@@ -60,6 +61,32 @@ type SDKConfig = {
   getAuthToken?: () => Promise<string | undefined>;
   getAPIKey?: () => Promise<string | undefined>;
 };
+
+const BuiltinMiniApp = dynamic(
+  () => import("builtin/App").then((mod: any) => mod.default ?? mod.App),
+  {
+    ssr: false,
+    loading: () => <p>Loading federated MiniApp…</p>,
+  },
+);
+
+class RemoteErrorBoundary extends Component<{ children: ReactNode }, { error?: Error }> {
+  state: { error?: Error } = {};
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div style={{ padding: 12, border: "1px solid #f2c6c6", borderRadius: 8, background: "#fff6f6" }}>
+        <div style={{ fontWeight: 600, marginBottom: 6 }}>Failed to load federated MiniApp</div>
+        <div style={{ fontSize: 12, color: "#8a2c2c" }}>{this.state.error.message}</div>
+      </div>
+    );
+  }
+}
 
 async function getInjectedWalletAddress(): Promise<string> {
   if (typeof window === "undefined") {
@@ -316,6 +343,27 @@ function entryOriginFromURL(entryUrl: string): string | null {
   }
 }
 
+type FederatedEntry = {
+  remote: string;
+  view?: string;
+  appId?: string;
+};
+
+function parseFederatedEntry(entryUrl: string): FederatedEntry | null {
+  const trimmed = entryUrl.trim();
+  if (!trimmed.startsWith("mf://")) return null;
+  try {
+    const parsed = new URL(trimmed);
+    const remote = parsed.hostname.trim();
+    if (!remote) return null;
+    const view = parsed.pathname.replace(/^\\/+/, "");
+    const appId = parsed.searchParams.get("app") ?? undefined;
+    return { remote, view: view || undefined, appId };
+  } catch {
+    return null;
+  }
+}
+
 export default function Home() {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const pendingInvocationsRef = useRef<Map<string, InvocationIntent>>(new Map());
@@ -334,13 +382,13 @@ export default function Home() {
   const [bindLabel, setBindLabel] = useState<string>("Primary");
   const [bindResult, setBindResult] = useState<string>("");
 
-  const [payAppId, setPayAppId] = useState<string>("com.example.demo");
+  const [payAppId, setPayAppId] = useState<string>("builtin-coin-flip");
   const [payAmount, setPayAmount] = useState<string>("1");
   const [payMemo, setPayMemo] = useState<string>("");
   const [payIntent, setPayIntent] = useState<PayGASResponse | null>(null);
   const [payTxResult, setPayTxResult] = useState<string>("");
 
-  const [voteAppId, setVoteAppId] = useState<string>("com.example.demo");
+  const [voteAppId, setVoteAppId] = useState<string>("");
   const [voteProposalId, setVoteProposalId] = useState<string>("proposal-1");
   const [voteAmount, setVoteAmount] = useState<string>("1");
   const [voteSupport, setVoteSupport] = useState<boolean>(true);
@@ -350,29 +398,30 @@ export default function Home() {
   const [appManifest, setAppManifest] = useState<string>(() =>
     JSON.stringify(
       {
-        app_id: "com.example.demo",
-        entry_url: "https://cdn.example.com/apps/demo/index.html",
-        name: "Demo Miniapp",
-        version: "0.1.0",
-        developer_pubkey: "0x020000000000000000000000000000000000000000000000000000000000000000",
+        app_id: "builtin-coin-flip",
+        entry_url: "mf://builtin?app=builtin-coin-flip",
+        name: "Neo Coin Flip",
+        description: "Simple 50/50 coin flip game - double your GAS with provably fair on-chain randomness",
+        version: "1.0.0",
+        icon: "https://cdn.miniapps.com/miniapps/builtin/coin-flip/icon.png",
+        developer_pubkey: "0x03f35d7ba09f0a14f0a0f8fdd2cd2db39647c80270f65a52d03d2cceb36b5250c5",
         permissions: {
-          wallet: ["read-address"],
           payments: true,
-          governance: true,
-          randomness: true,
-          datafeed: true,
-          storage: ["kv"],
+          governance: false,
+          rng: true,
+          datafeed: false,
         },
         assets_allowed: ["GAS"],
         governance_assets_allowed: ["NEO"],
         limits: {
-          max_gas_per_tx: "5",
-          daily_gas_cap_per_user: "20",
-          governance_cap: "100",
+          max_gas_per_tx: "20",
+          daily_gas_cap_per_user: "200",
         },
-        contracts_needed: ["Governance", "PaymentHub", "PriceFeed", "RandomnessLog"],
+        contracts_needed: ["PaymentHub", "RandomnessLog"],
         sandbox_flags: ["no-eval", "strict-csp"],
         attestation_required: true,
+        category: "gaming",
+        tags: ["coinflip", "gambling", "randomness", "simple"],
       },
       null,
       2,
@@ -419,10 +468,17 @@ export default function Home() {
     window.localStorage.setItem(storageKeys.apiKey, apiKey);
   }, [apiKey]);
 
+  const federatedEntry = useMemo(() => parseFederatedEntry(entryUrl), [entryUrl]);
+  const federatedUnsupported = useMemo(
+    () => (federatedEntry ? federatedEntry.remote !== "builtin" : false),
+    [federatedEntry],
+  );
+
   const canInjectSDK = useMemo(() => {
     if (typeof window === "undefined") return false;
+    if (federatedEntry) return false;
     return isSameOriginEntry(entryUrl);
-  }, [entryUrl]);
+  }, [entryUrl, federatedEntry]);
 
   const sdkCfg = useMemo((): SDKConfig | null => {
     const base = edgeBaseUrl.trim();
@@ -447,6 +503,18 @@ export default function Home() {
       },
     });
   }, [sdkCfg]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (sdk) {
+      (window as any).MiniAppSDK = sdk;
+      window.dispatchEvent(new Event("miniapp-sdk-ready"));
+      return;
+    }
+    if ((window as any).MiniAppSDK) {
+      delete (window as any).MiniAppSDK;
+    }
+  }, [sdk]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -576,14 +644,34 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sdk, canInjectSDK]);
 
-  const demos = [
+  const quickEntries = [
     {
-      name: "Price Ticker (builtin)",
-      url: "/miniapps/builtin/price-ticker/index.html",
+      name: "Price Ticker (MF)",
+      url: "mf://builtin?app=builtin-price-ticker",
     },
     {
-      name: "Community Template",
-      url: "/miniapps/community/template/index.html",
+      name: "Coin Flip (MF)",
+      url: "mf://builtin?app=builtin-coin-flip",
+    },
+    {
+      name: "Dice Game (MF)",
+      url: "mf://builtin?app=builtin-dice-game",
+    },
+    {
+      name: "Scratch Card (MF)",
+      url: "mf://builtin?app=builtin-scratch-card",
+    },
+    {
+      name: "Lottery (MF)",
+      url: "mf://builtin?app=builtin-lottery",
+    },
+    {
+      name: "Prediction Market (MF)",
+      url: "mf://builtin?app=builtin-prediction-market",
+    },
+    {
+      name: "Flashloan (MF)",
+      url: "mf://builtin?app=builtin-flashloan",
     },
   ];
 
@@ -821,10 +909,11 @@ export default function Home() {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
       <main style={{ padding: 24, fontFamily: "system-ui, sans-serif" }}>
-        <h1 style={{ margin: "0 0 12px" }}>Neo MiniApp Host (Scaffold)</h1>
+        <h1 style={{ margin: "0 0 12px" }}>Neo MiniApp Host</h1>
         <p style={{ margin: "0 0 16px", maxWidth: 820 }}>
-          This host embeds a MiniApp via <code>iframe</code>. For same-origin MiniApps (e.g. those served from{" "}
-          <code>/public</code>), it can inject a <code>MiniAppSDK</code> object into the iframe for local demos.
+          This host embeds third-party MiniApps via <code>iframe</code> and loads trusted built-ins via Module Federation
+          (use <code>mf://builtin?app=...</code> or the <code>/federated</code> route). For same-origin MiniApps (served
+          from <code>/public</code>), it can inject a <code>MiniAppSDK</code> object into the iframe for local previews.
         </p>
 
         <section
@@ -843,7 +932,6 @@ export default function Home() {
               <span style={{ fontSize: 12, opacity: 0.8 }}>MiniApp URL</span>
               <input
                 style={{ padding: "8px 10px", width: 520 }}
-                placeholder="/miniapps/builtin/price-ticker/index.html or https://cdn.example.com/app/index.html"
                 value={entryUrl}
                 onChange={(e) => setEntryUrl(e.target.value)}
               />
@@ -853,7 +941,6 @@ export default function Home() {
               <span style={{ fontSize: 12, opacity: 0.8 }}>Supabase Edge base URL</span>
               <input
                 style={{ padding: "8px 10px", width: 420 }}
-                placeholder="https://<project>.supabase.co/functions/v1"
                 value={edgeBaseUrl}
                 onChange={(e) => setEdgeBaseUrl(e.target.value)}
               />
@@ -872,7 +959,6 @@ export default function Home() {
               <span style={{ fontSize: 12, opacity: 0.8 }}>Auth JWT (optional)</span>
               <input
                 style={{ padding: "8px 10px", width: 520 }}
-                placeholder="eyJ..."
                 type="password"
                 autoComplete="off"
                 value={authToken}
@@ -884,7 +970,6 @@ export default function Home() {
               <span style={{ fontSize: 12, opacity: 0.8 }}>API key (optional)</span>
               <input
                 style={{ padding: "8px 10px", width: 420 }}
-                placeholder="neo_..."
                 type="password"
                 autoComplete="off"
                 value={apiKey}
@@ -901,7 +986,7 @@ export default function Home() {
               flexWrap: "wrap",
             }}
           >
-            {demos.map((d) => (
+            {quickEntries.map((d) => (
               <button
                 key={d.url}
                 style={{
@@ -929,9 +1014,11 @@ export default function Home() {
               title={
                 !sdk
                   ? "Set an Edge base URL first"
-                  : !canInjectSDK
-                    ? "SDK injection only works for same-origin entry URLs"
-                    : "Inject SDK into the iframe"
+                  : federatedEntry
+                    ? "Module Federation uses the host SDK directly"
+                    : !canInjectSDK
+                      ? "SDK injection only works for same-origin entry URLs"
+                      : "Inject SDK into the iframe"
               }
             >
               Inject SDK
@@ -986,7 +1073,6 @@ export default function Home() {
               <span style={{ fontSize: 12, opacity: 0.8 }}>Wallet address</span>
               <input
                 style={{ padding: "8px 10px", width: 360 }}
-                placeholder="N..."
                 value={walletAddress}
                 onChange={(e) => setWalletAddress(e.target.value)}
               />
@@ -996,7 +1082,6 @@ export default function Home() {
               <span style={{ fontSize: 12, opacity: 0.8 }}>Label (optional)</span>
               <input
                 style={{ padding: "8px 10px", width: 240 }}
-                placeholder="Primary"
                 value={bindLabel}
                 onChange={(e) => setBindLabel(e.target.value)}
               />
@@ -1086,7 +1171,7 @@ export default function Home() {
             maxWidth: 980,
           }}
         >
-          <h2 style={{ margin: "0 0 10px", fontSize: 16 }}>On-chain Intents (Demo)</h2>
+          <h2 style={{ margin: "0 0 10px", fontSize: 16 }}>On-chain Intents</h2>
           <p
             style={{
               margin: "0 0 10px",
@@ -1298,7 +1383,7 @@ export default function Home() {
             maxWidth: 980,
           }}
         >
-          <h2 style={{ margin: "0 0 10px", fontSize: 16 }}>App Registry (Host-only Demo)</h2>
+          <h2 style={{ margin: "0 0 10px", fontSize: 16 }}>App Registry (Host-only)</h2>
           <p style={{ margin: "0 0 10px", fontSize: 12, opacity: 0.85 }}>
             Build an <code>AppRegistry</code> invocation intent from a manifest (hashing + asset policy enforced by
             Edge), then submit it via the wallet. Requires auth + a bound primary wallet.
@@ -1396,15 +1481,28 @@ export default function Home() {
         {!entryUrl ? (
           <div style={{ maxWidth: 900 }}>
             <p style={{ margin: "0 0 12px" }}>
-              Pick a demo MiniApp above, or provide an <code>entry_url</code> query param:
+              Pick a MiniApp above, or provide an <code>entry_url</code> query param:
             </p>
             <pre style={{ background: "#111", color: "#eee", padding: 12 }}>
-              {`/?entry_url=/miniapps/builtin/price-ticker/index.html`}
+              {`/?entry_url=mf://builtin?app=builtin-price-ticker`}
             </pre>
             <pre style={{ background: "#111", color: "#eee", padding: 12 }}>
-              {`/?entry_url=https%3A%2F%2Fcdn.example.com%2Fapps%2Fdemo%2Findex.html`}
+              {`/?entry_url=/miniapps/builtin/coin-flip/index.html`}
+            </pre>
+            <pre style={{ background: "#111", color: "#eee", padding: 12 }}>
+              {`/?entry_url=https%3A%2F%2Fcdn.miniapps.com%2Fapps%2Fneo-game%2Findex.html`}
             </pre>
           </div>
+        ) : federatedEntry ? (
+          federatedUnsupported ? (
+            <div style={{ maxWidth: 900, padding: 12, border: "1px solid #f2c6c6", borderRadius: 8 }}>
+              Unsupported Module Federation remote: <code>{federatedEntry.remote}</code>
+            </div>
+          ) : (
+            <RemoteErrorBoundary>
+              <BuiltinMiniApp appId={federatedEntry.appId} view={federatedEntry.view} />
+            </RemoteErrorBoundary>
+          )
         ) : (
           <iframe
             ref={iframeRef}

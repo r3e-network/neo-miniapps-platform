@@ -1,4 +1,4 @@
-import { getEnv } from "./env.ts";
+import { getEnv, isProductionEnv } from "./env.ts";
 import { error } from "./response.ts";
 
 let mtlsClient: Deno.HttpClient | null | undefined;
@@ -7,14 +7,14 @@ let mtlsWarningLogged = false;
 function getMTLSClient(): Deno.HttpClient | undefined {
   if (mtlsClient !== undefined) return mtlsClient ?? undefined;
 
-  const certChain = getEnv("TEE_MTLS_CERT_PEM") ?? getEnv("EDGE_MTLS_CERT_PEM");
-  const privateKey = getEnv("TEE_MTLS_KEY_PEM") ?? getEnv("EDGE_MTLS_KEY_PEM");
+  const cert = getEnv("TEE_MTLS_CERT_PEM") ?? getEnv("EDGE_MTLS_CERT_PEM");
+  const key = getEnv("TEE_MTLS_KEY_PEM") ?? getEnv("EDGE_MTLS_KEY_PEM");
   const ca = getEnv("TEE_MTLS_ROOT_CA_PEM") ?? getEnv("MARBLERUN_ROOT_CA_PEM");
 
-  if (!certChain || !privateKey || !ca) {
+  if (!cert || !key || !ca) {
     mtlsClient = null;
     // Log warning once in production mode
-    if (!mtlsWarningLogged && getEnv("DENO_ENV") === "production") {
+    if (!mtlsWarningLogged && isProductionEnv()) {
       console.warn(
         "[TEE] WARNING: mTLS not configured. TEE services requiring service authentication will fail. " +
           "Set TEE_MTLS_CERT_PEM, TEE_MTLS_KEY_PEM, and TEE_MTLS_ROOT_CA_PEM for production.",
@@ -26,8 +26,8 @@ function getMTLSClient(): Deno.HttpClient | undefined {
 
   mtlsClient = Deno.createHttpClient({
     caCerts: [ca],
-    certChain,
-    privateKey,
+    cert,
+    key,
   });
   return mtlsClient;
 }
@@ -41,6 +41,10 @@ export async function requestJSON(
   },
   req?: Request,
 ): Promise<unknown | Response> {
+  if (isProductionEnv() && !url.toLowerCase().startsWith("https://")) {
+    return error(400, "TEE service URL must use https:// in production", "INSECURE_TEE_URL", req);
+  }
+
   const headers = new Headers(init.headers);
   let body: string | undefined = undefined;
 
@@ -56,7 +60,11 @@ export async function requestJSON(
   };
 
   const client = getMTLSClient();
-  if (client) requestInit.client = client;
+  if (client) {
+    requestInit.client = client;
+  } else if (isProductionEnv()) {
+    return error(503, "mTLS is required for TEE service calls in production", "MTLS_REQUIRED", req);
+  }
 
   const resp = await fetch(url, requestInit);
 

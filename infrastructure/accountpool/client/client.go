@@ -266,3 +266,67 @@ func (c *Client) GetMasterKeyAttestation(ctx context.Context) (*MasterKeyAttesta
 	}
 	return &out, nil
 }
+
+// DeployContract deploys a new smart contract using a pool account.
+// All signing happens inside TEE - private keys never leave the enclave.
+func (c *Client) DeployContract(ctx context.Context, accountID, nefBase64, manifestJSON string, data any) (*DeployContractResponse, error) {
+	var out DeployContractResponse
+	if err := c.doJSON(ctx, http.MethodPost, "/deploy", DeployContractInput{
+		ServiceID:    c.serviceID,
+		AccountID:    accountID,
+		NEFBase64:    nefBase64,
+		ManifestJSON: manifestJSON,
+		Data:         data,
+	}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// UpdateContract updates an existing smart contract using a pool account.
+// All signing happens inside TEE - private keys never leave the enclave.
+func (c *Client) UpdateContract(ctx context.Context, accountID, contractHash, nefBase64, manifestJSON string, data any) (*UpdateContractResponse, error) {
+	var out UpdateContractResponse
+	if err := c.doJSON(ctx, http.MethodPost, "/update-contract", UpdateContractInput{
+		ServiceID:    c.serviceID,
+		AccountID:    accountID,
+		ContractHash: contractHash,
+		NEFBase64:    nefBase64,
+		ManifestJSON: manifestJSON,
+		Data:         data,
+	}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// InvokeContract invokes a contract method using a pool account.
+// All signing happens inside TEE - private keys never leave the enclave.
+func (c *Client) InvokeContract(ctx context.Context, accountID, contractHash, method string, params []ContractParam) (*InvokeContractResponse, error) {
+	var out InvokeContractResponse
+	if err := c.doJSON(ctx, http.MethodPost, "/invoke", InvokeContractInput{
+		ServiceID:    c.serviceID,
+		AccountID:    accountID,
+		ContractHash: contractHash,
+		Method:       method,
+		Params:       params,
+	}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// SimulateContract simulates a contract invocation without signing or broadcasting.
+func (c *Client) SimulateContract(ctx context.Context, accountID, contractHash, method string, params []ContractParam) (*SimulateContractResponse, error) {
+	var out SimulateContractResponse
+	if err := c.doJSON(ctx, http.MethodPost, "/simulate", SimulateContractInput{
+		ServiceID:    c.serviceID,
+		AccountID:    accountID,
+		ContractHash: contractHash,
+		Method:       method,
+		Params:       params,
+	}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

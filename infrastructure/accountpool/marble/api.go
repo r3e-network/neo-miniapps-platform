@@ -19,4 +19,10 @@ func (s *Service) registerRoutes() {
 	router.HandleFunc("/batch-sign", s.handleBatchSign).Methods("POST")
 	router.HandleFunc("/balance", s.handleUpdateBalance).Methods("POST")
 	router.HandleFunc("/transfer", s.handleTransfer).Methods("POST")
+
+	// Contract operations - all signing happens inside TEE
+	router.HandleFunc("/deploy", s.handleDeployContract).Methods("POST")
+	router.HandleFunc("/update-contract", s.handleUpdateContract).Methods("POST")
+	router.HandleFunc("/invoke", s.handleInvokeContract).Methods("POST")
+	router.HandleFunc("/simulate", s.handleSimulateContract).Methods("POST")
 }

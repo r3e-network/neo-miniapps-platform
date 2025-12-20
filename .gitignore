@@ -125,3 +125,7 @@ marble-runner
 # Development artifacts
 SPRINT*_COMPLETION_REPORT.md
 .Droid/
+
+# MiniApp simulations (not ready for commit)
+miniapps/builtin/flashloan/simulation/
+miniapps/builtin/lottery/simulation/

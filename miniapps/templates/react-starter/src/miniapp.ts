@@ -37,7 +37,9 @@ export type RNGResponse = {
   request_id: string;
   app_id: string;
   randomness: string;
-  report_hash?: string;
+  signature?: string;
+  public_key?: string;
+  attestation_hash?: string;
   anchored_tx?: unknown;
 };
 
@@ -90,4 +92,3 @@ export function getMiniAppSDK(): MiniAppSDK {
   if (!window.MiniAppSDK) throw new Error("MiniAppSDK not available (host must inject it or provide a bridge)");
   return window.MiniAppSDK;
 }
-

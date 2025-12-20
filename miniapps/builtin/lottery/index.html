@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Neo Lottery - Decentralized lottery with provably fair randomness and 95% payout"
+    />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src https://*; img-src 'self' data: https:;"
+    />
+    <title>Neo Lottery</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        color: #fff;
+        min-height: 100vh;
+        padding: 20px;
+      }
+      .container {
+        max-width: 600px;
+        margin: 0 auto;
+      }
+      h1 {
+        text-align: center;
+        margin-bottom: 10px;
+        color: #00d9ff;
+        font-size: 2em;
+      }
+      .subtitle {
+        text-align: center;
+        color: #888;
+        margin-bottom: 30px;
+      }
+      .card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 20px;
+        backdrop-filter: blur(10px);
+      }
+      .card h2 {
+        color: #00d9ff;
+        margin-bottom: 20px;
+        font-size: 1.3em;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+      }
+      @media (max-width: 480px) {
+        .stats-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .stat-box {
+        background: rgba(0, 217, 255, 0.1);
+        border-radius: 12px;
+        padding: 15px;
+        text-align: center;
+      }
+      .stat-value {
+        font-size: 1.8em;
+        font-weight: bold;
+        color: #00d9ff;
+      }
+      .stat-label {
+        color: #888;
+        font-size: 0.9em;
+        margin-top: 5px;
+      }
+      .prize-pool {
+        background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 165, 0, 0.1));
+        border-radius: 12px;
+        padding: 20px;
+        text-align: center;
+        margin-bottom: 20px;
+      }
+      .prize-value {
+        font-size: 2.5em;
+        font-weight: bold;
+        color: #ffd700;
+      }
+      .prize-label {
+        color: #888;
+        font-size: 0.9em;
+        margin-top: 5px;
+      }
+      .countdown {
+        text-align: center;
+        font-size: 1.3em;
+        color: #ff6b6b;
+        padding: 15px;
+        background: rgba(255, 107, 107, 0.1);
+        border-radius: 10px;
+        margin-top: 15px;
+      }
+      .input-group {
+        margin-bottom: 20px;
+      }
+      .input-group label {
+        display: block;
+        color: #888;
+        margin-bottom: 8px;
+      }
+      .ticket-controls {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .ticket-controls input {
+        flex: 1;
+        padding: 15px;
+        border: 2px solid rgba(0, 217, 255, 0.3);
+        border-radius: 10px;
+        background: rgba(0, 0, 0, 0.3);
+        color: #fff;
+        font-size: 1.2em;
+        text-align: center;
+      }
+      .ticket-controls input:focus {
+        outline: none;
+        border-color: #00d9ff;
+      }
+      .ticket-controls input:invalid {
+        border-color: #ff6464;
+      }
+      .btn-adjust {
+        width: 50px;
+        height: 50px;
+        border: 2px solid rgba(0, 217, 255, 0.3);
+        border-radius: 10px;
+        background: rgba(0, 0, 0, 0.3);
+        color: #00d9ff;
+        font-size: 1.5em;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+      .btn-adjust:hover:not(:disabled) {
+        background: rgba(0, 217, 255, 0.2);
+        border-color: #00d9ff;
+      }
+      .btn-adjust:focus {
+        outline: 2px solid #00d9ff;
+        outline-offset: 2px;
+      }
+      .cost-info {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .cost-label {
+        color: #888;
+      }
+      .cost-value {
+        color: #ffd700;
+        font-weight: bold;
+      }
+      .btn {
+        width: 100%;
+        padding: 18px;
+        border: none;
+        border-radius: 12px;
+        font-size: 1.2em;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s;
+        margin-top: 15px;
+      }
+      .btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
+      .btn:focus {
+        outline: 2px solid #00d9ff;
+        outline-offset: 2px;
+      }
+      .btn-primary {
+        background: linear-gradient(90deg, #00d9ff, #00ff88);
+        color: #000;
+      }
+      .winners-list {
+        max-height: 250px;
+        overflow-y: auto;
+      }
+      .winner-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        font-size: 0.9em;
+      }
+      .winner-item:hover {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .winner-round {
+        color: #888;
+      }
+      .winner-address {
+        font-family: monospace;
+        color: #00d9ff;
+      }
+      .winner-prize {
+        color: #ffd700;
+        font-weight: bold;
+      }
+      .status {
+        padding: 15px;
+        border-radius: 10px;
+        margin-top: 15px;
+        text-align: center;
+        display: none;
+      }
+      .status.success {
+        background: rgba(0, 255, 136, 0.2);
+        color: #00ff88;
+        display: block;
+      }
+      .status.error {
+        background: rgba(255, 100, 100, 0.2);
+        color: #ff6464;
+        display: block;
+      }
+      .status.loading {
+        background: rgba(0, 217, 255, 0.2);
+        color: #00d9ff;
+        display: block;
+      }
+      .how-it-works {
+        padding-left: 20px;
+        line-height: 1.8;
+        color: #aaa;
+      }
+      .how-it-works li {
+        margin-bottom: 8px;
+      }
+      .live-indicator {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        background: #00ff88;
+        border-radius: 50%;
+        animation: pulse 1s infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        border: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container" role="main">
+      <header>
+        <h1>Neo Lottery</h1>
+        <p class="subtitle">Provably fair lottery with 95% payout</p>
+      </header>
+
+      <section class="card" aria-labelledby="round-heading">
+        <h2 id="round-heading">
+          Current Round #<span id="round-id" aria-live="polite">-</span>
+          <span class="live-indicator" aria-hidden="true"></span>
+          <span class="sr-only">Live data</span>
+        </h2>
+        <div class="prize-pool">
+          <div class="prize-value" id="prize-pool" aria-live="polite">0.00</div>
+          <div class="prize-label">Prize Pool (GAS)</div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-box">
+            <div class="stat-value" id="ticket-count" aria-live="polite">0</div>
+            <div class="stat-label">Tickets Sold</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value" id="your-tickets" aria-live="polite">0</div>
+            <div class="stat-label">Your Tickets</div>
+          </div>
+        </div>
+        <div class="countdown" id="countdown" aria-live="polite" role="timer">Next draw in: --:--</div>
+      </section>
+
+      <section class="card" aria-labelledby="buy-heading">
+        <h2 id="buy-heading">Buy Tickets</h2>
+        <form
+          id="lottery-form"
+          onsubmit="
+            event.preventDefault();
+            buyTickets();
+          "
+        >
+          <div class="input-group">
+            <label for="ticket-amount">Number of Tickets</label>
+            <div class="ticket-controls">
+              <button type="button" class="btn-adjust" onclick="adjustTickets(-1)" aria-label="Decrease ticket count">
+                -
+              </button>
+              <input
+                type="number"
+                id="ticket-amount"
+                name="amount"
+                value="1"
+                min="1"
+                max="100"
+                step="1"
+                required
+                aria-describedby="ticket-help"
+              />
+              <button type="button" class="btn-adjust" onclick="adjustTickets(1)" aria-label="Increase ticket count">
+                +
+              </button>
+            </div>
+            <span id="ticket-help" class="sr-only">Enter the number of tickets to purchase (1-100)</span>
+          </div>
+          <div class="cost-info">
+            <span class="cost-label">Ticket Price</span>
+            <span class="cost-value" id="ticket-price">0.1 GAS</span>
+          </div>
+          <div class="cost-info">
+            <span class="cost-label">Total Cost</span>
+            <span class="cost-value" id="total-cost" aria-live="polite">0.1 GAS</span>
+          </div>
+          <button type="submit" class="btn btn-primary" id="btn-buy" aria-describedby="btn-help">Buy Tickets</button>
+          <span id="btn-help" class="sr-only">Click to purchase lottery tickets</span>
+          <div id="status" class="status" aria-live="assertive"></div>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="winners-heading">
+        <h2 id="winners-heading">Recent Winners</h2>
+        <div class="winners-list" id="winners-list" role="list" aria-live="polite">
+          <div class="winner-item" role="listitem">
+            <span class="winner-address">Loading...</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="howto-heading">
+        <h2 id="howto-heading">How It Works</h2>
+        <ul class="how-it-works">
+          <li>Buy tickets with GAS (0.1 GAS each)</li>
+          <li>Draws happen automatically every minute</li>
+          <li>Winner takes 95% of the prize pool</li>
+          <li>More tickets = higher chance to win</li>
+          <li>Randomness provided by on-chain RNG</li>
+        </ul>
+      </section>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

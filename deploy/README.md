@@ -22,6 +22,7 @@ make test-go
 ```
 
 Or run everything at once:
+
 ```bash
 make all
 ```
@@ -49,6 +50,7 @@ deploy/
 ## Dependencies
 
 Install required tools:
+
 ```bash
 # Neo Express (local blockchain)
 dotnet tool install -g Neo.Express
@@ -81,6 +83,7 @@ make init
 ### TestNet
 
 1. Set environment variables:
+
 ```bash
 export TESTNET_OWNER_WALLET=/path/to/owner.json
 export TESTNET_OWNER_ADDRESS=<neo-n3-owner-address>
@@ -92,6 +95,7 @@ export TESTNET_TEE_PUBKEY=<33-byte-compressed-pubkey-hex>
 2. Ensure wallets have GAS for deployment (~50 GAS recommended)
 
 3. Deploy:
+
 ```bash
 make build
 make deploy NETWORK=testnet
@@ -112,6 +116,7 @@ In production, the updater should be the enclave-managed signer (GlobalSigner / 
 ## Testing
 
 ### Run Go Integration Tests
+
 ```bash
 make test-go
 ```
@@ -121,6 +126,7 @@ make test-go
 This deployment system is designed to work with [neo-fairy-test](https://github.com/r3e-network/neo-fairy-test), a Foundry-style testing framework for Neo N3.
 
 Key features used:
+
 - **VirtualDeploy**: Deploy contracts in isolated test sessions
 - **Session Snapshots**: Revert state between tests
 - **Cheatcodes**: `Prank` (impersonate), `Deal` (set balance), `Warp` (set time)
@@ -130,7 +136,24 @@ For ad-hoc Fairy deployments, use `go run ./cmd/deploy-fairy/main.go`.
 
 ## Deployed Contracts
 
-After deployment, contract addresses are saved to `config/deployed_contracts.json`:
+After deployment, contract addresses are saved to `config/deployed_contracts.json`.
+
+### Neo N3 Testnet (Live)
+
+| Contract         | Address                                      | Description               |
+| ---------------- | -------------------------------------------- | ------------------------- |
+| PaymentHub       | `0x56730a72af8363c8da7ae61ed930accb30aefe87` | GAS payments & settlement |
+| Governance       | `0x75b653ebe873d706757bab6f1166323d701da445` | NEO voting & governance   |
+| PriceFeed        | `0x1d1b28a968d45bce20ef9344f605856ac5b93418` | Price oracle anchoring    |
+| RandomnessLog    | `0xef79193a3a7d8c27655a7c111d4df6f8cec1d253` | Randomness anchoring      |
+| AppRegistry      | `0x3e23e14355209e6f48cd24174143535ae3f211a1` | MiniApp registration      |
+| AutomationAnchor | `0xde6bd82083eb52c214b50877d6a7b4e45fd806fd` | Task execution logs       |
+
+**Network:** Neo N3 Testnet
+**RPC:** `https://testnet1.neo.coz.io:443`
+**Network Magic:** `894710606`
+
+### Local Development (Neo Express)
 
 ```json
 {
@@ -146,21 +169,25 @@ After deployment, contract addresses are saved to `config/deployed_contracts.jso
 ## Troubleshooting
 
 ### "neoxp not found"
+
 ```bash
 dotnet tool install -g Neo.Express
 export PATH="$PATH:$HOME/.dotnet/tools"
 ```
 
 ### "nccs not found"
+
 ```bash
 dotnet tool install -g Neo.Compiler.CSharp
 ```
 
 ### Contract deployment fails
+
 - Ensure Neo Express is running: `make run-neoexpress`
 - Check wallet has sufficient GAS
 - Verify contract compiled successfully in `contracts/build/`
 
 ### Initialization fails
+
 - Ensure contracts are deployed first
 - Check `deployed_contracts.json` has valid contract hashes

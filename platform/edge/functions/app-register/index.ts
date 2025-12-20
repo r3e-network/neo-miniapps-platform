@@ -1,7 +1,8 @@
 import { handleCorsPreflight } from "../_shared/cors.ts";
 import { normalizeUInt160 } from "../_shared/contracts.ts";
 import { mustGetEnv } from "../_shared/env.ts";
-import { parseMiniAppManifestCore } from "../_shared/manifest.ts";
+import { upsertMiniAppManifest } from "../_shared/apps.ts";
+import { canonicalizeMiniAppManifest, parseMiniAppManifestCore } from "../_shared/manifest.ts";
 import { error, json } from "../_shared/response.ts";
 import { requireRateLimit } from "../_shared/ratelimit.ts";
 import { requireScope } from "../_shared/scopes.ts";
@@ -41,11 +42,22 @@ export async function handler(req: Request): Promise<Response> {
   if (!manifest) return error(400, "manifest required", "MANIFEST_REQUIRED", req);
 
   let core;
+  let canonical;
   try {
     core = await parseMiniAppManifestCore(manifest);
+    canonical = canonicalizeMiniAppManifest(manifest);
   } catch (e) {
     return error(400, (e as Error).message, "BAD_INPUT", req);
   }
+
+  const upsertErr = await upsertMiniAppManifest({
+    core,
+    canonicalManifest: canonical,
+    developerUserId: auth.userId,
+    mode: "register",
+    req,
+  });
+  if (upsertErr) return upsertErr;
 
   const appRegistryHash = normalizeUInt160(mustGetEnv("CONTRACT_APPREGISTRY_HASH"));
   const requestId = crypto.randomUUID();

@@ -1,0 +1,26 @@
+{
+  "app_id": "builtin-dice-game",
+  "name": "Neo Dice",
+  "description": "Provably fair dice game - roll the dice and win up to 6x your bet with on-chain randomness",
+  "version": "1.0.0",
+  "icon": "https://cdn.miniapps.com/miniapps/builtin/dice-game/icon.png",
+  "entry_url": "mf://builtin?app=builtin-dice-game",
+  "developer_pubkey": "0x03f35d7ba09f0a14f0a0f8fdd2cd2db39647c80270f65a52d03d2cceb36b5250c5",
+  "permissions": {
+    "payments": true,
+    "governance": false,
+    "rng": true,
+    "datafeed": false
+  },
+  "assets_allowed": ["GAS"],
+  "governance_assets_allowed": ["NEO"],
+  "limits": {
+    "max_gas_per_tx": "50",
+    "daily_gas_cap_per_user": "500"
+  },
+  "contracts_needed": ["PaymentHub", "RandomnessLog"],
+  "sandbox_flags": ["no-eval", "strict-csp"],
+  "attestation_required": true,
+  "category": "gaming",
+  "tags": ["dice", "gambling", "randomness", "betting"]
+}

@@ -31,6 +31,9 @@ Exceptions:
 
 - `GET /functions/v1/datafeed-price` is currently a public read proxy (no auth).
 
+Host-only endpoints (oracle/compute/automation/secrets) require **API keys with
+explicit scopes** in production; bearer JWTs are rejected there.
+
 Most state-changing endpoints also require a **verified primary wallet binding**
 (`wallet-nonce` + `wallet-bind`).
 
@@ -39,18 +42,24 @@ Most state-changing endpoints also require a **verified primary wallet binding**
 - `POST /functions/v1/pay-gas`
   - body: `{ app_id: "...", amount_gas: "1.5", memo?: "..." }`
   - returns: a PaymentHub `pay` invocation (GAS-only) for the wallet/SDK to sign and submit
+  - enforces: manifest `permissions.payments` and `limits.max_gas_per_tx` (when present)
+  - enforces: `limits.daily_gas_cap_per_user` via `miniapp_usage_bump(...)`
 
 ### Governance (NEO only)
 
 - `POST /functions/v1/vote-neo`
   - body: `{ app_id: "...", proposal_id: "...", neo_amount: "10", support?: true }`
   - returns: a Governance `vote` invocation (NEO-only) for the wallet/SDK to sign and submit
+  - enforces: manifest `permissions.governance` and `limits.governance_cap` (when present)
+  - tracks: `limits.governance_cap` via `miniapp_usage_bump(...)` (per-day enforcement)
 
 ### RNG / VRF
 
 - `POST /functions/v1/rng-request`
   - body: `{ app_id: "..." }`
-  - executes a randomness script in `neocompute` (no dedicated VRF service)
+  - requests randomness from `neovrf` (`/random`) with signature + attestation hash
+  - returns: `{ randomness, signature, public_key, attestation_hash }`
+  - enforces: manifest `permissions.rng`
   - optional: anchors to `RandomnessLog` via `txproxy` when enabled
 
 ### Apps (App Registry)
@@ -59,11 +68,13 @@ Most state-changing endpoints also require a **verified primary wallet binding**
   - body: `{ manifest: { ... } }`
   - gateway computes `manifest_hash = sha256(canonical_json(manifest))`
   - enforces: `assets_allowed == ["GAS"]` and `governance_assets_allowed == ["NEO"]`
+  - persists: canonical manifest in Supabase `miniapps` table for runtime enforcement
   - returns: an AppRegistry `register` invocation for the developer wallet to sign and submit
 - `POST /functions/v1/app-update-manifest`
   - body: `{ manifest: { ... } }`
   - gateway computes `manifest_hash = sha256(canonical_json(manifest))`
   - enforces: `assets_allowed == ["GAS"]` and `governance_assets_allowed == ["NEO"]`
+  - persists: updated canonical manifest in Supabase `miniapps` table
   - returns: an AppRegistry `updateManifest` invocation for the developer wallet to sign and submit
 
 ### Wallet Binding
@@ -91,6 +102,7 @@ Scope notes:
 - Scopes are optional. If omitted (or empty), the key is treated as full access for that user.
 - Recommended convention: set scopes to the Edge function names you want the key to call (e.g. `["pay-gas","rng-request"]`).
 - `["*"]` can be used as an explicit “full access” scope.
+- Host-only endpoints require **explicit scopes** (non-empty) in production.
 
 ### Secrets
 

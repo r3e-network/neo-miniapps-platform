@@ -19,6 +19,7 @@ func TestDefaultServicesConfig(t *testing.T) {
 		"neoflow",
 		"neoaccounts",
 		"neocompute",
+		"neovrf",
 		"neooracle",
 	}
 
@@ -50,6 +51,7 @@ func TestGetNeoServiceName(t *testing.T) {
 		{"neoaccounts", "neoaccounts"},
 		{"neocompute", "neocompute"},
 		{"neoflow", "neoflow"},
+		{"vrf", "neovrf"},
 		{"tx-proxy", "txproxy"},
 		{"unknown", "unknown"},
 		{"", ""},

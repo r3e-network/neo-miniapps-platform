@@ -17,7 +17,9 @@ namespace NeoMiniAppPlatform.Contracts
     }
 
     [DisplayName("AppRegistry")]
-    [ManifestExtra("Author", "Neo MiniApp Platform")]
+    [ManifestExtra("Author", "R3E Network")]
+    [ManifestExtra("Email", "dev@r3e.network")]
+    [ManifestExtra("Version", "1.0.0")]
     [ManifestExtra("Description", "On-chain miniapp registry (manifest hash + status + allowlist anchors)")]
     public class AppRegistry : SmartContract
     {
@@ -154,6 +156,19 @@ namespace NeoMiniAppPlatform.Contracts
             info.Status = status;
             AppMap().Put(AppKey(appId), StdLib.Serialize(info));
             OnStatusChanged(appId, status);
+        }
+
+        public static void SetAdmin(UInt160 newAdmin)
+        {
+            ValidateAdmin();
+            ExecutionEngine.Assert(newAdmin != null && newAdmin.IsValid, "invalid admin");
+            Storage.Put(Storage.CurrentContext, PREFIX_ADMIN, newAdmin);
+        }
+
+        public static void Update(ByteString nefFile, string manifest)
+        {
+            ValidateAdmin();
+            ContractManagement.Update(nefFile, manifest, null);
         }
     }
 }

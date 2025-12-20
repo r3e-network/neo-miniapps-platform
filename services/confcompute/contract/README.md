@@ -1,30 +1,9 @@
 # NeoCompute On‑Chain Contract
 
-NeoCompute (`service_id`: `neocompute`) can optionally anchor randomness outputs on-chain using the **platform** `RandomnessLog` contract.
+NeoCompute (`service_id`: `neocompute`) does not anchor results to a platform
+contract by default. Verifiable randomness anchoring is handled by **NeoVRF**
+via `RandomnessLog`.
 
-## Canonical Source
-
-- Contract implementation: `../../../contracts/RandomnessLog/RandomnessLog.cs`
-- Platform contract overview: `../../../contracts/README.md`
-
-## Purpose
-
-`RandomnessLog` provides an append-only audit log for randomness outputs:
-
-- Writes are restricted to the contract **Updater** (set by admin).
-- Each record stores the randomness value and an `attestation_hash` for auditability.
-
-## Key Methods / Events
-
-- `SetUpdater(updater)`: admin sets the Updater account.
-- `Record(requestId, randomness, attestationHash, timestamp)`: Updater records a randomness result (requestId is one-time).
-- `Get(requestId)`: reads a previously-recorded result.
-- Event: `RandomnessRecorded`.
-
-## Configuration
-
-The service discovers the deployed contract via:
-
-- `CONTRACT_RANDOMNESSLOG_HASH`: deployed script hash (see `../../../.env.example`).
-
-On-chain writes are performed via `../../txproxy/README.md` (allowlisted sign+broadcast).
+If a MiniApp needs to anchor compute outputs on-chain, it should define its own
+contract schema (or reuse `AutomationAnchor`/`AppRegistry` where applicable) and
+invoke it via `txproxy`.

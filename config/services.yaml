@@ -31,6 +31,13 @@ services:
     port: 8086
     description: "Secure JavaScript execution for private computations and neocompute data processing"
 
+  # NeoVRF - Verifiable Randomness
+  # Use cases: On-chain randomness, gaming, lotteries
+  neovrf:
+    enabled: true
+    port: 8087
+    description: "TEE-backed verifiable randomness service for miniapps"
+
   # NeoOracle - External Data Delivery with Proofs
   # Use cases: Price feeds, weather data, sports results
   neooracle:

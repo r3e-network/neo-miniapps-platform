@@ -12,9 +12,10 @@ The goal is **one module = one responsibility**, with **no duplicated chain I/O*
 
 ### `platform/` (host + SDK + Supabase Edge)
 
-- `platform/host-app`: Next.js host scaffold (Vercel) for embedding MiniApps.
-- `platform/sdk`: MiniApp SDK scaffold (`window.MiniAppSDK`).
-- `platform/edge`: Supabase Edge function scaffolds (thin gateway).
+- `platform/host-app`: Next.js host app (Vercel) for embedding MiniApps.
+- `platform/builtin-app`: built-in MiniApps served via Module Federation.
+- `platform/sdk`: MiniApp SDK (`window.MiniAppSDK`).
+- `platform/edge`: Supabase Edge functions (thin gateway).
 - `platform/rls`: reserved for platform RLS SQL (current schema is in `migrations/`).
 
 ### `infrastructure/` (shared building blocks)

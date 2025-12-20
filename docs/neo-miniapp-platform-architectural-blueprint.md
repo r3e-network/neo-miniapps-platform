@@ -42,7 +42,7 @@ strictly enforced.
 - **Framework:** **Next.js**.
 - **Hosting:** **Vercel**.
 - **Micro-frontend Strategy:**
-  - Built-ins: Module Federation (`@module-federation/nextjs-mf`) (optional).
+  - Built-ins: Module Federation (`@module-federation/nextjs-mf`).
   - 3rd Party Apps: `iframe sandbox` + `postMessage`.
 - **State Management:** Zustand (SDK-side state, optional).
 
@@ -66,18 +66,20 @@ neo-miniapp-platform/
 ├── services/                   # [Go] EGo + MarbleRun TEE Services
 │   ├── datafeed-service/       # High-freq polling, threshold logic
 │   ├── oracle-gateway/         # General purpose fetcher
-│   ├── vrf-service/            # Random number generation
+│   ├── vrf-service/            # Verifiable randomness generation
+│   ├── compute-service/        # Confidential compute scripts
 │   ├── tx-proxy/               # The "Key Holder". Signs transactions.
 │   └── marblerun/              # Manifests & policies
 │
 ├── platform/                   # [TS] Host Platform
 │   ├── host-app/               # Next.js App (The "App Store" UI)
+│   ├── builtin-app/            # Built-in MiniApps (Module Federation remote)
 │   ├── sdk/                    # The "MiniAppSDK" npm package
 │   ├── edge/                   # [Deno] Supabase Edge Functions
 │   └── rls/                    # [SQL] RLS Policies & Migrations
 │
 ├── miniapps/                   # [React/Vue] Mini-apps
-│   ├── builtin/                # Trusted apps (Raffle, Game)
+│   ├── builtin/                # Trusted apps (Coin Flip, Dice, Lottery, etc.)
 │   └── templates/              # Starter kits for users
 │
 └── infra/                      # Infrastructure Config
@@ -108,6 +110,11 @@ All services run inside EGo enclaves. Keys **never** leave the enclave.
 2. **datafeed-service**
    - Polls multiple sources, computes median.
    - Pushes updates when deviation ≥0.1% with hysteresis + throttling.
+3. **vrf-service**
+   - Signs `request_id` inside TEE and derives randomness from the signature.
+   - Optionally anchors randomness in `RandomnessLog` via `tx-proxy`.
+4. **compute-service**
+   - Runs restricted scripts inside TEE (confidential jobs).
 
 ### C. Gateway (Supabase Edge)
 - Stateless router + rate limiter.
@@ -136,7 +143,7 @@ interface MiniAppSDK {
 
 ## 5. Deployment & User Flow
 
-1. Developer builds a miniapp from a template and writes `manifest.json`.
+1. Developer builds a miniapp from a starter kit and writes `manifest.json`.
 2. Platform validates/sanitizes and computes `manifest_hash`.
 3. MarbleRun injects secrets and manages attestation for production enclaves.
 
@@ -152,5 +159,4 @@ interface MiniAppSDK {
 1. Infra setup (neo-express, Supabase, CI).
 2. Deploy PaymentHub + AppRegistry to local chain.
 3. TEE skeleton (EGo hello world, tx-proxy).
-4. End-to-end `payGAS` flow with a built-in demo miniapp.
-
+4. End-to-end `payGAS` flow with a built-in MiniApp.

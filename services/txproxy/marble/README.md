@@ -51,6 +51,19 @@ The allowlist defines which contracts and methods TxProxy will sign transactions
 }
 ```
 
+Example (allow platform contracts):
+
+```json
+{
+  "contracts": {
+    "<paymenthub_hash>": ["pay"],
+    "<governance_hash>": ["stake", "unstake", "vote"],
+    "<randomnesslog_hash>": ["record"],
+    "<pricefeed_hash>": ["update"]
+  }
+}
+```
+
 ### Rules
 
 - Contract hashes are normalized to lowercase **without** `0x` prefix (40 hex chars)
@@ -82,7 +95,7 @@ Requires corresponding contract hash environment variables:
 
 - Each request includes a unique `request_id`
 - TxProxy maintains an in-memory cache of seen request IDs
-- Duplicate requests within the replay window (5 min) are rejected
+- Duplicate requests within the replay window (10 min) are rejected
 - Cache cleanup runs periodically to remove expired entries
 
 ## Configuration

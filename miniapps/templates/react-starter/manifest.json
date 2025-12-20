@@ -1,11 +1,16 @@
 {
-  "app_id": "com.user.react-starter",
-  "name": "React Starter",
-  "version": "0.1.0",
-  "entry_url": "http://localhost:5173",
-  "developer_pubkey": "02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "app_id": "com.miniapps.react-starter",
+  "name": "MiniApp React Starter",
+  "version": "1.0.0",
+  "entry_url": "https://cdn.miniapps.com/miniapps/templates/react-starter/index.html",
+  "developer_pubkey": "0x02e09f57186a0757eef0100b5e31b7aa76706c02a8e62b4cfdb5bc117dc10e37f3",
   "assets_allowed": ["GAS"],
   "governance_assets_allowed": ["NEO"],
-  "permissions": ["wallet", "payments", "governance", "rng", "datafeed"]
+  "permissions": {
+    "wallet": ["read-address"],
+    "payments": true,
+    "governance": true,
+    "rng": true,
+    "datafeed": true
+  }
 }
-

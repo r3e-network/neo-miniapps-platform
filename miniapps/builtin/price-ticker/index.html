@@ -1,92 +1,257 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Price Ticker</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Neo Price Ticker - Real-time cryptocurrency price feeds with signed oracle data"
+    />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src https://*; img-src 'self' data: https:;"
+    />
+    <title>Neo Price Ticker</title>
     <style>
-      body {
-        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
-        margin: 24px;
-        background: #0b1020;
-        color: #e7ecff;
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
       }
-      .card {
-        max-width: 760px;
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: linear-gradient(135deg, #0b1020 0%, #1a1a2e 100%);
+        color: #e7ecff;
+        min-height: 100vh;
+        padding: 20px;
+      }
+      .container {
+        max-width: 600px;
         margin: 0 auto;
-        padding: 18px;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 12px;
-        background: rgba(255, 255, 255, 0.04);
       }
       h1 {
-        margin: 0 0 6px 0;
-        font-size: 20px;
+        text-align: center;
+        margin-bottom: 10px;
+        color: #335cff;
+        font-size: 2em;
       }
-      .row {
+      .subtitle {
+        text-align: center;
+        color: #888;
+        margin-bottom: 30px;
+      }
+      .card {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 20px;
+        backdrop-filter: blur(10px);
+      }
+      .card h2 {
+        color: #335cff;
+        margin-bottom: 20px;
+        font-size: 1.3em;
+      }
+      .price-display {
+        text-align: center;
+        padding: 30px;
+        background: rgba(51, 92, 255, 0.1);
+        border-radius: 16px;
+        margin-bottom: 20px;
+      }
+      .symbol-name {
+        font-size: 1.2em;
+        color: #888;
+        margin-bottom: 10px;
+      }
+      .current-price {
+        font-size: 3em;
+        font-weight: bold;
+        color: #335cff;
+      }
+      .price-meta {
+        font-size: 0.9em;
+        color: #888;
+        margin-top: 10px;
+      }
+      .input-group {
+        margin-bottom: 20px;
+      }
+      .input-group label {
+        display: block;
+        color: #888;
+        margin-bottom: 8px;
+      }
+      .input-row {
         display: flex;
         gap: 10px;
-        flex-wrap: wrap;
-        margin: 12px 0;
-        align-items: center;
       }
-      button,
-      input,
-      select {
-        font: inherit;
-      }
-      button {
-        background: #335cff;
-        color: white;
-        border: 0;
+      .input-row input {
+        flex: 1;
+        padding: 15px;
+        border: 2px solid rgba(51, 92, 255, 0.3);
         border-radius: 10px;
-        padding: 10px 12px;
-        cursor: pointer;
-      }
-      button.secondary {
-        background: rgba(255, 255, 255, 0.09);
-      }
-      input {
-        padding: 10px 12px;
-        border-radius: 10px;
-        border: 1px solid rgba(255, 255, 255, 0.12);
         background: rgba(0, 0, 0, 0.25);
         color: #e7ecff;
+        font-size: 1.1em;
       }
-      pre {
-        white-space: pre-wrap;
-        word-break: break-word;
-        margin: 0;
-        padding: 12px;
+      .input-row input:focus {
+        outline: none;
+        border-color: #335cff;
+      }
+      .btn {
+        padding: 15px 20px;
+        border: none;
         border-radius: 10px;
+        font-size: 1em;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+      .btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .btn:focus {
+        outline: 2px solid #335cff;
+        outline-offset: 2px;
+      }
+      .btn-primary {
+        background: #335cff;
+        color: #fff;
+      }
+      .btn-secondary {
+        background: rgba(255, 255, 255, 0.09);
+        color: #e7ecff;
+      }
+      .btn-secondary.active {
+        background: rgba(51, 92, 255, 0.3);
+        color: #335cff;
+      }
+      .quick-symbols {
+        display: flex;
+        gap: 10px;
+        margin-top: 15px;
+        flex-wrap: wrap;
+      }
+      .symbol-btn {
+        padding: 10px 15px;
+        border: 1px solid rgba(51, 92, 255, 0.3);
+        border-radius: 8px;
+        background: transparent;
+        color: #888;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+      .symbol-btn:hover {
+        border-color: #335cff;
+        color: #335cff;
+      }
+      .symbol-btn.selected {
+        border-color: #335cff;
+        background: rgba(51, 92, 255, 0.2);
+        color: #335cff;
+      }
+      .output-box {
         background: rgba(0, 0, 0, 0.35);
         border: 1px solid rgba(255, 255, 255, 0.09);
+        border-radius: 10px;
+        padding: 15px;
+        font-family: monospace;
+        font-size: 0.9em;
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 200px;
+        overflow-y: auto;
       }
-      .warn {
-        color: #ffdf7e;
-        margin-top: 12px;
+      .status {
+        padding: 15px;
+        border-radius: 10px;
+        margin-top: 15px;
+        text-align: center;
+        display: none;
+      }
+      .status.loading {
+        background: rgba(51, 92, 255, 0.2);
+        color: #335cff;
+        display: block;
+      }
+      .status.error {
+        background: rgba(255, 100, 100, 0.2);
+        color: #ff6464;
+        display: block;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        border: 0;
       }
     </style>
   </head>
   <body>
-    <div class="card">
-      <h1>Price Ticker</h1>
-      <p>Reads signed prices from the platform datafeed via <code>MiniAppSDK</code>.</p>
+    <div class="container" role="main">
+      <header>
+        <h1>Neo Price Ticker</h1>
+        <p class="subtitle">Real-time cryptocurrency prices with signed oracle data</p>
+      </header>
 
-      <div class="row">
-        <input id="symbol" value="BTC-USD" />
-        <button id="btn-refresh">Refresh</button>
-        <button id="btn-auto" class="secondary">Auto: Off</button>
-      </div>
+      <section class="card" aria-labelledby="price-heading">
+        <h2 id="price-heading">Current Price</h2>
+        <div class="price-display">
+          <div class="symbol-name" id="display-symbol" aria-live="polite">BTC-USD</div>
+          <div class="current-price" id="display-price" aria-live="polite">$0.00</div>
+          <div class="price-meta" id="display-meta" aria-live="polite">Last updated: --</div>
+        </div>
+      </section>
 
-      <pre id="out">{}</pre>
-      <div id="sdk-note" class="warn" style="display: none">
-        MiniAppSDK is not installed. Load this MiniApp via <code>platform/host-app</code>
-        or another host that injects the SDK.
-      </div>
+      <section class="card" aria-labelledby="query-heading">
+        <h2 id="query-heading">Query Price</h2>
+        <form
+          id="price-form"
+          onsubmit="
+            event.preventDefault();
+            refresh();
+          "
+        >
+          <div class="input-group">
+            <label for="symbol">Symbol</label>
+            <div class="input-row">
+              <input
+                type="text"
+                id="symbol"
+                value="BTC-USD"
+                required
+                aria-describedby="symbol-help"
+              />
+              <button type="submit" class="btn btn-primary" id="btn-refresh">Refresh</button>
+              <button type="button" class="btn btn-secondary" id="btn-auto">Auto: Off</button>
+            </div>
+            <span id="symbol-help" class="sr-only">Enter a trading pair symbol like BTC-USD or ETH-USD</span>
+          </div>
+          <div class="quick-symbols" role="group" aria-label="Quick symbol selection">
+            <button type="button" class="symbol-btn selected" onclick="setSymbol('BTC-USD')">BTC-USD</button>
+            <button type="button" class="symbol-btn" onclick="setSymbol('ETH-USD')">ETH-USD</button>
+            <button type="button" class="symbol-btn" onclick="setSymbol('NEO-USD')">NEO-USD</button>
+            <button type="button" class="symbol-btn" onclick="setSymbol('GAS-USD')">GAS-USD</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="raw-heading">
+        <h2 id="raw-heading">Raw Response</h2>
+        <div class="output-box" id="out" role="log" aria-live="polite">{}</div>
+        <div id="status" class="status" aria-live="assertive"></div>
+      </section>
     </div>
-
-    <script src="../../_shared/miniapp-bridge.js"></script>
-    <script src="./app.js"></script>
+    <script src="app.js"></script>
   </body>
 </html>

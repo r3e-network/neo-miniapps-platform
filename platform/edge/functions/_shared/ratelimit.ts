@@ -1,4 +1,4 @@
-import { getEnv } from "./env.ts";
+import { getEnv, isProductionEnv } from "./env.ts";
 import { json } from "./response.ts";
 import { supabaseServiceClient, type AuthContext } from "./supabase.ts";
 
@@ -116,9 +116,7 @@ export async function requireRateLimit(
     hit = await bump(identifier, identifierType, windowSeconds);
   } catch (e) {
     // In local dev, do not hard-fail on missing DB/RPC plumbing.
-    const env = (getEnv("DENO_ENV") ?? getEnv("ENV") ?? "").toLowerCase();
-    const isProd = env === "prod" || env === "production";
-    if (!isProd) return null;
+    if (!isProductionEnv()) return null;
     return json(
       { error: { code: "RATE_LIMIT_UNAVAILABLE", message: (e as Error).message } },
       { status: 503 },

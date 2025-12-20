@@ -8,13 +8,19 @@ package neogasbank
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"math/big"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/R3E-Network/service_layer/infrastructure/chain"
+	"github.com/R3E-Network/service_layer/infrastructure/crypto"
 	"github.com/R3E-Network/service_layer/infrastructure/database"
 	"github.com/R3E-Network/service_layer/infrastructure/marble"
 	"github.com/R3E-Network/service_layer/infrastructure/runtime"
@@ -36,6 +42,8 @@ const (
 	GASContractHash = "0xd2a4cff31913016155e38e474a2c06d08be276cf"
 )
 
+var errDepositMismatch = errors.New("deposit transaction does not match request")
+
 // Service implements the NeoGasBank service.
 type Service struct {
 	*commonservice.BaseService
@@ -43,13 +51,16 @@ type Service struct {
 
 	chainClient *chain.Client
 	db          database.RepositoryInterface
+
+	depositAddress string
 }
 
 // Config holds NeoGasBank service configuration.
 type Config struct {
-	Marble      *marble.Marble
-	DB          database.RepositoryInterface
-	ChainClient *chain.Client
+	Marble         *marble.Marble
+	DB             database.RepositoryInterface
+	ChainClient    *chain.Client
+	DepositAddress string
 }
 
 // New creates a new NeoGasBank service.
@@ -72,10 +83,22 @@ func New(cfg Config) (*Service, error) {
 		DB:      cfg.DB,
 	})
 
+	depositAddress := strings.TrimSpace(cfg.DepositAddress)
+	if depositAddress == "" {
+		depositAddress = strings.TrimSpace(os.Getenv("GASBANK_DEPOSIT_ADDRESS"))
+	}
+	if strict && depositAddress == "" {
+		return nil, fmt.Errorf("neogasbank: GASBANK_DEPOSIT_ADDRESS is required in strict/enclave mode")
+	}
+	if depositAddress == "" {
+		base.Logger().WithFields(nil).Warn("GASBANK_DEPOSIT_ADDRESS not configured; deposits will only validate sender and amount")
+	}
+
 	s := &Service{
-		BaseService: base,
-		chainClient: cfg.ChainClient,
-		db:          cfg.DB,
+		BaseService:    base,
+		chainClient:    cfg.ChainClient,
+		db:             cfg.DB,
+		depositAddress: depositAddress,
 	}
 
 	// Register deposit verification worker
@@ -105,10 +128,11 @@ func New(cfg Config) (*Service, error) {
 // statistics returns runtime statistics for the /info endpoint.
 func (s *Service) statistics() map[string]any {
 	return map[string]any{
-		"deposit_check_interval":  DepositCheckInterval.String(),
-		"required_confirmations":  RequiredConfirmations,
-		"deposit_expiration_time": DepositExpirationTime.String(),
-		"chain_connected":         s.chainClient != nil,
+		"deposit_check_interval":     DepositCheckInterval.String(),
+		"required_confirmations":     RequiredConfirmations,
+		"deposit_expiration_time":    DepositExpirationTime.String(),
+		"chain_connected":            s.chainClient != nil,
+		"deposit_address_configured": s.depositAddress != "",
 	}
 }
 
@@ -279,14 +303,20 @@ func (s *Service) processDepositVerification(ctx context.Context) {
 		return
 	}
 
-	// Get all pending deposits (we need to add this method to the repository)
+	// Get all pending deposits
 	deposits, err := s.getPendingDeposits(ctx)
 	if err != nil {
 		s.Logger().WithContext(ctx).WithError(err).Warn("failed to get pending deposits")
 		return
 	}
 
+	now := time.Now()
 	for _, deposit := range deposits {
+		if !deposit.ExpiresAt.IsZero() && now.After(deposit.ExpiresAt) {
+			_ = s.db.UpdateDepositStatus(ctx, deposit.ID, string(DepositStatusExpired), deposit.Confirmations)
+			continue
+		}
+
 		if deposit.TxHash == "" {
 			continue
 		}
@@ -294,6 +324,10 @@ func (s *Service) processDepositVerification(ctx context.Context) {
 		// Check transaction on chain
 		confirmed, confirmations, err := s.verifyTransaction(ctx, deposit.TxHash, deposit.FromAddress, deposit.Amount)
 		if err != nil {
+			if errors.Is(err, errDepositMismatch) {
+				_ = s.db.UpdateDepositStatus(ctx, deposit.ID, string(DepositStatusFailed), confirmations)
+				continue
+			}
 			s.Logger().WithContext(ctx).WithError(err).WithField("tx_hash", deposit.TxHash).Debug("failed to verify transaction")
 			continue
 		}
@@ -333,39 +367,117 @@ func (s *Service) verifyTransaction(ctx context.Context, txHash, fromAddress str
 
 	exec := appLog.Executions[0]
 	if exec.VMState != "HALT" {
-		return false, 0, fmt.Errorf("transaction failed: %s", exec.Exception)
+		return false, 0, fmt.Errorf("%w: transaction failed: %s", errDepositMismatch, exec.Exception)
 	}
 
-	// Parse notifications to find GAS transfer
-	for _, notif := range exec.Notifications {
-		if notif.Contract != GASContractHash {
+	match, err := s.matchGasTransfer(exec.Notifications, fromAddress, expectedAmount)
+	if err != nil {
+		return false, 0, err
+	}
+	if !match {
+		return false, 0, errDepositMismatch
+	}
+
+	confirmations, err := s.getTransactionConfirmations(ctx, txHash)
+	if err != nil {
+		return false, 0, err
+	}
+
+	return confirmations >= RequiredConfirmations, confirmations, nil
+}
+
+func (s *Service) matchGasTransfer(notifications []chain.Notification, fromAddress string, expectedAmount int64) (bool, error) {
+	expected := big.NewInt(expectedAmount)
+	fromAddress = strings.TrimSpace(fromAddress)
+	depositAddress := strings.TrimSpace(s.depositAddress)
+
+	for _, notif := range notifications {
+		if !strings.EqualFold(notif.Contract, GASContractHash) {
 			continue
 		}
 		if notif.EventName != "Transfer" {
 			continue
 		}
 
-		// Verify transfer details
-		// In production, parse the notification state to verify:
-		// - from address matches
-		// - to address is our deposit address
-		// - amount matches expected amount
+		items, err := chain.ParseArray(notif.State)
+		if err != nil || len(items) < 3 {
+			continue
+		}
+
+		fromBytes, err := chain.ParseByteArray(items[0])
+		if err != nil {
+			continue
+		}
+		toBytes, err := chain.ParseByteArray(items[1])
+		if err != nil {
+			continue
+		}
+		amount, err := chain.ParseInteger(items[2])
+		if err != nil || amount == nil {
+			continue
+		}
+		if amount.Cmp(expected) != 0 {
+			continue
+		}
+
+		fromCandidate := addressFromScriptHash(fromBytes)
+		toCandidate := addressFromScriptHash(toBytes)
+		if fromAddress != "" && fromCandidate != fromAddress {
+			continue
+		}
+		if depositAddress != "" && toCandidate != depositAddress {
+			continue
+		}
+
+		return true, nil
 	}
 
-	// Get block height for confirmation count
+	return false, nil
+}
+
+func (s *Service) getTransactionConfirmations(ctx context.Context, txHash string) (int, error) {
+	if s.chainClient == nil {
+		return 0, fmt.Errorf("chain client not configured")
+	}
+
+	result, err := s.chainClient.Call(ctx, "getrawtransaction", []interface{}{txHash, true})
+	if err != nil {
+		return 0, err
+	}
+
+	var meta struct {
+		Confirmations int    `json:"confirmations"`
+		BlockHash     string `json:"blockhash"`
+	}
+	if err := json.Unmarshal(result, &meta); err != nil {
+		return 0, err
+	}
+	if meta.Confirmations > 0 {
+		return meta.Confirmations, nil
+	}
+	if meta.BlockHash == "" {
+		return meta.Confirmations, nil
+	}
+
+	block, err := s.chainClient.GetBlock(ctx, meta.BlockHash)
+	if err != nil {
+		return meta.Confirmations, nil
+	}
 	currentHeight, err := s.chainClient.GetBlockCount(ctx)
 	if err != nil {
-		return false, 0, err
+		return meta.Confirmations, nil
 	}
-
-	// Calculate confirmations (simplified - assume tx is in recent block)
-	// In production, get the actual block height of the transaction
-	confirmations := 1
-	if currentHeight > 0 {
-		confirmations = 1 // At least 1 confirmation if tx exists
+	if currentHeight <= block.Index {
+		return 0, nil
 	}
+	return int(currentHeight - block.Index), nil
+}
 
-	return confirmations >= RequiredConfirmations, confirmations, nil
+func addressFromScriptHash(hash []byte) string {
+	if len(hash) != 20 {
+		return ""
+	}
+	return crypto.ScriptHashToAddress(hash)
 }
 
 // confirmDeposit marks a deposit as confirmed and credits the user's balance.
@@ -412,9 +524,23 @@ func (s *Service) confirmDeposit(ctx context.Context, deposit *database.DepositR
 	s.Logger().WithContext(ctx).WithField("user_id", deposit.UserID).WithField("amount", deposit.Amount).Info("deposit confirmed and credited")
 }
 
-// cleanupExpiredDeposits marks expired pending deposits as failed.
+// cleanupExpiredDeposits marks expired pending deposits as expired.
 func (s *Service) cleanupExpiredDeposits(ctx context.Context) {
-	// This would iterate through pending deposits and mark expired ones
-	// Implementation depends on having a proper query method
-	s.Logger().WithContext(ctx).Debug("running expired deposit cleanup")
+	if s.db == nil {
+		return
+	}
+
+	deposits, err := s.getPendingDeposits(ctx)
+	if err != nil {
+		s.Logger().WithContext(ctx).WithError(err).Warn("failed to get pending deposits for cleanup")
+		return
+	}
+
+	now := time.Now()
+	for _, deposit := range deposits {
+		if deposit.ExpiresAt.IsZero() || now.Before(deposit.ExpiresAt) {
+			continue
+		}
+		_ = s.db.UpdateDepositStatus(ctx, deposit.ID, string(DepositStatusExpired), deposit.Confirmations)
+	}
 }

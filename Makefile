@@ -160,7 +160,7 @@ db-seed: ## Seed database with test data
 # Frontend
 # =============================================================================
 
-export-miniapps: ## Export demo MiniApps into host public/
+export-miniapps: ## Export built-in MiniApps into host public/
 	./scripts/export_host_miniapps.sh
 
 export-supabase-functions: ## Export Edge functions into supabase/functions/
@@ -184,7 +184,7 @@ supabase-cli-install: ## Install Supabase CLI into ./bin/supabase
 	@chmod +x ./scripts/install_supabase_cli.sh
 	./scripts/install_supabase_cli.sh
 
-check-git: ## Report untracked canonical source/scaffolds
+check-git: ## Report untracked canonical source/exports
 	./scripts/git_completeness_check.sh
 
 frontend-install: ## Install frontend dependencies

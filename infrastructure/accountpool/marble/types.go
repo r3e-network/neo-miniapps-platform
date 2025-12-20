@@ -77,6 +77,33 @@ type TransferResponse = neoaccountstypes.TransferResponse
 // is bound to enclave report data.
 type MasterKeyAttestation = neoaccountstypes.MasterKeyAttestation
 
+// ContractParam represents a parameter for contract invocation.
+type ContractParam = neoaccountstypes.ContractParam
+
+// DeployContractInput deploys a new contract using a pool account.
+type DeployContractInput = neoaccountstypes.DeployContractInput
+
+// DeployContractResponse returns the deployment result.
+type DeployContractResponse = neoaccountstypes.DeployContractResponse
+
+// UpdateContractInput updates an existing contract using a pool account.
+type UpdateContractInput = neoaccountstypes.UpdateContractInput
+
+// UpdateContractResponse returns the update result.
+type UpdateContractResponse = neoaccountstypes.UpdateContractResponse
+
+// InvokeContractInput invokes a contract method using a pool account.
+type InvokeContractInput = neoaccountstypes.InvokeContractInput
+
+// InvokeContractResponse returns the invocation result.
+type InvokeContractResponse = neoaccountstypes.InvokeContractResponse
+
+// SimulateContractInput simulates a contract invocation without signing.
+type SimulateContractInput = neoaccountstypes.SimulateContractInput
+
+// SimulateContractResponse returns the simulation result.
+type SimulateContractResponse = neoaccountstypes.SimulateContractResponse
+
 // AccountInfoFromWithBalances converts AccountWithBalances to AccountInfo.
 func AccountInfoFromWithBalances(acc *neoaccountssupabase.AccountWithBalances) AccountInfo {
 	return AccountInfo{

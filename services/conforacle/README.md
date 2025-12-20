@@ -45,13 +45,13 @@ This service is intended to be reached via the gateway (Supabase Edge) rather th
 ```json
 POST /query
 {
-    "url": "https://api.example.com/data",
+    "url": "https://api.binance.com/api/v3/account",
     "headers": {
         "Accept": "application/json"
     },
     "method": "GET",
-    "secret_name": "my_api_key",
-    "secret_as_key": "X-API-Key"
+    "secret_name": "binance_api_key",
+    "secret_as_key": "X-MBX-APIKEY"
 }
 ```
 

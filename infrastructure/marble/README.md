@@ -6,7 +6,7 @@ This package is a thin SDK that wraps MarbleRun primitives for services:
 - Surfaces TEE identity (report, UUID, marble type) to services.
 
 We keep this layer even though MarbleRun is used because it provides:
-1. A stable Go API inside services (tests and simulation can stub it).
+1. A stable Go API inside services (tests and simulation can mock it).
 2. A single place to translate environment injection (`MARBLE_CERT`, `MARBLE_KEY`, `MARBLE_ROOT_CA`, `MARBLE_SECRETS`, `MARBLE_UUID`) into usable clients/configs.
 3. Enforcement of the official cross-marble communication path (mTLS via `Marble.HTTPClient`), rather than ad-hoc HTTP clients.
 
@@ -62,6 +62,7 @@ defer crypto.ZeroBytes(secret) // Always zero secrets after use
 | Secret | Service | Description |
 |--------|---------|-------------|
 | `NEOFEEDS_SIGNING_KEY` | Datafeed | ECDSA private key for signing prices |
+| `NEOVRF_SIGNING_KEY` | NeoVRF | Master key for VRF signing (>= 32 bytes) |
 | `COMPUTE_MASTER_KEY` | Confidential Compute | Master key for encryption/signing (>= 32 bytes) |
 | `POOL_MASTER_KEY` | AccountPool | HD derivation master key (>= 32 bytes) |
 | `POOL_MASTER_KEY_HASH` | AccountPool | SHA-256 hash of derived master pubkey (32 bytes; required in enclave mode) |

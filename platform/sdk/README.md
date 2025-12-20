@@ -1,6 +1,6 @@
-# MiniApp SDK (Scaffold)
+# MiniApp SDK
 
-This package is a small TypeScript SDK scaffold matching the platform blueprint:
+This package is the TypeScript SDK matching the platform blueprint:
 
 - MiniApps do not talk to the chain directly.
 - Calls go to **Supabase Edge**, which enforces policy and either:
@@ -39,10 +39,12 @@ NeoOracle is an allowlisted HTTP fetch service that can inject user secrets for 
 
 The gateway endpoint is `oracle-query` (Supabase Edge), which forwards to the TEE service.
 
+Host-only endpoints require an API key with explicit scopes in production.
+
 ```ts
 const host = createHostSDK({
   edgeBaseUrl: "https://<project>.supabase.co/functions/v1",
-  getAuthToken: async () => "<supabase-jwt>",
+  getAPIKey: async () => "<host-api-key>",
 });
 
 const res = await host.oracle.query({
@@ -54,12 +56,12 @@ console.log(res.status_code, res.body);
 ## Compute (Host-only)
 
 NeoCompute executes restricted scripts inside the enclave. These endpoints are
-host-only and require auth (and typically a primary wallet binding).
+host-only and require API-key auth (and typically a primary wallet binding).
 
 ```ts
 const host = createHostSDK({
   edgeBaseUrl: "https://<project>.supabase.co/functions/v1",
-  getAuthToken: async () => "<supabase-jwt>",
+  getAPIKey: async () => "<host-api-key>",
 });
 
 const job = await host.compute.execute({
@@ -77,14 +79,14 @@ NeoFlow manages user triggers (currently cron + webhook execution in the service
 ```ts
 const host = createHostSDK({
   edgeBaseUrl: "https://<project>.supabase.co/functions/v1",
-  getAuthToken: async () => "<supabase-jwt>",
+  getAPIKey: async () => "<host-api-key>",
 });
 
 const trigger = await host.automation.createTrigger({
   name: "Every 5 minutes",
   trigger_type: "cron",
   schedule: "*/5 * * * *",
-  action: { type: "webhook", url: "https://example.com/callback", method: "POST" },
+  action: { type: "webhook", url: "https://hooks.miniapps.com/callback", method: "POST" },
 });
 
 const executions = await host.automation.listExecutions(trigger.id, 25);
@@ -119,6 +121,8 @@ await host.wallet.bindWallet({
 
 Secrets are host-only and should not be exposed to untrusted MiniApps:
 
+Host-only endpoints require an API key with explicit scopes in production.
+
 ```ts
 await host.secrets.upsert("binance_api_key", "<secret-value>");
 await host.secrets.setPermissions("binance_api_key", ["neooracle"]);
@@ -131,12 +135,12 @@ Developer app registration is wallet-signed and routed via Supabase Edge:
 
 ```ts
 const manifest = {
-  app_id: "com.example.demo",
-  entry_url: "https://cdn.example.com/apps/demo/index.html",
-  name: "Demo Miniapp",
+  app_id: "com.miniapps.arcade",
+  entry_url: "https://cdn.miniapps.com/apps/neo-game/index.html",
+  name: "Neo Arcade",
   version: "1.0.0",
   developer_pubkey: "0x" + "<33-byte compressed pubkey hex>",
-  permissions: { payments: true, governance: false, randomness: true, datafeed: true },
+  permissions: { payments: true, governance: false, rng: true, datafeed: true },
   assets_allowed: ["GAS"],
   governance_assets_allowed: ["NEO"],
   sandbox_flags: ["no-eval", "strict-csp"],

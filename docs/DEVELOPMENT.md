@@ -197,6 +197,9 @@ Run a specific service:
 # Run confidential compute (NeoCompute)
 OE_SIMULATION=1 SERVICE_TYPE=neocompute go run ./cmd/marble
 
+# Run verifiable randomness (NeoVRF)
+OE_SIMULATION=1 SERVICE_TYPE=neovrf go run ./cmd/marble
+
 # Run confidential oracle (NeoOracle)
 OE_SIMULATION=1 SERVICE_TYPE=neooracle go run ./cmd/marble
 ```

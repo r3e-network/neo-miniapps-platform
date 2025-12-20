@@ -7,9 +7,9 @@ This document maps the current repository structure into the target **Neo N3 Min
 The target structure is:
 
 - `contracts/`: platform contracts (GAS-only payments, NEO-only governance, feeds, randomness logs, app registry, automation anchor)
-- `services/`: attested SGX services (datafeed/oracle/compute/automation/tx-proxy)
+- `services/`: attested SGX services (datafeed/oracle/vrf/compute/automation/tx-proxy)
 - `platform/`: Next.js host + SDK + Supabase Edge + RLS policies
-- `miniapps/`: builtin + community miniapps
+- `miniapps/`: builtin miniapps + developer templates
 - `deploy/`: neo-express config + deployment scripts
 - `docker/`: local dev compose bundles
 - `k8s/`: Kubernetes manifests/helm values
@@ -26,6 +26,7 @@ platform naming in docs:
 - `services/datafeed` (`neofeeds`) → `datafeed-service`
 - `services/conforacle` (`neooracle`) → `oracle-gateway`
 - `services/confcompute` (`neocompute`) → `compute-service`
+- `services/vrf` (`neovrf`) → `vrf-service`
 - `services/automation` (`neoflow`) → `automation-service`
 - `services/txproxy` (`txproxy`) → `tx-proxy`
 
@@ -38,13 +39,14 @@ platform naming in docs:
 
 These remain as shared building blocks used by the platform services.
 
-### Platform Layer (Scaffolded)
+### Platform Layer
 
-- `platform/host-app`: Next.js host (Vercel) scaffold with strict CSP starter
-- `platform/sdk`: JS SDK scaffold (`window.MiniAppSDK` shape)
-- `platform/edge`: Supabase Edge function scaffolds (auth/limits/routing)
-- `platform/rls`: Supabase RLS SQL policies (placeholder, see migrations for current SQL)
-- `miniapps/`: builtin apps + templates (placeholder)
+- `platform/host-app`: Next.js host (Vercel) with iframe + Module Federation loader
+- `platform/builtin-app`: built-in MiniApps served as Module Federation remote
+- `platform/sdk`: JS SDK (`window.MiniAppSDK`)
+- `platform/edge`: Supabase Edge functions (auth/limits/routing)
+- `platform/rls`: Supabase RLS SQL policies (schema lives in `migrations/`)
+- `miniapps/`: built-in manifests + developer starter kits (static previews exported for iframe use)
 
 ## Notes
 

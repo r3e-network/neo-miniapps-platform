@@ -57,8 +57,9 @@ async function getAESKey(): Promise<CryptoKey> {
 
   const raw = mustGetEnv("SECRETS_MASTER_KEY");
   const keyBytes = normalizeMasterKey(raw);
+  const keyData = keyBytes.buffer as ArrayBuffer;
 
-  cachedKey = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["encrypt", "decrypt"]);
+  cachedKey = await crypto.subtle.importKey("raw", keyData, "AES-GCM", false, ["encrypt", "decrypt"]);
   return cachedKey;
 }
 
@@ -97,4 +98,3 @@ export function encodeBytesToBase64(bytes: Uint8Array): string {
 export function decodeBase64ToBytes(b64: string): Uint8Array {
   return base64ToBytes(b64);
 }
-

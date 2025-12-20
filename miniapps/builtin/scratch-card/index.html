@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Neo Scratch Cards - Instant win cards with up to 100x prizes" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src https://*; img-src 'self' data: https:;"
+    />
+    <title>Neo Scratch Cards</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: linear-gradient(135deg, #2d1b69 0%, #11998e 100%);
+        color: #fff;
+        min-height: 100vh;
+        padding: 20px;
+      }
+      .container {
+        max-width: 500px;
+        margin: 0 auto;
+      }
+      h1 {
+        text-align: center;
+        margin-bottom: 10px;
+        color: #ffd700;
+        font-size: 2em;
+      }
+      .subtitle {
+        text-align: center;
+        color: rgba(255, 255, 255, 0.7);
+        margin-bottom: 30px;
+      }
+      .card {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 20px;
+        backdrop-filter: blur(10px);
+      }
+      .card h2 {
+        color: #ffd700;
+        margin-bottom: 20px;
+        font-size: 1.3em;
+      }
+      .scratch-area {
+        background: linear-gradient(135deg, #ffd700 0%, #ff8c00 100%);
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 20px;
+      }
+      .scratch-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+      }
+      .scratch-cell {
+        aspect-ratio: 1;
+        background: linear-gradient(135deg, #c0c0c0 0%, #808080 100%);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2em;
+        cursor: pointer;
+        transition: all 0.3s;
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        user-select: none;
+      }
+      .scratch-cell:hover:not(.revealed) {
+        transform: scale(1.05);
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+      }
+      .scratch-cell.revealed {
+        background: linear-gradient(135deg, #fff 0%, #f0f0f0 100%);
+        cursor: default;
+      }
+      .scratch-cell.winner {
+        background: linear-gradient(135deg, #ffd700 0%, #ffaa00 100%);
+        animation: glow 1s ease-in-out infinite alternate;
+      }
+      @keyframes glow {
+        from {
+          box-shadow: 0 0 10px #ffd700;
+        }
+        to {
+          box-shadow:
+            0 0 30px #ffd700,
+            0 0 60px #ff8c00;
+        }
+      }
+      .prize-tiers {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+      .tier {
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 10px;
+        padding: 12px;
+        text-align: center;
+      }
+      .tier-symbols {
+        font-size: 1.5em;
+        margin-bottom: 5px;
+      }
+      .tier-prize {
+        color: #ffd700;
+        font-weight: bold;
+      }
+      .card-types {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+      .card-type-btn {
+        flex: 1;
+        padding: 15px;
+        border: 2px solid rgba(255, 215, 0, 0.3);
+        border-radius: 10px;
+        background: rgba(0, 0, 0, 0.2);
+        color: #fff;
+        cursor: pointer;
+        transition: all 0.3s;
+        text-align: center;
+      }
+      .card-type-btn:hover {
+        border-color: #ffd700;
+      }
+      .card-type-btn.selected {
+        border-color: #ffd700;
+        background: rgba(255, 215, 0, 0.2);
+      }
+      .card-type-btn:focus {
+        outline: 2px solid #ffd700;
+        outline-offset: 2px;
+      }
+      .card-price {
+        font-size: 1.2em;
+        font-weight: bold;
+        color: #ffd700;
+      }
+      .card-max {
+        font-size: 0.8em;
+        color: rgba(255, 255, 255, 0.6);
+      }
+      .btn {
+        width: 100%;
+        padding: 18px;
+        border: none;
+        border-radius: 12px;
+        font-size: 1.2em;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+      .btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .btn:focus {
+        outline: 2px solid #ffd700;
+        outline-offset: 2px;
+      }
+      .btn-primary {
+        background: linear-gradient(90deg, #ffd700, #ff8c00);
+        color: #000;
+      }
+      .btn-reveal {
+        background: linear-gradient(90deg, #00ff88, #00d9ff);
+        color: #000;
+        margin-top: 10px;
+      }
+      .result-box {
+        text-align: center;
+        padding: 20px;
+        border-radius: 12px;
+        margin-top: 15px;
+        display: none;
+      }
+      .result-box.win {
+        background: rgba(0, 255, 136, 0.2);
+        display: block;
+      }
+      .result-box.lose {
+        background: rgba(255, 100, 100, 0.2);
+        display: block;
+      }
+      .result-amount {
+        font-size: 2em;
+        font-weight: bold;
+      }
+      .result-box.win .result-amount {
+        color: #00ff88;
+      }
+      .result-box.lose .result-amount {
+        color: #ff6464;
+      }
+      .stats-row {
+        display: flex;
+        justify-content: space-around;
+        text-align: center;
+        margin-bottom: 20px;
+      }
+      .stat-item .stat-value {
+        font-size: 1.3em;
+        font-weight: bold;
+        color: #ffd700;
+      }
+      .stat-item .stat-label {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 0.85em;
+      }
+      .status {
+        padding: 15px;
+        border-radius: 10px;
+        margin-top: 15px;
+        text-align: center;
+        display: none;
+      }
+      .status.loading {
+        background: rgba(255, 215, 0, 0.2);
+        color: #ffd700;
+        display: block;
+      }
+      .status.error {
+        background: rgba(255, 100, 100, 0.2);
+        color: #ff6464;
+        display: block;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        border: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container" role="main">
+      <header>
+        <h1>Neo Scratch Cards</h1>
+        <p class="subtitle">Match 3 symbols to win instant prizes</p>
+      </header>
+
+      <section class="card" aria-labelledby="scratch-heading">
+        <h2 id="scratch-heading">Your Card</h2>
+        <div class="scratch-area">
+          <div class="scratch-grid" id="scratch-grid" role="grid" aria-label="Scratch card grid">
+            <div
+              class="scratch-cell"
+              data-index="0"
+              onclick="revealCell(0)"
+              role="gridcell"
+              aria-label="Cell 1, not revealed"
+            >
+              ?
+            </div>
+            <div
+              class="scratch-cell"
+              data-index="1"
+              onclick="revealCell(1)"
+              role="gridcell"
+              aria-label="Cell 2, not revealed"
+            >
+              ?
+            </div>
+            <div
+              class="scratch-cell"
+              data-index="2"
+              onclick="revealCell(2)"
+              role="gridcell"
+              aria-label="Cell 3, not revealed"
+            >
+              ?
+            </div>
+            <div
+              class="scratch-cell"
+              data-index="3"
+              onclick="revealCell(3)"
+              role="gridcell"
+              aria-label="Cell 4, not revealed"
+            >
+              ?
+            </div>
+            <div
+              class="scratch-cell"
+              data-index="4"
+              onclick="revealCell(4)"
+              role="gridcell"
+              aria-label="Cell 5, not revealed"
+            >
+              ?
+            </div>
+            <div
+              class="scratch-cell"
+              data-index="5"
+              onclick="revealCell(5)"
+              role="gridcell"
+              aria-label="Cell 6, not revealed"
+            >
+              ?
+            </div>
+            <div
+              class="scratch-cell"
+              data-index="6"
+              onclick="revealCell(6)"
+              role="gridcell"
+              aria-label="Cell 7, not revealed"
+            >
+              ?
+            </div>
+            <div
+              class="scratch-cell"
+              data-index="7"
+              onclick="revealCell(7)"
+              role="gridcell"
+              aria-label="Cell 8, not revealed"
+            >
+              ?
+            </div>
+            <div
+              class="scratch-cell"
+              data-index="8"
+              onclick="revealCell(8)"
+              role="gridcell"
+              aria-label="Cell 9, not revealed"
+            >
+              ?
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-reveal" id="btn-reveal" onclick="revealAll()">Reveal All</button>
+        <div id="result-box" class="result-box" aria-live="polite">
+          <div id="result-text">Result</div>
+          <div class="result-amount" id="result-amount">0 GAS</div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="buy-heading">
+        <h2 id="buy-heading">Buy New Card</h2>
+        <div class="card-types" role="radiogroup" aria-label="Card type selection">
+          <button
+            class="card-type-btn selected"
+            data-price="0.1"
+            onclick="selectCardType(0.1)"
+            role="radio"
+            aria-checked="true"
+          >
+            <div class="card-price">0.1 GAS</div>
+            <div class="card-max">Win up to 10x</div>
+          </button>
+          <button
+            class="card-type-btn"
+            data-price="0.5"
+            onclick="selectCardType(0.5)"
+            role="radio"
+            aria-checked="false"
+          >
+            <div class="card-price">0.5 GAS</div>
+            <div class="card-max">Win up to 50x</div>
+          </button>
+          <button class="card-type-btn" data-price="1" onclick="selectCardType(1)" role="radio" aria-checked="false">
+            <div class="card-price">1 GAS</div>
+            <div class="card-max">Win up to 100x</div>
+          </button>
+        </div>
+        <button class="btn btn-primary" id="btn-buy" onclick="buyCard()">Buy Card</button>
+        <div id="status" class="status" aria-live="assertive"></div>
+      </section>
+
+      <section class="card" aria-labelledby="prizes-heading">
+        <h2 id="prizes-heading">Prize Tiers</h2>
+        <div class="prize-tiers">
+          <div class="tier">
+            <div class="tier-symbols">7 7 7</div>
+            <div class="tier-prize">100x</div>
+          </div>
+          <div class="tier">
+            <div class="tier-symbols">* * *</div>
+            <div class="tier-prize">50x</div>
+          </div>
+          <div class="tier">
+            <div class="tier-symbols">$ $ $</div>
+            <div class="tier-prize">10x</div>
+          </div>
+          <div class="tier">
+            <div class="tier-symbols">+ + +</div>
+            <div class="tier-prize">5x</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="stats-heading">
+        <h2 id="stats-heading">Your Stats</h2>
+        <div class="stats-row">
+          <div class="stat-item">
+            <div class="stat-value" id="cards-played">0</div>
+            <div class="stat-label">Cards Played</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="total-won">0</div>
+            <div class="stat-label">Total Won (GAS)</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="biggest-win">0</div>
+            <div class="stat-label">Biggest Win</div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>

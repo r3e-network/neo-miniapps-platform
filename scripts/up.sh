@@ -210,10 +210,10 @@ warn_env_file_placeholders() {
   fi
 
   if grep -Eq '^SUPABASE_URL=.*your-project\.supabase\.co' "$path"; then
-    echo "WARNING: SUPABASE_URL in $path still uses the sample value from .env.example (your-project.supabase.co)." >&2
+    echo "WARNING: SUPABASE_URL in $path still uses the default value from .env.example (your-project.supabase.co)." >&2
   fi
   if grep -Eq '^SUPABASE_SERVICE_KEY=your-service-key' "$path"; then
-    echo "WARNING: SUPABASE_SERVICE_KEY in $path still uses the sample value from .env.example (your-service-key)." >&2
+    echo "WARNING: SUPABASE_SERVICE_KEY in $path still uses the default value from .env.example (your-service-key)." >&2
   fi
   if grep -Eq '^COORDINATOR_MESH_ADDR=.*\\.svc\\.cluster\\.local' "$path"; then
     echo "WARNING: COORDINATOR_MESH_ADDR in $path looks like a Kubernetes DNS name; Docker Compose marbles should use coordinator:2001." >&2
@@ -329,7 +329,7 @@ ego_signerid_from_private_key() {
 }
 
 build_signed_images() {
-  local packages=(neofeeds neoflow neoaccounts neocompute neooracle txproxy globalsigner)
+  local packages=(neofeeds neoflow neoaccounts neocompute neovrf neooracle txproxy globalsigner)
   local pkg
 
   export DOCKER_BUILDKIT=1

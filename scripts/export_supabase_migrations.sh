@@ -33,7 +33,7 @@ fi
 #
 # The mapping is deterministic based on the numeric prefix.
 
-# Keep tracked scaffolding in dest, but remove previously-exported SQL files.
+# Keep tracked layout in dest, but remove previously-exported SQL files.
 find "$DEST_DIR" -maxdepth 1 -type f -name "*.sql" -delete
 
 copied=0

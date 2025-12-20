@@ -31,7 +31,7 @@ The NeoOracle Marble service implements secure external data fetching:
                              ▼
                     ┌─────────────────┐
                     │  External APIs  │
-                    │ (api.example.com│
+                    │ (api.coingecko.com│
                     │   etc.)         │
                     └─────────────────┘
 ```
@@ -105,9 +105,9 @@ Secrets can be automatically injected into request headers:
 
 ```json
 {
-    "url": "https://api.example.com/data",
-    "secret_name": "my_api_key",
-    "secret_as_key": "X-API-Key"
+    "url": "https://api.binance.com/api/v3/account",
+    "secret_name": "binance_api_key",
+    "secret_as_key": "X-MBX-APIKEY"
 }
 ```
 
@@ -198,7 +198,7 @@ POST /query
 ```json
 POST /query
 {
-    "url": "https://api.example.com/graphql",
+    "url": "https://api.thegraph.com/subgraphs/name/neo-project/neo",
     "method": "POST",
     "headers": {
         "Content-Type": "application/json"

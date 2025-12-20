@@ -6,6 +6,7 @@ import { error, json } from "../_shared/response.ts";
 import { requireRateLimit } from "../_shared/ratelimit.ts";
 import { requireScope } from "../_shared/scopes.ts";
 import { requireAuth, requirePrimaryWallet } from "../_shared/supabase.ts";
+import { enforceUsageCaps, fetchMiniAppPolicy, permissionEnabled } from "../_shared/apps.ts";
 
 type PayGasRequest = {
   app_id: string;
@@ -41,6 +42,12 @@ export async function handler(req: Request): Promise<Response> {
   const appId = (body.app_id ?? "").trim();
   if (!appId) return error(400, "app_id required", "APP_ID_REQUIRED", req);
 
+  const policy = await fetchMiniAppPolicy(appId, req);
+  if (policy instanceof Response) return policy;
+  if (policy && !permissionEnabled(policy.permissions, "payments")) {
+    return error(403, "app is not allowed to request payments", "PERMISSION_DENIED", req);
+  }
+
   let amount;
   try {
     amount = parseDecimalToInt(String(body.amount_gas ?? ""), 8);
@@ -48,6 +55,19 @@ export async function handler(req: Request): Promise<Response> {
     return error(400, `amount_gas invalid: ${(e as Error).message}`, "AMOUNT_INVALID", req);
   }
   if (amount <= 0n) return error(400, "amount_gas must be > 0", "AMOUNT_INVALID", req);
+  if (policy?.limits.maxGasPerTx && amount > policy.limits.maxGasPerTx) {
+    return error(403, "amount_gas exceeds manifest limit", "LIMIT_EXCEEDED", req);
+  }
+  if (policy?.limits.dailyGasCapPerUser) {
+    const usageErr = await enforceUsageCaps({
+      appId,
+      userId: auth.userId,
+      gasDelta: amount,
+      gasCap: policy.limits.dailyGasCapPerUser,
+      req,
+    });
+    if (usageErr) return usageErr;
+  }
 
   const paymentHubHash = normalizeUInt160(mustGetEnv("CONTRACT_PAYMENTHUB_HASH"));
 

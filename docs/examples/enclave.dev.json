@@ -24,6 +24,7 @@
     { "name": "SUPABASE_URL", "fromHost": true },
     { "name": "SUPABASE_SERVICE_KEY", "fromHost": true },
     { "name": "NEO_RPC_URL", "fromHost": true },
+    { "name": "GASBANK_DEPOSIT_ADDRESS", "fromHost": true },
     { "name": "PORT", "fromHost": true }
   ],
   "files": [

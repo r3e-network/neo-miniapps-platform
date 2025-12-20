@@ -14,10 +14,11 @@ For the reviewed English architectural blueprint, see `docs/neo-miniapp-platform
 - `services/datafeed` (`service_id`: `neofeeds`)
 - `services/automation` (`service_id`: `neoflow`)
 - `services/confcompute` (`service_id`: `neocompute`)
+- `services/vrf` (`service_id`: `neovrf`)
 - `services/conforacle` (`service_id`: `neooracle`)
 - `services/txproxy` (`service_id`: `txproxy`)
 
-Randomness is provided via `services/confcompute` by executing scripts inside the enclave.
+Randomness is provided via `services/vrf` (NeoVRF) inside the enclave.
 
 **Infrastructure marbles** (shared capabilities):
 
@@ -37,7 +38,7 @@ Secrets are **not** a separate service: they are managed by the gateway and stor
 - `infrastructure/`: shared building blocks (runtime, middleware, chain I/O, secrets, storage helpers, account pool, global signer)
 - `services/`: product services only (see “Scope”)
 - `contracts/`: Neo N3 MiniApp platform contracts
-- `platform/`: platform scaffolds (Supabase Edge functions, JS SDK, Next.js host app)
+- `platform/`: platform layer (Supabase Edge functions, JS SDK, Next.js host app)
 - Export targets (intentionally empty in git; generated via scripts):
   - `platform/host-app/public/miniapps/` + `platform/host-app/public/sdk/` (run `make export-miniapps`)
   - `supabase/functions/` (run `make export-supabase-functions`)
@@ -58,6 +59,8 @@ Run a single service locally (outside MarbleRun) for debugging:
 
 ```bash
 SERVICE_TYPE=neocompute go run ./cmd/marble
+# Or run VRF:
+# SERVICE_TYPE=neovrf go run ./cmd/marble
 ```
 
 Supabase Edge functions are the intended public gateway. See `platform/edge/README.md` for setup and required env vars.

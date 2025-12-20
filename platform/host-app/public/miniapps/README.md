@@ -1,4 +1,4 @@
-# Demo MiniApps (Export Target)
+# MiniApps Export Target
 
 This folder is an **export target** for the canonical static MiniApps under:
 
@@ -12,4 +12,3 @@ To refresh the copies, run:
 ```bash
 ./scripts/export_host_miniapps.sh
 ```
-

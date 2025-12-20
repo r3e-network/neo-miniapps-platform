@@ -336,7 +336,7 @@ POST /api/v1/neoflow/triggers
     "schedule": "0 0 * * *",
     "action": {
         "type": "webhook",
-        "url": "https://example.com/webhook",
+        "url": "https://hooks.miniapps.com/webhook",
         "method": "POST",
         "body": { "event": "daily_price_update" }
     }
@@ -519,7 +519,7 @@ For SGX hardware deployments, ensure:
 
 ## SDK Support
 
-Platform SDK scaffolds live under `platform/sdk/` and are intended to be exposed
+Platform SDK sources live under `platform/sdk/` and are intended to be exposed
 to MiniApps as `window.MiniAppSDK` via the Next.js host (`platform/host-app/`).
 
 The older `frontend/src/api/client.ts` remains as a legacy/internal client for

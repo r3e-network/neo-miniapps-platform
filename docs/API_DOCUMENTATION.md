@@ -20,7 +20,7 @@ Key gateway endpoints in this repo:
 - `api-keys-*` (user API keys: create/list/revoke; raw key returned once)
 - `pay-gas` (PaymentHub intent; settlement **GAS only**)
 - `vote-neo` (Governance intent; governance **NEO only**)
-- `rng-request` (randomness via `neocompute` scripts; optional RandomnessLog anchoring)
+- `rng-request` (randomness via `neovrf`; optional RandomnessLog anchoring)
 - `compute-execute`, `compute-jobs`, `compute-job` (host-gated `neocompute` script execution + job inspection)
 - `automation-triggers`, `automation-trigger-*` (host-gated trigger management + audit via `neoflow`)
 - `secrets-*` (user secrets management + per-service permissions)
@@ -35,6 +35,7 @@ Stable service IDs (runtime) used throughout the repo:
 - `neofeeds` (datafeed)
 - `neooracle` (oracle fetch)
 - `neocompute` (confidential compute)
+- `neovrf` (verifiable randomness)
 - `neoflow` (automation)
 - `txproxy` (allowlisted tx signing/broadcast)
 

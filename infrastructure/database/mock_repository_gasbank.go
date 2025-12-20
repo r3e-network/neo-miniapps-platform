@@ -187,11 +187,9 @@ func (m *MockRepository) GetPendingDeposits(ctx context.Context, limit int) ([]D
 	var result []DepositRequest
 	for _, deposit := range m.depositRequests {
 		if deposit.Status == "pending" || deposit.Status == "confirming" {
-			if deposit.TxHash != "" {
-				result = append(result, *deposit)
-				if len(result) >= limit {
-					break
-				}
+			result = append(result, *deposit)
+			if len(result) >= limit {
+				break
 			}
 		}
 	}

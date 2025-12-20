@@ -84,7 +84,7 @@ err := repo.CreateTrigger(ctx, &neoflowsupabase.Trigger{
     Name:        "Daily Report",
     TriggerType: "cron",
     Schedule:    "*/5 * * * *",
-    Action:      json.RawMessage(`{"type":"webhook","url":"https://example.com/hook"}`),
+    Action:      json.RawMessage(`{"type":"webhook","url":"https://hooks.miniapps.com/hook"}`),
     Enabled:     true,
 })
 

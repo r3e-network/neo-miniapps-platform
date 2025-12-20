@@ -347,6 +347,7 @@ var canonicalServiceIDs = map[string]struct{}{
 	"neofeeds":     {},
 	"neoflow":      {},
 	"neocompute":   {},
+	"neovrf":       {},
 	"neoaccounts":  {},
 	"txproxy":      {},
 }
@@ -357,6 +358,7 @@ var serviceIDAliases = map[string]string{
 	"datafeeds":    "neofeeds",
 	"automation":   "neoflow",
 	"confidential": "neocompute",
+	"vrf":          "neovrf",
 	"tx-proxy":     "txproxy",
 }
 

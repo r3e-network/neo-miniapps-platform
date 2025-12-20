@@ -11,7 +11,9 @@ using Neo.SmartContract.Framework.Services;
 namespace NeoMiniAppPlatform.Contracts
 {
     [DisplayName("PriceFeed")]
-    [ManifestExtra("Author", "Neo MiniApp Platform")]
+    [ManifestExtra("Author", "R3E Network")]
+    [ManifestExtra("Email", "dev@r3e.network")]
+    [ManifestExtra("Version", "1.0.0")]
     [ManifestExtra("Description", "On-chain price feed anchoring with attestation hash")]
     public class PriceFeed : SmartContract
     {
@@ -118,6 +120,19 @@ namespace NeoMiniAppPlatform.Contracts
 
             PriceMap().Put(symbol, StdLib.Serialize(next));
             OnPriceUpdated(symbol, roundId, price, timestamp, attestationHash, sourceSetId);
+        }
+
+        public static void SetAdmin(UInt160 newAdmin)
+        {
+            ValidateAdmin();
+            ExecutionEngine.Assert(newAdmin != null && newAdmin.IsValid, "invalid admin");
+            Storage.Put(Storage.CurrentContext, PREFIX_ADMIN, newAdmin);
+        }
+
+        public static void UpdateContract(ByteString nefFile, string manifest)
+        {
+            ValidateAdmin();
+            ContractManagement.Update(nefFile, manifest, null);
         }
     }
 }

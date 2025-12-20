@@ -79,6 +79,18 @@ patches:
         path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1provision
         value: "1"
 
+  # NeoVRF SGX patch
+  - target:
+      kind: Deployment
+      name: neovrf
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1enclave
+        value: "1"
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits/sgx.intel.com~1provision
+        value: "1"
+
   # NeoOracle SGX patch
   - target:
       kind: Deployment

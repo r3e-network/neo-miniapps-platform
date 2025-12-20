@@ -1,7 +1,6 @@
-# Supabase Edge Functions (Scaffold)
+# Supabase Edge Functions
 
-This folder contains **reference Supabase Edge functions** (Deno) for the MiniApp
-platform.
+This folder contains **Supabase Edge functions** (Deno) for the MiniApp platform.
 
 Goals:
 
@@ -22,20 +21,23 @@ TEE routing env vars (required by functions that proxy to internal services):
 
 - `NEOFEEDS_URL`
 - `NEOCOMPUTE_URL`
+- `NEOVRF_URL`
 - `NEOORACLE_URL`
 - `NEOFLOW_URL`
 - `TXPROXY_URL`
 
 Notes:
 
-- These functions are scaffolds; wire them into your Supabase project under
-  `supabase/functions/*` (or symlink/copy from here).
+- These functions are intended to be deployed under `supabase/functions/*`
+  (or symlinked/copied from here).
 - This repo includes a helper to export a Supabase-compatible layout:
   `./scripts/export_supabase_functions.sh` (populates `supabase/functions/`).
 - In strict identity / production mode, the TEE services will only trust
   identity headers (`X-User-ID`, `X-Service-ID`) when protected by verified mTLS.
 - Authentication: most endpoints accept either `Authorization: Bearer <jwt>` or
-  `X-API-Key: <key>`. API key management endpoints (`api-keys-*`) require a JWT.
+  `X-API-Key: <key>`. Host-only endpoints (compute/automation/oracle/secrets)
+  require API keys with **explicit scopes** in production; bearer JWTs are
+  rejected there. API key management endpoints (`api-keys-*`) require a JWT.
 
 Wallet onboarding:
 
@@ -54,7 +56,8 @@ API keys:
 API key scopes:
 
 - Scopes are optional and stored as a list of strings on the key.
-- If a key has an empty scope list, it is treated as full access (backward compatible).
+- If a key has an empty scope list, it is treated as full access (backward compatible),
+  except for host-only endpoints where explicit scopes are required.
 - Recommended convention: use the Edge function name as the scope string (e.g. `pay-gas`, `secrets-get`, `oracle-query`).
 - A special `*` scope (if present) also grants full access.
 
@@ -71,7 +74,7 @@ On-chain invocations (wallet-signed):
 
 TEE-routed:
 
-- `rng-request`: executes RNG via `neocompute` scripts and can optionally anchor to `RandomnessLog` through `txproxy`.
+- `rng-request`: executes RNG via `neovrf` and can optionally anchor to `RandomnessLog` through `txproxy`.
 - `datafeed-price`: read proxy to `neofeeds` (future: cache/SSE/WebSocket).
 - `oracle-query`: allowlisted HTTP fetch via `neooracle` (optional secret injection).
 - `compute-execute`, `compute-jobs`, `compute-job`: host-gated proxy for `neocompute` script execution and job inspection.

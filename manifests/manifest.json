@@ -42,6 +42,20 @@
         "OutOfDateConfigurationNeeded"
       ]
     },
+    "neovrf": {
+      "SignerID": "0000000000000000000000000000000000000000000000000000000000000000",
+      "ProductID": 1,
+      "SecurityVersion": 1,
+      "Debug": false,
+      "AcceptedTCBStatuses": [
+        "UpToDate",
+        "SWHardeningNeeded",
+        "ConfigurationAndSWHardeningNeeded",
+        "ConfigurationNeeded",
+        "OutOfDate",
+        "OutOfDateConfigurationNeeded"
+      ]
+    },
     "neoaccounts": {
       "SignerID": "ca015eb0538d3d0232ca24299d4cd8df49d163f436860841b2f1442458484b13",
       "ProductID": 1,
@@ -124,6 +138,11 @@
       "Size": 256,
       "Shared": true
     },
+    "NEOVRF_SIGNING_KEY": {
+      "Type": "symmetric-key",
+      "Size": 256,
+      "Shared": true
+    },
     "COMPUTE_MASTER_KEY": {
       "Type": "symmetric-key",
       "Size": 256,
@@ -185,6 +204,21 @@
           "SERVICE_TYPE": "neocompute",
           "COMPUTE_MASTER_KEY": "{{ hex .Secrets.COMPUTE_MASTER_KEY.Private }}",
           "SECRETS_MASTER_KEY": "{{ hex .Secrets.SECRETS_MASTER_KEY.Private }}",
+          "MARBLE_CERT": "{{ pem .MarbleRun.MarbleCert.Cert }}",
+          "MARBLE_KEY": "{{ pem .MarbleRun.MarbleCert.Private }}",
+          "MARBLE_ROOT_CA": "{{ pem .MarbleRun.RootCA.Cert }}"
+        }
+      }
+    },
+    "neovrf": {
+      "Package": "neovrf",
+      "MaxActivations": 100,
+      "Parameters": {
+        "Argv": ["./service"],
+        "Env": {
+          "EDG_MARBLE_TYPE": "neovrf",
+          "SERVICE_TYPE": "neovrf",
+          "NEOVRF_SIGNING_KEY": "{{ hex .Secrets.NEOVRF_SIGNING_KEY.Private }}",
           "MARBLE_CERT": "{{ pem .MarbleRun.MarbleCert.Cert }}",
           "MARBLE_KEY": "{{ pem .MarbleRun.MarbleCert.Private }}",
           "MARBLE_ROOT_CA": "{{ pem .MarbleRun.RootCA.Cert }}"

@@ -1,0 +1,360 @@
+.root {
+  margin: 24px auto;
+  max-width: 1100px;
+  padding: 24px;
+  border-radius: 20px;
+  background: #0c1226;
+  border: 1px solid #1f2a48;
+  color: #e8edff;
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+
+.root * {
+  box-sizing: border-box;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.title {
+  margin: 0 0 6px;
+  font-size: 26px;
+}
+
+.subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: #9aa4c4;
+}
+
+.sdkPanel {
+  min-width: 220px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #101a33;
+  border: 1px solid #263458;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sdkLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #7f8ab0;
+}
+
+.sdkBadge {
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sdkReady {
+  background: rgba(60, 200, 120, 0.15);
+  color: #8ef0b5;
+  border: 1px solid rgba(60, 200, 120, 0.4);
+}
+
+.sdkMissing {
+  background: rgba(255, 170, 80, 0.15);
+  color: #ffd4a1;
+  border: 1px solid rgba(255, 170, 80, 0.4);
+}
+
+.walletRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.walletAddress {
+  font-size: 12px;
+  color: #c8d4f4;
+  word-break: break-all;
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.navButton,
+.navButtonActive {
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  border: 1px solid #28355a;
+  background: transparent;
+  color: #b7c4e6;
+  cursor: pointer;
+}
+
+.navButtonActive {
+  background: #335cff;
+  border-color: #335cff;
+  color: #fff;
+}
+
+.card {
+  padding: 18px;
+  border-radius: 16px;
+  background: #10182f;
+  border: 1px solid #223154;
+}
+
+.cardHeader {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 18px;
+}
+
+.cardSummary {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #9aa4c4;
+}
+
+.appId {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid #2a3a61;
+  font-size: 11px;
+  color: #9aa4c4;
+}
+
+.section {
+  margin-top: 16px;
+}
+
+.sectionTitle {
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: #cbd6f7;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.cardInset {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid #23325a;
+  background: #0b1124;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.inputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 12px;
+  color: #9aa4c4;
+}
+
+.input {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #263458;
+  background: #0b1020;
+  color: #e8edff;
+  font-size: 14px;
+}
+
+.buttonRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.buttonPrimary,
+.buttonSecondary {
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.buttonPrimary {
+  border: none;
+  background: #335cff;
+  color: #fff;
+}
+
+.buttonSecondary {
+  border: 1px solid #335cff;
+  background: transparent;
+  color: #bcd0ff;
+}
+
+.quickRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.quickButton,
+.quickActive {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(51, 92, 255, 0.3);
+  background: transparent;
+  color: #9aa4c4;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.quickActive {
+  background: rgba(51, 92, 255, 0.2);
+  border-color: #335cff;
+  color: #fff;
+}
+
+.status {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #2a3a61;
+  background: #0d1426;
+  color: #c7d2f5;
+  font-size: 12px;
+}
+
+.statusError {
+  background: #2a1521;
+  border-color: #5a2a3e;
+  color: #ffb4c0;
+}
+
+.statusSuccess {
+  background: #152a1d;
+  border-color: #2a5a3c;
+  color: #bff5c9;
+}
+
+.choiceGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 8px;
+}
+
+.choiceButton,
+.choiceActive {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #2a3a61;
+  background: transparent;
+  color: #c4d0f4;
+  cursor: pointer;
+  font-size: 13px;
+  text-transform: capitalize;
+}
+
+.choiceActive {
+  background: rgba(51, 92, 255, 0.25);
+  border-color: #335cff;
+  color: #fff;
+}
+
+.kpiRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.kpiCard {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid #203052;
+  background: #0b1020;
+  min-width: 120px;
+}
+
+.kpiLabel {
+  font-size: 11px;
+  color: #9aa4c4;
+}
+
+.kpiValue {
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.historyList {
+  display: grid;
+  gap: 6px;
+}
+
+.historyItem {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #23325a;
+  background: #0b1020;
+  font-size: 12px;
+  color: #c4d0f4;
+}
+
+.badgeWin,
+.badgeLoss {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.badgeWin {
+  background: rgba(60, 200, 120, 0.15);
+  color: #8ef0b5;
+}
+
+.badgeLoss {
+  background: rgba(255, 120, 120, 0.15);
+  color: #ffb3c0;
+}
+
+.emptyState {
+  font-size: 12px;
+  color: #9aa4c4;
+}
+
+.resultBox {
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #23325a;
+  background: #0b1020;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

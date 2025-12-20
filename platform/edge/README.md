@@ -1,7 +1,7 @@
 # Supabase Edge (Gateway)
 
-This folder contains **Supabase Edge Functions** scaffolds for the MiniApp
-platform. The intended architecture is a **thin gateway**:
+This folder contains **Supabase Edge Functions** for the MiniApp platform. The
+intended architecture is a **thin gateway**:
 
 - Auth via **Supabase Auth (GoTrue)**.
 - Stateless request validation + rate limiting (backed by Postgres `rate_limits`).
@@ -9,7 +9,7 @@ platform. The intended architecture is a **thin gateway**:
   - **payments/settlement = GAS only**
   - **governance = NEO only**
 - Forward sensitive requests to the **TEE services** over **mTLS** (attested TLS
-  inside MarbleRun).
+  inside MarbleRun; **required in production**).
 
 ## Functions
 
@@ -33,7 +33,7 @@ See `platform/edge/functions/`:
 - `vote-neo`: returns a Governance `vote` invocation (NEO-only).
 - `app-register`: validates a `manifest`, computes `manifest_hash`, and returns an AppRegistry `register` invocation (developer wallet-signed).
 - `app-update-manifest`: validates a `manifest`, computes `manifest_hash`, and returns an AppRegistry `updateManifest` invocation (developer wallet-signed).
-- `rng-request`: runs RNG via `neocompute` (no dedicated `vrf-service` in this repo).
+- `rng-request`: runs RNG via `neovrf` (signature + attestation hash).
 - `compute-execute`: runs a script via `neocompute` (`/execute`) (host-gated).
 - `compute-jobs`: lists compute jobs via `neocompute` (`/jobs`) (host-gated).
 - `compute-job`: gets a compute job via `neocompute` (`/jobs/{id}`) (host-gated; uses `?id=`).
@@ -59,10 +59,17 @@ At minimum, these functions expect:
 - `SUPABASE_SERVICE_ROLE_KEY` (preferred) or `SUPABASE_SERVICE_KEY` (fallback; used by Go services)
 - `SECRETS_MASTER_KEY` (required for `secrets-*` endpoints; AES-GCM envelope key)
 
+`app-register` and `app-update-manifest` also persist canonical manifests into the
+Supabase `miniapps` table. Runtime endpoints (`pay-gas`, `vote-neo`, `rng-request`)
+use that table to enforce manifest permissions and per-tx limits.
+Daily cap enforcement uses the `miniapp_usage` table and the
+`miniapp_usage_bump(...)` RPC (see `migrations/026_miniapp_usage.sql`).
+
 TEE routing env vars (required by functions that proxy to internal services):
 
 - `NEOFEEDS_URL`
 - `NEOCOMPUTE_URL`
+- `NEOVRF_URL`
 - `NEOORACLE_URL`
 - `NEOFLOW_URL`
 - `TXPROXY_URL`
@@ -71,6 +78,9 @@ Most endpoints accept either:
 
 - `Authorization: Bearer <jwt>` (Supabase Auth), or
 - `X-API-Key: <key>` (user API keys; used for secrets/gasbank/etc.)
+
+Host-only endpoints (compute/automation/oracle/secrets) require **API keys with
+explicit scopes** in production; bearer JWTs are rejected there.
 
 API key management endpoints (`api-keys-*`) require `Authorization: Bearer <jwt>`.
 
@@ -103,6 +113,9 @@ The Edge functions are Deno code. To typecheck locally (requires Deno installed)
 cd platform/edge
 deno task check
 ```
+
+`deno.json` sets `compilerOptions.skipLibCheck` to avoid upstream `.d.ts`
+issues from `esm.sh` dependencies (Supabase SDK).
 
 ## Local Dev Server (No Supabase CLI)
 
@@ -140,8 +153,8 @@ set:
 
 ## mTLS to TEE
 
-The shared helper `platform/edge/functions/_shared/tee.ts` supports optional
-mTLS when these env vars are present:
+The shared helper `platform/edge/functions/_shared/tee.ts` enforces **mTLS in
+production** and rejects non-HTTPS service URLs. Provide these env vars:
 
 - `TEE_MTLS_CERT_PEM`: client certificate chain (PEM)
 - `TEE_MTLS_KEY_PEM`: client private key (PEM)

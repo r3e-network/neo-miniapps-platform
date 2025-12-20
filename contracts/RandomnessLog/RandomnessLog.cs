@@ -11,7 +11,9 @@ using Neo.SmartContract.Framework.Services;
 namespace NeoMiniAppPlatform.Contracts
 {
     [DisplayName("RandomnessLog")]
-    [ManifestExtra("Author", "Neo MiniApp Platform")]
+    [ManifestExtra("Author", "R3E Network")]
+    [ManifestExtra("Email", "dev@r3e.network")]
+    [ManifestExtra("Version", "1.0.0")]
     [ManifestExtra("Description", "On-chain randomness anchoring with attestation hash")]
     public class RandomnessLog : SmartContract
     {
@@ -116,6 +118,19 @@ namespace NeoMiniAppPlatform.Contracts
 
             RecordMap().Put(key, StdLib.Serialize(rec));
             OnRandomnessRecorded(requestId, randomness, attestationHash, timestamp);
+        }
+
+        public static void SetAdmin(UInt160 newAdmin)
+        {
+            ValidateAdmin();
+            ExecutionEngine.Assert(newAdmin != null && newAdmin.IsValid, "invalid admin");
+            Storage.Put(Storage.CurrentContext, PREFIX_ADMIN, newAdmin);
+        }
+
+        public static void Update(ByteString nefFile, string manifest)
+        {
+            ValidateAdmin();
+            ContractManagement.Update(nefFile, manifest, null);
         }
     }
 }

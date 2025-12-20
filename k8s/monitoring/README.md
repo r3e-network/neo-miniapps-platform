@@ -216,9 +216,9 @@ receivers:
 
   - name: "email"
     email_configs:
-      - to: "ops@example.com"
-        from: "alertmanager@example.com"
-        smarthost: "smtp.example.com:587"
+      - to: "ops@miniapps.com"
+        from: "alertmanager@miniapps.com"
+        smarthost: "smtp.miniapps.com:587"
         auth_username: "alertmanager"
         # ⚠️ 生产环境: 使用 Secret 管理凭据，不要硬编码密码
         # auth_password 应从 Secret 读取或使用 auth_password_file

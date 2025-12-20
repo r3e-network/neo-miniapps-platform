@@ -29,8 +29,11 @@ Service Layer as described in `docs/ARCHITECTURE.md`.
 - `SUPABASE_ANON_KEY` (Edge validates `Authorization: Bearer <jwt>`)
 - `SUPABASE_SERVICE_ROLE_KEY` (Edge reads/writes `public.*` platform tables)
 - `SECRETS_MASTER_KEY` (hex-encoded 32 bytes)
+- Host-only endpoints (oracle/compute/automation/secrets) require API keys with explicit scopes in production
 - `rate_limit_bump(...)` RPC available in Postgres (see `migrations/024_rate_limit_bump.sql`) if you enable gateway rate limiting in production
-- Optional: `TEE_MTLS_CERT_PEM`, `TEE_MTLS_KEY_PEM`, `TEE_MTLS_ROOT_CA_PEM` when connecting Edge → TEE services over mTLS
+- `miniapps` table available (see `migrations/025_miniapps.sql`) for manifest/limit enforcement
+- `miniapp_usage` table + `miniapp_usage_bump(...)` RPC available (see `migrations/026_miniapp_usage.sql`) for daily cap enforcement
+- `TEE_MTLS_CERT_PEM`, `TEE_MTLS_KEY_PEM`, `TEE_MTLS_ROOT_CA_PEM` for Edge → TEE mTLS (required in production; Edge rejects non-HTTPS TEE URLs)
 
 ### Enclave Workloads
 
@@ -40,6 +43,7 @@ Injected via MarbleRun secrets (values depend on which services you run):
 - `GLOBALSIGNER_MASTER_SEED` for GlobalSigner
 - `NEOFEEDS_SIGNING_KEY` for Datafeeds
 - `COMPUTE_MASTER_KEY` for Confidential Compute
+- `GASBANK_DEPOSIT_ADDRESS` (public) for GasBank deposit verification
 - `TEE_PRIVATE_KEY` (fallback only) if `txproxy` cannot use GlobalSigner and must sign/broadcast directly
 
 ## Chain / Contract Configuration

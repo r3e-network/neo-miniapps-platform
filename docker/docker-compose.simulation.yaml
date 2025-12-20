@@ -162,6 +162,38 @@ services:
     restart: unless-stopped
 
   # =============================================================================
+  # NeoVRF Service Marble - Simulation Mode
+  # =============================================================================
+  neovrf:
+    image: service-layer/neovrf:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: neovrf
+        EGO_VERSION: ${EGO_VERSION:-1.8.0}
+        EGO_STRICT_SIGNING: 0
+    container_name: service-neovrf
+    ports:
+      - 127.0.0.1:${NEOVRF_PORT:-8087}:${NEOVRF_PORT:-8087}
+    environment:
+      - EDG_MARBLE_COORDINATOR_ADDR=${COORDINATOR_MESH_ADDR:-coordinator:2001}
+      - EDG_MARBLE_TYPE=neovrf
+      - EDG_MARBLE_DNS_NAMES=localhost,neovrf,vrf
+      - SERVICE_TYPE=neovrf
+      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - PORT=${NEOVRF_PORT:-8087}
+      - MARBLE_ENV=${MARBLE_ENV:-development}
+      - METRICS_ENABLED
+      - SUPABASE_URL
+      - SUPABASE_SERVICE_KEY
+      - NEO_RPC_URL
+      - NEO_NETWORK_MAGIC
+    depends_on:
+      - coordinator
+    restart: unless-stopped
+
+  # =============================================================================
   # NeoOracle Service Marble - Simulation Mode
   # =============================================================================
   neooracle:

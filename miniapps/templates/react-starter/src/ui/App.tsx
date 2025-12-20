@@ -11,8 +11,8 @@ export function App() {
   }, []);
 
   const [status, setStatus] = useState("");
-  const [appId, setAppId] = useState("com.user.react-starter");
-  const [symbol, setSymbol] = useState("NEOUSD");
+  const [appId, setAppId] = useState("com.miniapps.react-starter");
+  const [symbol, setSymbol] = useState("NEO-USD");
   const [amountGas, setAmountGas] = useState("0.1");
   const [proposalId, setProposalId] = useState("proposal-1");
   const [neoAmount, setNeoAmount] = useState("1");
@@ -29,7 +29,7 @@ export function App() {
 
   return (
     <div style={{ fontFamily: "ui-sans-serif, system-ui", padding: 16, maxWidth: 820 }}>
-      <h1 style={{ margin: 0 }}>Neo MiniApp (React Starter)</h1>
+      <h1 style={{ margin: 0 }}>Neo MiniApp (React Starter Kit)</h1>
       <p style={{ marginTop: 8, color: "#444" }}>
         Uses <code>window.MiniAppSDK</code> (injected by the host or bridged via postMessage).
       </p>
@@ -57,6 +57,10 @@ export function App() {
             onClick={() =>
               run(async () => {
                 const intent = await sdk!.payments.payGAS(appId, amountGas, "hello");
+                if (sdk!.wallet.invokeIntent) {
+                  const tx = await sdk!.wallet.invokeIntent(intent.request_id);
+                  return { intent, tx };
+                }
                 if (!sdk!.wallet.invokeInvocation) return intent;
                 const tx = await sdk!.wallet.invokeInvocation(intent.invocation);
                 return { intent, tx };
@@ -103,6 +107,10 @@ export function App() {
             onClick={() =>
               run(async () => {
                 const intent = await sdk!.governance.vote(appId, proposalId, neoAmount, true);
+                if (sdk!.wallet.invokeIntent) {
+                  const tx = await sdk!.wallet.invokeIntent(intent.request_id);
+                  return { intent, tx };
+                }
                 if (!sdk!.wallet.invokeInvocation) return intent;
                 const tx = await sdk!.wallet.invokeInvocation(intent.invocation);
                 return { intent, tx };
@@ -130,4 +138,3 @@ export function App() {
     </div>
   );
 }
-

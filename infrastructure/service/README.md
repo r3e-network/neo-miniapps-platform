@@ -313,7 +313,7 @@ func (b *BaseService) Stop() error {
 All Neo Service Layer services extend BaseService:
 
 - **Datafeeds (NeoFeeds)**: Price feed aggregation
-- **Randomness**: Provided via NeoCompute scripts (no dedicated VRF service)
+- **Randomness (NeoVRF)**: Verifiable randomness service (signature + attestation)
 - **Automation (NeoFlow)**: Task automation
 - **Confidential Oracle (NeoOracle)**: External fetch with controls
 - **Confidential Compute (NeoCompute)**: Restricted JS execution

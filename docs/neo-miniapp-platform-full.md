@@ -2,7 +2,7 @@
 
 > 约束：支付/结算 **仅 GAS**；治理 **仅 NEO**（不再支持 bNEO）；服务层基于 **MarbleRun + EGo (SGX TEE)**；网关/数据用 **Supabase**；宿主前端 **Vercel + Next.js + 微前端**；包含高频 **Datafeed（≥0.1% 变动推送）**、VRF、Oracle、机密计算、自动化。
 >
-> 实现备注（本仓库）：为减少重复代码，`VRF` 功能可通过在 `compute-service`（`neocompute`）内执行受限脚本来提供；如需独立 `vrf-service`，可在此规范基础上再拆分为单独服务。
+> 实现备注（本仓库）：已提供独立 `vrf-service`（`neovrf`）用于随机数生成与签名证明；`compute-service`（`neocompute`）专注机密计算。
 
 ---
 
@@ -31,22 +31,23 @@ neo-miniapp-platform/
 ├─ services/            # TEE 服务层（MarbleRun + EGo）
 │  ├─ oracle-gateway/   # 隐私预言机/Datafeed 拉取+聚合
 │  ├─ datafeed-service/ # 高频价格推送（≥0.1% 变动），含阈值/去抖
-│  ├─ compute-service/  # 机密计算（可选 wasm/脚本；可提供 RNG/VRF 脚本）
+│  ├─ vrf-service/      # 随机数服务（VRF）
+│  ├─ compute-service/  # 机密计算（可选 wasm/脚本）
 │  ├─ automation-service/# Keeper/定时/事件触发
 │  ├─ tx-proxy/         # 交易签名/广播，资产&方法白名单
 │  └─ marblerun/        # policy.json / manifest.json / CA
 │
 ├─ platform/
 │  ├─ host-app/         # 前端宿主（Next.js/Vercel）
+│  ├─ builtin-app/      # 内置小程序（Module Federation 远程）
 │  ├─ sdk/              # JS SDK（payGAS/vote/rng/datafeed）
 │  ├─ edge/             # Supabase Edge（鉴权/限流/路由）
 │  ├─ rls/              # Supabase RLS 策略 SQL
 │  └─ admin-console/    # 审核/运维后台（可选）
 │
 ├─ miniapps/
-│  ├─ builtin/          # 官方内置：game-lite, raffle, automation-demo, price-ticker
-│  └─ community/        # 模板/示例
-│      └─ template/     # Manifest + 前端脚手架
+│  ├─ builtin/          # 官方内置：coin-flip, dice-game, scratch-card, lottery, prediction-market, flashloan, price-ticker
+│  └─ templates/        # 开发者 starter kits（React + HTML）
 │
 ├─ docker/              # dev/test 容器编排（Supabase 等）
 ├─ deploy/              # neo-express 配置 + 部署脚本
@@ -77,7 +78,7 @@ neo-miniapp-platform/
 - datafeed-service：多源聚合，触发阈值 0.1%，hysteresis 0.08%，最小发布间隔 2~5s，最大发布频率/符号（如每分钟 ≤30）；异常偏差需多源一致/二次确认；写 PriceFeed。
 - oracle-gateway：外部数据抓取/聚合/校验 → 回调链上或存证。
 - compute-service：受限脚本/wasm 计算 → 结果+报告 → 可回调链上。
-- randomness（RNG/VRF）：通过 compute-service 执行受限脚本提供 → (randomness, attestation) → RandomnessLog 或回调。
+- randomness（RNG/VRF）：通过 vrf-service 生成 → (randomness, signature, attestation) → RandomnessLog 或回调。
 - automation-service：事件/时间触发 → 调用目标合约（allowlist）。
 - tx-proxy：签名/广播；资产仅 GAS/NEO；方法白名单；mTLS；防重放/额度检查。
 - marblerun：policy/manifest 管理 MRSIGNER/MRENCLAVE、证书与密钥注入、轮换。
@@ -91,7 +92,7 @@ neo-miniapp-platform/
 await window.MiniAppSDK.wallet.getAddress();
 await window.MiniAppSDK.payments.payGAS(appId, "1.5", "entry fee");
 const { randomness, reportHash } = await window.MiniAppSDK.rng.requestRandom(appId);
-await window.MiniAppSDK.governance.vote(appId, proposalId, "10", "NEO");
+await window.MiniAppSDK.governance.vote(appId, proposalId, "10");
 const price = await window.MiniAppSDK.datafeed.getPrice("BTC-USD");
 ```
 - 小程序禁止自构交易；敏感操作经 SDK → Edge → TEE → 链上。
@@ -110,11 +111,11 @@ const price = await window.MiniAppSDK.datafeed.getPrice("BTC-USD");
 ```json
 {
   "app_id": "your-app-id",
-  "entry_url": "https://cdn.example.com/apps/demo/index.html",
-  "name": "Demo Miniapp",
+  "entry_url": "https://cdn.miniapps.com/apps/neo-game/index.html",
+  "name": "Neo MiniApp",
   "version": "1.0.0",
   "developer_pubkey": "0x...",
-  "permissions": { "wallet": ["read-address"], "payments": true, "governance": false, "randomness": true, "datafeed": true, "storage": ["kv"] },
+  "permissions": { "wallet": ["read-address"], "payments": true, "governance": false, "rng": true, "datafeed": true, "storage": ["kv"] },
   "assets_allowed": ["GAS"],
   "governance_assets_allowed": ["NEO"],
   "limits": { "max_gas_per_tx": "5", "daily_gas_cap_per_user": "20", "governance_cap": "100" },
@@ -154,15 +155,15 @@ const price = await window.MiniAppSDK.datafeed.getPrice("BTC-USD");
 
 ## 10. MVP 里程碑
 1) 测试网部署：PaymentHub(GAS)、Governance(NEO)、PriceFeed、RandomnessLog、AppRegistry、AutomationAnchor。
-2) 服务：compute-service（含 RNG/VRF 脚本） + datafeed-service(0.1% 阈值) + tx-proxy（EGo 仿真），MarbleRun dev policy。
+2) 服务：vrf-service + compute-service + datafeed-service(0.1% 阈值) + tx-proxy（EGo 仿真），MarbleRun dev policy。
 3) 平台：Next.js 宿主 + SDK + iframe；Edge 鉴权/限流；Supabase 本地/云。
-4) 内置小程序：`game-lite`、`raffle`、`automation-demo`、`price-ticker`。
+4) 内置小程序：`coin-flip`、`dice-game`、`scratch-card`、`lottery`、`prediction-market`、`flashloan`、`price-ticker`。
 5) CI 打通：合约单测、EGo 构建、前端/Edge 构建与安全检查。
 
 ---
 
 ## 11. 开发者（小程序）流程
-1) 用模板创建前端；填 manifest（assets_allowed 仅 GAS，governance_assets_allowed 仅 NEO）。
+1) 用 starter kit 创建前端；填 manifest（assets_allowed 仅 GAS，governance_assets_allowed 仅 NEO）。
 2) 接入 `window.MiniAppSDK`（payGAS / rng / datafeed / vote）。
 3) 本地：neo-express + Supabase 本地 + SDK Mock/TEE 仿真，自测支付/随机数/价格订阅。
 4) 打包前端，提交 manifest（由 Edge 计算 `manifest_hash`）并提交审核；（若有）合约部署测试网。
@@ -172,9 +173,9 @@ const price = await window.MiniAppSDK.datafeed.getPrice("BTC-USD");
 
 ## 12. 可立即提供的文件（按需索取）
 - 合约骨架（C#）：PaymentHub / Governance(NEO-only) / PriceFeed / RandomnessLog / AppRegistry / AutomationAnchor
-- EGo/MarbleRun：policy.json / manifest.json 示例；compute-service（含 RNG/VRF 脚本） & datafeed-service & tx-proxy 壳
-- Supabase：RLS SQL + Edge 路由模板（鉴权/限流/资产预检/mTLS 转发）
-- 前端：Next.js 宿主 + Module Federation 脚手架 + JS SDK（payGAS/vote/rng/datafeed）
+- EGo/MarbleRun：policy.json / manifest.json 示例；vrf-service & compute-service & datafeed-service & tx-proxy 壳
+- Supabase：RLS SQL + Edge 路由实现（鉴权/限流/资产预检/mTLS 转发）
+- 前端：Next.js 宿主 + Module Federation 组件 + JS SDK（payGAS/vote/rng/datafeed）
 - Dev：neo-express 配置、一键本地脚本、Supabase docker-compose
 
 请告知优先要的模块，我将直接给出对应文件内容。

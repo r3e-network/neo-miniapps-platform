@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Neo Predictions - Bet on crypto price movements and win" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src https://*; img-src 'self' data: https:;"
+    />
+    <title>Neo Predictions</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%);
+        color: #fff;
+        min-height: 100vh;
+        padding: 20px;
+      }
+      .container {
+        max-width: 600px;
+        margin: 0 auto;
+      }
+      h1 {
+        text-align: center;
+        margin-bottom: 10px;
+        color: #00d9ff;
+        font-size: 2em;
+      }
+      .subtitle {
+        text-align: center;
+        color: #888;
+        margin-bottom: 30px;
+      }
+      .card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 20px;
+        backdrop-filter: blur(10px);
+      }
+      .card h2 {
+        color: #00d9ff;
+        margin-bottom: 20px;
+        font-size: 1.3em;
+      }
+      .price-display {
+        text-align: center;
+        padding: 30px;
+        background: rgba(0, 217, 255, 0.1);
+        border-radius: 16px;
+        margin-bottom: 20px;
+      }
+      .asset-name {
+        font-size: 1.2em;
+        color: #888;
+        margin-bottom: 10px;
+      }
+      .current-price {
+        font-size: 3em;
+        font-weight: bold;
+        color: #00d9ff;
+      }
+      .price-change {
+        font-size: 1.2em;
+        margin-top: 10px;
+      }
+      .price-change.up {
+        color: #00ff88;
+      }
+      .price-change.down {
+        color: #ff6464;
+      }
+      .round-info {
+        display: flex;
+        justify-content: space-between;
+        padding: 15px;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 10px;
+        margin-bottom: 20px;
+      }
+      .round-item {
+        text-align: center;
+      }
+      .round-label {
+        color: #888;
+        font-size: 0.85em;
+      }
+      .round-value {
+        font-size: 1.2em;
+        font-weight: bold;
+        color: #fff;
+      }
+      .countdown {
+        color: #ff6b6b;
+      }
+      .prediction-buttons {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 20px;
+      }
+      .pred-btn {
+        flex: 1;
+        padding: 25px;
+        border: 3px solid;
+        border-radius: 16px;
+        background: transparent;
+        font-size: 1.3em;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+      .pred-btn:focus {
+        outline: 2px solid #fff;
+        outline-offset: 2px;
+      }
+      .pred-btn.up {
+        border-color: #00ff88;
+        color: #00ff88;
+      }
+      .pred-btn.up:hover {
+        background: rgba(0, 255, 136, 0.2);
+      }
+      .pred-btn.up.selected {
+        background: rgba(0, 255, 136, 0.3);
+      }
+      .pred-btn.down {
+        border-color: #ff6464;
+        color: #ff6464;
+      }
+      .pred-btn.down:hover {
+        background: rgba(255, 100, 100, 0.2);
+      }
+      .pred-btn.down.selected {
+        background: rgba(255, 100, 100, 0.3);
+      }
+      .pred-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .pool-info {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 20px;
+      }
+      .pool-side {
+        flex: 1;
+        text-align: center;
+        padding: 15px;
+        border-radius: 10px;
+      }
+      .pool-side.up {
+        background: rgba(0, 255, 136, 0.1);
+      }
+      .pool-side.down {
+        background: rgba(255, 100, 100, 0.1);
+      }
+      .pool-amount {
+        font-size: 1.5em;
+        font-weight: bold;
+      }
+      .pool-side.up .pool-amount {
+        color: #00ff88;
+      }
+      .pool-side.down .pool-amount {
+        color: #ff6464;
+      }
+      .pool-label {
+        color: #888;
+        font-size: 0.85em;
+      }
+      .input-group {
+        margin-bottom: 20px;
+      }
+      .input-group label {
+        display: block;
+        color: #888;
+        margin-bottom: 8px;
+      }
+      .input-group input {
+        width: 100%;
+        padding: 15px;
+        border: 2px solid rgba(0, 217, 255, 0.3);
+        border-radius: 10px;
+        background: rgba(0, 0, 0, 0.3);
+        color: #fff;
+        font-size: 1.2em;
+        text-align: center;
+      }
+      .input-group input:focus {
+        outline: none;
+        border-color: #00d9ff;
+      }
+      .quick-amounts {
+        display: flex;
+        gap: 10px;
+        margin-top: 10px;
+      }
+      .quick-btn {
+        flex: 1;
+        padding: 10px;
+        border: 1px solid rgba(0, 217, 255, 0.3);
+        border-radius: 8px;
+        background: transparent;
+        color: #888;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+      .quick-btn:hover {
+        border-color: #00d9ff;
+        color: #00d9ff;
+      }
+      .payout-info {
+        display: flex;
+        justify-content: space-between;
+        padding: 15px;
+        background: rgba(255, 215, 0, 0.1);
+        border-radius: 10px;
+        margin-bottom: 20px;
+      }
+      .payout-label {
+        color: #888;
+      }
+      .payout-value {
+        color: #ffd700;
+        font-weight: bold;
+        font-size: 1.2em;
+      }
+      .btn {
+        width: 100%;
+        padding: 18px;
+        border: none;
+        border-radius: 12px;
+        font-size: 1.2em;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+      .btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .btn:focus {
+        outline: 2px solid #00d9ff;
+        outline-offset: 2px;
+      }
+      .btn-primary {
+        background: linear-gradient(90deg, #00d9ff, #00ff88);
+        color: #000;
+      }
+      .history-list {
+        max-height: 250px;
+        overflow-y: auto;
+      }
+      .history-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      }
+      .history-item.win {
+        background: rgba(0, 255, 136, 0.05);
+      }
+      .history-item.lose {
+        background: rgba(255, 100, 100, 0.05);
+      }
+      .history-item.pending {
+        background: rgba(255, 215, 0, 0.05);
+      }
+      .history-pred {
+        font-weight: bold;
+      }
+      .history-pred.up {
+        color: #00ff88;
+      }
+      .history-pred.down {
+        color: #ff6464;
+      }
+      .history-result {
+        font-weight: bold;
+      }
+      .history-result.win {
+        color: #00ff88;
+      }
+      .history-result.lose {
+        color: #ff6464;
+      }
+      .history-result.pending {
+        color: #ffd700;
+      }
+      .status {
+        padding: 15px;
+        border-radius: 10px;
+        margin-top: 15px;
+        text-align: center;
+        display: none;
+      }
+      .status.success {
+        background: rgba(0, 255, 136, 0.2);
+        color: #00ff88;
+        display: block;
+      }
+      .status.error {
+        background: rgba(255, 100, 100, 0.2);
+        color: #ff6464;
+        display: block;
+      }
+      .status.loading {
+        background: rgba(0, 217, 255, 0.2);
+        color: #00d9ff;
+        display: block;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        border: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container" role="main">
+      <header>
+        <h1>Neo Predictions</h1>
+        <p class="subtitle">Predict price movements, win rewards</p>
+      </header>
+
+      <section class="card" aria-labelledby="price-heading">
+        <h2 id="price-heading">Current Price</h2>
+        <div class="price-display">
+          <div class="asset-name">NEO/USD</div>
+          <div class="current-price" id="current-price" aria-live="polite">$0.00</div>
+          <div class="price-change up" id="price-change" aria-live="polite">+0.00%</div>
+        </div>
+        <div class="round-info">
+          <div class="round-item">
+            <div class="round-label">Round</div>
+            <div class="round-value" id="round-id">#1</div>
+          </div>
+          <div class="round-item">
+            <div class="round-label">Lock Price</div>
+            <div class="round-value" id="lock-price">$0.00</div>
+          </div>
+          <div class="round-item">
+            <div class="round-label">Time Left</div>
+            <div class="round-value countdown" id="countdown">5:00</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="predict-heading">
+        <h2 id="predict-heading">Make Prediction</h2>
+        <div class="pool-info">
+          <div class="pool-side up">
+            <div class="pool-amount" id="up-pool">0 GAS</div>
+            <div class="pool-label">UP Pool</div>
+          </div>
+          <div class="pool-side down">
+            <div class="pool-amount" id="down-pool">0 GAS</div>
+            <div class="pool-label">DOWN Pool</div>
+          </div>
+        </div>
+        <form
+          id="predict-form"
+          onsubmit="
+            event.preventDefault();
+            placePrediction();
+          "
+        >
+          <div class="prediction-buttons" role="radiogroup" aria-label="Prediction direction">
+            <button
+              type="button"
+              class="pred-btn up selected"
+              data-direction="up"
+              onclick="selectDirection('up')"
+              role="radio"
+              aria-checked="true"
+            >
+              UP
+            </button>
+            <button
+              type="button"
+              class="pred-btn down"
+              data-direction="down"
+              onclick="selectDirection('down')"
+              role="radio"
+              aria-checked="false"
+            >
+              DOWN
+            </button>
+          </div>
+          <div class="input-group">
+            <label for="bet-amount">Bet Amount (GAS)</label>
+            <input type="number" id="bet-amount" value="1" min="0.1" max="100" step="0.1" required />
+            <div class="quick-amounts">
+              <button type="button" class="quick-btn" onclick="setAmount(0.5)">0.5</button>
+              <button type="button" class="quick-btn" onclick="setAmount(1)">1</button>
+              <button type="button" class="quick-btn" onclick="setAmount(5)">5</button>
+              <button type="button" class="quick-btn" onclick="setAmount(10)">10</button>
+            </div>
+          </div>
+          <div class="payout-info">
+            <span class="payout-label">Potential Payout</span>
+            <span class="payout-value" id="potential-payout" aria-live="polite">2.00x</span>
+          </div>
+          <button type="submit" class="btn btn-primary" id="btn-predict">Place Prediction</button>
+          <div id="status" class="status" aria-live="assertive"></div>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="history-heading">
+        <h2 id="history-heading">Your Predictions</h2>
+        <div class="history-list" id="history-list" role="list" aria-live="polite">
+          <div class="history-item" role="listitem"><span>No predictions yet</span></div>
+        </div>
+      </section>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>

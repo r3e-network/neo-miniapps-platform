@@ -11,8 +11,11 @@ using Neo.SmartContract.Framework.Services;
 namespace NeoMiniAppPlatform.Contracts
 {
     [DisplayName("Governance")]
-    [ManifestExtra("Author", "Neo MiniApp Platform")]
+    [ManifestExtra("Author", "R3E Network")]
+    [ManifestExtra("Email", "dev@r3e.network")]
+    [ManifestExtra("Version", "1.0.0")]
     [ManifestExtra("Description", "NEO-only staking and voting for platform governance")]
+    [ContractPermission("*", "onNEP17Payment")]
     public class Governance : SmartContract
     {
         private static readonly byte[] PREFIX_ADMIN = new byte[] { 0x01 };
@@ -213,6 +216,19 @@ namespace NeoMiniAppPlatform.Contracts
 
             p.Finalized = true;
             ProposalMap().Put(ProposalKey(proposalId), StdLib.Serialize(p));
+        }
+
+        public static void SetAdmin(UInt160 newAdmin)
+        {
+            ValidateAdmin();
+            ExecutionEngine.Assert(newAdmin != null && newAdmin.IsValid, "invalid admin");
+            Storage.Put(Storage.CurrentContext, PREFIX_ADMIN, newAdmin);
+        }
+
+        public static void Update(ByteString nefFile, string manifest)
+        {
+            ValidateAdmin();
+            ContractManagement.Update(nefFile, manifest, null);
         }
     }
 }

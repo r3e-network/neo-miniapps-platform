@@ -60,7 +60,7 @@ POST /triggers
     "schedule": "0 9 * * *",
     "action": {
         "type": "webhook",
-        "url": "https://example.com/callback",
+        "url": "https://hooks.miniapps.com/callback",
         "method": "POST"
     }
 }
