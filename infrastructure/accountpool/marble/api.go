@@ -13,6 +13,7 @@ func (s *Service) registerRoutes() {
 	router.HandleFunc("/master-key", s.handleMasterKey).Methods("GET")
 	router.HandleFunc("/pool-info", s.handleInfo).Methods("GET")
 	router.HandleFunc("/accounts", s.handleListAccounts).Methods("GET")
+	router.HandleFunc("/accounts/low-balance", s.handleListLowBalanceAccounts).Methods("GET")
 	router.HandleFunc("/request", s.handleRequestAccounts).Methods("POST")
 	router.HandleFunc("/release", s.handleReleaseAccounts).Methods("POST")
 	router.HandleFunc("/sign", s.handleSignTransaction).Methods("POST")
@@ -20,9 +21,14 @@ func (s *Service) registerRoutes() {
 	router.HandleFunc("/balance", s.handleUpdateBalance).Methods("POST")
 	router.HandleFunc("/transfer", s.handleTransfer).Methods("POST")
 
+	// Fund pool accounts from master wallet (TEE_PRIVATE_KEY)
+	router.HandleFunc("/fund", s.handleFundAccount).Methods("POST")
+
 	// Contract operations - all signing happens inside TEE
 	router.HandleFunc("/deploy", s.handleDeployContract).Methods("POST")
+	router.HandleFunc("/deploy-master", s.handleDeployMaster).Methods("POST")
 	router.HandleFunc("/update-contract", s.handleUpdateContract).Methods("POST")
 	router.HandleFunc("/invoke", s.handleInvokeContract).Methods("POST")
+	router.HandleFunc("/invoke-master", s.handleInvokeMaster).Methods("POST")
 	router.HandleFunc("/simulate", s.handleSimulateContract).Methods("POST")
 }

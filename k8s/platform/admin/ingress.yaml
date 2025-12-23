@@ -1,0 +1,30 @@
+# =============================================================================
+# Admin Console Ingress
+# Exposes admin console at https://admin.localhost for local development
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: admin-console
+  namespace: platform
+  annotations:
+    cert-manager.io/cluster-issuer: selfsigned-issuer
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - admin.localhost
+      secretName: admin-console-tls
+  rules:
+    - host: admin.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: admin-console
+                port:
+                  number: 3002

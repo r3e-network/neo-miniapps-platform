@@ -232,6 +232,32 @@ func (q *QueryBuilder) Gte(field, value string) *QueryBuilder {
 	return q
 }
 
+// In adds an IN filter: field=in.(value1,value2,...)
+// This is useful for batch queries to avoid N+1 problems.
+func (q *QueryBuilder) In(field string, values []string) *QueryBuilder {
+	if len(values) == 0 {
+		return q
+	}
+	escaped := make([]string, len(values))
+	for i, v := range values {
+		escaped[i] = url.QueryEscape(v)
+	}
+	q.filters = append(q.filters, fmt.Sprintf("%s=in.(%s)", field, joinStrings(escaped, ",")))
+	return q
+}
+
+// joinStrings joins strings with a separator (avoiding strings package import).
+func joinStrings(strs []string, sep string) string {
+	if len(strs) == 0 {
+		return ""
+	}
+	result := strs[0]
+	for i := 1; i < len(strs); i++ {
+		result += sep + strs[i]
+	}
+	return result
+}
+
 // OrderAsc adds ascending order: order=field.asc
 func (q *QueryBuilder) OrderAsc(field string) *QueryBuilder {
 	q.order = fmt.Sprintf("order=%s.asc", field)

@@ -113,6 +113,12 @@ func New(cfg Config) (*Service, error) {
 			s.cleanupExpiredDeposits(ctx)
 			return nil
 		}, commonservice.WithTickerWorkerName("deposit-cleanup"))
+
+		// Register auto top-up worker (runs every 5 minutes)
+		base.AddTickerWorker(TopUpCheckInterval, func(ctx context.Context) error {
+			s.processAutoTopUp(ctx)
+			return nil
+		}, commonservice.WithTickerWorkerName("auto-topup"))
 	}
 
 	// Register statistics provider for /info endpoint
@@ -133,6 +139,10 @@ func (s *Service) statistics() map[string]any {
 		"deposit_expiration_time":    DepositExpirationTime.String(),
 		"chain_connected":            s.chainClient != nil,
 		"deposit_address_configured": s.depositAddress != "",
+		"topup_enabled":              s.isAutoTopUpEnabled(),
+		"topup_check_interval":       TopUpCheckInterval.String(),
+		"topup_threshold":            TopUpThreshold,
+		"topup_target_amount":        TopUpTargetAmount,
 	}
 }
 

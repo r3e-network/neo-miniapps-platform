@@ -211,6 +211,21 @@ edge-dev: ## Run local Edge dev server (requires deno)
 	cd platform/edge && deno task dev
 
 # =============================================================================
+# Local Dev Stack (k3s)
+# =============================================================================
+
+dev-stack-up: ## Bring up entire local k3s dev stack
+	@echo "Setting up local k3s dev stack..."
+	@./scripts/k3s-local-setup.sh install
+
+dev-stack-down: ## Tear down local k3s dev stack
+	@echo "Tearing down local k3s dev stack..."
+	@./scripts/k3s-local-setup.sh cleanup
+
+dev-stack-status: ## Check status of all dev stack components
+	@./scripts/k3s-local-setup.sh status
+
+# =============================================================================
 # Development
 # =============================================================================
 

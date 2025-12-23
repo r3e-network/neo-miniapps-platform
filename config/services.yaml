@@ -58,3 +58,17 @@ services:
     enabled: true
     port: 8092
     description: "TEE master key management and domain-separated signing"
+
+  # NeoGasBank - GAS Balance Management
+  # Use cases: User GAS deposits, service fee deduction
+  neogasbank:
+    enabled: true
+    port: 8091
+    description: "GAS balance management for user deposits and service fee deduction"
+
+  # NeoSimulation - Transaction Simulation
+  # Use cases: MiniApp testing, continuous transaction simulation
+  neosimulation:
+    enabled: true
+    port: 8093
+    description: "Continuous transaction simulation for MiniApp testing and load generation"

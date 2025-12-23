@@ -33,6 +33,10 @@ type (
 	TransferResponse        = neoaccountstypes.TransferResponse
 	MasterKeyAttestation    = neoaccountstypes.MasterKeyAttestation
 
+	// Fund account types - transfer from master wallet to pool accounts
+	FundAccountInput    = neoaccountstypes.FundAccountInput
+	FundAccountResponse = neoaccountstypes.FundAccountResponse
+
 	// Contract operation types - all signing happens inside TEE
 	ContractParam            = neoaccountstypes.ContractParam
 	DeployContractInput      = neoaccountstypes.DeployContractInput
@@ -41,6 +45,11 @@ type (
 	UpdateContractResponse   = neoaccountstypes.UpdateContractResponse
 	InvokeContractInput      = neoaccountstypes.InvokeContractInput
 	InvokeContractResponse   = neoaccountstypes.InvokeContractResponse
+	InvokeMasterInput        = neoaccountstypes.InvokeMasterInput
 	SimulateContractInput    = neoaccountstypes.SimulateContractInput
 	SimulateContractResponse = neoaccountstypes.SimulateContractResponse
+
+	// Deploy with master wallet types
+	DeployMasterInput    = neoaccountstypes.DeployMasterInput
+	DeployMasterResponse = neoaccountstypes.DeployMasterResponse
 )

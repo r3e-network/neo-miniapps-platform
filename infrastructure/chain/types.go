@@ -41,7 +41,11 @@ func (e *RPCError) Error() string {
 func isNotFoundError(err error) bool {
 	if rpcErr, ok := err.(*RPCError); ok {
 		msg := strings.ToLower(rpcErr.Message)
-		if strings.Contains(msg, "unknown transaction") || rpcErr.Code == -100 {
+		// -100: Unknown transaction
+		// -105: Unknown script container (transaction not yet confirmed)
+		if strings.Contains(msg, "unknown transaction") ||
+			strings.Contains(msg, "unknown script container") ||
+			rpcErr.Code == -100 || rpcErr.Code == -105 {
 			return true
 		}
 	}

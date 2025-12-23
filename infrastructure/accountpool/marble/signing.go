@@ -10,14 +10,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/nspcc-dev/neo-go/pkg/core/transaction"
 	"github.com/nspcc-dev/neo-go/pkg/encoding/address"
+	"github.com/nspcc-dev/neo-go/pkg/wallet"
 
-	neoaccountssupabase "github.com/R3E-Network/service_layer/infrastructure/accountpool/supabase"
+	"github.com/R3E-Network/service_layer/infrastructure/accountpool/supabase"
 	"github.com/R3E-Network/service_layer/infrastructure/chain"
 	intcrypto "github.com/R3E-Network/service_layer/infrastructure/crypto"
 )
@@ -141,24 +143,9 @@ func (s *Service) Transfer(ctx context.Context, serviceID, accountID, toAddress 
 		s.mu.RUnlock()
 		return "", fmt.Errorf("account not locked by service %s", serviceID)
 	}
-
-	// Default to GAS if no token hash specified
-	if tokenHash == "" {
-		tokenHash = neoaccountssupabase.GASScriptHash
-	}
-	tokenHash = strings.TrimSpace(tokenHash)
-	tokenHash = strings.TrimPrefix(strings.TrimPrefix(tokenHash, "0x"), "0X")
-	if tokenHash == "" {
-		s.mu.RUnlock()
-		return "", fmt.Errorf("token_hash required")
-	}
-	tokenHash = "0x" + tokenHash
-
-	// Copy required account fields while holding the lock; do not hold the lock across RPC calls.
-	fromAddress := strings.TrimSpace(acc.Address)
 	s.mu.RUnlock()
 
-	// Derive pool account private key and build a neo-go signer account.
+	// Derive pool account private key and build a neo-go wallet account.
 	priv, err := s.getPrivateKey(accountID)
 	if err != nil {
 		return "", fmt.Errorf("derive key: %w", err)
@@ -167,60 +154,24 @@ func (s *Service) Transfer(ctx context.Context, serviceID, accountID, toAddress 
 	dBytes := priv.D.Bytes()
 	keyBytes := make([]byte, 32)
 	copy(keyBytes[32-len(dBytes):], dBytes)
-	signer, err := chain.AccountFromPrivateKey(hex.EncodeToString(keyBytes))
+	walletAccount, err := chain.AccountFromPrivateKey(hex.EncodeToString(keyBytes))
 	if err != nil {
 		return "", fmt.Errorf("create signer account: %w", err)
 	}
 
-	// Convert addresses to script-hash strings for RPC params.
-	fromU160, err := address.StringToUint160(fromAddress)
-	if err != nil {
-		return "", fmt.Errorf("invalid from address %q: %w", fromAddress, err)
-	}
+	// Convert to address to script hash
 	toU160, err := address.StringToUint160(strings.TrimSpace(toAddress))
 	if err != nil {
 		return "", fmt.Errorf("invalid to address %q: %w", toAddress, err)
 	}
 
-	params := []chain.ContractParam{
-		chain.NewHash160Param("0x" + fromU160.StringLE()),
-		chain.NewHash160Param("0x" + toU160.StringLE()),
-		chain.NewIntegerParam(big.NewInt(amount)),
-		chain.NewAnyParam(),
-	}
-
-	// Build and sign the transaction locally.
-	invokeResult, err := s.chainClient.InvokeFunctionWithSigners(ctx, tokenHash, "transfer", params, signer.ScriptHash())
+	// Use the chain client's TransferGAS method which uses the actor pattern
+	txHash, err := s.chainClient.TransferGAS(ctx, walletAccount, toU160, big.NewInt(amount))
 	if err != nil {
-		return "", fmt.Errorf("transfer simulation failed: %w", err)
-	}
-	if invokeResult.State != "HALT" {
-		return "", fmt.Errorf("transfer simulation faulted: %s", invokeResult.Exception)
-	}
-
-	txBuilder := chain.NewTxBuilder(s.chainClient, s.chainClient.NetworkID())
-	tx, err := txBuilder.BuildAndSignTx(ctx, invokeResult, signer, transaction.CalledByEntry)
-	if err != nil {
-		return "", fmt.Errorf("build transfer transaction: %w", err)
-	}
-
-	txHash, err := txBuilder.BroadcastTx(ctx, tx)
-	if err != nil {
-		return "", err
+		return "", fmt.Errorf("transfer GAS: %w", err)
 	}
 
 	txHashString := "0x" + txHash.StringLE()
-
-	waitCtx, cancel := context.WithTimeout(ctx, chain.DefaultTxWaitTimeout)
-	defer cancel()
-
-	appLog, err := s.chainClient.WaitForApplicationLog(waitCtx, txHashString, chain.DefaultPollInterval)
-	if err != nil {
-		return txHashString, fmt.Errorf("wait for transfer execution: %w", err)
-	}
-	if appLog != nil && len(appLog.Executions) > 0 && appLog.Executions[0].VMState != "HALT" {
-		return txHashString, fmt.Errorf("transfer failed with state: %s", appLog.Executions[0].VMState)
-	}
 
 	// Best-effort account metadata update; the chain tx succeeded regardless.
 	s.mu.Lock()
@@ -238,7 +189,6 @@ func (s *Service) Transfer(ctx context.Context, serviceID, accountID, toAddress 
 		"account_id": accountID,
 		"to_address": toAddress,
 		"amount":     amount,
-		"token_hash": tokenHash,
 		"tx_hash":    txHashString,
 	}).Info("transfer completed")
 
@@ -510,7 +460,7 @@ func (s *Service) UpdateContract(ctx context.Context, serviceID, accountID, cont
 
 // InvokeContract invokes a contract method using a pool account.
 // All signing happens inside TEE - private keys never leave the enclave.
-func (s *Service) InvokeContract(ctx context.Context, serviceID, accountID, contractHash, method string, params []ContractParam) (*InvokeContractResponse, error) {
+func (s *Service) InvokeContract(ctx context.Context, serviceID, accountID, contractHash, method string, params []ContractParam, scope string) (*InvokeContractResponse, error) {
 	if s.repo == nil {
 		return nil, fmt.Errorf("repository not configured")
 	}
@@ -574,9 +524,24 @@ func (s *Service) InvokeContract(ctx context.Context, serviceID, accountID, cont
 		}, fmt.Errorf("invocation simulation faulted: %s", invokeResult.Exception)
 	}
 
+	// Determine transaction scope (default to CalledByEntry for safety)
+	txScope := transaction.CalledByEntry
+	switch strings.ToLower(scope) {
+	case "global":
+		txScope = transaction.Global
+	case "customcontracts":
+		txScope = transaction.CustomContracts
+	case "customgroups":
+		txScope = transaction.CustomGroups
+	case "none":
+		txScope = transaction.None
+	case "calledbyentry", "":
+		txScope = transaction.CalledByEntry
+	}
+
 	// Build and sign the transaction inside TEE
 	txBuilder := chain.NewTxBuilder(s.chainClient, s.chainClient.NetworkID())
-	tx, err := txBuilder.BuildAndSignTx(ctx, invokeResult, signer, transaction.CalledByEntry)
+	tx, err := txBuilder.BuildAndSignTx(ctx, invokeResult, signer, txScope)
 	if err != nil {
 		return nil, fmt.Errorf("build invocation transaction: %w", err)
 	}
@@ -618,6 +583,7 @@ func (s *Service) InvokeContract(ctx context.Context, serviceID, accountID, cont
 		"tx_hash":       txHashString,
 		"contract_hash": contractHash,
 		"method":        method,
+		"scope":         scope,
 		"gas_consumed":  invokeResult.GasConsumed,
 	}).Info("contract invoked")
 
@@ -699,6 +665,14 @@ func convertToChainParam(p ContractParam) chain.ContractParam {
 	switch strings.ToLower(p.Type) {
 	case "hash160":
 		if s, ok := p.Value.(string); ok {
+			// If it looks like a Neo address (starts with N), convert to script hash
+			if len(s) > 0 && s[0] == 'N' {
+				u160, err := address.StringToUint160(s)
+				if err == nil {
+					// Return as 0x-prefixed little-endian hex string
+					return chain.NewHash160Param("0x" + u160.StringLE())
+				}
+			}
 			return chain.NewHash160Param(s)
 		}
 	case "integer":
@@ -743,4 +717,376 @@ func convertToChainParam(p ContractParam) chain.ContractParam {
 	}
 	// Default to any
 	return chain.NewAnyParam()
+}
+
+// FundAccount transfers tokens from the master wallet (TEE_PRIVATE_KEY) to a target address.
+// This is used to fund pool accounts with GAS for transaction fees.
+// Unlike Transfer(), this uses the master wallet directly, not a pool account.
+// After successful transfer, updates the database balance for the target account.
+func (s *Service) FundAccount(ctx context.Context, toAddress string, amount int64, tokenHash string) (*FundAccountResponse, error) {
+	if s.chainClient == nil {
+		return nil, fmt.Errorf("chain client not configured")
+	}
+	if toAddress == "" {
+		return nil, fmt.Errorf("to_address required")
+	}
+	if amount <= 0 {
+		return nil, fmt.Errorf("amount must be positive")
+	}
+
+	// Load TEE_PRIVATE_KEY from environment - try WIF first, then hex
+	teePrivateKey := strings.TrimSpace(os.Getenv("NEO_TESTNET_WIF"))
+	if teePrivateKey == "" {
+		teePrivateKey = strings.TrimSpace(os.Getenv("TEE_PRIVATE_KEY"))
+	}
+	if teePrivateKey == "" {
+		teePrivateKey = strings.TrimSpace(os.Getenv("TEE_WALLET_PRIVATE_KEY"))
+	}
+	if teePrivateKey == "" {
+		return nil, fmt.Errorf("TEE_PRIVATE_KEY not configured")
+	}
+
+	// Create signer - try WIF format first, then hex
+	var walletAccount *wallet.Account
+	var err error
+
+	// Check if it looks like a WIF (starts with K, L, or 5)
+	if len(teePrivateKey) > 0 && (teePrivateKey[0] == 'K' || teePrivateKey[0] == 'L' || teePrivateKey[0] == '5') {
+		walletAccount, err = chain.AccountFromWIF(teePrivateKey)
+	} else {
+		// Remove 0x prefix if present and try hex
+		teePrivateKey = strings.TrimPrefix(strings.TrimPrefix(teePrivateKey, "0x"), "0X")
+		walletAccount, err = chain.AccountFromPrivateKey(teePrivateKey)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("create signer from TEE_PRIVATE_KEY: %w", err)
+	}
+
+	fromAddress := walletAccount.Address
+
+	// Convert to address to script hash
+	toU160, err := address.StringToUint160(strings.TrimSpace(toAddress))
+	if err != nil {
+		return nil, fmt.Errorf("invalid to address %q: %w", toAddress, err)
+	}
+
+	// Use the chain client's TransferGAS method which uses the actor pattern
+	txHash, err := s.chainClient.TransferGAS(ctx, walletAccount, toU160, big.NewInt(amount))
+	if err != nil {
+		return nil, fmt.Errorf("transfer GAS: %w", err)
+	}
+
+	txHashString := "0x" + txHash.StringLE()
+
+	// Update database balance for the target pool account
+	if s.repo != nil {
+		acc, accErr := s.repo.GetByAddress(ctx, toAddress)
+		if accErr == nil && acc != nil {
+			// Get GAS script hash and decimals
+			scriptHash, decimals := supabase.GetDefaultTokenConfig(TokenTypeGAS)
+			// Get current balance and add the funded amount
+			currentBalance := int64(0)
+			if existingBal, balErr := s.repo.GetBalance(ctx, acc.ID, TokenTypeGAS); balErr == nil && existingBal != nil {
+				currentBalance = existingBal.Amount
+			}
+			newBalance := currentBalance + amount
+			if upsertErr := s.repo.UpsertBalance(ctx, acc.ID, TokenTypeGAS, scriptHash, newBalance, decimals); upsertErr != nil {
+				s.Logger().WithContext(ctx).WithError(upsertErr).Warn("failed to update database balance after fund transfer")
+			} else {
+				s.Logger().WithContext(ctx).WithFields(map[string]interface{}{
+					"account_id":  acc.ID,
+					"old_balance": currentBalance,
+					"new_balance": newBalance,
+					"funded":      amount,
+				}).Info("database balance updated after fund transfer")
+			}
+		}
+	}
+
+	s.Logger().WithContext(ctx).WithFields(map[string]interface{}{
+		"from_address": fromAddress,
+		"to_address":   toAddress,
+		"amount":       amount,
+		"tx_hash":      txHashString,
+	}).Info("fund transfer completed")
+
+	return &FundAccountResponse{
+		TxHash:      txHashString,
+		FromAddress: fromAddress,
+		ToAddress:   toAddress,
+		Amount:      amount,
+	}, nil
+}
+
+// InvokeMaster invokes a contract method using the master wallet (TEE_PRIVATE_KEY).
+// This is used for TEE operations like PriceFeed and RandomnessLog that require
+// the caller to be a registered TEE signer in AppRegistry.
+// Unlike InvokeContract(), this uses the master wallet directly, not a pool account.
+func (s *Service) InvokeMaster(ctx context.Context, contractHash, method string, params []ContractParam, scope string) (*InvokeContractResponse, error) {
+	if s.chainClient == nil {
+		return nil, fmt.Errorf("chain client not configured")
+	}
+	if contractHash == "" {
+		return nil, fmt.Errorf("contract_hash required")
+	}
+	if method == "" {
+		return nil, fmt.Errorf("method required")
+	}
+
+	// Load TEE_PRIVATE_KEY from environment - try WIF first, then hex
+	teePrivateKey := strings.TrimSpace(os.Getenv("NEO_TESTNET_WIF"))
+	if teePrivateKey == "" {
+		teePrivateKey = strings.TrimSpace(os.Getenv("TEE_PRIVATE_KEY"))
+	}
+	if teePrivateKey == "" {
+		teePrivateKey = strings.TrimSpace(os.Getenv("TEE_WALLET_PRIVATE_KEY"))
+	}
+	if teePrivateKey == "" {
+		return nil, fmt.Errorf("TEE_PRIVATE_KEY not configured")
+	}
+
+	// Create signer - try WIF format first, then hex
+	var signer *wallet.Account
+	var err error
+
+	// Check if it looks like a WIF (starts with K, L, or 5)
+	if len(teePrivateKey) > 0 && (teePrivateKey[0] == 'K' || teePrivateKey[0] == 'L' || teePrivateKey[0] == '5') {
+		signer, err = chain.AccountFromWIF(teePrivateKey)
+	} else {
+		// Remove 0x prefix if present and try hex
+		teePrivateKey = strings.TrimPrefix(strings.TrimPrefix(teePrivateKey, "0x"), "0X")
+		signer, err = chain.AccountFromPrivateKey(teePrivateKey)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("create signer from TEE_PRIVATE_KEY: %w", err)
+	}
+
+	// Convert params to chain.ContractParam
+	chainParams := make([]chain.ContractParam, len(params))
+	for i, p := range params {
+		chainParams[i] = convertToChainParam(p)
+	}
+
+	// Simulate invocation
+	invokeResult, err := s.chainClient.InvokeFunctionWithSigners(ctx, contractHash, method, chainParams, signer.ScriptHash())
+	if err != nil {
+		return nil, fmt.Errorf("invocation simulation failed: %w", err)
+	}
+	if invokeResult.State != "HALT" {
+		return &InvokeContractResponse{
+			State:       invokeResult.State,
+			GasConsumed: invokeResult.GasConsumed,
+			Exception:   invokeResult.Exception,
+			AccountID:   "master",
+		}, fmt.Errorf("invocation simulation faulted: %s", invokeResult.Exception)
+	}
+
+	// Determine transaction scope (default to CalledByEntry for safety)
+	txScope := transaction.CalledByEntry
+	switch strings.ToLower(scope) {
+	case "global":
+		txScope = transaction.Global
+	case "customcontracts":
+		txScope = transaction.CustomContracts
+	case "customgroups":
+		txScope = transaction.CustomGroups
+	case "none":
+		txScope = transaction.None
+	case "calledbyentry", "":
+		txScope = transaction.CalledByEntry
+	}
+
+	// Build and sign the transaction inside TEE
+	txBuilder := chain.NewTxBuilder(s.chainClient, s.chainClient.NetworkID())
+	tx, err := txBuilder.BuildAndSignTx(ctx, invokeResult, signer, txScope)
+	if err != nil {
+		return nil, fmt.Errorf("build invocation transaction: %w", err)
+	}
+
+	txHash, err := txBuilder.BroadcastTx(ctx, tx)
+	if err != nil {
+		return nil, fmt.Errorf("broadcast invocation: %w", err)
+	}
+
+	txHashString := "0x" + txHash.StringLE()
+
+	// Wait for confirmation
+	waitCtx, cancel := context.WithTimeout(ctx, chain.DefaultTxWaitTimeout)
+	defer cancel()
+
+	appLog, err := s.chainClient.WaitForApplicationLog(waitCtx, txHashString, chain.DefaultPollInterval)
+	if err != nil {
+		return nil, fmt.Errorf("wait for invocation execution: %w", err)
+	}
+
+	state := "HALT"
+	exception := ""
+	if appLog != nil && len(appLog.Executions) > 0 {
+		state = appLog.Executions[0].VMState
+		exception = appLog.Executions[0].Exception
+	}
+
+	s.Logger().WithContext(ctx).WithFields(map[string]interface{}{
+		"account":       "master",
+		"tx_hash":       txHashString,
+		"contract_hash": contractHash,
+		"method":        method,
+		"scope":         scope,
+		"gas_consumed":  invokeResult.GasConsumed,
+	}).Info("master contract invoked")
+
+	return &InvokeContractResponse{
+		TxHash:      txHashString,
+		State:       state,
+		GasConsumed: invokeResult.GasConsumed,
+		Exception:   exception,
+		AccountID:   "master",
+	}, nil
+}
+
+// DeployMaster deploys a new smart contract using the master wallet (TEE_PRIVATE_KEY).
+// This is used for deploying contracts where the master account needs to be the Admin.
+// All signing happens inside TEE - private keys never leave the enclave.
+func (s *Service) DeployMaster(ctx context.Context, nefBase64, manifestJSON string, data any) (*DeployMasterResponse, error) {
+	if s.chainClient == nil {
+		return nil, fmt.Errorf("chain client not configured")
+	}
+	if nefBase64 == "" {
+		return nil, fmt.Errorf("nef_base64 required")
+	}
+	if manifestJSON == "" {
+		return nil, fmt.Errorf("manifest_json required")
+	}
+
+	// Load TEE_PRIVATE_KEY from environment - try WIF first, then hex
+	teePrivateKey := strings.TrimSpace(os.Getenv("NEO_TESTNET_WIF"))
+	if teePrivateKey == "" {
+		teePrivateKey = strings.TrimSpace(os.Getenv("TEE_PRIVATE_KEY"))
+	}
+	if teePrivateKey == "" {
+		teePrivateKey = strings.TrimSpace(os.Getenv("TEE_WALLET_PRIVATE_KEY"))
+	}
+	if teePrivateKey == "" {
+		return nil, fmt.Errorf("TEE_PRIVATE_KEY not configured")
+	}
+
+	// Create signer - try WIF format first, then hex
+	var signer *wallet.Account
+	var err error
+
+	// Check if it looks like a WIF (starts with K, L, or 5)
+	if len(teePrivateKey) > 0 && (teePrivateKey[0] == 'K' || teePrivateKey[0] == 'L' || teePrivateKey[0] == '5') {
+		signer, err = chain.AccountFromWIF(teePrivateKey)
+	} else {
+		// Remove 0x prefix if present and try hex
+		teePrivateKey = strings.TrimPrefix(strings.TrimPrefix(teePrivateKey, "0x"), "0X")
+		signer, err = chain.AccountFromPrivateKey(teePrivateKey)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("create signer from TEE_PRIVATE_KEY: %w", err)
+	}
+
+	// Decode NEF from base64
+	nefBytes, err := base64.StdEncoding.DecodeString(nefBase64)
+	if err != nil {
+		return nil, fmt.Errorf("decode nef base64: %w", err)
+	}
+
+	// Build deployment parameters
+	// ContractManagement.deploy expects: (ByteArray nefFile, ByteArray manifest, Any data)
+	// The manifest must be passed as ByteArray (UTF-8 bytes), not String
+	params := []chain.ContractParam{
+		chain.NewByteArrayParam(nefBytes),
+		chain.NewByteArrayParam([]byte(manifestJSON)),
+	}
+	if data != nil {
+		params = append(params, chain.NewAnyParam())
+	}
+
+	// ContractManagement native contract hash
+	contractMgmtHash := "0xfffdc93764dbaddd97c48f252a53ea4643faa3fd"
+
+	// Simulate deployment first
+	invokeResult, err := s.chainClient.InvokeFunctionWithSigners(ctx, contractMgmtHash, "deploy", params, signer.ScriptHash())
+	if err != nil {
+		return nil, fmt.Errorf("deployment simulation failed: %w", err)
+	}
+	if invokeResult.State != "HALT" {
+		return nil, fmt.Errorf("deployment simulation faulted: %s", invokeResult.Exception)
+	}
+
+	s.Logger().WithContext(ctx).WithFields(map[string]interface{}{
+		"account":      "master",
+		"gas_estimate": invokeResult.GasConsumed,
+	}).Info("deployment simulation passed, building transaction")
+
+	// Build and sign the transaction inside TEE
+	txBuilder := chain.NewTxBuilder(s.chainClient, s.chainClient.NetworkID())
+	tx, err := txBuilder.BuildAndSignTx(ctx, invokeResult, signer, transaction.CalledByEntry)
+	if err != nil {
+		return nil, fmt.Errorf("build deployment transaction: %w", err)
+	}
+
+	txHash, err := txBuilder.BroadcastTx(ctx, tx)
+	if err != nil {
+		return nil, fmt.Errorf("broadcast deployment: %w", err)
+	}
+
+	txHashString := "0x" + txHash.StringLE()
+
+	s.Logger().WithContext(ctx).WithFields(map[string]interface{}{
+		"account": "master",
+		"tx_hash": txHashString,
+	}).Info("deployment transaction broadcast, waiting for confirmation")
+
+	// Wait for confirmation
+	waitCtx, cancel := context.WithTimeout(ctx, chain.DefaultTxWaitTimeout)
+	defer cancel()
+
+	appLog, err := s.chainClient.WaitForApplicationLog(waitCtx, txHashString, chain.DefaultPollInterval)
+	if err != nil {
+		s.Logger().WithContext(ctx).WithError(err).WithFields(map[string]interface{}{
+			"tx_hash": txHashString,
+		}).Error("failed to get application log")
+		return nil, fmt.Errorf("wait for deployment execution (tx: %s): %w", txHashString, err)
+	}
+
+	// Extract contract hash from deployment result
+	contractHash := ""
+	if appLog != nil && len(appLog.Executions) > 0 {
+		exec := appLog.Executions[0]
+		if exec.VMState != "HALT" {
+			s.Logger().WithContext(ctx).WithFields(map[string]interface{}{
+				"tx_hash":   txHashString,
+				"vm_state":  exec.VMState,
+				"exception": exec.Exception,
+			}).Error("deployment transaction failed")
+			return nil, fmt.Errorf("deployment failed (tx: %s) with state: %s, exception: %s", txHashString, exec.VMState, exec.Exception)
+		}
+		// Contract hash is typically in the first notification or stack result
+		// The stack item contains the deployed contract state as a struct
+		if len(exec.Stack) > 0 {
+			// Try to extract hash from the stack item's Value field
+			var valueMap map[string]any
+			if err := json.Unmarshal(exec.Stack[0].Value, &valueMap); err == nil {
+				if h, ok := valueMap["hash"].(string); ok {
+					contractHash = h
+				}
+			}
+		}
+	}
+
+	s.Logger().WithContext(ctx).WithFields(map[string]interface{}{
+		"account":       "master",
+		"tx_hash":       txHashString,
+		"contract_hash": contractHash,
+		"gas_consumed":  invokeResult.GasConsumed,
+	}).Info("contract deployed with master wallet")
+
+	return &DeployMasterResponse{
+		TxHash:       txHashString,
+		ContractHash: contractHash,
+		GasConsumed:  invokeResult.GasConsumed,
+		AccountID:    "master",
+	}, nil
 }

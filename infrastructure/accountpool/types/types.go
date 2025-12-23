@@ -218,6 +218,7 @@ type InvokeContractInput struct {
 	ContractHash string          `json:"contract_hash"` // Contract to invoke
 	Method       string          `json:"method"`        // Method name
 	Params       []ContractParam `json:"params"`        // Method parameters
+	Scope        string          `json:"scope,omitempty"` // Transaction scope: "CalledByEntry" (default), "Global", "CustomContracts", "CustomGroups"
 }
 
 // InvokeContractResponse returns the invocation result.
@@ -244,4 +245,46 @@ type SimulateContractResponse struct {
 	GasConsumed string `json:"gas_consumed"`
 	Exception   string `json:"exception,omitempty"`
 	Stack       []any  `json:"stack,omitempty"` // Return values
+}
+
+// FundAccountInput funds a pool account from the master wallet (TEE_PRIVATE_KEY).
+// This is used to provide GAS to pool accounts for transaction fees.
+type FundAccountInput struct {
+	ToAddress string `json:"to_address"`          // Pool account address to fund
+	Amount    int64  `json:"amount"`              // Amount in smallest units (8 decimals for GAS)
+	TokenHash string `json:"token_hash,omitempty"` // NEP-17 script hash (defaults to GAS)
+}
+
+// FundAccountResponse returns the funding result.
+type FundAccountResponse struct {
+	TxHash      string `json:"tx_hash"`
+	FromAddress string `json:"from_address"` // Master wallet address
+	ToAddress   string `json:"to_address"`
+	Amount      int64  `json:"amount"`
+}
+
+// InvokeMasterInput invokes a contract method using the master wallet (TEE_PRIVATE_KEY).
+// This is used for TEE operations like PriceFeed and RandomnessLog that require
+// the caller to be a registered TEE signer in AppRegistry.
+type InvokeMasterInput struct {
+	ContractHash string          `json:"contract_hash"` // Contract to invoke
+	Method       string          `json:"method"`        // Method name
+	Params       []ContractParam `json:"params"`        // Method parameters
+	Scope        string          `json:"scope,omitempty"` // Transaction scope: "CalledByEntry" (default), "Global"
+}
+
+// DeployMasterInput deploys a new contract using the master wallet (TEE_PRIVATE_KEY).
+// This is used for deploying contracts where the master account needs to be the Admin.
+type DeployMasterInput struct {
+	NEFBase64    string `json:"nef_base64"`     // Base64-encoded NEF file
+	ManifestJSON string `json:"manifest_json"`  // JSON manifest string
+	Data         any    `json:"data,omitempty"` // Optional deployment data
+}
+
+// DeployMasterResponse returns the deployment result using master wallet.
+type DeployMasterResponse struct {
+	TxHash       string `json:"tx_hash"`
+	ContractHash string `json:"contract_hash"`
+	GasConsumed  string `json:"gas_consumed"`
+	AccountID    string `json:"account_id"` // Always "master"
 }

@@ -1,0 +1,39 @@
+# =============================================================================
+# Edge Gateway Configuration
+# Service URLs for internal k8s service mesh communication
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: edge-gateway-config
+  namespace: platform
+data:
+  # Runtime environment
+  EDGE_ENV: "development"
+  DENO_ENV: "development"
+
+  # Edge server configuration
+  EDGE_DEV_PORT: "8787"
+
+  # Supabase configuration (internal k8s service URL)
+  # Points to self-hosted Supabase in k3s cluster
+  SUPABASE_URL: "http://supabase.platform.svc.cluster.local:8000"
+
+  # Neo RPC URL (internal k8s service URL)
+  # Points to neoaccounts service in service-layer namespace
+  NEO_RPC_URL: "http://neoaccounts.service-layer.svc.cluster.local:8085"
+
+  # Other service endpoints (internal k8s URLs)
+  NEOFEEDS_SERVICE_URL: "http://neofeeds.service-layer.svc.cluster.local:8083"
+  NEOFLOW_SERVICE_URL: "http://neoflow.service-layer.svc.cluster.local:8084"
+  NEOCOMPUTE_SERVICE_URL: "http://neocompute.service-layer.svc.cluster.local:8086"
+  NEOVRF_SERVICE_URL: "http://neovrf.service-layer.svc.cluster.local:8087"
+  NEOORACLE_SERVICE_URL: "http://neooracle.service-layer.svc.cluster.local:8088"
+  TXPROXY_SERVICE_URL: "http://txproxy.service-layer.svc.cluster.local:8090"
+  GLOBALSIGNER_SERVICE_URL: "http://globalsigner.service-layer.svc.cluster.local:8092"
+
+  # Neo network configuration
+  NEO_NETWORK_MAGIC: "894710606"
+
+  # Kubernetes cluster detection flag
+  K8S_CLUSTER: "true"

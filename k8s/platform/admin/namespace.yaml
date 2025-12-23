@@ -1,0 +1,10 @@
+# =============================================================================
+# Admin Console Namespace
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform
+  labels:
+    name: platform
+    app.kubernetes.io/part-of: platform

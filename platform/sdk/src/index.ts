@@ -1,7 +1,17 @@
 export { createHostSDK, createMiniAppSDK } from "./client.js";
+export { createAdminSDK, AdminSDK } from "./admin.js";
 
 // Core types
 export type { ContractParam, InvocationIntent, MiniAppSDK, MiniAppSDKConfig, HostSDK } from "./types.js";
+
+// Admin types
+export type {
+  AdminSDKConfig,
+  ServiceHealthResponse,
+  MiniAppListResponse,
+  UserListResponse,
+  AnalyticsResponse,
+} from "./admin.js";
 
 // Payment & Governance responses (GAS/NEO constraints)
 export type { PayGASResponse, VoteNEOResponse } from "./types.js";
@@ -55,3 +65,9 @@ export type {
   AutomationDeleteResponse,
   AutomationStatusResponse,
 } from "./types.js";
+
+// Events types
+export type { ContractEvent, EventsListParams, EventsListResponse } from "./types.js";
+
+// Transactions types
+export type { ChainTransaction, TransactionsListParams, TransactionsListResponse } from "./types.js";

@@ -104,6 +104,21 @@ type SimulateContractInput = neoaccountstypes.SimulateContractInput
 // SimulateContractResponse returns the simulation result.
 type SimulateContractResponse = neoaccountstypes.SimulateContractResponse
 
+// FundAccountInput funds a pool account from the master wallet.
+type FundAccountInput = neoaccountstypes.FundAccountInput
+
+// FundAccountResponse returns the funding result.
+type FundAccountResponse = neoaccountstypes.FundAccountResponse
+
+// InvokeMasterInput invokes a contract using the master wallet (TEE operations).
+type InvokeMasterInput = neoaccountstypes.InvokeMasterInput
+
+// DeployMasterInput deploys a contract using the master wallet.
+type DeployMasterInput = neoaccountstypes.DeployMasterInput
+
+// DeployMasterResponse returns the deployment result using master wallet.
+type DeployMasterResponse = neoaccountstypes.DeployMasterResponse
+
 // AccountInfoFromWithBalances converts AccountWithBalances to AccountInfo.
 func AccountInfoFromWithBalances(acc *neoaccountssupabase.AccountWithBalances) AccountInfo {
 	return AccountInfo{

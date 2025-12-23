@@ -9,6 +9,8 @@ import type {
   AutomationStatusResponse,
   AutomationTrigger,
   AutomationTriggerRequest,
+  EventsListParams,
+  EventsListResponse,
   GasBankAccountResponse,
   GasBankDepositCreateResponse,
   GasBankDepositsResponse,
@@ -29,6 +31,8 @@ import type {
   SecretsListResponse,
   SecretsPermissionsResponse,
   SecretsUpsertResponse,
+  TransactionsListParams,
+  TransactionsListResponse,
   VoteNEOResponse,
   WalletBindResponse,
   WalletNonceResponse,
@@ -229,6 +233,26 @@ export function createMiniAppSDK(cfg: MiniAppSDKConfig): MiniAppSDK {
         return requestJSON<PriceResponse>(cfg, `/datafeed-price?symbol=${encodeURIComponent(symbol)}`, {
           method: "GET",
         });
+      },
+    },
+    events: {
+      async list(params: EventsListParams): Promise<EventsListResponse> {
+        const qs = new URLSearchParams();
+        if (params.app_id) qs.set("app_id", params.app_id);
+        if (params.event_name) qs.set("event_name", params.event_name);
+        if (params.contract_hash) qs.set("contract_hash", params.contract_hash);
+        if (params.limit) qs.set("limit", String(params.limit));
+        if (params.after_id) qs.set("after_id", params.after_id);
+        return requestJSON<EventsListResponse>(cfg, `/events-list?${qs.toString()}`, { method: "GET" });
+      },
+    },
+    transactions: {
+      async list(params: TransactionsListParams): Promise<TransactionsListResponse> {
+        const qs = new URLSearchParams();
+        if (params.app_id) qs.set("app_id", params.app_id);
+        if (params.limit) qs.set("limit", String(params.limit));
+        if (params.after_id) qs.set("after_id", params.after_id);
+        return requestJSON<TransactionsListResponse>(cfg, `/transactions-list?${qs.toString()}`, { method: "GET" });
       },
     },
   };

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/nspcc-dev/neo-go/pkg/core/transaction"
+	"github.com/nspcc-dev/neo-go/pkg/util"
 )
 
 // =============================================================================
@@ -241,9 +242,16 @@ func (c *Client) InvokeFunctionWithSigners(ctx context.Context, scriptHash, meth
 	switch v := signerHash.(type) {
 	case string:
 		signers = []Signer{{Account: v, Scopes: ScopeCalledByEntry}}
+	case util.Uint160:
+		// Neo RPC expects script hash in little-endian format
+		signers = []Signer{{Account: "0x" + v.StringLE(), Scopes: ScopeCalledByEntry}}
 	default:
-		// Assume it's a util.Uint160 or similar
-		signers = []Signer{{Account: fmt.Sprintf("0x%s", v), Scopes: ScopeCalledByEntry}}
+		// Fallback for other types - try to use StringLE if available
+		if hasStringLE, ok := v.(interface{ StringLE() string }); ok {
+			signers = []Signer{{Account: "0x" + hasStringLE.StringLE(), Scopes: ScopeCalledByEntry}}
+		} else {
+			signers = []Signer{{Account: fmt.Sprintf("0x%s", v), Scopes: ScopeCalledByEntry}}
+		}
 	}
 
 	args := []interface{}{scriptHash, method, params, signers}

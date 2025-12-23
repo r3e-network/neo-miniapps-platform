@@ -258,6 +258,19 @@ func (c *Client) Transfer(ctx context.Context, accountID, toAddress string, amou
 	return &out, nil
 }
 
+// FundAccount transfers tokens from the master wallet (TEE_PRIVATE_KEY) to a target address.
+// This is used to fund pool accounts with GAS for transaction fees.
+func (c *Client) FundAccount(ctx context.Context, toAddress string, amount int64) (*FundAccountResponse, error) {
+	var out FundAccountResponse
+	if err := c.doJSON(ctx, http.MethodPost, "/fund", FundAccountInput{
+		ToAddress: toAddress,
+		Amount:    amount,
+	}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // GetMasterKeyAttestation fetches the publicly cacheable master key attestation bundle.
 func (c *Client) GetMasterKeyAttestation(ctx context.Context) (*MasterKeyAttestation, error) {
 	var out MasterKeyAttestation
@@ -302,7 +315,8 @@ func (c *Client) UpdateContract(ctx context.Context, accountID, contractHash, ne
 
 // InvokeContract invokes a contract method using a pool account.
 // All signing happens inside TEE - private keys never leave the enclave.
-func (c *Client) InvokeContract(ctx context.Context, accountID, contractHash, method string, params []ContractParam) (*InvokeContractResponse, error) {
+// Scope can be: "CalledByEntry" (default), "Global", "CustomContracts", "CustomGroups", "None"
+func (c *Client) InvokeContract(ctx context.Context, accountID, contractHash, method string, params []ContractParam, scope string) (*InvokeContractResponse, error) {
 	var out InvokeContractResponse
 	if err := c.doJSON(ctx, http.MethodPost, "/invoke", InvokeContractInput{
 		ServiceID:    c.serviceID,
@@ -310,6 +324,7 @@ func (c *Client) InvokeContract(ctx context.Context, accountID, contractHash, me
 		ContractHash: contractHash,
 		Method:       method,
 		Params:       params,
+		Scope:        scope,
 	}, &out); err != nil {
 		return nil, err
 	}
@@ -325,6 +340,61 @@ func (c *Client) SimulateContract(ctx context.Context, accountID, contractHash, 
 		ContractHash: contractHash,
 		Method:       method,
 		Params:       params,
+	}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListLowBalanceAccounts returns accounts with balance below the specified threshold.
+// This is useful for auto top-up workers that need to find accounts requiring funding.
+func (c *Client) ListLowBalanceAccounts(ctx context.Context, tokenType string, maxBalance int64, limit int) ([]AccountInfo, error) {
+	q := url.Values{}
+	if tokenType != "" {
+		q.Set("token", tokenType)
+	}
+	q.Set("max_balance", strconv.FormatInt(maxBalance, 10))
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+
+	path := "/accounts/low-balance"
+	if enc := q.Encode(); enc != "" {
+		path += "?" + enc
+	}
+
+	var out ListAccountsResponse
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Accounts, nil
+}
+
+// InvokeMaster invokes a contract method using the master wallet (TEE_PRIVATE_KEY).
+// This is used for TEE operations like PriceFeed and RandomnessLog that require
+// the caller to be a registered TEE signer in AppRegistry.
+func (c *Client) InvokeMaster(ctx context.Context, contractHash, method string, params []ContractParam, scope string) (*InvokeContractResponse, error) {
+	var out InvokeContractResponse
+	if err := c.doJSON(ctx, http.MethodPost, "/invoke-master", InvokeMasterInput{
+		ContractHash: contractHash,
+		Method:       method,
+		Params:       params,
+		Scope:        scope,
+	}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// DeployMaster deploys a new smart contract using the master wallet (TEE_PRIVATE_KEY).
+// This is used for deploying contracts where the master account needs to be the Admin.
+// All signing happens inside TEE - private keys never leave the enclave.
+func (c *Client) DeployMaster(ctx context.Context, nefBase64, manifestJSON string, data any) (*DeployMasterResponse, error) {
+	var out DeployMasterResponse
+	if err := c.doJSON(ctx, http.MethodPost, "/deploy-master", DeployMasterInput{
+		NEFBase64:    nefBase64,
+		ManifestJSON: manifestJSON,
+		Data:         data,
 	}, &out); err != nil {
 		return nil, err
 	}

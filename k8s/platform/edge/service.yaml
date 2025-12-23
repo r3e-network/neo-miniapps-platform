@@ -1,0 +1,21 @@
+# =============================================================================
+# Edge Gateway Service
+# ClusterIP service for internal routing
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: edge-gateway
+  namespace: platform
+  labels:
+    app: edge-gateway
+spec:
+  type: ClusterIP
+  selector:
+    app: edge-gateway
+  ports:
+    - name: http
+      port: 8787
+      targetPort: 8787
+      protocol: TCP
+  sessionAffinity: None

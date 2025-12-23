@@ -47,6 +47,7 @@ import (
 	neovrf "github.com/R3E-Network/service_layer/services/vrf/marble"
 	txproxy "github.com/R3E-Network/service_layer/services/txproxy/marble"
 	neogasbank "github.com/R3E-Network/service_layer/services/gasbank/marble"
+	neosimulation "github.com/R3E-Network/service_layer/services/simulation/marble"
 )
 
 // ServiceRunner interface for all Neo services
@@ -65,6 +66,7 @@ var availableServices = []string{
 	"neoflow",
 	"neogasbank",
 	"neooracle",
+	"neosimulation",
 	"neovrf",
 	"txproxy",
 }
@@ -402,6 +404,19 @@ func main() {
 			Marble:      m,
 			DB:          db,
 			ChainClient: chainClient,
+		})
+	case "neosimulation":
+		// Get account pool URL for simulation
+		accountPoolURL := strings.TrimSpace(os.Getenv("NEOACCOUNTS_SERVICE_URL"))
+		if accountPoolURL == "" {
+			accountPoolURL = "http://neoaccounts:8085"
+		}
+		svc, err = neosimulation.New(neosimulation.Config{
+			Marble:         m,
+			DB:             db,
+			ChainClient:    chainClient,
+			AccountPoolURL: accountPoolURL,
+			AutoStart:      strings.ToLower(os.Getenv("SIMULATION_ENABLED")) == "true",
 		})
 	case "txproxy":
 		svc, err = txproxy.New(txproxy.Config{

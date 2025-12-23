@@ -6,14 +6,14 @@ package neoaccounts
 import (
 	"context"
 	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
-	"math/big"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nspcc-dev/neo-go/pkg/crypto/keys"
 
 	neoaccountssupabase "github.com/R3E-Network/service_layer/infrastructure/accountpool/supabase"
 	"github.com/R3E-Network/service_layer/infrastructure/chain"
@@ -30,10 +30,11 @@ const (
 	Version     = "2.0.0" // Updated for multi-token support
 
 	// Pool configuration
-	MinPoolAccounts = 200
-	MaxPoolAccounts = 10000
-	RotationRate    = 0.1 // 10% of accounts rotated per day
-	RotationMinAge  = 24  // Minimum age in hours before rotation
+	MinPoolAccounts = 1000
+	MaxPoolAccounts = 50000
+	BatchCreateSize = 100  // Number of accounts to create in each batch
+	RotationRate    = 0.1  // 10% of accounts rotated per day
+	RotationMinAge  = 24   // Minimum age in hours before rotation
 
 	// Lock timeout - accounts locked longer than this can be force-released
 	LockTimeout = 24 * time.Hour
@@ -152,16 +153,33 @@ func (s *Service) initializePool(ctx context.Context) error {
 	if need > MaxPoolAccounts-len(accounts) {
 		need = MaxPoolAccounts - len(accounts)
 	}
+
+	// Create accounts in batches for better performance
 	for i := 0; i < need; i++ {
 		if _, err := s.createAccount(ctx); err != nil {
 			return err
 		}
+		// Log progress every BatchCreateSize accounts
+		if (i+1)%BatchCreateSize == 0 {
+			s.Logger().WithContext(ctx).WithFields(map[string]interface{}{
+				"created": i + 1,
+				"total":   need,
+			}).Info("batch account creation progress")
+		}
 	}
+
+	if need > 0 {
+		s.Logger().WithContext(ctx).WithFields(map[string]interface{}{
+			"created": need,
+		}).Info("pool initialization complete")
+	}
+
 	return nil
 }
 
 // createAccount creates and persists a new pool account with HD derivation.
 // No balance is set on the account itself - balances are tracked in pool_account_balances.
+// Uses neo-go's secp256k1 keys for Neo N3 compatibility.
 func (s *Service) createAccount(ctx context.Context) (*neoaccountssupabase.Account, error) {
 	accountID := uuid.New().String()
 
@@ -170,17 +188,14 @@ func (s *Service) createAccount(ctx context.Context) (*neoaccountssupabase.Accou
 		return nil, err
 	}
 
-	curve := elliptic.P256()
-	d := new(big.Int).SetBytes(derivedKey)
-	n := new(big.Int).Sub(curve.Params().N, big.NewInt(1))
-	d.Mod(d, n)
-	d.Add(d, big.NewInt(1)) // ensure non-zero
-	priv := &ecdsa.PrivateKey{PublicKey: ecdsa.PublicKey{Curve: curve}, D: d}
-	priv.PublicKey.X, priv.PublicKey.Y = curve.ScalarBaseMult(d.Bytes())
+	// Use neo-go's keys package which uses secp256k1 (Neo N3 curve)
+	neoPrivKey, err := keys.NewPrivateKeyFromBytes(derivedKey)
+	if err != nil {
+		return nil, fmt.Errorf("create neo private key: %w", err)
+	}
 
-	pubBytes := crypto.PublicKeyToBytes(&priv.PublicKey)
-	scriptHash := crypto.PublicKeyToScriptHash(pubBytes)
-	address := crypto.ScriptHashToAddress(scriptHash)
+	// Get the Neo N3 address directly from neo-go
+	address := neoPrivKey.Address()
 
 	acc := &neoaccountssupabase.Account{
 		ID:         accountID,
@@ -224,19 +239,29 @@ func (s *Service) deriveAccountKey(accountID string) ([]byte, error) {
 
 // getPrivateKey derives and returns the private key for an account.
 // This is internal only - private keys never leave this service.
+// Uses neo-go's secp256k1 keys for Neo N3 compatibility.
 func (s *Service) getPrivateKey(accountID string) (*ecdsa.PrivateKey, error) {
 	derivedKey, err := s.deriveAccountKey(accountID)
 	if err != nil {
 		return nil, err
 	}
 
-	curve := elliptic.P256()
-	d := new(big.Int).SetBytes(derivedKey)
-	n := new(big.Int).Sub(curve.Params().N, big.NewInt(1))
-	d.Mod(d, n)
-	d.Add(d, big.NewInt(1))
-	priv := &ecdsa.PrivateKey{PublicKey: ecdsa.PublicKey{Curve: curve}, D: d}
-	priv.PublicKey.X, priv.PublicKey.Y = curve.ScalarBaseMult(d.Bytes())
+	// Use neo-go's keys package which uses secp256k1 (Neo N3 curve)
+	neoPrivKey, err := keys.NewPrivateKeyFromBytes(derivedKey)
+	if err != nil {
+		return nil, fmt.Errorf("create neo private key: %w", err)
+	}
 
-	return priv, nil
+	// Return the underlying ecdsa.PrivateKey (secp256k1)
+	return &neoPrivKey.PrivateKey, nil
+}
+
+// getPrivateKeyHex derives and returns the private key hex string for an account.
+// This is used for creating neo-go wallet accounts for signing.
+func (s *Service) getPrivateKeyHex(accountID string) (string, error) {
+	derivedKey, err := s.deriveAccountKey(accountID)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(derivedKey), nil
 }

@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gotrue
+  labels:
+    app: gotrue
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gotrue
+  template:
+    metadata:
+      labels:
+        app: gotrue
+    spec:
+      containers:
+        - name: gotrue
+          image: supabase/gotrue:v2.143.0
+          ports:
+            - containerPort: 9999
+              name: http
+          env:
+            # Database
+            - name: GOTRUE_DB_DRIVER
+              value: "postgres"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: supabase-secrets
+                  key: DATABASE_URL
+
+            # API
+            - name: API_EXTERNAL_URL
+              value: "https://supabase.localhost"
+            - name: GOTRUE_API_HOST
+              value: "0.0.0.0"
+            - name: GOTRUE_API_PORT
+              value: "9999"
+
+            # JWT
+            - name: GOTRUE_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: supabase-secrets
+                  key: JWT_SECRET
+            - name: GOTRUE_JWT_EXP
+              value: "3600"
+            - name: GOTRUE_JWT_DEFAULT_GROUP_NAME
+              value: "authenticated"
+
+            # Site URL
+            - name: GOTRUE_SITE_URL
+              value: "http://localhost:3000"
+            - name: GOTRUE_URI_ALLOW_LIST
+              value: "http://localhost:3000,https://supabase.localhost"
+
+            # Disable email confirmation for local dev
+            - name: GOTRUE_MAILER_AUTOCONFIRM
+              value: "true"
+            - name: GOTRUE_SMTP_HOST
+              value: ""
+            - name: GOTRUE_SMTP_PORT
+              value: "587"
+            - name: GOTRUE_SMTP_USER
+              value: ""
+            - name: GOTRUE_SMTP_PASS
+              value: ""
+            - name: GOTRUE_SMTP_ADMIN_EMAIL
+              value: "admin@localhost"
+            - name: GOTRUE_MAILER_URLPATHS_CONFIRMATION
+              value: "/auth/v1/verify"
+            - name: GOTRUE_MAILER_URLPATHS_INVITE
+              value: "/auth/v1/verify"
+            - name: GOTRUE_MAILER_URLPATHS_RECOVERY
+              value: "/auth/v1/verify"
+            - name: GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE
+              value: "/auth/v1/verify"
+
+            # External OAuth (optional)
+            - name: GOTRUE_EXTERNAL_GOOGLE_ENABLED
+              value: "false"
+            - name: GOTRUE_EXTERNAL_GITHUB_ENABLED
+              value: "false"
+
+            # Security
+            - name: GOTRUE_DISABLE_SIGNUP
+              value: "false"
+            - name: GOTRUE_RATE_LIMIT_HEADER
+              value: "X-Real-IP"
+
+            # Logging
+            - name: GOTRUE_LOG_LEVEL
+              value: "info"
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9999
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9999
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

@@ -1,7 +1,7 @@
 package chain
 
 import (
-	"encoding/hex"
+	"encoding/base64"
 	"math/big"
 )
 
@@ -31,8 +31,9 @@ func NewBoolParam(value bool) ContractParam {
 }
 
 // NewByteArrayParam creates a byte array parameter.
+// Neo N3 RPC expects ByteArray values to be base64 encoded.
 func NewByteArrayParam(value []byte) ContractParam {
-	return ContractParam{Type: "ByteArray", Value: hex.EncodeToString(value)}
+	return ContractParam{Type: "ByteArray", Value: base64.StdEncoding.EncodeToString(value)}
 }
 
 // NewHash160Param creates a Hash160 (address) parameter.

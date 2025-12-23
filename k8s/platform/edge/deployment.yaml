@@ -1,0 +1,165 @@
+# =============================================================================
+# Edge Gateway Deployment
+# Deno-based edge runtime for serverless functions
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edge-gateway
+  namespace: platform
+  labels:
+    app: edge-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: edge-gateway
+  template:
+    metadata:
+      labels:
+        app: edge-gateway
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: edge-gateway
+          image: service-layer/edge-gateway:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: 8787
+              protocol: TCP
+          env:
+            # Runtime environment
+            - name: EDGE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: edge-gateway-config
+                  key: EDGE_ENV
+            - name: DENO_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: edge-gateway-config
+                  key: DENO_ENV
+            - name: EDGE_DEV_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: edge-gateway-config
+                  key: EDGE_DEV_PORT
+
+            # Kubernetes cluster detection
+            - name: K8S_CLUSTER
+              valueFrom:
+                configMapKeyRef:
+                  name: edge-gateway-config
+                  key: K8S_CLUSTER
+
+            # Supabase configuration
+            - name: SUPABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: edge-gateway-config
+                  key: SUPABASE_URL
+            - name: SUPABASE_ANON_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: edge-gateway-secrets
+                  key: SUPABASE_ANON_KEY
+            - name: SUPABASE_SERVICE_ROLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: edge-gateway-secrets
+                  key: SUPABASE_SERVICE_ROLE_KEY
+                  optional: true
+            - name: SUPABASE_SERVICE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: edge-gateway-secrets
+                  key: SUPABASE_SERVICE_KEY
+                  optional: true
+
+            # Neo RPC configuration
+            - name: NEO_RPC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: edge-gateway-config
+                  key: NEO_RPC_URL
+            - name: NEO_NETWORK_MAGIC
+              valueFrom:
+                configMapKeyRef:
+                  name: edge-gateway-config
+                  key: NEO_NETWORK_MAGIC
+
+            # Service mesh URLs
+            - name: NEOFEEDS_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: edge-gateway-config
+                  key: NEOFEEDS_SERVICE_URL
+            - name: NEOFLOW_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: edge-gateway-config
+                  key: NEOFLOW_SERVICE_URL
+            - name: NEOCOMPUTE_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: edge-gateway-config
+                  key: NEOCOMPUTE_SERVICE_URL
+            - name: NEOVRF_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: edge-gateway-config
+                  key: NEOVRF_SERVICE_URL
+            - name: NEOORACLE_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: edge-gateway-config
+                  key: NEOORACLE_SERVICE_URL
+            - name: TXPROXY_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: edge-gateway-config
+                  key: TXPROXY_SERVICE_URL
+            - name: GLOBALSIGNER_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: edge-gateway-config
+                  key: GLOBALSIGNER_SERVICE_URL
+
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+          # Health checks
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8787
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8787
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3

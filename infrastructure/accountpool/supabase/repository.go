@@ -21,6 +21,7 @@ type RepositoryInterface interface {
 	Create(ctx context.Context, acc *Account) error
 	Update(ctx context.Context, acc *Account) error
 	GetByID(ctx context.Context, id string) (*Account, error)
+	GetByAddress(ctx context.Context, address string) (*Account, error)
 	List(ctx context.Context) ([]Account, error)
 	ListAvailable(ctx context.Context, limit int) ([]Account, error)
 	ListByLocker(ctx context.Context, lockerID string) ([]Account, error)
@@ -31,11 +32,13 @@ type RepositoryInterface interface {
 	ListWithBalances(ctx context.Context) ([]AccountWithBalances, error)
 	ListAvailableWithBalances(ctx context.Context, tokenType string, minBalance *int64, limit int) ([]AccountWithBalances, error)
 	ListByLockerWithBalances(ctx context.Context, lockerID string) ([]AccountWithBalances, error)
+	ListLowBalanceAccounts(ctx context.Context, tokenType string, maxBalance int64, limit int) ([]AccountWithBalances, error)
 
 	// Balance operations
 	UpsertBalance(ctx context.Context, accountID, tokenType, scriptHash string, amount int64, decimals int) error
 	GetBalance(ctx context.Context, accountID, tokenType string) (*AccountBalance, error)
 	GetBalances(ctx context.Context, accountID string) ([]AccountBalance, error)
+	GetBalancesForAccounts(ctx context.Context, accountIDs []string) ([]AccountBalance, error)
 	DeleteBalances(ctx context.Context, accountID string) error
 
 	// Statistics
@@ -76,6 +79,11 @@ func (r *Repository) Update(ctx context.Context, acc *Account) error {
 // GetByID fetches a pool account by ID.
 func (r *Repository) GetByID(ctx context.Context, id string) (*Account, error) {
 	return database.GenericGetByField[Account](r.base, ctx, tableName, "id", id)
+}
+
+// GetByAddress fetches a pool account by address.
+func (r *Repository) GetByAddress(ctx context.Context, address string) (*Account, error) {
+	return database.GenericGetByField[Account](r.base, ctx, tableName, "address", address)
 }
 
 // List returns all pool accounts.
@@ -203,23 +211,84 @@ func (r *Repository) ListByLockerWithBalances(ctx context.Context, lockerID stri
 	return r.hydrateAccountsWithBalances(ctx, accounts)
 }
 
-// hydrateAccountsWithBalances adds balance information to a list of accounts.
-func (r *Repository) hydrateAccountsWithBalances(ctx context.Context, accounts []Account) ([]AccountWithBalances, error) {
-	result := make([]AccountWithBalances, 0, len(accounts))
+// ListLowBalanceAccounts returns accounts with balance below the specified threshold.
+// This is useful for auto top-up workers that need to find accounts requiring funding.
+func (r *Repository) ListLowBalanceAccounts(ctx context.Context, tokenType string, maxBalance int64, limit int) ([]AccountWithBalances, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 10
+	}
 
+	// Get all accounts (we need to check balances)
+	accounts, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Hydrate with balances
+	accountsWithBalances, err := r.hydrateAccountsWithBalances(ctx, accounts)
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter by token balance below threshold
+	filtered := make([]AccountWithBalances, 0, limit)
+	for i := range accountsWithBalances {
+		acc := &accountsWithBalances[i]
+		// Skip retiring accounts
+		if acc.IsRetiring {
+			continue
+		}
+		// Check if balance is below threshold
+		balance := acc.GetBalance(tokenType)
+		if balance < maxBalance {
+			filtered = append(filtered, *acc)
+			if len(filtered) >= limit {
+				break
+			}
+		}
+	}
+
+	return filtered, nil
+}
+
+// hydrateAccountsWithBalances adds balance information to a list of accounts.
+// Uses a single batch query to fetch all balances, avoiding N+1 query problem.
+func (r *Repository) hydrateAccountsWithBalances(ctx context.Context, accounts []Account) ([]AccountWithBalances, error) {
+	if len(accounts) == 0 {
+		return []AccountWithBalances{}, nil
+	}
+
+	// Collect all account IDs for batch query
+	accountIDs := make([]string, len(accounts))
+	for i := range accounts {
+		accountIDs[i] = accounts[i].ID
+	}
+
+	// Fetch all balances in a single query
+	allBalances, err := r.GetBalancesForAccounts(ctx, accountIDs)
+	if err != nil {
+		// Log error but continue - accounts exist even if balances query fails
+		allBalances = []AccountBalance{}
+	}
+
+	// Build a map of account_id -> balances for O(1) lookup
+	balanceMap := make(map[string][]AccountBalance)
+	for i := range allBalances {
+		bal := &allBalances[i]
+		balanceMap[bal.AccountID] = append(balanceMap[bal.AccountID], *bal)
+	}
+
+	// Hydrate accounts with their balances
+	result := make([]AccountWithBalances, 0, len(accounts))
 	for i := range accounts {
 		acc := &accounts[i]
 		accWithBal := NewAccountWithBalances(acc)
 
-		balances, err := r.GetBalances(ctx, acc.ID)
-		if err != nil {
-			// Log error but continue - account exists even if balances query fails
-			continue
-		}
-
-		for j := range balances {
-			bal := &balances[j]
-			accWithBal.AddBalance(bal)
+		if balances, ok := balanceMap[acc.ID]; ok {
+			for j := range balances {
+				bal := &balances[j]
+				accWithBal.AddBalance(bal)
+			}
 		}
 
 		result = append(result, *accWithBal)
@@ -240,7 +309,7 @@ func (r *Repository) UpsertBalance(ctx context.Context, accountID, tokenType, sc
 
 	// Check if balance exists
 	existing, err := r.GetBalance(ctx, accountID, tokenType)
-	if err != nil && existing == nil {
+	if err != nil || existing == nil {
 		// Create new balance
 		bal := &AccountBalance{
 			AccountID:  accountID,
@@ -304,6 +373,20 @@ func (r *Repository) GetBalances(ctx context.Context, accountID string) ([]Accou
 	return database.GenericListByField[AccountBalance](r.base, ctx, balancesTableName, "account_id", accountID)
 }
 
+// GetBalancesForAccounts fetches all token balances for multiple accounts in a single query.
+// This avoids the N+1 query problem when hydrating accounts with balances.
+func (r *Repository) GetBalancesForAccounts(ctx context.Context, accountIDs []string) ([]AccountBalance, error) {
+	if len(accountIDs) == 0 {
+		return []AccountBalance{}, nil
+	}
+
+	query := database.NewQuery().
+		In("account_id", accountIDs).
+		Build()
+
+	return database.GenericListWithQuery[AccountBalance](r.base, ctx, balancesTableName, query)
+}
+
 // DeleteBalances deletes all token balances for an account.
 func (r *Repository) DeleteBalances(ctx context.Context, accountID string) error {
 	if accountID == "" {
@@ -334,6 +417,7 @@ func (r *Repository) DeleteBalances(ctx context.Context, accountID string) error
 // =============================================================================
 
 // AggregateTokenStats calculates aggregate statistics for a token type.
+// Uses batch query to avoid N+1 problem.
 func (r *Repository) AggregateTokenStats(ctx context.Context, tokenType string) (*TokenStats, error) {
 	if tokenType == "" {
 		return nil, fmt.Errorf("token_type is required")
@@ -351,19 +435,44 @@ func (r *Repository) AggregateTokenStats(ctx context.Context, tokenType string) 
 		ScriptHash: scriptHash,
 	}
 
-	for i := range accounts {
-		acc := &accounts[i]
-		bal, err := r.GetBalance(ctx, acc.ID, tokenType)
-		if err != nil {
-			continue
-		}
-		if bal == nil {
-			continue
-		}
+	if len(accounts) == 0 {
+		return stats, nil
+	}
 
+	// Collect all account IDs for batch query
+	accountIDs := make([]string, len(accounts))
+	for i := range accounts {
+		accountIDs[i] = accounts[i].ID
+	}
+
+	// Fetch all balances for the specific token type in a single query
+	query := database.NewQuery().
+		In("account_id", accountIDs).
+		Eq("token_type", tokenType).
+		Build()
+
+	balances, err := database.GenericListWithQuery[AccountBalance](r.base, ctx, balancesTableName, query)
+	if err != nil {
+		return stats, nil // Return empty stats on error
+	}
+
+	// Build a map of account_id -> balance for O(1) lookup
+	balanceMap := make(map[string]*AccountBalance)
+	for i := range balances {
+		bal := &balances[i]
+		balanceMap[bal.AccountID] = bal
 		// Update script hash from actual data if available
 		if bal.ScriptHash != "" {
 			stats.ScriptHash = bal.ScriptHash
+		}
+	}
+
+	// Calculate stats
+	for i := range accounts {
+		acc := &accounts[i]
+		bal, ok := balanceMap[acc.ID]
+		if !ok || bal == nil {
+			continue
 		}
 
 		stats.TotalBalance += bal.Amount

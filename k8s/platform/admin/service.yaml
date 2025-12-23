@@ -1,0 +1,20 @@
+# =============================================================================
+# Admin Console Service
+# Exposes admin console within the cluster
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-console
+  namespace: platform
+  labels:
+    app: admin-console
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3002
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: admin-console

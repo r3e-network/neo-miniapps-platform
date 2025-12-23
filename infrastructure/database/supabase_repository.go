@@ -203,7 +203,8 @@ func (r *Repository) HealthCheck(ctx context.Context) error {
 	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	if _, err := r.client.request(checkCtx, "GET", "users", nil, "select=id&limit=1"); err != nil {
+	// Query pool_accounts table which has proper permissions (users table is restricted)
+	if _, err := r.client.request(checkCtx, "GET", "pool_accounts", nil, "select=id&limit=1"); err != nil {
 		return fmt.Errorf("health check failed: %w", err)
 	}
 	return nil

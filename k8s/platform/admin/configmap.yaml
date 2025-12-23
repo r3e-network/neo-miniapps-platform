@@ -1,0 +1,18 @@
+# =============================================================================
+# Admin Console ConfigMap
+# Environment variables for admin console
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: admin-console-config
+  namespace: platform
+data:
+  # Supabase configuration (internal k8s service URL)
+  NEXT_PUBLIC_SUPABASE_URL: "http://postgrest.supabase.svc.cluster.local:3000"
+
+  # Edge Gateway configuration (internal k8s service URL)
+  NEXT_PUBLIC_EDGE_URL: "http://edge-gateway.platform.svc.cluster.local:8787"
+
+  # Node environment
+  NODE_ENV: "production"

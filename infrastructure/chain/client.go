@@ -6,9 +6,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/nspcc-dev/neo-go/pkg/rpcclient"
+	"github.com/nspcc-dev/neo-go/pkg/rpcclient/actor"
+	"github.com/nspcc-dev/neo-go/pkg/rpcclient/gas"
+	"github.com/nspcc-dev/neo-go/pkg/util"
+	"github.com/nspcc-dev/neo-go/pkg/wallet"
 
 	"github.com/R3E-Network/service_layer/infrastructure/httputil"
 )
@@ -18,6 +26,12 @@ type Client struct {
 	rpcURL     string
 	httpClient *http.Client
 	networkID  uint32
+
+	// Persistent actor for concurrent transaction support
+	persistentRPC   *rpcclient.Client
+	persistentActor *actor.Actor
+	actorAccount    *wallet.Account
+	actorMu         sync.Mutex
 }
 
 // Config holds client configuration.
@@ -205,4 +219,79 @@ func (c *Client) GetApplicationLog(ctx context.Context, txHash string) (*Applica
 		return nil, err
 	}
 	return &log, nil
+}
+
+// TransferGAS transfers GAS from a signer account to a target address using the neo-go actor pattern.
+// This uses a persistent actor for the account to support concurrent transactions with proper nonce management.
+func (c *Client) TransferGAS(ctx context.Context, account *wallet.Account, to util.Uint160, amount *big.Int) (util.Uint256, error) {
+	// Get or create the actor (hold lock only during setup)
+	act, err := c.getOrCreateActor(ctx, account)
+	if err != nil {
+		return util.Uint256{}, err
+	}
+
+	// Get GAS contract using the actor
+	gasContract := gas.New(act)
+
+	// Transfer GAS - this can run concurrently, actor handles nonce management
+	txHash, _, err := gasContract.Transfer(account.ScriptHash(), to, amount, nil)
+	if err != nil {
+		// If transfer fails, reset the actor so it gets recreated on next call
+		c.resetActor()
+		return util.Uint256{}, fmt.Errorf("transfer: %w", err)
+	}
+
+	return txHash, nil
+}
+
+// getOrCreateActor returns the persistent actor, creating it if necessary.
+func (c *Client) getOrCreateActor(ctx context.Context, account *wallet.Account) (*actor.Actor, error) {
+	c.actorMu.Lock()
+	defer c.actorMu.Unlock()
+
+	// Check if we need to create or recreate the persistent actor
+	needNewActor := c.persistentActor == nil ||
+		c.actorAccount == nil ||
+		c.actorAccount.ScriptHash() != account.ScriptHash()
+
+	if needNewActor {
+		// Close existing RPC client if any
+		if c.persistentRPC != nil {
+			c.persistentRPC.Close()
+			c.persistentRPC = nil
+			c.persistentActor = nil
+		}
+
+		// Create a new rpcclient connection
+		rpcClient, err := rpcclient.New(ctx, c.rpcURL, rpcclient.Options{})
+		if err != nil {
+			return nil, fmt.Errorf("create rpc client: %w", err)
+		}
+
+		// Create actor for signing transactions
+		act, err := actor.NewSimple(rpcClient, account)
+		if err != nil {
+			rpcClient.Close()
+			return nil, fmt.Errorf("create actor: %w", err)
+		}
+
+		c.persistentRPC = rpcClient
+		c.persistentActor = act
+		c.actorAccount = account
+	}
+
+	return c.persistentActor, nil
+}
+
+// resetActor clears the persistent actor so it gets recreated on next call.
+func (c *Client) resetActor() {
+	c.actorMu.Lock()
+	defer c.actorMu.Unlock()
+
+	if c.persistentRPC != nil {
+		c.persistentRPC.Close()
+	}
+	c.persistentRPC = nil
+	c.persistentActor = nil
+	c.actorAccount = nil
 }

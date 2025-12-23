@@ -1,0 +1,42 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: supabase-ingress
+  annotations:
+    cert-manager.io/cluster-issuer: "selfsigned-issuer"
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - supabase.localhost
+      secretName: supabase-tls
+  rules:
+    - host: supabase.localhost
+      http:
+        paths:
+          # PostgREST API (REST API)
+          - path: /rest/v1
+            pathType: Prefix
+            backend:
+              service:
+                name: postgrest
+                port:
+                  number: 3000
+          # GoTrue Auth API
+          - path: /auth/v1
+            pathType: Prefix
+            backend:
+              service:
+                name: gotrue
+                port:
+                  number: 9999
+          # Default to PostgREST for root path
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: postgrest
+                port:
+                  number: 3000

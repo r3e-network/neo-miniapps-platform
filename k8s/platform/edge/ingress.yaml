@@ -1,0 +1,30 @@
+# =============================================================================
+# Edge Gateway Ingress
+# Exposes edge gateway at https://edge.localhost for local development
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: edge-gateway
+  namespace: platform
+  annotations:
+    cert-manager.io/cluster-issuer: selfsigned-issuer
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - edge.localhost
+      secretName: wildcard-localhost-tls
+  rules:
+    - host: edge.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: edge-gateway
+                port:
+                  number: 8787

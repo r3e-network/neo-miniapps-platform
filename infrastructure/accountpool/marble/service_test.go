@@ -56,6 +56,15 @@ func (m *mockNeoAccountsRepo) GetByID(_ context.Context, id string) (*neoaccount
 	return nil, fmt.Errorf("account not found: %s", id)
 }
 
+func (m *mockNeoAccountsRepo) GetByAddress(_ context.Context, address string) (*neoaccountssupabase.Account, error) {
+	for _, acc := range m.accounts {
+		if acc.Address == address {
+			return acc, nil
+		}
+	}
+	return nil, fmt.Errorf("account not found by address: %s", address)
+}
+
 func (m *mockNeoAccountsRepo) List(_ context.Context) ([]neoaccountssupabase.Account, error) {
 	if m.simulateError {
 		return nil, fmt.Errorf("simulated database error")
@@ -204,6 +213,18 @@ func (m *mockNeoAccountsRepo) GetBalances(_ context.Context, accountID string) (
 	return result, nil
 }
 
+func (m *mockNeoAccountsRepo) GetBalancesForAccounts(_ context.Context, accountIDs []string) ([]neoaccountssupabase.AccountBalance, error) {
+	var result []neoaccountssupabase.AccountBalance
+	for _, accountID := range accountIDs {
+		if bals, ok := m.balances[accountID]; ok {
+			for _, bal := range bals {
+				result = append(result, *bal)
+			}
+		}
+	}
+	return result, nil
+}
+
 func (m *mockNeoAccountsRepo) DeleteBalances(_ context.Context, accountID string) error {
 	delete(m.balances, accountID)
 	return nil
@@ -229,6 +250,37 @@ func (m *mockNeoAccountsRepo) AggregateTokenStats(_ context.Context, tokenType s
 		}
 	}
 	return stats, nil
+}
+
+// ListLowBalanceAccounts returns accounts with balance below the specified threshold.
+func (m *mockNeoAccountsRepo) ListLowBalanceAccounts(_ context.Context, tokenType string, maxBalance int64, limit int) ([]neoaccountssupabase.AccountWithBalances, error) {
+	if m.simulateError {
+		return nil, fmt.Errorf("simulated error")
+	}
+	var result []neoaccountssupabase.AccountWithBalances
+	for _, acc := range m.accounts {
+		if acc.LockedBy == "" && !acc.IsRetiring {
+			if bals, ok := m.balances[acc.ID]; ok {
+				if bal, ok := bals[tokenType]; ok && bal.Amount < maxBalance {
+					awb := neoaccountssupabase.NewAccountWithBalances(acc)
+					for _, b := range bals {
+						awb.Balances[b.TokenType] = neoaccountssupabase.TokenBalance{
+							TokenType:  b.TokenType,
+							ScriptHash: b.ScriptHash,
+							Amount:     b.Amount,
+							Decimals:   b.Decimals,
+							UpdatedAt:  b.UpdatedAt,
+						}
+					}
+					result = append(result, *awb)
+					if len(result) >= limit {
+						break
+					}
+				}
+			}
+		}
+	}
+	return result, nil
 }
 
 // =============================================================================
@@ -579,6 +631,15 @@ func TestServiceConstants(t *testing.T) {
 	}
 	if Version != "2.0.0" {
 		t.Errorf("Version = %s, want 2.0.0", Version)
+	}
+	if MinPoolAccounts != 1000 {
+		t.Errorf("MinPoolAccounts = %d, want 1000", MinPoolAccounts)
+	}
+	if MaxPoolAccounts != 50000 {
+		t.Errorf("MaxPoolAccounts = %d, want 50000", MaxPoolAccounts)
+	}
+	if BatchCreateSize != 100 {
+		t.Errorf("BatchCreateSize = %d, want 100", BatchCreateSize)
 	}
 }
 
@@ -2431,5 +2492,181 @@ func BenchmarkAccountInfoMarshal(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = json.Marshal(info)
+	}
+}
+
+// =============================================================================
+// New Pool Limit Tests (MinPoolAccounts=1000, MaxPoolAccounts=50000)
+// =============================================================================
+
+func TestInitializePoolWithNewMinLimit(t *testing.T) {
+	svc, mockRepo := newTestServiceWithMock(t)
+
+	// Start with empty pool
+	err := svc.initializePool(context.Background())
+	if err != nil {
+		t.Fatalf("initializePool: %v", err)
+	}
+
+	// Should create MinPoolAccounts (1000) accounts
+	accounts, _ := mockRepo.List(context.Background())
+	if len(accounts) < MinPoolAccounts {
+		t.Errorf("Expected at least %d accounts, got %d", MinPoolAccounts, len(accounts))
+	}
+}
+
+func TestInitializePoolRespectMaxLimit(t *testing.T) {
+	svc, mockRepo := newTestServiceWithMock(t)
+
+	// Pre-populate with accounts close to max
+	for i := 0; i < MaxPoolAccounts-10; i++ {
+		mockRepo.Create(context.Background(), &neoaccountssupabase.Account{
+			ID:      fmt.Sprintf("pre-acc-%d", i),
+			Address: fmt.Sprintf("NAddr%d", i),
+		})
+	}
+
+	// Initialize should not exceed MaxPoolAccounts
+	err := svc.initializePool(context.Background())
+	if err != nil {
+		t.Fatalf("initializePool: %v", err)
+	}
+
+	accounts, _ := mockRepo.List(context.Background())
+	if len(accounts) > MaxPoolAccounts {
+		t.Errorf("Pool size %d exceeds MaxPoolAccounts %d", len(accounts), MaxPoolAccounts)
+	}
+}
+
+func TestBatchCreationLogging(t *testing.T) {
+	svc, mockRepo := newTestServiceWithMock(t)
+
+	// Create exactly BatchCreateSize accounts to trigger logging
+	for i := 0; i < BatchCreateSize; i++ {
+		_, err := svc.createAccount(context.Background())
+		if err != nil {
+			t.Fatalf("createAccount: %v", err)
+		}
+	}
+
+	accounts, _ := mockRepo.List(context.Background())
+	if len(accounts) != BatchCreateSize {
+		t.Errorf("Expected %d accounts, got %d", BatchCreateSize, len(accounts))
+	}
+}
+
+func TestPoolSizeBoundaries(t *testing.T) {
+	// Test that constants are properly defined
+	if MinPoolAccounts >= MaxPoolAccounts {
+		t.Error("MinPoolAccounts should be less than MaxPoolAccounts")
+	}
+
+	if MinPoolAccounts != 1000 {
+		t.Errorf("MinPoolAccounts = %d, expected 1000", MinPoolAccounts)
+	}
+
+	if MaxPoolAccounts != 50000 {
+		t.Errorf("MaxPoolAccounts = %d, expected 50000", MaxPoolAccounts)
+	}
+
+	if BatchCreateSize != 100 {
+		t.Errorf("BatchCreateSize = %d, expected 100", BatchCreateSize)
+	}
+
+	// Verify batch size is reasonable relative to min pool size
+	if BatchCreateSize > MinPoolAccounts {
+		t.Error("BatchCreateSize should not exceed MinPoolAccounts")
+	}
+}
+
+func TestInitializePoolBatchProgress(t *testing.T) {
+	svc, mockRepo := newTestServiceWithMock(t)
+
+	// Pre-populate with some accounts, requiring multiple batches to reach min
+	initialCount := 50
+	for i := 0; i < initialCount; i++ {
+		mockRepo.Create(context.Background(), &neoaccountssupabase.Account{
+			ID:      fmt.Sprintf("initial-acc-%d", i),
+			Address: fmt.Sprintf("NAddr%d", i),
+		})
+	}
+
+	err := svc.initializePool(context.Background())
+	if err != nil {
+		t.Fatalf("initializePool: %v", err)
+	}
+
+	accounts, _ := mockRepo.List(context.Background())
+	expectedMin := MinPoolAccounts
+	if len(accounts) < expectedMin {
+		t.Errorf("Expected at least %d accounts, got %d", expectedMin, len(accounts))
+	}
+}
+
+func TestRequestAccountsWithNewLimits(t *testing.T) {
+	svc, mockRepo := newTestServiceWithMock(t)
+
+	// Pre-populate with available accounts
+	for i := 0; i < 150; i++ {
+		mockRepo.Create(context.Background(), &neoaccountssupabase.Account{
+			ID:       fmt.Sprintf("avail-acc-%d", i),
+			Address:  fmt.Sprintf("NAddr%d", i),
+			LockedBy: "",
+		})
+	}
+
+	// Request 100 accounts (max per request)
+	accounts, lockID, err := svc.RequestAccounts(context.Background(), "test-service", 100, "test")
+	if err != nil {
+		t.Fatalf("RequestAccounts: %v", err)
+	}
+
+	if len(accounts) != 100 {
+		t.Errorf("Expected 100 accounts, got %d", len(accounts))
+	}
+
+	if lockID == "" {
+		t.Error("lockID should not be empty")
+	}
+
+	// Verify all accounts are locked
+	for _, acc := range accounts {
+		if acc.LockedBy != "test-service" {
+			t.Errorf("Account %s should be locked by test-service", acc.ID)
+		}
+	}
+}
+
+func TestPoolInfoWithLargePool(t *testing.T) {
+	svc, mockRepo := newTestServiceWithMock(t)
+
+	// Create a larger pool (simulate production scenario)
+	accountCount := 5000
+	for i := 0; i < accountCount; i++ {
+		status := ""
+		if i%10 == 0 {
+			status = "locked-service"
+		}
+		mockRepo.Create(context.Background(), &neoaccountssupabase.Account{
+			ID:       fmt.Sprintf("pool-acc-%d", i),
+			Address:  fmt.Sprintf("NAddr%d", i),
+			LockedBy: status,
+		})
+		// Add some GAS balance
+		mockRepo.UpsertBalance(context.Background(), fmt.Sprintf("pool-acc-%d", i), TokenTypeGAS, neoaccountssupabase.GASScriptHash, 1000000, 8)
+	}
+
+	info, err := svc.GetPoolInfo(context.Background())
+	if err != nil {
+		t.Fatalf("GetPoolInfo: %v", err)
+	}
+
+	if info.TotalAccounts != accountCount {
+		t.Errorf("TotalAccounts = %d, want %d", info.TotalAccounts, accountCount)
+	}
+
+	expectedLocked := accountCount / 10
+	if info.LockedAccounts != expectedLocked {
+		t.Errorf("LockedAccounts = %d, want %d", info.LockedAccounts, expectedLocked)
 	}
 }

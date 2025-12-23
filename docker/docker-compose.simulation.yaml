@@ -297,5 +297,42 @@ services:
       - coordinator
     restart: unless-stopped
 
+  # =============================================================================
+  # NeoSimulation Service Marble - Simulation Mode
+  # Continuous transaction simulation for MiniApps
+  # =============================================================================
+  neosimulation:
+    image: service-layer/neosimulation:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: neosimulation
+        EGO_VERSION: ${EGO_VERSION:-1.8.0}
+        EGO_STRICT_SIGNING: 0
+    container_name: service-neosimulation
+    ports:
+      - 127.0.0.1:${NEOSIMULATION_PORT:-8093}:${NEOSIMULATION_PORT:-8093}
+    environment:
+      - EDG_MARBLE_COORDINATOR_ADDR=${COORDINATOR_MESH_ADDR:-coordinator:2001}
+      - EDG_MARBLE_TYPE=neosimulation
+      - EDG_MARBLE_DNS_NAMES=localhost,neosimulation
+      - SERVICE_TYPE=neosimulation
+      - OE_SIMULATION=${OE_SIMULATION:-1}
+      - PORT=${NEOSIMULATION_PORT:-8093}
+      - MARBLE_ENV=${MARBLE_ENV:-development}
+      - METRICS_ENABLED
+      - SUPABASE_URL
+      - SUPABASE_SERVICE_KEY
+      - NEO_RPC_URL
+      - NEO_NETWORK_MAGIC
+      - NEOACCOUNTS_SERVICE_URL=http://neoaccounts:8085
+      - SIMULATION_ENABLED=${SIMULATION_ENABLED:-true}
+      - SIMULATION_MINIAPPS=${SIMULATION_MINIAPPS:-builtin-lottery,builtin-coin-flip,builtin-dice-game}
+    depends_on:
+      - coordinator
+      - neoaccounts
+    restart: unless-stopped
+
 volumes:
   coordinator-data:

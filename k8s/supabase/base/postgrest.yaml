@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgrest
+  labels:
+    app: postgrest
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: postgrest
+  template:
+    metadata:
+      labels:
+        app: postgrest
+    spec:
+      containers:
+        - name: postgrest
+          image: postgrest/postgrest:v12.0.2
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: PGRST_DB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: supabase-secrets
+                  key: DATABASE_URL
+            - name: PGRST_DB_SCHEMAS
+              value: "public"
+            - name: PGRST_DB_ANON_ROLE
+              value: "anon"
+            - name: PGRST_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: supabase-secrets
+                  key: JWT_SECRET
+            - name: PGRST_DB_USE_LEGACY_GUCS
+              value: "false"
+            - name: PGRST_APP_SETTINGS_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: supabase-secrets
+                  key: JWT_SECRET
+            - name: PGRST_APP_SETTINGS_JWT_EXP
+              value: "3600"
+            - name: PGRST_DB_EXTRA_SEARCH_PATH
+              value: "public"
+            - name: PGRST_DB_MAX_ROWS
+              value: "1000"
+            - name: PGRST_DB_POOL
+              value: "10"
+            - name: PGRST_DB_POOL_TIMEOUT
+              value: "10"
+            - name: PGRST_SERVER_HOST
+              value: "*"
+            - name: PGRST_SERVER_PORT
+              value: "3000"
+            - name: PGRST_LOG_LEVEL
+              value: "info"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

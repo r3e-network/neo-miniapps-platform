@@ -1,0 +1,25 @@
+# =============================================================================
+# Wildcard Certificate for *.localhost
+# Used by all local development services
+# =============================================================================
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-localhost
+  namespace: cert-manager
+spec:
+  secretName: wildcard-localhost-tls
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
+  commonName: "*.localhost"
+  dnsNames:
+    - "*.localhost"
+    - "localhost"
+    - "*.marblerun.localhost"
+    - "*.service-layer.localhost"
+    - "*.supabase.localhost"
+    - "*.platform.localhost"
+  duration: 87600h # 10 years for local dev
+  renewBefore: 720h # 30 days

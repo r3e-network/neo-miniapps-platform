@@ -235,6 +235,59 @@ export type AutomationExecution = {
 export type AutomationDeleteResponse = { status: "ok" };
 export type AutomationStatusResponse = { status: string };
 
+// Events
+export type ContractEvent = {
+  id: string;
+  tx_hash: string;
+  block_index: number;
+  contract_hash: string;
+  event_name: string;
+  app_id?: string;
+  state?: unknown;
+  created_at: string;
+};
+
+export type EventsListParams = {
+  app_id?: string;
+  event_name?: string;
+  contract_hash?: string;
+  limit?: number;
+  after_id?: string;
+};
+
+export type EventsListResponse = {
+  events: ContractEvent[];
+  has_more: boolean;
+  last_id?: string;
+};
+
+// Transactions
+export type ChainTransaction = {
+  id: string;
+  tx_hash?: string;
+  request_id: string;
+  from_service: string;
+  tx_type: string;
+  contract_address: string;
+  method_name: string;
+  status: string;
+  gas_consumed?: number;
+  submitted_at: string;
+  confirmed_at?: string;
+};
+
+export type TransactionsListParams = {
+  app_id?: string;
+  limit?: number;
+  after_id?: string;
+};
+
+export type TransactionsListResponse = {
+  transactions: ChainTransaction[];
+  has_more: boolean;
+  last_id?: string;
+};
+
 export interface MiniAppSDK {
   // Blueprint-compatible convenience (alias of wallet.getAddress()).
   getAddress?: () => Promise<string>;
@@ -265,6 +318,12 @@ export interface MiniAppSDK {
   };
   datafeed: {
     getPrice(symbol: string): Promise<PriceResponse>;
+  };
+  events: {
+    list(params: EventsListParams): Promise<EventsListResponse>;
+  };
+  transactions: {
+    list(params: TransactionsListParams): Promise<TransactionsListResponse>;
   };
 }
 
@@ -335,6 +394,8 @@ export interface HostSDK {
   governance: MiniAppSDK["governance"];
   rng: MiniAppSDK["rng"];
   datafeed: MiniAppSDK["datafeed"];
+  events: MiniAppSDK["events"];
+  transactions: MiniAppSDK["transactions"];
 }
 
 export type MiniAppSDKConfig = {

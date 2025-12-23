@@ -4,6 +4,7 @@ package neoaccounts
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/R3E-Network/service_layer/infrastructure/httputil"
@@ -311,7 +312,7 @@ func (s *Service) handleInvokeContract(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := s.InvokeContract(r.Context(), input.ServiceID, input.AccountID, input.ContractHash, input.Method, input.Params)
+	resp, err := s.InvokeContract(r.Context(), input.ServiceID, input.AccountID, input.ContractHash, input.Method, input.Params, input.Scope)
 	if err != nil {
 		// Return partial response if available (for simulation failures)
 		if resp != nil {
@@ -344,6 +345,113 @@ func (s *Service) handleSimulateContract(w http.ResponseWriter, r *http.Request)
 	}
 
 	resp, err := s.SimulateContract(r.Context(), input.ServiceID, input.AccountID, input.ContractHash, input.Method, input.Params)
+	if err != nil {
+		httputil.InternalError(w, err.Error())
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, resp)
+}
+
+// handleInvokeMaster invokes a contract method using the master wallet (TEE_PRIVATE_KEY).
+// This is used for TEE operations like PriceFeed and RandomnessLog that require
+// the caller to be a registered TEE signer in AppRegistry.
+func (s *Service) handleInvokeMaster(w http.ResponseWriter, r *http.Request) {
+	var input InvokeMasterInput
+	if !httputil.DecodeJSON(w, r, &input) {
+		return
+	}
+
+	if input.ContractHash == "" || input.Method == "" {
+		httputil.BadRequest(w, "contract_hash and method required")
+		return
+	}
+
+	resp, err := s.InvokeMaster(r.Context(), input.ContractHash, input.Method, input.Params, input.Scope)
+	if err != nil {
+		// Return partial response if available (for simulation failures)
+		if resp != nil {
+			httputil.WriteJSON(w, http.StatusOK, resp)
+			return
+		}
+		httputil.InternalError(w, err.Error())
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, resp)
+}
+
+// handleDeployMaster deploys a new smart contract using the master wallet (TEE_PRIVATE_KEY).
+// This is used for deploying contracts where the master account needs to be the Admin.
+func (s *Service) handleDeployMaster(w http.ResponseWriter, r *http.Request) {
+	var input DeployMasterInput
+	if !httputil.DecodeJSON(w, r, &input) {
+		return
+	}
+
+	if input.NEFBase64 == "" || input.ManifestJSON == "" {
+		httputil.BadRequest(w, "nef_base64 and manifest_json required")
+		return
+	}
+
+	resp, err := s.DeployMaster(r.Context(), input.NEFBase64, input.ManifestJSON, input.Data)
+	if err != nil {
+		httputil.InternalError(w, err.Error())
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, resp)
+}
+
+// handleListLowBalanceAccounts returns accounts with balance below the specified threshold.
+// This is useful for auto top-up workers that need to find accounts requiring funding.
+func (s *Service) handleListLowBalanceAccounts(w http.ResponseWriter, r *http.Request) {
+	tokenType := r.URL.Query().Get("token")
+	if tokenType == "" {
+		tokenType = "GAS"
+	}
+
+	maxBalanceStr := r.URL.Query().Get("max_balance")
+	var maxBalance int64 = 10000000 // Default: 0.1 GAS
+	if maxBalanceStr != "" {
+		if parsed, err := strconv.ParseInt(maxBalanceStr, 10, 64); err == nil {
+			maxBalance = parsed
+		}
+	}
+
+	limitStr := r.URL.Query().Get("limit")
+	limit := 10
+	if limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	accounts, err := s.ListLowBalanceAccounts(r.Context(), tokenType, maxBalance, limit)
+	if err != nil {
+		httputil.InternalError(w, err.Error())
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, ListAccountsResponse{
+		Accounts: accounts,
+	})
+}
+
+// handleFundAccount transfers tokens from the master wallet (TEE_PRIVATE_KEY) to a target address.
+// This is used to fund pool accounts with GAS for transaction fees.
+func (s *Service) handleFundAccount(w http.ResponseWriter, r *http.Request) {
+	var input FundAccountInput
+	if !httputil.DecodeJSON(w, r, &input) {
+		return
+	}
+
+	if input.ToAddress == "" || input.Amount <= 0 {
+		httputil.BadRequest(w, "to_address and positive amount required")
+		return
+	}
+
+	resp, err := s.FundAccount(r.Context(), input.ToAddress, input.Amount, input.TokenHash)
 	if err != nil {
 		httputil.InternalError(w, err.Error())
 		return

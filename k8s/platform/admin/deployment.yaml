@@ -1,0 +1,73 @@
+# =============================================================================
+# Admin Console Deployment
+# Next.js admin dashboard for platform management
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-console
+  namespace: platform
+  labels:
+    app: admin-console
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: admin-console
+  template:
+    metadata:
+      labels:
+        app: admin-console
+    spec:
+      containers:
+        - name: admin-console
+          image: admin-console:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3002
+              protocol: TCP
+          env:
+            - name: NEXT_PUBLIC_SUPABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: admin-console-config
+                  key: NEXT_PUBLIC_SUPABASE_URL
+            - name: NEXT_PUBLIC_EDGE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: admin-console-config
+                  key: NEXT_PUBLIC_EDGE_URL
+            - name: SUPABASE_SERVICE_ROLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: supabase-secrets
+                  key: SUPABASE_SERVICE_KEY
+            - name: NEXTAUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: admin-console-secrets
+                  key: NEXTAUTH_SECRET
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3

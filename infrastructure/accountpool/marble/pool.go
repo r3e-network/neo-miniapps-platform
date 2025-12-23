@@ -287,6 +287,29 @@ func (s *Service) ListAccountsByService(ctx context.Context, serviceID, tokenTyp
 	return result, nil
 }
 
+// ListLowBalanceAccounts returns accounts with balance below the specified threshold.
+// This is useful for auto top-up workers that need to find accounts requiring funding.
+func (s *Service) ListLowBalanceAccounts(ctx context.Context, tokenType string, maxBalance int64, limit int) ([]AccountInfo, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("repository not configured")
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	accounts, err := s.repo.ListLowBalanceAccounts(ctx, tokenType, maxBalance, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]AccountInfo, 0, len(accounts))
+	for i := range accounts {
+		acc := &accounts[i]
+		result = append(result, AccountInfoFromWithBalances(acc))
+	}
+
+	return result, nil
+}
+
 // rotateAccounts retires old accounts and creates new ones.
 // Locked accounts are NEVER rotated.
 func (s *Service) rotateAccounts(ctx context.Context) {

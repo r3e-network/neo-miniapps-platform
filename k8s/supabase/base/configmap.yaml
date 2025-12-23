@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: supabase-config
+data:
+  # Supabase API URL (internal cluster URL)
+  SUPABASE_URL: "http://postgrest.supabase.svc.cluster.local:3000"
+
+  # Auth URL
+  AUTH_URL: "http://gotrue.supabase.svc.cluster.local:9999"
+
+  # PostgreSQL connection
+  POSTGRES_HOST: "postgres.supabase.svc.cluster.local"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "postgres"
+  POSTGRES_USER: "postgres"
+
+  # API settings
+  PGRST_DB_SCHEMAS: "public"
+  PGRST_DB_ANON_ROLE: "anon"
+  PGRST_DB_MAX_ROWS: "1000"
+
+  # Auth settings
+  GOTRUE_SITE_URL: "http://localhost:3000"
+  GOTRUE_JWT_EXP: "3600"
+  GOTRUE_DISABLE_SIGNUP: "false"
+  GOTRUE_MAILER_AUTOCONFIRM: "true"

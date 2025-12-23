@@ -159,17 +159,10 @@ func (b *TxBuilder) estimateNetworkFee(tx *transaction.Transaction) int64 {
 }
 
 // parseGasValue parses a GAS value string to int64 (in fractions).
+// Neo N3 RPC returns gasconsumed as an integer string in GAS fractions (1 GAS = 10^8 fractions).
 func parseGasValue(gasStr string) (int64, error) {
-	// GasConsumed is returned as a decimal string (e.g., "0.0123456")
-	// or as an integer string (e.g., "1234560")
-
-	// Try parsing as float first
-	if f, err := strconv.ParseFloat(gasStr, 64); err == nil {
-		// Convert to GAS fractions (1 GAS = 10^8 fractions)
-		return int64(f * 100000000), nil
-	}
-
-	// Try parsing as integer
+	// GasConsumed is returned as an integer string (e.g., "1000114412" = 10.00114412 GAS)
+	// It's already in GAS fractions, so we just parse it as an integer.
 	return strconv.ParseInt(gasStr, 10, 64)
 }
 
