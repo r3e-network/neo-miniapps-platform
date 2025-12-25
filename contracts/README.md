@@ -33,15 +33,15 @@ gateway + TEE services, with final enforcement at the contract layer.
 
 ## Platform Contracts
 
-| Contract             | Source                                 | Description                                        |
-| -------------------- | -------------------------------------- | -------------------------------------------------- |
-| **PaymentHub**       | `PaymentHub/PaymentHub.cs`             | GAS-only payments with configurable revenue splits |
-| **Governance**       | `Governance/Governance.cs`             | NEO staking and proposal voting                    |
-| **PriceFeed**        | `PriceFeed/PriceFeed.cs`               | Oracle price data with TEE attestation             |
-| **RandomnessLog**    | `RandomnessLog/RandomnessLog.cs`       | Verifiable randomness with TEE attestation         |
-| **AppRegistry**      | `AppRegistry/AppRegistry.cs`           | MiniApp manifest and status registry               |
-| **AutomationAnchor** | `AutomationAnchor/AutomationAnchor.cs` | Task scheduling with nonce-based anti-replay       |
-| **ServiceLayerGateway** | `ServiceLayerGateway/ServiceLayerGateway.cs` | On-chain service request routing + callbacks |
+| Contract                | Source                                       | Description                                        |
+| ----------------------- | -------------------------------------------- | -------------------------------------------------- |
+| **PaymentHub**          | `PaymentHub/PaymentHub.cs`                   | GAS-only payments with configurable revenue splits |
+| **Governance**          | `Governance/Governance.cs`                   | NEO staking and proposal voting                    |
+| **PriceFeed**           | `PriceFeed/PriceFeed.cs`                     | Oracle price data with TEE attestation             |
+| **RandomnessLog**       | `RandomnessLog/RandomnessLog.cs`             | Verifiable randomness with TEE attestation         |
+| **AppRegistry**         | `AppRegistry/AppRegistry.cs`                 | MiniApp manifest and status registry               |
+| **AutomationAnchor**    | `AutomationAnchor/AutomationAnchor.cs`       | Task scheduling with nonce-based anti-replay       |
+| **ServiceLayerGateway** | `ServiceLayerGateway/ServiceLayerGateway.cs` | On-chain service request routing + callbacks       |
 
 ## Custom MiniApp Contracts
 
@@ -139,6 +139,18 @@ neo-go contract update -i contracts/build/PaymentHub.nef \
 
 For Neo Express local dev, `deploy/scripts/deploy_all.sh` automatically updates
 contracts if they already exist in `deploy/config/deployed_contracts.json`.
+
+## Deployed Contract Hashes (Neo N3 Testnet)
+
+| Contract            | Hash                                         | Status    |
+| ------------------- | -------------------------------------------- | --------- |
+| PaymentHub          | `0x0bb8f09e6d3611bc5c8adbd79ff8af1e34f73193` | ✅ Active |
+| Governance          | `0xc8f3bbe1c205c932aab00b28f7df99f9bc788a05` | ✅ Active |
+| PriceFeed           | `0xc5d9117d255054489d1cf59b2c1d188c01bc9954` | ✅ Active |
+| RandomnessLog       | `0x76dfee17f2f4b9fa8f32bd3f4da6406319ab7b39` | ✅ Active |
+| AppRegistry         | `0x79d16bee03122e992bb80c478ad4ed405f33bc7f` | ✅ Active |
+| AutomationAnchor    | `0x1c888d699ce76b0824028af310d90c3c18adeab5` | ✅ Active |
+| ServiceLayerGateway | `0x27b79cf631eff4b520dd9d95cd1425ec33025a53` | ✅ Active |
 
 ## Security Considerations
 

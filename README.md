@@ -102,3 +102,54 @@ See `.env.example` for a full list.
 - `docs/API_DOCUMENTATION.md`: gateway/service API reference
 - `docs/DEPLOYMENT_GUIDE.md`: deployment paths (Docker, MarbleRun, K8s)
 - `docs/MASTER_KEY_ATTESTATION.md`: GlobalSigner key + attestation workflow
+- `docs/sdk-guide.md`: MiniApp SDK integration guide
+- `docs/service-api.md`: Service API reference
+
+## Smart Contracts (Neo N3 Testnet)
+
+| Contract            | Hash                                         | Description               |
+| ------------------- | -------------------------------------------- | ------------------------- |
+| PaymentHub          | `0x0bb8f09e6d3611bc5c8adbd79ff8af1e34f73193` | GAS payments for MiniApps |
+| Governance          | `0xc8f3bbe1c205c932aab00b28f7df99f9bc788a05` | NEO staking and voting    |
+| PriceFeed           | `0xc5d9117d255054489d1cf59b2c1d188c01bc9954` | Oracle price data         |
+| RandomnessLog       | `0x76dfee17f2f4b9fa8f32bd3f4da6406319ab7b39` | VRF attestation anchoring |
+| AppRegistry         | `0x79d16bee03122e992bb80c478ad4ed405f33bc7f` | MiniApp registration      |
+| AutomationAnchor    | `0x1c888d699ce76b0824028af310d90c3c18adeab5` | Automation triggers       |
+| ServiceLayerGateway | `0x27b79cf631eff4b520dd9d95cd1425ec33025a53` | Service request routing   |
+
+## Builtin MiniApps (23 Apps)
+
+**Phase 1 - Gaming:**
+
+- `builtin-lottery` - Neo Lottery with provable randomness
+- `builtin-coin-flip` - 50/50 double-or-nothing
+- `builtin-dice-game` - Roll dice, win up to 6x
+- `builtin-scratch-card` - Instant win scratch cards
+
+**Phase 2 - DeFi & Social:**
+
+- `builtin-prediction-market` - Price movement predictions
+- `builtin-flashloan` - Instant borrow and repay
+- `builtin-price-ticker` - Real-time price feeds
+- `builtin-gas-spin` - Lucky wheel with VRF
+- `builtin-price-predict` - Binary options trading
+- `builtin-secret-vote` - Privacy-preserving voting
+- `builtin-secret-poker` - TEE Texas Hold'em
+- `builtin-micro-predict` - 60-second predictions
+- `builtin-red-envelope` - Social GAS red packets
+- `builtin-gas-circle` - Daily savings circle
+
+**Phase 3 - Advanced:**
+
+- `builtin-fog-chess` - Chess with fog of war
+- `builtin-gov-booster` - NEO governance tools
+- `builtin-turbo-options` - Ultra-fast binary options
+- `builtin-il-guard` - Impermanent loss protection
+- `builtin-guardian-policy` - TEE transaction security
+
+**Phase 4 - Long-Running Processes:**
+
+- `builtin-ai-trader` - Autonomous AI trading agent
+- `builtin-grid-bot` - Automated grid trading
+- `builtin-nft-evolve` - Dynamic NFT evolution
+- `builtin-bridge-guardian` - Cross-chain asset bridge
