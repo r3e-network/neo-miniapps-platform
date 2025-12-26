@@ -26,8 +26,43 @@ import (
 const (
 	defaultRPC      = "https://testnet1.neo.coz.io:443"
 	defaultBuildDir = "contracts/build"
-	contractName    = "MiniAppServiceConsumer"
 )
+
+// MiniApp contracts to deploy
+var miniAppContracts = []string{
+	// Phase 1 - Gaming
+	"MiniAppLottery",
+	"MiniAppCoinFlip",
+	"MiniAppDiceGame",
+	"MiniAppScratchCard",
+	// Phase 2 - DeFi/Social
+	"MiniAppPredictionMarket",
+	"MiniAppFlashLoan",
+	"MiniAppPriceTicker",
+	"MiniAppGasSpin",
+	"MiniAppPricePredict",
+	"MiniAppSecretVote",
+	"MiniAppSecretPoker",
+	"MiniAppMicroPredict",
+	"MiniAppRedEnvelope",
+	"MiniAppGasCircle",
+	// Phase 3 - Advanced
+	"MiniAppFogChess",
+	"MiniAppGovBooster",
+	"MiniAppTurboOptions",
+	"MiniAppILGuard",
+	"MiniAppGuardianPolicy",
+	// Phase 4 - Long-Running
+	"MiniAppAITrader",
+	"MiniAppGridBot",
+	"MiniAppNFTEvolve",
+	"MiniAppBridgeGuardian",
+}
+
+type DeployResult struct {
+	Name string `json:"name"`
+	Hash string `json:"hash"`
+}
 
 func main() {
 	wif := strings.TrimSpace(os.Getenv("NEO_TESTNET_WIF"))
@@ -46,20 +81,6 @@ func main() {
 		buildDir = defaultBuildDir
 	}
 
-	nefPath := filepath.Join(buildDir, contractName+".nef")
-	manifestPath := filepath.Join(buildDir, contractName+".manifest.json")
-
-	nefFile, err := loadNEF(nefPath)
-	if err != nil {
-		fmt.Printf("Failed to load NEF: %v\n", err)
-		os.Exit(1)
-	}
-	mani, err := loadManifest(manifestPath)
-	if err != nil {
-		fmt.Printf("Failed to load manifest: %v\n", err)
-		os.Exit(1)
-	}
-
 	privateKey, err := keys.NewPrivateKeyFromWIF(wif)
 	if err != nil {
 		fmt.Printf("Invalid WIF: %v\n", err)
@@ -68,13 +89,11 @@ func main() {
 
 	deployerHash := privateKey.GetScriptHash()
 	deployerAddr := address.Uint160ToString(deployerHash)
-	expectedHash := state.CreateContractHash(deployerHash, nefFile.Checksum, mani.Name)
-	expectedHex := "0x" + expectedHash.StringLE()
 
-	fmt.Println("=== MiniAppServiceConsumer Deployment ===")
+	fmt.Println("=== MiniApp Contracts Batch Deployment ===")
 	fmt.Printf("RPC: %s\n", rpcURL)
 	fmt.Printf("Deployer: %s\n", deployerAddr)
-	fmt.Printf("Expected hash: %s\n", expectedHex)
+	fmt.Printf("Contracts to deploy: %d\n\n", len(miniAppContracts))
 
 	ctx := context.Background()
 	client, err := rpcclient.New(ctx, rpcURL, rpcclient.Options{})
@@ -91,44 +110,106 @@ func main() {
 		os.Exit(1)
 	}
 
-	contractHash := expectedHex
-	if _, err := client.GetContractStateByHash(expectedHash); err == nil {
-		fmt.Printf("Already deployed at: %s\n", contractHash)
-	} else {
-		mgmt := management.New(act)
-		fmt.Println("Submitting deploy transaction...")
+	gatewayHash, _ := resolveGatewayHash()
 
-		txHash, vub, err := mgmt.Deploy(nefFile, mani, nil)
+	var results []DeployResult
+	var failures []string
+
+	for i, contractName := range miniAppContracts {
+		fmt.Printf("\n[%d/%d] Deploying %s...\n", i+1, len(miniAppContracts), contractName)
+
+		hash, err := deployContract(ctx, client, act, buildDir, contractName, deployerHash, gatewayHash)
 		if err != nil {
-			fmt.Printf("Failed to deploy: %v\n", err)
-			os.Exit(1)
+			fmt.Printf("  ❌ Failed: %v\n", err)
+			failures = append(failures, contractName)
+			continue
 		}
 
-		fmt.Printf("Transaction sent: %s\n", txHash.StringLE())
-		fmt.Printf("Valid until block: %d\n", vub)
+		fmt.Printf("  ✅ Deployed at: %s\n", hash)
+		results = append(results, DeployResult{Name: contractName, Hash: hash})
 
-		contractHash, err = waitForDeployment(ctx, client, txHash, expectedHash)
-		if err != nil {
-			fmt.Printf("Deployment failed: %v\n", err)
-			os.Exit(1)
-		}
-
-		fmt.Printf("✅ Contract deployed at: %s\n", contractHash)
+		// Small delay between deployments
+		time.Sleep(2 * time.Second)
 	}
 
-	gatewayHash, err := resolveGatewayHash()
-	if err != nil {
-		fmt.Printf("Invalid ServiceLayerGateway hash: %v\n", err)
+	fmt.Println("\n=== Deployment Summary ===")
+	fmt.Printf("Successful: %d\n", len(results))
+	fmt.Printf("Failed: %d\n", len(failures))
+
+	if len(failures) > 0 {
+		fmt.Println("\nFailed contracts:")
+		for _, name := range failures {
+			fmt.Printf("  - %s\n", name)
+		}
+	}
+
+	// Output results as JSON
+	if len(results) > 0 {
+		fmt.Println("\n=== Contract Addresses ===")
+		for _, r := range results {
+			fmt.Printf("%s: %s\n", r.Name, r.Hash)
+		}
+
+		// Save to file
+		outputPath := filepath.Join(buildDir, "miniapp_contracts.json")
+		data, _ := json.MarshalIndent(results, "", "  ")
+		if err := os.WriteFile(outputPath, data, 0644); err == nil {
+			fmt.Printf("\nResults saved to: %s\n", outputPath)
+		}
+	}
+
+	if len(failures) > 0 {
 		os.Exit(1)
 	}
-	if gatewayHash != (util.Uint160{}) {
-		fmt.Println("Configuring gateway on MiniAppServiceConsumer...")
-		if err := setGateway(ctx, client, act, expectedHash, gatewayHash); err != nil {
-			fmt.Printf("❌ setGateway failed: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println("✅ Gateway configured")
+}
+
+func deployContract(ctx context.Context, client *rpcclient.Client, act *actor.Actor, buildDir, contractName string, deployerHash, gatewayHash util.Uint160) (string, error) {
+	nefPath := filepath.Join(buildDir, contractName+".nef")
+	manifestPath := filepath.Join(buildDir, contractName+".manifest.json")
+
+	nefFile, err := loadNEF(nefPath)
+	if err != nil {
+		return "", fmt.Errorf("load NEF: %w", err)
 	}
+
+	mani, err := loadManifest(manifestPath)
+	if err != nil {
+		return "", fmt.Errorf("load manifest: %w", err)
+	}
+
+	expectedHash := state.CreateContractHash(deployerHash, nefFile.Checksum, mani.Name)
+	expectedHex := "0x" + expectedHash.StringLE()
+
+	// Check if already deployed
+	if _, err := client.GetContractStateByHash(expectedHash); err == nil {
+		fmt.Printf("  Already deployed at: %s\n", expectedHex)
+		return expectedHex, nil
+	}
+
+	// Deploy
+	mgmt := management.New(act)
+	txHash, vub, err := mgmt.Deploy(nefFile, mani, nil)
+	if err != nil {
+		return "", fmt.Errorf("deploy: %w", err)
+	}
+
+	fmt.Printf("  Transaction: %s (vub: %d)\n", txHash.StringLE(), vub)
+
+	contractHash, err := waitForDeployment(ctx, client, txHash, expectedHash)
+	if err != nil {
+		return "", fmt.Errorf("wait: %w", err)
+	}
+
+	// Configure gateway if available
+	if gatewayHash != (util.Uint160{}) {
+		if err := setGateway(ctx, client, act, expectedHash, gatewayHash); err != nil {
+			fmt.Printf("  ⚠ Gateway config failed: %v\n", err)
+		} else {
+			fmt.Printf("  Gateway configured\n")
+		}
+	}
+
+	return contractHash, nil
 }
 
 func loadNEF(path string) (*nef.File, error) {
@@ -171,20 +252,20 @@ func parseHash160(raw string) (util.Uint160, error) {
 	return util.Uint160DecodeStringLE(raw)
 }
 
-func setGateway(ctx context.Context, client *rpcclient.Client, act *actor.Actor, contract util.Uint160, gateway util.Uint160) error {
+func setGateway(ctx context.Context, client *rpcclient.Client, act *actor.Actor, contract, gateway util.Uint160) error {
 	testResult, err := act.Call(contract, "setGateway", gateway)
 	if err != nil {
-		return fmt.Errorf("test invoke failed: %w", err)
+		return fmt.Errorf("test invoke: %w", err)
 	}
 	if testResult.State != "HALT" {
-		return fmt.Errorf("test invoke failed: %s (fault: %s)", testResult.State, testResult.FaultException)
+		return fmt.Errorf("test failed: %s", testResult.FaultException)
 	}
 
 	txHash, vub, err := act.SendCall(contract, "setGateway", gateway)
 	if err != nil {
-		return fmt.Errorf("send transaction: %w", err)
+		return fmt.Errorf("send: %w", err)
 	}
-	fmt.Printf("  tx %s (vub %d)\n", txHash.StringLE(), vub)
+	fmt.Printf("  Gateway tx: %s (vub: %d)\n", txHash.StringLE(), vub)
 	return waitForTx(ctx, client, txHash)
 }
 
@@ -196,7 +277,7 @@ func waitForTx(ctx context.Context, client *rpcclient.Client, txHash util.Uint25
 	for {
 		select {
 		case <-timeout:
-			return fmt.Errorf("timeout waiting for transaction")
+			return fmt.Errorf("timeout")
 		case <-ticker.C:
 			appLog, err := client.GetApplicationLog(txHash, nil)
 			if err != nil {
@@ -209,7 +290,7 @@ func waitForTx(ctx context.Context, client *rpcclient.Client, txHash util.Uint25
 			if exec.VMState.HasFlag(1) {
 				return nil
 			}
-			return fmt.Errorf("transaction failed: %s", exec.FaultException)
+			return fmt.Errorf("failed: %s", exec.FaultException)
 		}
 	}
 }
@@ -217,54 +298,27 @@ func waitForTx(ctx context.Context, client *rpcclient.Client, txHash util.Uint25
 func waitForDeployment(ctx context.Context, client *rpcclient.Client, txHash util.Uint256, expected util.Uint160) (string, error) {
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
-
 	timeout := time.After(5 * time.Minute)
 
 	for {
 		select {
 		case <-timeout:
-			return "", fmt.Errorf("timeout waiting for transaction")
+			return "", fmt.Errorf("timeout")
 		case <-ticker.C:
 			appLog, err := client.GetApplicationLog(txHash, nil)
 			if err != nil {
 				continue
 			}
-
 			if len(appLog.Executions) == 0 {
 				continue
 			}
-
 			exec := appLog.Executions[0]
 			if !exec.VMState.HasFlag(1) {
-				return "", fmt.Errorf("transaction failed: %s", exec.FaultException)
+				return "", fmt.Errorf("failed: %s", exec.FaultException)
 			}
-
-			if len(exec.Stack) > 0 {
-				item := exec.Stack[0]
-				if arr, ok := item.Value().([]interface{}); ok && len(arr) > 0 {
-					if hashItem, ok := arr[0].([]byte); ok {
-						return fmt.Sprintf("0x%x", hashItem), nil
-					}
-				}
-				if bs, ok := item.Value().([]byte); ok {
-					return fmt.Sprintf("0x%x", bs), nil
-				}
-			}
-
-			for _, notif := range exec.Events {
-				if notif.Name == "Deploy" {
-					if arr, ok := notif.Item.Value().([]interface{}); ok && len(arr) > 0 {
-						if hash, ok := arr[0].([]byte); ok {
-							return fmt.Sprintf("0x%x", hash), nil
-						}
-					}
-				}
-			}
-
 			if _, err := client.GetContractStateByHash(expected); err == nil {
 				return "0x" + expected.StringLE(), nil
 			}
-			return "", fmt.Errorf("deploy succeeded but contract hash not found in logs")
 		}
 	}
 }

@@ -292,6 +292,9 @@ func (s *Service) registerHandlers() {
 	s.eventListener.On("ServiceFulfilled", func(event *chain.ContractEvent) error {
 		return s.handleServiceFulfilled(context.Background(), event)
 	})
+	s.eventListener.On("Notification", func(event *chain.ContractEvent) error {
+		return s.handleNotificationEvent(context.Background(), event)
+	})
 
 	s.BaseService.AddWorker(s.runEventListener)
 }

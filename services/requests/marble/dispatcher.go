@@ -774,3 +774,39 @@ func (s *Service) fulfillFailure(ctx context.Context, req *chain.ServiceRequeste
 	result := serviceResult{}
 	return s.fulfillRequest(ctx, req, userID, result, err, nil)
 }
+
+func (s *Service) handleNotificationEvent(ctx context.Context, event *chain.ContractEvent) error {
+	if event == nil {
+		return nil
+	}
+
+	parsed, err := chain.ParseMiniAppNotificationEvent(event)
+	if err != nil {
+		return nil // Skip non-notification events
+	}
+
+	logger := s.Logger().WithFields(map[string]interface{}{
+		"app_id": parsed.AppID,
+		"title":  parsed.Title,
+	})
+
+	// Store notification in database via repository
+	err = s.repo.CreateNotification(ctx, &neorequestsupabase.Notification{
+		AppID:            parsed.AppID,
+		Title:            parsed.Title,
+		Content:          parsed.Content,
+		NotificationType: parsed.NotificationType,
+		Source:           "contract",
+		TxHash:           event.TxHash,
+		BlockNumber:      int64(event.BlockIndex),
+		Priority:         parsed.Priority,
+	})
+
+	if err != nil {
+		logger.WithError(err).Error("failed to store notification")
+		return err
+	}
+
+	logger.Info("notification stored from contract event")
+	return nil
+}

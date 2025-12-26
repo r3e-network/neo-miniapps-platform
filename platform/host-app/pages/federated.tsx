@@ -3,13 +3,15 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/router";
 import { Component, ReactNode } from "react";
 
-const BuiltinMiniApp = dynamic(
-  () => import("builtin/App").then((mod: any) => mod.default ?? mod.App),
-  {
-    ssr: false,
-    loading: () => <p>Loading federated MiniApp…</p>,
-  },
-);
+type MiniAppProps = {
+  appId?: string;
+  view?: string;
+};
+
+const BuiltinMiniApp = dynamic<MiniAppProps>(() => import("builtin/App").then((mod: any) => mod.default ?? mod.App), {
+  ssr: false,
+  loading: () => <p>Loading federated MiniApp…</p>,
+});
 
 class RemoteErrorBoundary extends Component<{ children: ReactNode }, { error?: Error }> {
   state: { error?: Error } = {};
@@ -45,23 +47,18 @@ export default function FederatedMiniApp() {
       <main style={{ padding: 24, fontFamily: "system-ui, sans-serif", maxWidth: 960 }}>
         <h1 style={{ margin: "0 0 12px" }}>Federated MiniApp Host</h1>
         <p style={{ margin: "0 0 12px", fontSize: 14 }}>
-          Built-in MiniApps can be served as Module Federation remotes. This page loads the{" "}
-          <code>builtin/App</code> module from the configured remote and passes optional{" "}
-          <code>?app=&lt;app_id&gt;</code> parameters.
+          Built-in MiniApps can be served as Module Federation remotes. This page loads the <code>builtin/App</code>{" "}
+          module from the configured remote and passes optional <code>?app=&lt;app_id&gt;</code> parameters.
         </p>
         <div style={{ marginBottom: 12, fontSize: 12 }}>
           <div>
             <strong>Expected remote:</strong> <code>builtin</code> exposing <code>./App</code>
           </div>
           <div>
-            <strong>NEXT_PUBLIC_MF_REMOTES:</strong>{" "}
-            <code>{remotes || "not set"}</code>
+            <strong>NEXT_PUBLIC_MF_REMOTES:</strong> <code>{remotes || "not set"}</code>
           </div>
           <div>
-            Example:{" "}
-            <code>
-              NEXT_PUBLIC_MF_REMOTES=builtin@https://cdn.miniapps.com/miniapps/builtin-mf
-            </code>
+            Example: <code>NEXT_PUBLIC_MF_REMOTES=builtin@https://cdn.miniapps.com/miniapps/builtin-mf</code>
           </div>
         </div>
         <RemoteErrorBoundary>

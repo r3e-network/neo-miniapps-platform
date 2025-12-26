@@ -77,3 +77,16 @@ type ProcessedEvent struct {
 	Payload         json.RawMessage `json:"payload"`
 	Confirmations   int             `json:"confirmations,omitempty"`
 }
+
+// Notification represents a miniapp_notifications row.
+type Notification struct {
+	ID               string `json:"id,omitempty"`
+	AppID            string `json:"app_id"`
+	Title            string `json:"title"`
+	Content          string `json:"content"`
+	NotificationType string `json:"notification_type"`
+	Source           string `json:"source"`
+	TxHash           string `json:"tx_hash,omitempty"`
+	BlockNumber      int64  `json:"block_number,omitempty"`
+	Priority         int    `json:"priority"`
+}

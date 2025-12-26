@@ -30,6 +30,7 @@ type RepositoryInterface interface {
 	HasProcessedEvent(ctx context.Context, chainID, txHash string, logIndex int) (bool, error)
 	CreateProcessedEvent(ctx context.Context, event *ProcessedEvent) error
 	MarkProcessedEvent(ctx context.Context, event *ProcessedEvent) (bool, error)
+	CreateNotification(ctx context.Context, n *Notification) error
 }
 
 // Ensure Repository implements RepositoryInterface.
@@ -212,4 +213,15 @@ func MarshalParams(params any) json.RawMessage {
 		return json.RawMessage("null")
 	}
 	return data
+}
+
+// CreateNotification inserts a notification record.
+func (r *Repository) CreateNotification(ctx context.Context, n *Notification) error {
+	if n == nil {
+		return fmt.Errorf("notification cannot be nil")
+	}
+	if n.AppID == "" {
+		return fmt.Errorf("notification app_id cannot be empty")
+	}
+	return database.GenericCreate(r.base, ctx, "miniapp_notifications", n, nil)
 }
